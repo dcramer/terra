@@ -1,17 +1,32 @@
 // The perf row's decisions (D610), pure: what to bench next, and what a bench's points say.
 // A landing is benched once per batch (the landings that came while the last ran, taken
 // together at main's tip, as a busy Buildbot builder collapses its pending requests); a
-// landing past its band is benched again at the same commit (a retrigger, as Perfherder's
-// sheriffs confirm a suspect); a confirmed change raises an alert naming the scene, the metric,
-// before and after and the range, and a regression is bisected (bisect.ts) to its first bad
-// commit, which the alert then names. One perf bench at a time, a rest between two, so the row
+// landing past its band is benched again at the same commit, several runs (a retrigger, as
+// Perfherder's sheriffs confirm a suspect), and when that holds its range's good end is benched
+// beside it the same way, as Pinpoint measures both sides of a change: only ends that differ,
+// past the floor and by a rank test, raise an alert, so the box's level drifting moves both
+// ends and raises none. An alert names the scene, the metric, before and after and the range,
+// and a regression is bisected (bisect.ts) to its first bad commit, which the alert then names. One perf bench at a time, a rest between two, so the row
 // never holds the box with benches back to back (D319, D445).
 
 import { type Bisect, CAP, found, next as nextStep, type Options, start, step } from "./bisect.ts";
-import { changeLine, FLOORS, type Judged, judge, METRICS, type Metric, type Point, series, type Why } from "./history.ts";
+import { centre, changeLine, FLOORS, type Judged, judge, least, METRICS, type Metric, mannWhitney, type Point, series, type Why } from "./history.ts";
 
 /// A landing's metric past its band, waiting for its retrigger.
 export type Suspect = Exclude<Judged, { change: "learning" }> & { scene: string };
+/// A suspect being confirmed: the runs of its bad end (the landing, retriggered) and of its
+/// good end (the range's last landing in every band, benched beside it) so far.
+export type Confirming = Suspect & { bad?: number[]; base?: number[] };
+
+/// Runs a confirm benches at each end, each its own load, so the two sides are samples taken
+/// in the same hour of the box: Pinpoint's attempts, compared by a rank test, not one run each.
+export const CONFIRM = 5;
+/// The p-value at or under which the ends differ (Pinpoint's low threshold): five runs a side
+/// pass it only when every bad run is past every good one (2 of 252 splits, 0.008).
+export const LOW = 0.01;
+/// Rounds of runs a confirm may take: one more when the ends differ by more than the floor
+/// but not surely (Pinpoint's "unknown", which adds attempts), then it is let go.
+export const ROUNDS = 2;
 
 export type Alert = {
   id: string;
@@ -27,6 +42,10 @@ export type Alert = {
   /// Commits in the range touching what the row reads.
   commits: number;
   state: "bisecting" | "found" | "narrowed" | "open" | "better";
+  /// The confirm's runs at each end and its rank test's p-value (`before` and `after` are its
+  /// ends' centres).
+  runs?: { good: number; bad: number };
+  p?: number;
   first?: string;
   left?: string[];
   /// Closed by hand, as Perfherder's sheriffs triage an alert: invalid (not the code: the box,
@@ -44,7 +63,9 @@ export type State = {
   job?: InFlight;
   lastEnded?: string;
   lastWhy?: Why;
-  retrigger?: { rev: string; good?: string; suspects: Suspect[] };
+  /// A suspect landing being confirmed (D610): its bad end `rev` retriggered, then its good end
+  /// benched beside it (`phase` good), `round` of ROUNDS.
+  retrigger?: { rev: string; good?: string; suspects: Confirming[]; phase?: "bad" | "good"; round?: number };
   bisect?: Bisect;
   /// Bisects waiting their turn, the worst first.
   waiting: Bisect[];
@@ -63,13 +84,16 @@ export const REST = 20;
 export function plan(s: State, tip: string, touched: boolean, now: number, rest = REST): { rev: string; why: Why; end?: "good" | "bad" } | { wait: string } {
   if (s.job) return { wait: `${s.job.id} benches ${s.job.rev.slice(0, 9)} (${s.job.why})` };
   if (s.lastEnded && now - Date.parse(s.lastEnded) < rest * 60_000) return { wait: `resting ${rest} min after its last bench` };
-  if (s.retrigger) return { rev: s.retrigger.rev, why: "retrigger" };
+  if (s.retrigger) return s.retrigger.phase === "good" && s.retrigger.good ? { rev: s.retrigger.good, why: "baseline" } : { rev: s.retrigger.rev, why: "retrigger" };
   const landing = tip !== s.benched && touched;
   const bisect = s.bisect && nextStep(s.bisect);
   if (landing && (!bisect || s.lastWhy !== "landing")) return { rev: tip, why: "landing" };
   if (bisect) return { rev: bisect.rev, why: "bisect", end: bisect.end };
   return { wait: tip === s.benched ? `main's tip ${tip.slice(0, 9)} is benched` : `nothing the row reads changed since ${s.benched?.slice(0, 9)}` };
 }
+
+/// What a confirm's bench takes: its suspects' scenes, `runs` runs each, every one its own load.
+export const confirmOptions = (s: State, runs = CONFIRM): Options => ({ scenes: [...new Set((s.retrigger?.suspects ?? []).map((j) => j.scene))], runs });
 
 const key = (scene: string, metric: Metric) => `${scene} ${metric}`;
 const alertId = (scene: string, metric: Metric, bad: string) => `${scene}/${metric}@${bad.slice(0, 9)}`;
@@ -78,7 +102,8 @@ const alertId = (scene: string, metric: Metric, bad: string) => `${scene}/${metr
 export function alertLine(a: Alert): string {
   const mark = a.closed ? "·" : a.state === "better" ? "✓" : "✗";
   const where = `in ${a.good.slice(0, 9)}..${a.bad.slice(0, 9)} (${a.commits} commit${a.commits === 1 ? "" : "s"} touching the row)`;
-  const what = changeLine(a.scene, { metric: a.metric, before: a.before, after: a.after, width: a.width, change: "worse" });
+  const runs = a.runs ? `, ${a.runs.good} runs at its good end and ${a.runs.bad} at its bad, p ${a.p?.toFixed(3)}` : "";
+  const what = `${changeLine(a.scene, { metric: a.metric, before: a.before, after: a.after, width: a.width, change: "worse" })}${runs}`;
   const tail =
     a.state === "found" ? `; first bad ${a.first?.slice(0, 9)}` : a.state === "narrowed" ? `; bisect narrowed it to ${a.left?.length} commits: ${a.left?.map((c) => c.slice(0, 9)).join(" ")}` : a.state === "bisecting" ? "; bisecting" : a.state === "better" ? "; better, not bisected" : "";
   const closed = a.closed ? `; closed ${a.closed.as} ${a.closed.when.slice(0, 16).replace("T", " ")} UTC: ${a.closed.reason}` : "";
@@ -88,7 +113,7 @@ export function alertLine(a: Alert): string {
 /// A job's points taken in: the new state and the lines it says. `history` is every point
 /// before this job's; `commits(good, bad)` the commits after `good` up to `bad` touching what
 /// the row reads, oldest first.
-export function ingest(s0: State, job: InFlight, points: Point[], history: Point[], commits: (good: string, bad: string) => string[], now: string, cap = CAP): { state: State; lines: string[] } {
+export function ingest(s0: State, job: InFlight, points: Point[], history: Point[], commits: (good: string, bad: string) => string[], now: string, cap = CAP, runs = CONFIRM): { state: State; lines: string[] } {
   const s: State = { ...s0, job: undefined, lastEnded: now, lastWhy: job.why, alerts: [...s0.alerts], waiting: [...s0.waiting], since: { ...s0.since } };
   const lines: string[] = [];
   // A scene taken on a busy machine (D185: the box's CPU clock collapsing under its runs) is
@@ -117,7 +142,7 @@ export function ingest(s0: State, job: InFlight, points: Point[], history: Point
   }
   if (!points.length) {
     if (!all.length) lines.push(`✗ perf: ${job.id} at ${job.rev.slice(0, 9)} gave no numbers (its log says why); the next landing is benched as usual`);
-    else if (job.why === "retrigger" && s.retrigger) lines.push(`· perf: ${job.rev.slice(0, 9)}'s retrigger was all busy, so its suspects are neither confirmed nor raised; the next landing is benched as usual`);
+    else if (job.why !== "landing" && s.retrigger) lines.push(`· perf: ${job.rev.slice(0, 9)}'s ${job.why === "baseline" ? "good end's repeat" : "retrigger"} was all busy, so its suspects are neither confirmed nor raised; the next landing is benched as usual`);
     if (job.why === "landing") s.benched = job.rev;
     else s.retrigger = undefined;
     return { state: s, lines };
@@ -135,8 +160,8 @@ export function ingest(s0: State, job: InFlight, points: Point[], history: Point
       }
     }
     if (suspects.length) {
-      s.retrigger = { rev: job.rev, good: s.good, suspects };
-      lines.push(`· perf: ${job.rev.slice(0, 9)} past its band, retriggered: ${suspects.map((j) => changeLine(j.scene, j)).join("; ")}`);
+      s.retrigger = { rev: job.rev, good: s.good, suspects, phase: "bad", round: 1 };
+      lines.push(`· perf: ${job.rev.slice(0, 9)} past its band, retriggered, then its good end ${s.good?.slice(0, 9) ?? "(none yet)"} benched beside it: ${suspects.map((j) => changeLine(j.scene, j)).join("; ")}`);
     } else if (all.length > points.length) {
       // A busy scene was not judged, so this is no landing every band held at.
       lines.push(`✓ perf: ${job.rev.slice(0, 9)} within every band it judged`);
@@ -146,36 +171,87 @@ export function ingest(s0: State, job: InFlight, points: Point[], history: Point
     }
     return { state: s, lines };
   }
-  // A retrigger: each suspect confirmed when this run too is past its band the same way.
   const r = s.retrigger;
   s.retrigger = undefined;
   if (!r) return { state: s, lines };
+  const samples = (j: Suspect) => points.filter((p) => p.scene === j.scene).flatMap((p) => (p.values[j.metric] === undefined ? [] : [p.values[j.metric] as number]));
+  const none = (j: Suspect, what: string) =>
+    `· perf: ${changeLine(j.scene, j)} not confirmed: its ${what} ${all.some((p) => p.scene === j.scene && p.busy) ? "was taken on a busy machine" : "gave no numbers"}, so no alert`;
+  const round = r.round ?? 1;
+  const rebase = (j: Suspect) => (s.since[key(j.scene, j.metric)] = r.rev);
+  if (job.why === "retrigger") {
+    // The bad end retriggered: a suspect whose runs, together, are back in its band was a
+    // one-off (noise); one that held has its good end benched beside it next.
+    const held: Confirming[] = [];
+    for (const j of r.suspects) {
+      const v = samples(j);
+      if (!v.length) {
+        lines.push(none(j, "retrigger"));
+        continue;
+      }
+      const c = centre(j.metric, v);
+      if (round === 1 && !(j.change === "worse" ? c > j.before + j.width : c < j.before - j.width)) {
+        lines.push(`· perf: ${changeLine(j.scene, j)} did not hold on its retrigger (${v.join(", ")}): noise`);
+        continue;
+      }
+      held.push({ ...j, bad: [...(j.bad ?? []), ...v] });
+    }
+    if (held.length && !r.good) {
+      // Pinpoint compares both sides; with no good end there is no other side.
+      for (const j of held) rebase(j);
+      lines.push(`· perf: ${held.map((j) => changeLine(j.scene, j)).join("; ")} held on its retrigger, but the row has no good end to bench beside it, so no alert; its band re-based at ${r.rev.slice(0, 9)}`);
+    } else if (held.length) {
+      s.retrigger = { ...r, suspects: held, phase: "good", round };
+      lines.push(`· perf: ${held.map((j) => `${j.scene} ${j.metric}`).join(", ")} held on ${r.rev.slice(0, 9)}'s retrigger; its good end ${r.good?.slice(0, 9)} is benched next, beside it`);
+      return { state: s, lines };
+    }
+    s.good = r.rev;
+    return { state: s, lines };
+  }
+  // The good end benched beside the bad: a suspect is confirmed when its ends differ past the
+  // floor and surely (Pinpoint's rank test at its low threshold); ends that measure alike now
+  // say the box's level moved, not the code, so its band is re-based at that level.
   let worse = false;
+  const again: Confirming[] = [];
   const raised: Alert[] = [];
   for (const j of r.suspects) {
-    if (all.some((p) => p.scene === j.scene && p.busy)) {
-      lines.push(`· perf: ${changeLine(j.scene, j)} not confirmed: its retrigger was taken on a busy machine, so no alert`);
+    const v = samples(j);
+    if (!v.length) {
+      lines.push(none(j, "good end's repeat"));
       continue;
     }
-    const v = points.find((p) => p.scene === j.scene)?.values[j.metric];
-    const held = v !== undefined && (j.change === "worse" ? v > j.before + j.width : v < j.before - j.width);
-    if (!held) {
-      lines.push(`· perf: ${changeLine(j.scene, j)} did not hold on its retrigger (${v ?? "no number"}): noise`);
+    const base = [...(j.base ?? []), ...v];
+    const bad = j.bad ?? [];
+    const [g, b] = [centre(j.metric, base), centre(j.metric, bad)];
+    const p = mannWhitney(base, bad);
+    const ends = `its good end ${r.good?.slice(0, 9)} ran ${base.join(", ")} and its bad end ${r.rev.slice(0, 9)} ${bad.join(", ")}, p ${p.toFixed(3)}`;
+    const past = j.change === "worse" ? b - g > least(j.metric, g) : g - b > least(j.metric, g);
+    if (!past) {
+      rebase(j);
+      lines.push(`· perf: ${changeLine(j.scene, j)} is the box's level, not the code: ${ends}, alike within its floor, so no alert; its band re-based at ${r.rev.slice(0, 9)}`);
+      continue;
+    }
+    if (p > LOW) {
+      if (round < ROUNDS) {
+        again.push({ ...j, base, bad });
+        lines.push(`· perf: ${changeLine(j.scene, j)} unclear: ${ends}; both ends benched once more`);
+      } else lines.push(`· perf: ${changeLine(j.scene, j)} unclear after ${round} rounds: ${ends}, so no alert; the next landing is judged as usual`);
       continue;
     }
     const good = r.good ?? r.rev;
     const range = r.good ? commits(r.good, r.rev) : [];
-    const a: Alert = { id: alertId(j.scene, j.metric, r.rev), when: now, scene: j.scene, metric: j.metric, before: j.before, after: (j.after + v) / 2, width: j.width, good, bad: r.rev, commits: range.length, state: j.change === "worse" ? "open" : "better" };
-    s.since[key(j.scene, j.metric)] = r.rev;
+    const a: Alert = { id: alertId(j.scene, j.metric, r.rev), when: now, scene: j.scene, metric: j.metric, before: g, after: b, width: j.width, runs: { good: base.length, bad: bad.length }, p, good, bad: r.rev, commits: range.length, state: j.change === "worse" ? "open" : "better" };
+    rebase(j);
     if (j.change === "worse") {
       worse = true;
-      // One commit is its own answer; more are bisected.
-      if (range.length > 1) s.waiting.push(start(j.scene, j.metric, good, r.rev, range, { goodValue: a.before, badValue: a.after }, cap, a.id));
+      // One commit is its own answer; more are bisected, each step as many runs as an end's.
+      if (range.length > 1) s.waiting.push(start(j.scene, j.metric, good, r.rev, range, { goodValue: g, badValue: b, goodWorst: Math.max(...base) }, cap, a.id, { runs }));
     }
     raised.push(a);
   }
   s.alerts.push(...raised);
-  if (!worse) s.good = r.rev;
+  if (again.length) s.retrigger = { ...r, suspects: again, phase: "bad", round: round + 1 };
+  else if (!worse) s.good = r.rev;
   // The worst change bisected first, by its share of its own band.
   s.waiting.sort((x, y) => share(y) - share(x));
   if (!s.bisect && s.waiting.length) s.bisect = s.waiting.shift();

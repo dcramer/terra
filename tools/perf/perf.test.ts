@@ -5,8 +5,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Bisect, found, next, start, step } from "./bisect.ts";
-import { appended, band, FLOORS, historyLine, judge, type Point, pointOf, readHistory, type Why } from "./history.ts";
-import { alertLine, askBisect, cancelBisect, closeAlert, empty, ingest, plan, type State } from "./sheriff.ts";
+import { appended, band, FLOORS, historyLine, judge, mannWhitney, type Point, pointOf, readHistory, type Why } from "./history.ts";
+import { alertLine, askBisect, CONFIRM, cancelBisect, closeAlert, empty, ingest, plan, type State } from "./sheriff.ts";
 
 const commits = Array.from({ length: 30 }, (_, i) => `c${String(i).padStart(2, "0")}${"0".repeat(38)}`);
 const SCENES = ["lake-play", "forest-run", "town-dusk"];
@@ -39,7 +39,9 @@ function drive(s: State, tip: string, bench: ReturnType<typeof fakeBench>, histo
     const p = plan(s, tip, true, Date.parse("2026-11-03T12:00:00Z"), 0);
     if ("wait" in p) return s;
     const job = { id: `job${n}`, rev: p.rev, why: p.why, end: p.end };
-    const points = bench(p.rev, p.why);
+    // A confirm's end and a bisect's step of a flaky metric are several runs, each its own.
+    const runs = p.why === "landing" ? 1 : p.why === "bisect" ? (s.bisect?.runs ?? 1) : CONFIRM;
+    const points = Array.from({ length: runs }, () => bench(p.rev, p.why)).flat();
     const r = ingest({ ...s, job }, job, points, history, (g, b) => commits.slice(commits.indexOf(g) + 1, commits.indexOf(b) + 1), "2026-11-03T12:00:00Z");
     history.push(...points);
     lines.push(...r.lines);
@@ -92,6 +94,9 @@ test("landings in their band raise nothing; a step past it is retriggered, confi
   s = drive(s, commits[20], bench, history, lines, 1);
   assert.equal(s.retrigger?.rev, commits[20], "past its band: retriggered at the same commit");
   s = drive(s, commits[20], bench, history, lines, 1);
+  assert.deepEqual(plan(s, commits[20], true, Date.parse("2026-11-03T12:00:00Z"), 0), { rev: commits[10], why: "baseline" }, "held: its good end benched beside it");
+  assert.equal(s.alerts.length, 0, "no alert on the bad end's runs alone");
+  s = drive(s, commits[20], bench, history, lines, 1);
   const alert = s.alerts.find((a) => a.scene === "forest-run" && a.metric === "hitches");
   assert.ok(alert, lines.join("\n"));
   assert.equal(s.alerts.length, 1, "only forest-run's hitches changed");
@@ -100,7 +105,69 @@ test("landings in their band raise nothing; a step past it is retriggered, confi
   assert.equal(alert.commits, 10);
   assert.ok(alert.after >= 9 && alert.before <= 1);
   const line = alertLine(alert);
-  assert.match(line, /forest-run hitches \d → (9|10)(\.\d)? .*in c10000000\.\.c20000000 \(10 commits touching the row\); bisecting/);
+  assert.deepEqual(alert.runs, { good: CONFIRM, bad: CONFIRM });
+  assert.ok((alert.p ?? 1) <= 0.01, "every bad run past every good one");
+  assert.match(line, /forest-run hitches [\d.]+ → (9|10)(\.\d)? .*5 runs at its good end and 5 at its bad, p 0\.008, in c10000000\.\.c20000000 \(10 commits touching the row\); bisecting/);
+});
+
+test("the rank test's p-value: exact for a few runs, ties at their mid-rank", () => {
+  const close = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+  assert.ok(close(mannWhitney([1, 2, 3, 4, 5], [6, 7, 8, 9, 10]), 2 / 252), "apart: the two most extreme of 252 splits");
+  assert.ok(close(mannWhitney([1, 2, 3, 4, 6], [5, 7, 8, 9, 10]), 4 / 252), "one overlap");
+  assert.equal(mannWhitney([0, 0, 0, 0, 0], [0, 0, 0, 0, 0]), 1, "all ties: nothing told apart");
+  assert.ok(mannWhitney([9.3, 9.7, 9.5, 9.6, 9.4], [9.6, 9.5, 9.7, 9.4, 9.8]) > 0.2, "two samples of one level");
+  const many = (from: number) => Array.from({ length: 12 }, (_, i) => from + i);
+  assert.ok(mannWhitney(many(0), many(100)) < 1e-4, "past a million splits, the normal approximation");
+});
+
+test("a level shift of the box alone, both ends moved together, is no alert, and the band re-bases at it", () => {
+  const history: Point[] = [];
+  const lines: string[] = [];
+  const steady = fakeBench(99);
+  let s = empty();
+  for (const tip of commits.slice(1, 6)) s = drive(s, tip, steady, history, lines);
+  assert.equal(s.good, commits[5]);
+  // From now on every lake-play run is 5% slower, whatever the commit: the box drifted.
+  const drifted = (rev: string, why: Why) => steady(rev, why).map((p) => (p.scene === "lake-play" ? { ...p, values: { ...p.values, median_ms: (p.values.median_ms ?? 0) * 1.05 } } : p));
+  lines.length = 0;
+  s = drive(s, commits[6], drifted, history, lines);
+  assert.equal(s.alerts.length, 0, lines.join("\n"));
+  assert.ok(history.some((p) => p.why === "baseline" && p.rev === commits[5]), "its good end benched beside it");
+  assert.ok(lines.some((l) => /lake-play median_ms .* the box's level, not the code: its good end c05000000 ran .* so no alert; its band re-based at c06000000/.test(l)), lines.join("\n"));
+  assert.equal(s.since["lake-play median_ms"], commits[6]);
+  assert.equal(s.good, commits[6], "the code was fine: a good end");
+  // The landings after are judged at the box's new level: no retrigger, no alert.
+  lines.length = 0;
+  for (const tip of commits.slice(7, 10)) s = drive(s, tip, drifted, history, lines);
+  assert.ok(!lines.some((l) => /retriggered/.test(l)), lines.join("\n"));
+  assert.equal(s.good, commits[9]);
+});
+
+test("ends that differ past the floor but not surely are benched once more, then let go", () => {
+  const at = (rev: string, why: Why, values: number[]): Point[] =>
+    values.map((v, i) => ({ rev, job: `${why}${i}`, why, date: "", gpu: "g", size: "s", build: "release", scene: "lake-play", values: { median_ms: v } }));
+  const history = [...at(commits[1], "landing", [9.3]), ...at(commits[2], "landing", [9.28]), ...at(commits[3], "landing", [9.32])];
+  let s: State = { ...empty(), benched: commits[3], good: commits[3] };
+  const take = (rev: string, why: Why, values: number[]) => {
+    const job = { id: why, rev, why };
+    const r = ingest({ ...s, job }, job, at(rev, why, values), history, () => [rev], "2026-11-03T12:00:00Z");
+    history.push(...at(rev, why, values));
+    s = r.state;
+    return r.lines;
+  };
+  take(commits[4], "landing", [9.9]);
+  assert.equal(s.retrigger?.phase, "bad");
+  take(commits[4], "retrigger", [9.9, 9.4, 9.85, 9.8, 9.75]);
+  assert.equal(s.retrigger?.phase, "good");
+  // Medians 9.45 and 9.8 (+3.7%), past the 3% floor, but runs overlap: unclear, once more.
+  const unclear = take(commits[3], "baseline", [9.3, 9.45, 9.85, 9.4, 9.5]);
+  assert.ok(unclear.some((l) => /unclear: .*both ends benched once more/.test(l)), unclear.join("\n"));
+  assert.deepEqual(plan(s, commits[4], true, Date.parse("2026-11-03T13:00:00Z"), 0), { rev: commits[4], why: "retrigger" });
+  take(commits[4], "retrigger", [9.9, 9.45, 9.85, 9.8, 9.75]);
+  const last = take(commits[3], "baseline", [9.3, 9.5, 9.85, 9.4, 9.45]);
+  assert.ok(last.some((l) => /unclear after 2 rounds: .* so no alert/.test(l)), last.join("\n"));
+  assert.equal(s.alerts.length, 0);
+  assert.equal(s.retrigger, undefined, "let go");
 });
 
 test("a one-off spike that does not hold on its retrigger is noise", () => {
@@ -234,7 +301,7 @@ test("an alert closed as invalid drops its bisect, re-bases its band and raises 
   const lines: string[] = [];
   let s = empty();
   for (const tip of [commits[1], commits[3], commits[5], commits[8], commits[10]]) s = drive(s, tip, bench, history, lines);
-  s = drive(s, commits[20], bench, history, lines, 2);
+  s = drive(s, commits[20], bench, history, lines, 3);
   const a = s.alerts.find((a) => a.scene === "forest-run");
   assert.equal(a?.state, "bisecting", lines.join("\n"));
   const inFlight: State = { ...s, job: { id: "jb", rev: commits[15], why: "bisect" } };

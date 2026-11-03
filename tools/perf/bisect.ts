@@ -42,7 +42,7 @@ export const CAP = 5;
 
 export type Options = Pick<Bisect, "scenes" | "runs" | "patch">;
 
-export function start(scene: string, metric: Metric, good: string, bad: string, commits: string[], ends: { goodValue?: number; badValue?: number } = {}, cap = CAP, alert?: string, options: Options = {}): Bisect {
+export function start(scene: string, metric: Metric, good: string, bad: string, commits: string[], ends: { goodValue?: number; badValue?: number; goodWorst?: number } = {}, cap = CAP, alert?: string, options: Options = {}): Bisect {
   return { scene, metric, good, bad, commits, lo: -1, hi: commits.length - 1, ...ends, benches: 0, cap, skipped: [], alert, ...options };
 }
 

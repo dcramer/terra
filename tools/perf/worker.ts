@@ -14,9 +14,9 @@ import { type Box, box, boxEnv, git, outDir, readJob, wake, writeJob } from "../
 import { type Job, jobId } from "../render-worker/jobs.ts";
 import { appended, HISTORY_HEADER, historyLine, METRICS, type Metric, type Point, pointOf, readHistory, series, WINDOW } from "./history.ts";
 import type { Options } from "./bisect.ts";
-import { alertLine, askBisect, cancelBisect, closeAlert, empty, ingest, plan, type State } from "./sheriff.ts";
+import { alertLine, askBisect, cancelBisect, closeAlert, confirmOptions, empty, ingest, plan, type State } from "./sheriff.ts";
 
-export type Row = { scenes: string[]; runs: number; reads: string[]; origin: string; every: number; rest: number; cap: number; minutes: number };
+export type Row = { scenes: string[]; runs: number; confirm: number; reads: string[]; origin: string; every: number; rest: number; cap: number; minutes: number };
 export const row = (): Row => JSON.parse(readFileSync(join(import.meta.dirname, "row.json"), "utf8"));
 
 const dir = (b: Box) => join(b.dir, "perf");
@@ -127,7 +127,7 @@ export function tick(b: Box, say: (line: string) => void, now = new Date(), forc
       mkdirSync(dir(b), { recursive: true });
       if (!existsSync(file(b, "history.csv"))) writeFileSync(file(b, "history.csv"), `${HISTORY_HEADER}\n`);
       appendFileSync(file(b, "history.csv"), rows.map((l) => `${historyLine(l, j.rev, j.id, why)}\n`).join(""));
-      const got = ingest(s, s.job, points, before, (g, bad) => commitsBetween(b.repo, g, bad, r.reads), now.toISOString(), r.cap);
+      const got = ingest(s, s.job, points, before, (g, bad) => commitsBetween(b.repo, g, bad, r.reads), now.toISOString(), r.cap, r.confirm);
       s = got.state;
       note([`perf: ${j.id} ${j.state} at ${j.rev.slice(0, 9)}, ${points.length} scenes`, ...got.lines]);
       saveState(b, s);
@@ -147,7 +147,7 @@ export function tick(b: Box, say: (line: string) => void, now = new Date(), forc
   const touched = !s.benched || git(b.repo, ["diff", "--quiet", s.benched, tip, "--", ...r.reads]).status !== 0;
   const p = plan(s, tip, touched, now.getTime(), r.rest);
   if ("wait" in p) return;
-  const job = queueBench(b, r, p.rev, p.why, now, p.why === "bisect" && s.bisect ? s.bisect : {});
+  const job = queueBench(b, r, p.rev, p.why, now, p.why === "bisect" && s.bisect ? s.bisect : p.why === "landing" ? {} : confirmOptions(s, r.confirm));
   if ("error" in job) return note([`✗ perf: ${job.error}`]);
   s = { ...s, job: { id: job.id, rev: p.rev, why: p.why, end: p.end } };
   saveState(b, s);
@@ -159,7 +159,7 @@ export function tick(b: Box, say: (line: string) => void, now = new Date(), forc
 /// its numbers stand for `rev`), and each scene's window up to it.
 export function mainSide(b: Box, rev: string): { at?: string; between: number; touched: boolean; window: Point[] } {
   const r = row();
-  const points = history(b).filter((p) => p.why !== "bisect");
+  const points = history(b).filter((p) => p.why === "landing" || p.why === "retrigger");
   const benched = new Set(points.map((p) => p.rev));
   const line = git(b.repo, ["rev-list", "--first-parent", "-n", "2000", rev]).stdout.split("\n").filter(Boolean);
   const i = line.findIndex((c) => benched.has(c));
@@ -182,7 +182,7 @@ export function perfCommand(b: Box, args: string[]): number {
     const r = row();
     const tail = existsSync(file(b, "log.txt")) ? readFileSync(file(b, "log.txt"), "utf8").trim().split("\n").slice(-Number(rest[0] ?? 12)) : [];
     const job = s.job && readJob(b, s.job.id);
-    console.log(`perf row: ${r.scenes.join(", ")}, ${r.runs} run each, at each landing batch on main${boxEnv(b).TERRA_PERF === "0" ? " (off: TERRA_PERF=0)" : ""}`);
+    console.log(`perf row: ${r.scenes.join(", ")}, ${r.runs} run each, at each landing batch on main, a suspect confirmed with ${r.confirm} runs at both ends${boxEnv(b).TERRA_PERF === "0" ? " (off: TERRA_PERF=0)" : ""}`);
     console.log(`  last benched ${s.benched?.slice(0, 9) ?? "nothing"}, last in every band ${s.good?.slice(0, 9) ?? "none yet"}; ${s.job ? `in flight ${s.job.id} (${s.job.why}, ${job?.state ?? "gone"})` : "nothing in flight"}`);
     if (s.bisect) console.log(`  bisecting ${s.bisect.scene} ${s.bisect.metric} ${s.bisect.good.slice(0, 9)}..${s.bisect.bad.slice(0, 9)}: ${s.bisect.hi - s.bisect.lo} commits left, ${s.bisect.benches} of ${s.bisect.cap} benches`);
     if (s.waiting.length) console.log(`  ${s.waiting.length} bisects waiting`);

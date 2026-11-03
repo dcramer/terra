@@ -15,9 +15,10 @@
 export type Metric = "median_ms" | "p99_ms" | "hitches" | "load_s";
 export const METRICS: Metric[] = ["median_ms", "p99_ms", "hitches", "load_s"];
 
-/// Why a point was benched: a landing on main, a retrigger at a suspect landing, a bisect's
-/// step, or a bisect's end measured by hand (`perf.ts bisect`).
-export type Why = "landing" | "retrigger" | "bisect";
+/// Why a point was benched: a landing on main, a retrigger at a suspect landing (its bad end),
+/// the repeat of its range's good end benched beside it (`baseline`, as Pinpoint measures both
+/// sides of a change), a bisect's step, or a bisect's end measured by hand (`perf.ts bisect`).
+export type Why = "landing" | "retrigger" | "baseline" | "bisect";
 
 /// One scene's numbers at one commit, from one job.
 export type Point = {
@@ -97,6 +98,65 @@ export const median = (xs: number[]) => {
   return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
 };
 
+/// A sample's centre: the median of a time (one slow run moves it little), the mean of a count
+/// of hitches (they come in bursts in some runs and none in others, so a median hides them).
+export const centre = (m: Metric, xs: number[]) => (m === "hitches" ? xs.reduce((a, b) => a + b, 0) / xs.length : median(xs));
+
+/// The least change of a metric at a level: its floor, the larger of its share and its count.
+export const least = (m: Metric, at: number) => Math.max(FLOORS[m].abs ?? 0, ((FLOORS[m].pct ?? 0) / 100) * Math.abs(at));
+
+/// Two-sided p-value of the Mann-Whitney U test of two samples, exact (every split of the
+/// pooled ranks, ties at their mid-rank) for the few runs the row takes, the normal
+/// approximation past a million splits. As Pinpoint compares a change's two sides (catapult
+/// dashboard pinpoint/models/compare/compare.py, which also takes Kolmogorov-Smirnov's).
+export function mannWhitney(a: number[], b: number[]): number {
+  const pooled = [...a, ...b];
+  const sorted = [...pooled].sort((x, y) => x - y);
+  const rank = (v: number) => {
+    const first = sorted.indexOf(v);
+    const last = sorted.lastIndexOf(v);
+    return (first + last) / 2 + 1;
+  };
+  const ranks = pooled.map(rank);
+  const [n, m] = [a.length, b.length];
+  if (!n || !m) return 1;
+  const mid = (n * m) / 2;
+  const u = (picked: number[]) => picked.reduce((s, r) => s + r, 0) - (n * (n + 1)) / 2;
+  const seen = Math.abs(u(ranks.slice(0, n)) - mid);
+  let splits = 1;
+  for (let i = 0; i < n; i++) splits = (splits * (n + m - i)) / (i + 1);
+  if (splits > 1e6) {
+    const sd = Math.sqrt((n * m * (n + m + 1)) / 12);
+    const z = (seen - 0.5) / sd;
+    return Math.min(1, 2 * (1 - normal(z)));
+  }
+  let as = 0;
+  let all = 0;
+  const pick: number[] = [];
+  const walk = (from: number) => {
+    if (pick.length === n) {
+      all++;
+      if (Math.abs(u(pick) - mid) >= seen - 1e-9) as++;
+      return;
+    }
+    for (let i = from; i <= ranks.length - (n - pick.length); i++) {
+      pick.push(ranks[i]);
+      walk(i + 1);
+      pick.pop();
+    }
+  };
+  walk(0);
+  return as / all;
+}
+
+/// The standard normal's cumulative distribution (Abramowitz and Stegun 26.2.17).
+function normal(z: number): number {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989422804014327 * Math.exp((-z * z) / 2);
+  const p = d * t * (0.31938153 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  return z >= 0 ? 1 - p : p;
+}
+
 /// The noise band of a window: its median, and how far from it a value is still noise, the
 /// larger of the metric's floor and three robust deviations of the window.
 export function band(values: number[], floor: Floor): { base: number; width: number } | undefined {
@@ -108,10 +168,10 @@ export function band(values: number[], floor: Floor): { base: number; width: num
 }
 
 /// The points one series is judged against: the same scene on the same card, picture and
-/// build, from landings and retriggers (a bisect's points are of older commits), none taken on
-/// a busy machine, in the order they were benched.
+/// build, from landings and retriggers (a bisect's points and a baseline's are of older
+/// commits), none taken on a busy machine, in the order they were benched.
 export function series(points: Point[], like: Pick<Point, "scene" | "gpu" | "size" | "build">): Point[] {
-  return points.filter((p) => p.why !== "bisect" && !p.busy && p.scene === like.scene && p.gpu === like.gpu && p.size === like.size && p.build === like.build);
+  return points.filter((p) => (p.why === "landing" || p.why === "retrigger") && !p.busy && p.scene === like.scene && p.gpu === like.gpu && p.size === like.size && p.build === like.build);
 }
 
 /// What a value says against the window before it.
