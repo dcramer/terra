@@ -12,18 +12,13 @@
 
 use super::{FOREST_M, Species, floor::MEADOW_M, glade_at, species_at};
 use bevy::{
-    asset::RenderAssetUsages,
-    camera::{primitives::Aabb, visibility::NoAutoAabb},
-    light::NotShadowCaster,
-    mesh::{Indices, PrimitiveTopology},
-    platform::collections::HashMap,
-    prelude::*,
-    render::storage::ShaderBuffer,
+    camera::visibility::NoAutoAabb, light::NotShadowCaster, platform::collections::HashMap,
+    prelude::*, render::storage::ShaderBuffer,
 };
 use terra_gen::{Noise, Seed};
 use terra_world::{
     planet::Planet,
-    woods::{FarExtension, FarWoods},
+    woods::{FarCard, FarExtension, FarWoods, far_mesh},
 };
 
 /// The far forest's material is the world's (`terra_world::woods`, D396): one definition of
@@ -64,16 +59,6 @@ pub(super) struct Lay<'a> {
     pub parting: Handle<ShaderBuffer>,
 }
 
-/// One far tree's card, in the mesh of its square.
-struct Card {
-    foot: Vec3,
-    width: f32,
-    height: f32,
-    species: Species,
-    /// 0 to 1, for the shader's own variation.
-    luck: f32,
-}
-
 /// Lays the far forest: a card for each tree, merged a square at a time.
 pub(super) fn lay(
     lay: Lay,
@@ -98,7 +83,7 @@ pub(super) fn lay(
     });
     let edge = Noise::new(lay.seed.derive("far edge"));
     let cells = (TO_M / CELL_M).ceil() as i32;
-    let mut squares: HashMap<(i32, i32), Vec<Card>> = HashMap::default();
+    let mut squares: HashMap<(i32, i32), Vec<FarCard>> = HashMap::default();
     let mut count = [0usize; 3];
     let seed = far_seed(lay.seed);
     for i in -cells..=cells {
@@ -142,18 +127,20 @@ pub(super) fn lay(
                     (at.y / CHUNK_M).floor() as i32,
                 ))
                 .or_default()
-                .push(Card {
+                .push(FarCard {
                     foot,
                     width,
                     height,
-                    species,
+                    kind: species as usize,
                     luck: luck(7),
+                    comes_in: 0.0,
                 });
         }
     }
     let squares_count = squares.len();
     for (_, cards) in squares {
-        let (mesh, middle, aabb) = merged(&cards);
+        // The world's far cards, cut to their trees' outlines (D396: one primitive).
+        let (mesh, middle, aabb) = far_mesh(&cards);
         commands.spawn((
             Name::new("Far forest"),
             Mesh3d(meshes.add(mesh)),
@@ -168,51 +155,6 @@ pub(super) fn lay(
         "lush: far forest of {} oaks, {} pines and {} spruces, out to {TO_M:.0} m, in {squares_count} squares",
         count[0], count[1], count[2]
     );
-}
-
-/// A square's cards as one mesh about its middle: each card's four corners all at its foot,
-/// the shader standing them up and turning them to the eye. The first texture coordinate is
-/// the corner, the second the card's width and height, and the colour its kind, its luck
-/// and how far up its crown starts. Its bounds hold the cards turned any way.
-fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
-    let middle = cards.iter().map(|c| c.foot).sum::<Vec3>() / cards.len() as f32;
-    let up = middle.normalize();
-    let mut positions = Vec::with_capacity(cards.len() * 4);
-    let mut normals = Vec::with_capacity(cards.len() * 4);
-    let mut corners = Vec::with_capacity(cards.len() * 4);
-    let mut sizes = Vec::with_capacity(cards.len() * 4);
-    let mut colours = Vec::with_capacity(cards.len() * 4);
-    let mut indices = Vec::with_capacity(cards.len() * 6);
-    let (mut low, mut high) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
-    for card in cards {
-        let at = card.foot - middle;
-        let reach = Vec3::splat(card.width * 0.5);
-        let top = up * card.height;
-        for p in [at - reach, at + reach, at - reach + top, at + reach + top] {
-            low = low.min(p);
-            high = high.max(p);
-        }
-        let first = positions.len() as u32;
-        for corner in [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]] {
-            positions.push(at.to_array());
-            normals.push(up.to_array());
-            corners.push(corner);
-            sizes.push([card.width, card.height]);
-            colours.push([card.species as u32 as f32 / 2.0, card.luck, 0.0, 1.0]);
-        }
-        indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
-    }
-    let mut mesh = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
-    );
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, corners);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_1, sizes);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colours);
-    mesh.insert_indices(Indices::U32(indices));
-    (mesh, middle, Aabb::from_min_max(low, high))
 }
 
 /// The word the far trees' squares are drawn by: the forest's seed, derived for them.
@@ -234,47 +176,6 @@ fn hash(seed: u32, i: i32, j: i32, salt: u32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_squares_bounds_hold_its_cards_turned_any_way() {
-        let up = Vec3::Y * 2000.0;
-        let cards = [
-            Card {
-                foot: up + Vec3::new(3.0, 0.0, -4.0),
-                width: 10.0,
-                height: 25.0,
-                species: Species::Oak,
-                luck: 0.3,
-            },
-            Card {
-                foot: up + Vec3::new(-50.0, 0.4, 20.0),
-                width: 6.0,
-                height: 30.0,
-                species: Species::Pine,
-                luck: 0.9,
-            },
-        ];
-        let (mesh, middle, aabb) = merged(&cards);
-        assert_eq!(mesh.count_vertices(), 8);
-        let (low, high) = (Vec3::from(aabb.min()), Vec3::from(aabb.max()));
-        for card in &cards {
-            for turn in 0..16 {
-                let angle = turn as f32 / 16.0 * std::f32::consts::TAU;
-                let across = Vec3::new(libm::cosf(angle), 0.0, libm::sinf(angle));
-                for corner in [-0.5f32, 0.5] {
-                    for rise in [0.0, 1.0] {
-                        let p = card.foot - middle
-                            + across * corner * card.width
-                            + Vec3::Y * rise * card.height;
-                        assert!(
-                            p.cmpge(low - 1e-3).all() && p.cmple(high + 1e-3).all(),
-                            "{p} outside {low} to {high}"
-                        );
-                    }
-                }
-            }
-        }
-    }
 
     #[test]
     fn the_grids_luck_is_spread_and_repeatable() {

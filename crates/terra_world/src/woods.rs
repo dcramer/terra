@@ -638,15 +638,53 @@ struct Card {
     grown: Option<Drawn>,
 }
 
-/// A square's trees as one mesh of cards about its middle, in the far forest's form
-/// (far_forest.wesl): each card a quad for each band of its tree's outline ([`outline`]),
-/// the corners at its foot, the shader standing them up and turning them to the eye; the
-/// first texture coordinate the corner on the whole card, the second the card's width and
-/// height, the colour its kind (oak 0, pine 0.5, spruce 1), its luck, for a grown tree's card
-/// where it comes in, and which way the corner is widened ([`outward`]). Its bounds hold the
-/// cards turned any way.
+/// A square's trees as one mesh of far cards ([`far_mesh`]).
 fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
-    let middle = cards.iter().map(|c| c.tree.at).sum::<Vec3>() / cards.len() as f32;
+    let cards: Vec<FarCard> = cards
+        .iter()
+        .map(|card| {
+            let tree = &card.tree;
+            let planted = planted(tree);
+            // As its grown tree was drawn, if it was.
+            let kind = kind_index(card.grown.map_or(tree.kind, |drawn| drawn.kind));
+            let height = planted.height_m;
+            FarCard {
+                foot: tree.at,
+                width: height * CROWN[kind] * planted.squat * card.widen * (0.85 + 0.3 * tree.luck),
+                height,
+                kind,
+                luck: tree.luck,
+                comes_in: card
+                    .grown
+                    .map_or(0.0, |drawn| drawn.to_m / HANDOVER_SCALE_M),
+            }
+        })
+        .collect();
+    far_mesh(&cards)
+}
+
+/// One far tree's card: where its foot stands, how wide and high it is drawn, its kind (oak
+/// 0, pine 1, spruce 2), its luck (0 to 1, the shader's own variation), and for a grown
+/// tree's card where it comes in (`FarExtension`'s handover scale, 0 for none).
+#[derive(Clone, Copy, Debug)]
+pub struct FarCard {
+    pub foot: Vec3,
+    pub width: f32,
+    pub height: f32,
+    pub kind: usize,
+    pub luck: f32,
+    pub comes_in: f32,
+}
+
+/// Cards as one mesh about their middle, in the far forest's form (far_forest.wesl): each
+/// card a quad for each band of its tree's outline ([`outline`]), the corners at its foot,
+/// the shader standing them up and turning them to the eye; the first texture coordinate the
+/// corner on the whole card, the second the card's width and height, the colour its kind
+/// (oak 0, pine 0.5, spruce 1), its luck, where it comes in, and which way the corner is
+/// widened ([`outward`]). Its bounds hold the cards turned any way. The world's woods and the
+/// lush experiment's far forest both draw by it (D396).
+pub fn far_mesh(cards: &[FarCard]) -> (Mesh, Vec3, Aabb) {
+    let middle = cards.iter().map(|c| c.foot).sum::<Vec3>() / cards.len() as f32;
     let up = middle.normalize();
     let count = cards.len() * 4;
     let (mut positions, mut normals, mut corners, mut sizes, mut colours) = (
@@ -659,34 +697,18 @@ fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
     let mut indices = Vec::with_capacity(cards.len() * 6);
     let (mut low, mut high) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
     for card in cards {
-        let tree = &card.tree;
-        let planted = planted(tree);
-        // As its grown tree was drawn, if it was.
-        let kind = card.grown.map_or(tree.kind, |drawn| drawn.kind);
-        let height = planted.height_m;
-        let width = height
-            * CROWN[kind_index(kind)]
-            * planted.squat
-            * card.widen
-            * (0.85 + 0.3 * tree.luck);
-        let at = tree.at - middle;
+        let (width, height) = (card.width, card.height);
+        let at = card.foot - middle;
         let reach = Vec3::splat(width * 0.5);
         let top = up * height;
         for p in [at - reach, at + reach, at - reach + top, at + reach + top] {
             low = low.min(p);
             high = high.max(p);
         }
-        let species = match kind {
-            TreeKind::Oak => 0.0,
-            TreeKind::Pine => 0.5,
-            TreeKind::Spruce => 1.0,
-        };
-        let comes_in = card
-            .grown
-            .map_or(0.0, |drawn| drawn.to_m / HANDOVER_SCALE_M);
+        let species = card.kind as f32 * 0.5;
         // The card cut to its tree's outline, a quad a band; each corner says in its colour's
         // alpha which way the shader widens it (`outward`).
-        let bands = outline::outline(kind_index(kind), width, height);
+        let bands = outline::outline(card.kind, width, height);
         for (i, band) in bands.iter().enumerate() {
             let first = positions.len() as u32;
             let below = (i == 0 || bands[i - 1].half < band.half) as i32;
@@ -703,7 +725,7 @@ fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
                 normals.push(up.to_array());
                 corners.push(corner);
                 sizes.push([width, height]);
-                colours.push([species, tree.luck, comes_in, outward(out)]);
+                colours.push([species, card.luck, card.comes_in, outward(out)]);
             }
             indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
         }
@@ -723,7 +745,7 @@ fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
 
 /// Which way a band's corner is widened, across and up, each -1, 0 or 1, as one number for
 /// the colour's alpha, 2 to 10: far_forest.wesl's vertex shader reads it back (`outward`).
-/// An alpha of 1 is a whole card, not widened (the lush forest's far cards).
+/// An alpha of 1 is a whole card, not widened.
 fn outward([across, up]: [i32; 2]) -> f32 {
     (2 + (across + 1) * 3 + up + 1) as f32
 }
@@ -732,6 +754,45 @@ fn outward([across, up]: [i32; 2]) -> f32 {
 mod tests {
     use super::*;
     use bevy::mesh::VertexAttributeValues;
+
+    /// The lush experiment's far forest draws by `far_mesh` too: a square's bounds hold its
+    /// cards whole, turned any way, though each is cut to its outline.
+    #[test]
+    fn a_squares_bounds_hold_its_cards_turned_any_way() {
+        let up = Vec3::Y * 2000.0;
+        let card = |foot, width, height, kind, luck| FarCard {
+            foot: up + foot,
+            width,
+            height,
+            kind,
+            luck,
+            comes_in: 0.0,
+        };
+        let cards = [
+            card(Vec3::new(3.0, 0.0, -4.0), 10.0, 25.0, 0, 0.3),
+            card(Vec3::new(-50.0, 0.4, 20.0), 6.0, 30.0, 1, 0.9),
+        ];
+        let (mesh, middle, aabb) = far_mesh(&cards);
+        assert!(mesh.count_vertices() >= 8);
+        let (low, high) = (Vec3::from(aabb.min()), Vec3::from(aabb.max()));
+        for card in &cards {
+            for turn in 0..16 {
+                let angle = turn as f32 / 16.0 * std::f32::consts::TAU;
+                let across = Vec3::new(libm::cosf(angle), 0.0, libm::sinf(angle));
+                for corner in [-0.5f32, 0.5] {
+                    for rise in [0.0, 1.0] {
+                        let p = card.foot - middle
+                            + across * corner * card.width
+                            + Vec3::Y * rise * card.height;
+                        assert!(
+                            p.cmpge(low - 1e-3).all() && p.cmple(high + 1e-3).all(),
+                            "{p} outside {low} to {high}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     fn tree(at: Vec3, kind: TreeKind, stature: f32) -> Tree {
         Tree {
