@@ -583,7 +583,8 @@ fn seen(o: &SkyOccluders) -> Seen {
     let count = (cells.x * cells.y * cells.z) as usize;
     let mut sides = vec![[1.0f32; 6]; count];
     let mut up = vec![1.0f32; count];
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    // As wide as this thread may fan out, from the table of the game's threads (D606).
+    let threads = terra_gen::par::width();
     let rows = cells.y * cells.z;
     let per = rows.div_ceil(threads as u32) as usize * cells.x as usize;
     std::thread::scope(|scope| {

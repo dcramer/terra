@@ -684,7 +684,7 @@ fn first_view(
         .map(|(&id, &sides)| (id, sides))
         .partition(|(id, _)| id.level < STREAM_FROM);
     terrain.later = later.into_iter().collect();
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let threads = terra_gen::par::width();
     let planet_ref = &*planet;
     let meshed = terra_gen::par::map(&chunks, |&(id, sides)| {
         let at = std::time::Instant::now();

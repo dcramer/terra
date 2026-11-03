@@ -79,7 +79,7 @@ fn main() -> ExitCode {
         .collect();
     let started = std::time::Instant::now();
     // Every base on a thread of its own, as many at once as there are cores.
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let threads = terra_gen::par::width();
     let next = std::sync::atomic::AtomicUsize::new(0);
     let reports: Vec<(usize, inspect::Report)> = std::thread::scope(|scope| {
         let workers: Vec<_> = (0..threads)
@@ -247,7 +247,7 @@ fn fuzz(
     let started = std::time::Instant::now();
     let count = seeds.end - seeds.start;
     let next = std::sync::atomic::AtomicU64::new(seeds.start);
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let threads = terra_gen::par::width();
     let mut found: Vec<(u64, Vec<inspect::Finding>)> = std::thread::scope(|threads_scope| {
         let workers: Vec<_> = (0..threads)
             .map(|_| {

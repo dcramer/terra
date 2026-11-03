@@ -988,23 +988,19 @@ fn plant(
         growing: HashMap::default(),
     };
     let squares = (GRASS_REACH_M / GRASS_SQUARE_M).ceil() as i32;
-    // One thread per row of squares; working out where the ground is, is the slow part.
+    // The rows of squares shared out over the threads the table gives this one (D606);
+    // working out where the ground is, is the slow part.
     let footprints: Vec<&Footprint> = footprints.iter().map(|(_, f)| f).collect();
-    let grown: Vec<((i32, i32), Option<Mesh>)> = std::thread::scope(|scope| {
-        let (grass, planet, footprints) = (&meadow.grass, &*planet, footprints.as_slice());
-        let rows: Vec<_> = (-squares..squares)
-            .map(|i| {
-                scope.spawn(move || {
-                    (-squares..squares)
-                        .map(|j| ((i, j), grass_square(grass, planet, footprints, i, j)))
-                        .collect::<Vec<_>>()
-                })
-            })
-            .collect();
-        rows.into_iter()
-            .flat_map(|row| row.join().unwrap())
-            .collect()
-    });
+    let (grass, planet, footprints) = (&meadow.grass, &*planet, footprints.as_slice());
+    let rows: Vec<i32> = (-squares..squares).collect();
+    let grown: Vec<((i32, i32), Option<Mesh>)> = terra_gen::par::map(&rows, |&i| {
+        (-squares..squares)
+            .map(|j| ((i, j), grass_square(grass, planet, footprints, i, j)))
+            .collect::<Vec<_>>()
+    })
+    .into_iter()
+    .flatten()
+    .collect();
     let blades: usize = grown
         .iter()
         .filter_map(|(_, mesh)| mesh.as_ref())
