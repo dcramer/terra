@@ -54,7 +54,8 @@ pub(super) fn of(scene: &str) -> Result<Scene, String> {
 /// and says what is wanted (D556).
 pub(super) fn parse(text: &str, scene: &str) -> Result<Scene, String> {
     let file = ron::parse(text).map_err(|e| format!("{FILE}, {e}"))?;
-    known(&file, "the file", &["load", "every", "scenes"])?;
+    // `streaming` is the game's, what enters the world a frame after the load (D608).
+    known(&file, "the file", &["load", "streaming", "every", "scenes"])?;
     let mut budgets = Scene::default();
     if let Some(load) = file.get("load") {
         known(load, "load", &["target_s", "provisional"])?;

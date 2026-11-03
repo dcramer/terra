@@ -139,6 +139,8 @@ fn worth_saying(line: &str) -> Option<&str> {
         // How long the load took, a play scene's second number (D578); a long run's minutes.
         "Loaded in ",
         "Last minute, ",
+        // How long the far view streamed in after the loading screen (D603, D608).
+        "Far view in ",
     ]
     .iter()
     .find_map(|key| line.find(key))

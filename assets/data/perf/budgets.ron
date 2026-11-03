@@ -32,6 +32,18 @@
         target_s: 10.0,
         provisional: true,
     ),
+    // What streams after the load may put in the world a frame (D608, read by the game's
+    // `streaming`): the main thread's ms and the MiB of mesh for the GPU, the first of each
+    // class a frame and the near ground always let in. Unity's `backgroundLoadingPriority`
+    // caps its main thread's integration at 2 ms a frame at Low and 50 at High, Unreal's
+    // `s.AsyncLoadingTimeLimit` at 5 by default, larger behind a loading screen; 8 MiB a frame
+    // is load-time j5's, some 0.5 GB/s at 60 fps, a few percent of a PCIe 3 link.
+    streaming: (
+        frame_ms: 2.0,
+        upload_mib: 8.0,
+        loading_frame_ms: 50.0,
+        loading_upload_mib: 64.0,
+    ),
     // Every scene's phases, unless its own entry says otherwise.
     every: (
         settle: (
