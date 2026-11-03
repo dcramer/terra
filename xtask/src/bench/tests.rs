@@ -1,4 +1,5 @@
 use super::*;
+use crate::load::{Clock, During, Load};
 
 pub(crate) fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
     Timing {
@@ -178,30 +179,47 @@ fn busy_runs_are_left_out_when_enough_are_quiet() {
     assert!(during.busy());
 }
 
-/// A run that hitched while the machine's clock collapsed is the machine's (D185), so it is
-/// busy and another stands in; a collapse without a hitch, or a hitch without one, is not.
+/// A run that hitched while the machine's clock collapsed after it loaded is the machine's
+/// (D185), so it is busy and another stands in; a collapse without a hitch, a hitch without
+/// one, or a collapse only while it loaded is not.
 #[test]
 fn a_hitch_in_a_clock_collapse_is_the_machines() {
-    let run = |hitches, collapses| Run {
+    let run = |hitches, at_s: &[f32]| Run {
         timing: Timing {
             hitches,
+            load_s: Some(10.0),
             ..timing(5.0, 9.0, 40.0)
         },
         before: None,
         during: Some(During {
             mean_cpu_pct: 5.0,
             most_cpu_pct: 10.0,
-            clock: Some(crate::load::Clock {
+            clock: Some(Clock {
                 median_mhz: 5300.0,
                 lowest_mhz: 900.0,
-                collapses,
+                at_s: at_s.to_vec(),
             }),
         }),
     };
-    assert!(run(2, 1).busy());
-    assert!(!run(0, 1).busy());
-    assert!(!run(2, 0).busy());
-    let (used, was_busy) = chosen_runs(&[run(0, 0), run(3, 1), run(0, 1)]);
+    assert!(run(2, &[3.0, 25.0]).busy());
+    assert!(!run(0, &[25.0]).busy());
+    assert!(!run(2, &[]).busy());
+    assert!(!run(2, &[3.0, 8.0]).busy());
+    let said = run(2, &[3.0, 25.0]).clock_said().unwrap();
+    assert!(said.contains("fell to 900 MHz 2 times") && said.contains("another stands in"));
+    assert!(
+        run(2, &[3.0])
+            .clock_said()
+            .unwrap()
+            .ends_with("all while it loaded")
+    );
+    assert_eq!(run(2, &[]).clock_said(), None);
+    // The settle phase's hitches count as the play's do.
+    let mut settled = run(0, &[25.0]);
+    let line = "SANDBOX settle phase, the first 30 s after the loading screen lifted: 1800 frames, median 8.00 ms, 99th percentile 20.00 ms, worst 90.00 ms; 3 hitches over 26.7 ms, 0 freezes of 100 ms or more; ticks' 99th percentile 4.00 ms";
+    settled.timing.phases.read(line);
+    assert!(settled.busy());
+    let (used, was_busy) = chosen_runs(&[run(0, &[]), run(3, &[25.0]), run(0, &[25.0])]);
     assert_eq!((used.len(), was_busy), (2, false));
 }
 

@@ -119,13 +119,13 @@ pub(crate) fn wait_for_quiet(most: Duration) -> (Option<Load>, Duration) {
 pub(crate) struct Watch {
     stop: Arc<AtomicBool>,
     samples: Arc<Mutex<Vec<Load>>>,
-    clocks: Arc<Mutex<Vec<f32>>>,
+    clocks: Arc<Mutex<Vec<(f32, f32)>>>,
     threads: Vec<std::thread::JoinHandle<()>>,
 }
 
 /// What the load was during a run: its mean and its most; and the processors' clock, where
 /// it can be read.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct During {
     pub mean_cpu_pct: f32,
     pub most_cpu_pct: f32,
@@ -137,9 +137,12 @@ impl During {
         self.mean_cpu_pct > BUSY_DURING_CPU_PCT || self.most_cpu_pct > BUSY_DURING_MOST_PCT
     }
 
-    /// The machine's clock collapsed at least once while the run went.
-    pub(crate) fn clock_fell(&self) -> bool {
-        self.clock.is_some_and(|clock| clock.collapses > 0)
+    /// How many times the machine's clock collapsed from `from_s` seconds into the run on (a
+    /// play scene's collapses while it loads slow no frame it is judged on).
+    pub(crate) fn collapses_from(&self, from_s: f32) -> usize {
+        self.clock.as_ref().map_or(0, |clock| {
+            clock.at_s.iter().filter(|&&at| at >= from_s).count()
+        })
     }
 }
 
@@ -156,39 +159,37 @@ pub(crate) const COLLAPSE_SHARE: f32 = 0.4;
 const SUDDEN_SHARE: f32 = 0.8;
 const SUDDEN: usize = 5;
 
-/// The watched processors' clock over a run: its median, how many times it collapsed and the
-/// lowest it fell to in them (the lowest of all where it never did).
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// The watched processors' clock over a run: its median, when it collapsed (seconds from the
+/// run's start) and the lowest it fell to in them (the lowest of all where it never did).
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Clock {
     pub median_mhz: f32,
     pub lowest_mhz: f32,
-    pub collapses: u32,
+    pub at_s: Vec<f32>,
 }
 
-/// The clock of a run from its readings, in MHz, one every `CLOCK_EVERY`; none for too few.
-pub(crate) fn clock(series: &[f32]) -> Option<Clock> {
+/// The clock of a run from its readings, each its second from the run's start and its MHz,
+/// one every `CLOCK_EVERY`; none for too few.
+pub(crate) fn clock(series: &[(f32, f32)]) -> Option<Clock> {
     if series.len() < SUDDEN * 2 {
         return None;
     }
-    let mut sorted = series.to_vec();
+    let mut sorted: Vec<f32> = series.iter().map(|&(_, mhz)| mhz).collect();
     sorted.sort_by(f32::total_cmp);
     let median_mhz = sorted[sorted.len() / 2];
     if median_mhz <= 0.0 {
         return None;
     }
     let (low, high) = (median_mhz * COLLAPSE_SHARE, median_mhz * SUDDEN_SHARE);
-    let (mut collapses, mut lowest, mut down) = (0, f32::MAX, false);
-    for (at, &mhz) in series.iter().enumerate() {
+    let (mut at_s, mut lowest, mut down) = (Vec::new(), f32::MAX, false);
+    for (at, &(second, mhz)) in series.iter().enumerate() {
         if mhz >= low {
             down = false;
             continue;
         }
-        if !down
-            && series[at.saturating_sub(SUDDEN)..at]
-                .iter()
-                .any(|&b| b >= high)
-        {
-            collapses += 1;
+        let before = &series[at.saturating_sub(SUDDEN)..at];
+        if !down && before.iter().any(|&(_, mhz)| mhz >= high) {
+            at_s.push(second);
             down = true;
         }
         if down {
@@ -197,8 +198,8 @@ pub(crate) fn clock(series: &[f32]) -> Option<Clock> {
     }
     Some(Clock {
         median_mhz,
-        lowest_mhz: if collapses > 0 { lowest } else { sorted[0] },
-        collapses,
+        lowest_mhz: if at_s.is_empty() { sorted[0] } else { lowest },
+        at_s,
     })
 }
 
@@ -264,10 +265,11 @@ impl Watch {
         let files = watched_cpus();
         if !files.is_empty() {
             let (stopping, kept) = (stop.clone(), clocks.clone());
+            let started = Instant::now();
             threads.push(std::thread::spawn(move || {
                 while !stopping.load(Ordering::Relaxed) {
                     if let (Some(mhz), Ok(mut kept)) = (mean_clock(&files), kept.lock()) {
-                        kept.push(mhz);
+                        kept.push((started.elapsed().as_secs_f32(), mhz));
                     }
                     std::thread::sleep(CLOCK_EVERY);
                 }
@@ -534,31 +536,49 @@ mod tests {
         let steady =
             |n: usize| -> Vec<f32> { (0..n).map(|i| 5000.0 + (i % 7) as f32 * 100.0).collect() };
         let ramp: Vec<f32> = (0..30).map(|i| 900.0 + i as f32 * 140.0).collect();
+        // Each reading's second, one every 20 ms.
+        let timed = |mhz: Vec<f32>| -> Vec<(f32, f32)> {
+            mhz.into_iter()
+                .enumerate()
+                .map(|(i, mhz)| (i as f32 * 0.02, mhz))
+                .collect()
+        };
         let mut series = steady(200);
         series.extend(&ramp);
         series.extend(steady(200));
         series.push(1300.0);
         series.extend(&ramp[3..]);
         series.extend(steady(100));
-        let seen = clock(&series).unwrap();
-        assert_eq!(seen.collapses, 2);
+        let seen = clock(&timed(series)).unwrap();
+        assert_eq!(seen.at_s.len(), 2);
+        assert!((seen.at_s[0] - 4.0).abs() < 1e-3 && (seen.at_s[1] - 8.6).abs() < 1e-3);
         assert_eq!(seen.lowest_mhz, 900.0);
         assert!((5000.0..=5600.0).contains(&seen.median_mhz));
+        // The run's collapses from a second on: one after its load of 6 s, none after 9 s.
+        let during = During {
+            mean_cpu_pct: 2.0,
+            most_cpu_pct: 3.0,
+            clock: Some(seen),
+        };
+        assert_eq!(
+            [0.0, 6.0, 9.0].map(|from| during.collapses_from(from)),
+            [2, 1, 0]
+        );
 
         // Nothing but steady, and a dip to 60% of it: none, the lowest of all said.
         let mut dipped = steady(300);
         dipped.extend([3100.0; 20]);
         dipped.extend(steady(100));
-        let seen = clock(&dipped).unwrap();
-        assert_eq!((seen.collapses, seen.lowest_mhz), (0, 3100.0));
+        let seen = clock(&timed(dipped)).unwrap();
+        assert_eq!((seen.at_s.len(), seen.lowest_mhz), (0, 3100.0));
 
         // A slow wind-down (the last readings as the program exits and the cores idle).
         let mut idle = steady(300);
         idle.extend((0..40).map(|i| 5000.0 - i as f32 * 110.0));
-        assert_eq!(clock(&idle).unwrap().collapses, 0);
+        assert!(clock(&timed(idle)).unwrap().at_s.is_empty());
 
         // Too few readings to say, or none.
-        assert_eq!(clock(&[5000.0, 900.0]), None);
+        assert_eq!(clock(&timed(vec![5000.0, 900.0])), None);
         assert_eq!(clock(&[]), None);
     }
 

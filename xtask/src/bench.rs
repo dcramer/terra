@@ -1,7 +1,7 @@
 //! `cargo xtask bench` (D185): the scenes timed in release, offscreen at 1920x1080 on the
 //! real GPU, each judged against the frame budget and the last recorded result.
 
-use crate::load::{self, During, Load};
+use crate::load;
 use crate::scenes::{SCENES, Scene};
 use crate::windows::{on_wsl, profile_folder, windows_program};
 use crate::{Task, node, output, root, run};
@@ -70,6 +70,11 @@ struct Timing {
 }
 
 impl Timing {
+    /// Its hitches, the settle phase's (D607) and the timed play's.
+    fn all_hitches(&self) -> u32 {
+        self.hitches + self.phases.settle.as_ref().map_or(0, |s| s.hitches)
+    }
+
     /// Whether it is held to the integrated GPU's target (D239) rather than the budget (D25).
     fn integrated(&self) -> bool {
         self.device == "IntegratedGpu"
@@ -194,30 +199,6 @@ fn parse_drawn(line: &str) -> Option<(String, String)> {
     Some((preset.to_string(), device.to_string()))
 }
 
-/// One run of a scene: its frames, the load before it and how long it waited for a quiet
-/// machine, and the load while it ran.
-#[derive(Debug, Clone)]
-struct Run {
-    timing: Timing,
-    before: Option<Load>,
-    during: Option<During>,
-}
-
-impl Run {
-    /// Taken on a busy machine: it started busy, or was busy while it ran, or it hitched and
-    /// the machine's clock collapsed meanwhile (D185), whose slow frames are the machine's.
-    fn busy(&self) -> bool {
-        self.before.is_some_and(|load| !load.quiet())
-            || self.during.is_some_and(|d| d.busy())
-            || self.clock_hitched()
-    }
-
-    /// It hitched while the machine's clock collapsed.
-    fn clock_hitched(&self) -> bool {
-        self.timing.hitches > 0 && self.during.is_some_and(|d| d.clock_fell())
-    }
-}
-
 /// How a scene's runs went, for its line in the table.
 struct Note {
     /// The runs its result is taken from, of all it made.
@@ -231,21 +212,6 @@ struct Note {
     holding: usize,
     /// Whether they were taken on a busy machine.
     busy: bool,
-}
-
-/// The runs a scene's result is taken from: the quiet ones when at least half are, so noise
-/// nobody chose is left out; otherwise all of them, which the table says were busy.
-fn chosen_runs(runs: &[Run]) -> (Vec<Timing>, bool) {
-    let quiet: Vec<Timing> = runs
-        .iter()
-        .filter(|run| !run.busy())
-        .map(|run| run.timing.clone())
-        .collect();
-    if !quiet.is_empty() && quiet.len() * 2 >= runs.len() {
-        (quiet, false)
-    } else {
-        (runs.iter().map(|run| run.timing.clone()).collect(), true)
-    }
 }
 
 /// How far apart the runs' medians are: their lowest and highest, and that range as a share
@@ -578,37 +544,27 @@ pub(crate) fn bench(args: &[String]) -> bool {
                 picture.as_deref(),
             );
             let during = watch.stop();
-            if let Some(during) = during {
+            if let Some(during) = &during {
                 println!(
                     "  while it ran, everything but it: processors {:.0}% busy on average, {:.0}% at most{}",
                     during.mean_cpu_pct,
                     during.most_cpu_pct,
                     if during.busy() { ", busy" } else { "" }
                 );
-                if let Some(clock) = during.clock.filter(|clock| clock.collapses > 0) {
-                    let hitched = timing.as_ref().is_some_and(|t| t.hitches > 0);
-                    println!(
-                        "  the box's CPU clock fell to {:.0} MHz {} time{} from its {:.0} MHz (its power management, not the game){}",
-                        clock.lowest_mhz,
-                        clock.collapses,
-                        if clock.collapses == 1 { "" } else { "s" },
-                        clock.median_mhz,
-                        if hitched {
-                            ": its hitches are the machine's, so the run counts as busy and another stands in"
-                        } else {
-                            ""
-                        }
-                    );
-                }
             }
-            match timing {
-                Some(timing) => timed.push(Run {
-                    timing,
-                    before,
-                    during,
-                }),
-                None => println!("  no frame times came out"),
+            let Some(timing) = timing else {
+                println!("  no frame times came out");
+                continue;
+            };
+            let run = Run {
+                timing,
+                before,
+                during,
+            };
+            if let Some(said) = run.clock_said() {
+                println!("  {said}");
             }
+            timed.push(run);
         }
         let (used, busy) = chosen_runs(&timed);
         let Some(timing) = combine(&used) else {
@@ -976,6 +932,9 @@ mod judge;
 mod phases;
 #[path = "bench/play.rs"]
 mod play;
+#[path = "bench/runs.rs"]
+mod runs;
+use runs::{Run, chosen_runs};
 #[path = "bench/ticks.rs"]
 mod ticks;
 
