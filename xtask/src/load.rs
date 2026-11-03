@@ -246,17 +246,24 @@ fn watched_cpus() -> Vec<String> {
         .collect()
 }
 
-/// The watched processors' mean clock now, in MHz.
+/// The watched processors' mean clock now, in MHz, of those whose reading is fresh.
 fn mean_clock(files: &[String]) -> Option<f32> {
-    let mut khz = 0.0;
+    let mut khz = Vec::with_capacity(files.len());
     for file in files {
-        khz += std::fs::read_to_string(file)
-            .ok()?
-            .trim()
-            .parse::<f32>()
-            .ok()?;
+        khz.push(std::fs::read_to_string(file).ok()?.trim().parse().ok()?);
     }
-    (!files.is_empty()).then(|| khz / files.len() as f32 / 1000.0)
+    fresh_mean_mhz(&khz)
+}
+
+/// The mean clock, in MHz, of the `scaling_cur_freq` readings (kHz) that measure one; none
+/// when none does. x86 Linux gives a processor's APERF/MPERF clock over its last tick (base
+/// clock times their ratio, `arch_freq_get_on_cpu`) only when it ticked in the last 20 ms; an
+/// idle one reads the cpufreq driver's last P-state instead, a whole multiple of 100 MHz (800
+/// or 5700 on the render worker), no clock at all. Counted in the mean, those made 16 of a
+/// forest-run bench's 71 collapses (its P-cores 7-11% busy) and hid 17 others (perf-clock j2).
+pub(crate) fn fresh_mean_mhz(khz: &[u64]) -> Option<f32> {
+    let fresh: Vec<u64> = khz.iter().copied().filter(|k| k % 100_000 != 0).collect();
+    (!fresh.is_empty()).then(|| fresh.iter().sum::<u64>() as f32 / fresh.len() as f32 / 1000.0)
 }
 
 impl Watch {
@@ -578,6 +585,17 @@ mod tests {
         // Too few readings to say, or none.
         assert_eq!(clock(&timed(vec![5000.0, 900.0])), None);
         assert_eq!(clock(&[]), None);
+    }
+
+    /// An idle processor's stale reading (a whole 100 MHz step) is no clock: the render
+    /// worker's busy P-cores read 799975 kHz in a collapse while idle ones read 800000 or
+    /// 5700000, which would raise the mean out of a real collapse or make one of an idle box.
+    #[test]
+    fn only_fresh_readings_make_the_clock() {
+        let mhz = fresh_mean_mhz(&[799_975, 5_700_000, 800_045, 800_000]).unwrap();
+        assert!((mhz - 800.01).abs() < 0.01, "{mhz}");
+        assert_eq!(fresh_mean_mhz(&[800_000, 5_700_000]), None, "all stale");
+        assert_eq!(fresh_mean_mhz(&[]), None);
     }
 
     #[test]
