@@ -291,10 +291,7 @@ fn apply(world: &mut World, probe: &mut Probe) -> Result<(), String> {
     }
     for part in hides(&variant) {
         let matched = matching(world, part);
-        let in_view = matched
-            .iter()
-            .filter(|&&e| world.get::<ViewVisibility>(e).is_some_and(|v| v.get()))
-            .count();
+        let in_view = matched.iter().filter(|&&e| shown(world, e)).count();
         if in_view == 0 {
             let what = if matched.is_empty() {
                 "matched no mesh or light".to_string()
@@ -383,15 +380,23 @@ fn matching(world: &World, part: &str) -> Vec<Entity> {
         .collect()
 }
 
+/// Whether it is in view: a mesh by its view visibility; a light, which has no bounds to
+/// cull and whose view visibility stays unset (the first real probe, at the lake, failed
+/// `hide=PointLight` so), by whether it is shown at all.
+fn shown(world: &World, e: Entity) -> bool {
+    if world.get::<Mesh3d>(e).is_some() {
+        world.get::<ViewVisibility>(e).is_some_and(|v| v.get())
+    } else {
+        world.get::<InheritedVisibility>(e).is_some_and(|v| v.get())
+    }
+}
+
 /// Every kind drawn, with how many and how many in view.
 fn census(world: &World) -> Vec<String> {
     kinds(world)
         .iter()
         .map(|(name, es)| {
-            let shown = es
-                .iter()
-                .filter(|&&e| world.get::<ViewVisibility>(e).is_some_and(|v| v.get()))
-                .count();
+            let shown = es.iter().filter(|&&e| shown(world, e)).count();
             format!("{name} {}/{shown}", es.len())
         })
         .collect()

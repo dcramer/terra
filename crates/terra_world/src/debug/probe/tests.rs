@@ -247,6 +247,21 @@ fn a_hide_matching_nothing_fails_naming_what_is_drawn() {
     apply(&mut world, &mut right).unwrap();
     hide(&mut world, &mut right);
     assert_eq!(world.get::<Visibility>(mesh), Some(&Visibility::Hidden));
+
+    // A light is never culled, so its view visibility stays unset: shown is in view (the
+    // lake's first probe failed `hide=PointLight` as matching 24, none in view).
+    let light = world
+        .spawn((
+            PointLight::default(),
+            Visibility::Inherited,
+            InheritedVisibility::VISIBLE,
+            ViewVisibility::HIDDEN,
+        ))
+        .id();
+    let mut lights = probe("base:; unlit: hide=PointLight");
+    apply(&mut world, &mut lights).unwrap();
+    hide(&mut world, &mut lights);
+    assert_eq!(world.get::<Visibility>(light), Some(&Visibility::Hidden));
 }
 
 #[test]
