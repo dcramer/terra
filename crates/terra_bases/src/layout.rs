@@ -279,11 +279,25 @@ fn track(
     );
 }
 
-/// How many more jobs building's workers may have, `running` already: the phase's share of
-/// the cores (D606), behind the loading screen all but the main and render threads', in play
-/// a quarter's, though the pool has threads for the load.
-fn room_beside(running: usize) -> usize {
-    terra_gen::par::share(terra_gen::par::Work::Building).saturating_sub(running)
+/// How many more jobs building's workers may have now: the phase's share of the cores (D606),
+/// behind the loading screen all but the main and render threads', in play a quarter's,
+/// though the pool has threads for the load, less the sections' jobs running and the bases
+/// being laid whole, each holding a thread of it. A scripted run sends everything at once and
+/// waits for it.
+fn room_now(
+    options: &Options,
+    jobs: &Jobs,
+    site: &mut Site,
+    builds: &mut Query<&mut Built>,
+) -> usize {
+    if options.scripted() && !options.bench {
+        return usize::MAX;
+    }
+    let laying = each(site, builds)
+        .filter(|build| build.sections.laying.is_some())
+        .count();
+    terra_gen::par::share(terra_gen::par::Work::Building)
+        .saturating_sub(jobs.running.len() + laying)
 }
 
 /// Sends the waiting sections nearest the camera to the workers, as many as they have
@@ -303,12 +317,7 @@ fn launch(
     let pool = builders();
     jobs.budget_ms =
         (jobs.budget_ms + time.delta_secs() * 1000.0 * DETAIL_CORES).min(DETAIL_BURST_MS);
-    // A scripted run sends everything at once and waits for it.
-    let room = if options.scripted() && !options.bench {
-        usize::MAX
-    } else {
-        room_beside(jobs.running.len())
-    };
+    let mut room = room_now(&options, &jobs, &mut site, &mut builds);
     let eye = camera
         .iter()
         .next()
@@ -326,7 +335,8 @@ fn launch(
         if sections.waiting.is_empty() || sections.whole.is_some() {
             continue;
         }
-        if sections.laying.is_none() {
+        if sections.laying.is_none() && room > 0 {
+            room -= 1;
             let snapshot = sections
                 .snapshot
                 .get_or_insert_with(|| Arc::new(build.base.clone()))

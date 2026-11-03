@@ -53,6 +53,59 @@ fn the_base_runs_without_the_world_layer() {
     );
 }
 
+/// Several bases changed at once in play are laid whole no more at a time than building's
+/// share of the cores (D606): each laying held a thread of building's pool, sized for the
+/// loading screen's seven on sixteen cores, where the play's share is one.
+#[test]
+fn bases_changed_at_once_in_play_are_laid_within_buildings_share() {
+    use terra_gen::par::{Phase, Work, set_phase, share};
+    let mut app = alone();
+    for _ in 0..3 {
+        app.update();
+    }
+    let look = app.world().resource::<BuildLook>().clone();
+    let bases = terra_gen::par::threads().most(Work::Building) + 2;
+    for n in 0..bases {
+        let mut commands = app.world_mut().commands();
+        let build = Build::new(&mut commands, &look, Transform::default(), "a house");
+        commands.spawn((Name::new(format!("house {n}")), Built(build)));
+    }
+    app.world_mut().flush();
+    // Until the player's base and every section sent out are done, holding none of the share.
+    for _ in 0..500 {
+        app.update();
+        let world = app.world();
+        let laying = world.resource::<Site>().build.sections.laying.is_some();
+        if world.resource::<layout::Jobs>().quiet() && !laying {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    // Every base with a section waiting and nothing laid, as an edit leaves it.
+    let mut built = app.world_mut().query::<&mut Built>();
+    for mut build in built.iter_mut(app.world_mut()) {
+        let sections = &mut build.0.sections;
+        sections.whole = None;
+        sections.waiting.insert([0; 3], store::Waiting::default());
+    }
+    set_phase(Phase::Play);
+    app.update();
+    set_phase(Phase::Load);
+    // Laid or being laid: each started this frame.
+    let started = built
+        .iter(app.world())
+        .filter(|build| build.0.sections.laying.is_some() || build.0.sections.whole.is_some())
+        .count();
+    assert!(started >= 1, "no base was laid");
+    let threads = terra_gen::par::threads();
+    let play = threads.during(Phase::Play, Work::Building);
+    assert!(
+        started <= play,
+        "{started} of {bases} laid at once, its share {play}"
+    );
+    assert_eq!(share(Work::Building), threads.load_building);
+}
+
 /// A build not the player's (a village's house, a town's) goes with its world on a crossing,
 /// as its root does (D469): one left behind had its details and far cells drawn under the
 /// gone root, the warnings after the title's crossing to a new world (seeds j7).
