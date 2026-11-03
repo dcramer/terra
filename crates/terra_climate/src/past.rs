@@ -21,7 +21,7 @@
 //! average, takes about 0.65 ms; a kept cell's next day, 1.8 µs. Measured on 2026-10-14,
 //! release build, one core of a Ryzen 9 5900X.
 
-use crate::fields::{Fields, Place};
+use crate::fields::{Fields, Place, Sky, Weather};
 use glam::Vec3;
 use std::collections::HashMap;
 
@@ -156,8 +156,111 @@ fn fold_from(fields: &Fields, place: Place, mut past: Past, from: i64, to: i64) 
     past
 }
 
+/// The pasts at the starts of several days, each as [`pasts`] has it, at a place's latitude,
+/// leaning and point but at each of so many heights over the sea and catches: in order of
+/// height, then catch. A moment's sky is worked out once for all of them, since only the
+/// temperature's lapse changes with height and only what lies with the catch.
+pub fn pasts_up<const N: usize>(
+    fields: &Fields,
+    place: Place,
+    heights_m: &[f32],
+    catches: &[f32],
+    days: [i64; N],
+) -> Vec<[Past; N]> {
+    let mut pasts = vec![Past::fresh(); heights_m.len() * catches.len()];
+    let mut found = vec![[Past::default(); N]; pasts.len()];
+    let mut last: Option<(i64, i64)> = None;
+    for (n, &day) in days.iter().enumerate() {
+        let start = fold_start(fields, day);
+        let from = match last {
+            Some((from, upto)) if from == start && upto <= day => upto,
+            _ => {
+                pasts.fill(Past::fresh());
+                start
+            }
+        };
+        for on in from..day {
+            let today = fields.day(place, on);
+            let skies: [Sky; SAMPLES] = std::array::from_fn(|sample| today.sky(hour_of(sample)));
+            let (warmth_c, annual_c) = fields.level_warmth(place.latitude, today.phase);
+            for (&height_m, pasts) in heights_m.iter().zip(pasts.chunks_mut(catches.len())) {
+                let base_c = fields.base_c(warmth_c, height_m, annual_c);
+                let moments = skies.map(|sky| Moment::under(&sky, base_c));
+                for (past, &catch) in pasts.iter_mut().zip(catches) {
+                    *past = fold_day(fields, *past, on, catch, today.daylight.day_hours, &moments);
+                }
+            }
+        }
+        for (found, past) in found.iter_mut().zip(&pasts) {
+            found[n] = *past;
+        }
+        last = Some((start, day));
+    }
+    found
+}
+
+/// The hour of a day's sample of the weather.
+fn hour_of(sample: usize) -> f32 {
+    (sample as f32 + 0.5) * (24.0 / SAMPLES as f32)
+}
+
+/// What a fold takes of a moment's weather.
+#[derive(Clone, Copy)]
+struct Moment {
+    temperature_c: f32,
+    precipitation_mm_per_hour: f32,
+    snow_share: f32,
+    ground_sunlight_w_m2: f32,
+}
+
+impl Moment {
+    fn of(weather: &Weather) -> Self {
+        Self {
+            temperature_c: weather.temperature_c,
+            precipitation_mm_per_hour: weather.precipitation_mm_per_hour,
+            snow_share: weather.snow_share,
+            ground_sunlight_w_m2: weather.ground_sunlight_w_m2,
+        }
+    }
+
+    /// Under a sky, the day's temperature's base so, as `Day::weather` has it.
+    fn under(sky: &Sky, base_c: f32) -> Self {
+        let temperature_c = sky.temperature_c(base_c);
+        Self {
+            temperature_c,
+            precipitation_mm_per_hour: sky.precipitation_mm_per_hour,
+            snow_share: crate::fields::snow_share(temperature_c),
+            ground_sunlight_w_m2: sky.ground_sunlight_w_m2,
+        }
+    }
+}
+
 /// The past at the start of the day after `day`, from the past at its start.
-pub fn step(fields: &Fields, place: Place, mut past: Past, day: i64) -> Past {
+pub fn step(fields: &Fields, place: Place, past: Past, day: i64) -> Past {
+    let today = fields.day(place, day);
+    let moments: [Moment; SAMPLES] =
+        std::array::from_fn(|sample| Moment::of(&today.weather(hour_of(sample))));
+    fold_day(
+        fields,
+        past,
+        day,
+        place.catch,
+        today.daylight.day_hours,
+        &moments,
+    )
+}
+
+/// The past at the start of the day after `day`, from the past at its start, the day's
+/// weather sampled so and its sun up so many hours, where the ground keeps `catch` of the
+/// snow falling.
+fn fold_day(
+    fields: &Fields,
+    mut past: Past,
+    day: i64,
+    catch: f32,
+    day_hours: f32,
+    moments: &[Moment; SAMPLES],
+) -> Past {
     let year = &fields.climate().year;
     if year.winters(day) != year.winters(day - 1) {
         past.warmth = 0.0;
@@ -167,17 +270,15 @@ pub fn step(fields: &Fields, place: Place, mut past: Past, day: i64) -> Past {
         past.chill = 0.0;
         past.chill_days = 0.0;
     }
-    let today = fields.day(place, day);
     let hours = 24.0 / SAMPLES as f32;
     let mut sum = 0.0;
-    for sample in 0..SAMPLES {
-        let weather = today.weather((sample as f32 + 0.5) * hours);
+    for weather in moments {
         let t = weather.temperature_c;
         let falls = weather.precipitation_mm_per_hour * hours;
         let snow = falls * weather.snow_share;
         // What the wind leaves of it here: more in the lee, less on a scoured rise (D323).
         // What it carries off a rise is not water the ground there gets either.
-        past.snow_mm += snow * place.catch;
+        past.snow_mm += snow * catch;
         let melt = if t > 0.0 {
             ((MELT_MM_PER_HOUR_C + MELT_PER_W_M2 * weather.ground_sunlight_w_m2) * t * hours)
                 .min(past.snow_mm)
@@ -191,7 +292,7 @@ pub fn step(fields: &Fields, place: Place, mut past: Past, day: i64) -> Past {
     let mean = sum / SAMPLES as f32;
     // Bare ground above freezing dries; under snow, or frozen, it keeps its water.
     if past.snow_mm <= 0.0 && mean > 0.0 {
-        past.ground_mm = (past.ground_mm - drying_mm(mean, today.daylight.day_hours)).max(0.0);
+        past.ground_mm = (past.ground_mm - drying_mm(mean, day_hours)).max(0.0);
     }
     past.ice_m = if mean < 0.0 {
         (past.ice_m * past.ice_m + STEFAN_M * STEFAN_M * -mean).sqrt()
@@ -342,6 +443,39 @@ mod tests {
             latitude: 45.0_f32.to_radians(),
             sunward: 0.0,
             catch: 1.0,
+        }
+    }
+
+    #[test]
+    fn the_pasts_up_a_place_are_each_heights_and_catchs_own_to_the_bit() {
+        let fields = Fields::new(temperate(), Seed(4));
+        let heights: Vec<f32> = (0..9).map(|j| -50.0 + 400.0 * j as f32).collect();
+        let catches = [0.3, 1.0, 1.7];
+        // A later day carried on from an earlier's fold, an earlier one after a later, and
+        // two whose folds start a year apart.
+        for days in [[100, 196], [196, 100], [40, 300]] {
+            for sunward in [-0.6, 0.0, 0.8] {
+                let place = Place { sunward, ..at() };
+                let up = pasts_up(&fields, place, &heights, &catches, days);
+                for (n, found) in up.iter().enumerate() {
+                    let (height_m, catch) = (heights[n / catches.len()], catches[n % 3]);
+                    let own = pasts(
+                        &fields,
+                        Place {
+                            height_m,
+                            catch,
+                            ..place
+                        },
+                        days,
+                    );
+                    // `Debug` tells every bit of a float apart.
+                    assert_eq!(
+                        format!("{found:?}"),
+                        format!("{own:?}"),
+                        "{days:?} {sunward} {height_m} {catch}"
+                    );
+                }
+            }
         }
     }
 

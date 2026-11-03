@@ -57,35 +57,40 @@ impl Snow {
             (((height_m.1 - height_m.0) / 50.0).ceil() as usize).max(1),
             6,
         );
-        let points: Vec<(usize, usize, usize)> = (0..=steps.0)
-            .flat_map(|i| (0..=steps.1).flat_map(move |j| (0..=steps.2).map(move |k| (i, j, k))))
-            .collect();
         let value = |range: (f32, f32), step: usize, of: usize| {
             range.0 + (range.1 - range.0) * step as f32 / of as f32
         };
-        let tables = crate::maps::par_map(&points, |&(i, j, k)| {
+        // A latitude's and leaning's snow at every height and catch at once, which share
+        // their weather.
+        let columns: Vec<(usize, usize)> = (0..=steps.0)
+            .flat_map(|i| (0..=steps.2).map(move |k| (i, k)))
+            .collect();
+        let heights: Vec<f32> = (0..=steps.1).map(|j| value(height_m, j, steps.1)).collect();
+        let up = crate::maps::par_map(&columns, |&(i, k)| {
             // Snow too high for anything to ever melt it would pile up for ever; the fold
             // starts at the summer before, so it holds a winter's at most.
-            CATCHES.map(|catch| {
-                let place = Place {
-                    at,
-                    height_m: value(height_m, j, steps.1),
-                    latitude: value(latitude, i, steps.0),
-                    sunward: value(sunward, k, steps.2),
-                    catch,
-                };
-                terra_climate::pasts(fields, place, days).map(|past| past.snow_depth_m())
-            })
+            let place = Place {
+                at,
+                height_m: height_m.0,
+                latitude: value(latitude, i, steps.0),
+                sunward: value(sunward, k, steps.2),
+                catch: 1.0,
+            };
+            terra_climate::pasts_up(fields, place, &heights, &CATCHES, days)
         });
+        let (leanings, rows) = (steps.2 + 1, steps.1 + 1);
         std::array::from_fn(|n| Self {
             day: days[n],
             latitude,
             height_m,
             sunward,
             steps,
-            table: tables
-                .iter()
-                .map(|catches| catches.map(|days| days[n]))
+            table: (0..(steps.0 + 1) * rows * leanings)
+                .map(|m| {
+                    let (i, j, k) = (m / (rows * leanings), m / leanings % rows, m % leanings);
+                    let column = &up[i * leanings + k];
+                    std::array::from_fn(|c| column[j * CATCHES.len() + c][n].snow_depth_m())
+                })
                 .collect(),
         })
     }
@@ -131,6 +136,42 @@ impl Snow {
 mod tests {
     use super::*;
     use glam::Vec3;
+
+    #[test]
+    fn the_snow_tables_points_are_each_places_fold_to_the_bit() {
+        let climate = crate::start_climate().unwrap();
+        let fields = Fields::new(climate, terra_gen::Seed(1));
+        let at = Vec3::new(3_000.0, 29_000.0, -800.0);
+        // Where snow lies in winter on low ground too, and on the heights into spring.
+        let (latitude, height_m) = ((0.9, 0.92), (-50.0, 950.0));
+        let days = [150, 30];
+        let snows = Snow::on_days(&fields, days, at, latitude, height_m);
+        let (a, b, c) = snows[0].steps;
+        let value = |range: (f32, f32), step: usize, of: usize| {
+            range.0 + (range.1 - range.0) * step as f32 / of as f32
+        };
+        for (n, snow) in snows.iter().enumerate() {
+            assert_eq!(snow.table.len(), (a + 1) * (b + 1) * (c + 1));
+            for (m, point) in snow.table.iter().enumerate() {
+                let (i, j, k) = (m / ((b + 1) * (c + 1)), m / (c + 1) % (b + 1), m % (c + 1));
+                let own = CATCHES.map(|catch| {
+                    let place = Place {
+                        at,
+                        height_m: value(height_m, j, b),
+                        latitude: value(latitude, i, a),
+                        sunward: value(snow.sunward, k, c),
+                        catch,
+                    };
+                    terra_climate::pasts(&fields, place, days)[n].snow_depth_m()
+                });
+                assert_eq!(
+                    point.map(f32::to_bits),
+                    own.map(f32::to_bits),
+                    "{n} {i} {j} {k}"
+                );
+            }
+        }
+    }
 
     #[test] // Slow: minutes.
     fn early_summer_snow_lies_on_the_heights_longest_facing_the_pole() {

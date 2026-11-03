@@ -342,6 +342,26 @@ impl Day<'_> {
     }
 
     pub(crate) fn weather(&self, hour: f32) -> Weather {
+        let sky = self.sky(hour);
+        let temperature_c = sky.temperature_c(self.base_c);
+        Weather {
+            temperature_c,
+            precipitation_mm_per_hour: sky.precipitation_mm_per_hour,
+            snow_share: snow_share(temperature_c),
+            cloud: sky.cloud,
+            sunlight_w_m2: sky.sunlight_w_m2,
+            ground_sunlight_w_m2: sky.ground_sunlight_w_m2,
+            sun_height: libm::asinf(sky.sine),
+            front: sky.front,
+            daily: sky.daily,
+            point: sky.point,
+            tau: sky.tau,
+        }
+    }
+
+    /// The weather at an hour of the day but for its temperature's base: all of it that is
+    /// the same at every height over the sea.
+    pub(crate) fn sky(&self, hour: f32) -> Sky {
         let fields = self.fields;
         let climate = &fields.climate;
         let days = self.day as f64 + hour as f64 / crate::time::HOURS;
@@ -367,23 +387,46 @@ impl Day<'_> {
         let sine = self.sun.sine(hour);
         let level = sun::on_level(sine, cloud);
         let ground = self.ground_sunlight(sine, hour, cloud);
-        let temperature_c = self.base_c
-            + t.daily_swing_c * (1.0 - 0.5 * cloud) * daily
-            + t.weather_swing_c * mass
-            + SLOPE_WARMS_C_PER_W_M2 * (ground - level);
-        Weather {
-            temperature_c,
+        Sky {
+            warming_c: [
+                t.daily_swing_c * (1.0 - 0.5 * cloud) * daily,
+                t.weather_swing_c * mass,
+                SLOPE_WARMS_C_PER_W_M2 * (ground - level),
+            ],
             precipitation_mm_per_hour: precipitation,
-            snow_share: snow_share(temperature_c),
             cloud,
             sunlight_w_m2: level,
             ground_sunlight_w_m2: ground,
-            sun_height: libm::asinf(sine),
+            sine,
             front,
             daily,
             point,
             tau,
         }
+    }
+}
+
+/// A moment's weather but for its temperature's base (`Day::sky`): the same at every height.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Sky {
+    /// What the day's swing, the air mass and the ground's leaning add to the day's base.
+    warming_c: [f32; 3],
+    pub precipitation_mm_per_hour: f32,
+    cloud: f32,
+    sunlight_w_m2: f32,
+    pub ground_sunlight_w_m2: f32,
+    sine: f32,
+    front: f32,
+    daily: f32,
+    point: Vec3,
+    tau: f32,
+}
+
+impl Sky {
+    /// The air's temperature under this sky, the day's base (`Fields::base_c`) so.
+    pub fn temperature_c(&self, base_c: f32) -> f32 {
+        let [daily, mass, slope] = self.warming_c;
+        base_c + daily + mass + slope
     }
 }
 
