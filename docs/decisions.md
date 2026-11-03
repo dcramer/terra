@@ -590,6 +590,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D596](decisions/D596.md) | A world is made from its seed alone | Tech | Agent | Decided | A world's seed, a `u64`, is the only input its… |
 | [D601](decisions/D601.md) | Eight joint influences a vertex, read from glTF's JOINTS_1 and skinned in our patched Bevy | Tech | Agent | Decided | A vertex may be skinned to up to eight joints… |
 | [D603](decisions/D603.md) | The start's far view streams in after the loading screen | Tech | Agent | Decided | The loading screen waits for what is near the start… |
+| [D604](decisions/D604.md) | The volumetric fog takes the air's dimming of the sun at a ray's two ends, not at every lit step | Tech | Agent | Decided | Bevy 0.20's `volumetric_fog.wesl`, with an atmosphere on… |
 
 ## Tools and workflow
 

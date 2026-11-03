@@ -268,6 +268,17 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         let neg_LdotV = dot(normalize(L), Rd_world);
         let phase = henyey_greenstein(neg_LdotV);
 
+        // Terra's patch (D604): the air's dimming of the sun taken at the ray's two ends and
+        // drawn between them, not looked up at every lit step.
+        @if(ATMOSPHERE)
+        let sun_air_first = sun_through_air(Ro_world + depth_offset, L, (*light).sun_disk_angular_size);
+        @if(ATMOSPHERE)
+        let sun_air_last = sun_through_air(
+            Ro_world + Rd_world * f32(step_count - 1u) * step_size_world + depth_offset,
+            L,
+            (*light).sun_disk_angular_size
+        );
+
         // Reset `background_alpha` for a new raymarch.
         background_alpha = 1.0;
         // Terra's patch (D595): this march's `background_alpha` is the point lights' march's.
@@ -337,17 +348,13 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
                     scattering * density * step_size_world * light_intensity * exposure;
 
 @if(ATMOSPHERE) {
-                // attenuate by atmospheric scattering
-                let P = P_world + depth_offset;
-                let P_as = (atmosphere.world_to_atmosphere * vec4(P, 1.0)).xyz;
-                let P_clamped = clamp_to_surface(atmosphere, P_as);
-                let r = length(P_clamped);
-                let local_up = normalize(P_clamped);
-                let mu_light = dot(L, local_up);
-
-                let transmittance = sample_transmittance_lut(r, mu_light);
-                let sun_visibility = calculate_visible_sun_ratio(atmosphere, r, mu_light, (*light).sun_disk_angular_size);
-                light_factors_per_step *= transmittance * sun_visibility;
+                // attenuate by atmospheric scattering (Terra's patch, D604: drawn between the
+                // ray's ends)
+                light_factors_per_step *= mix(
+                    sun_air_first,
+                    sun_air_last,
+                    f32(step) / f32(max(step_count - 1u, 1u))
+                );
 }
 
                 // Modulate the factor we calculated above by the phase, fog color,
@@ -567,6 +574,19 @@ fn fetch_spot_shadow_without_normal(light_id: u32, frag_position: vec4<f32>, fra
         frag_coord_xy,
         SPOT_SHADOW_TEXEL_SIZE
     );
+}
+
+// Terra's patch (D604): how much of the sun `L` reaches the point `P` through the air, the
+// transmittance table's colour by the part of its disk over the horizon, as the march took it at
+// every lit step.
+@if(ATMOSPHERE)
+fn sun_through_air(P: vec3<f32>, L: vec3<f32>, sun_disk_angular_size: f32) -> vec3<f32> {
+    let P_as = (atmosphere.world_to_atmosphere * vec4(P, 1.0)).xyz;
+    let P_clamped = clamp_to_surface(atmosphere, P_as);
+    let r = length(P_clamped);
+    let mu_light = dot(L, normalize(P_clamped));
+    return sample_transmittance_lut(r, mu_light) *
+        calculate_visible_sun_ratio(atmosphere, r, mu_light, sun_disk_angular_size);
 }
 
 @if(ATMOSPHERE)
