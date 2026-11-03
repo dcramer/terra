@@ -14,6 +14,7 @@ mod load;
 mod local;
 mod nightly;
 mod primitives;
+mod probe;
 mod profile;
 mod scenes;
 mod scope;
@@ -49,6 +50,7 @@ const MODULES: &[&[Task]] = &[
     profile::TASKS,
     tasks::play::TASKS,
     bench::TASKS,
+    probe::TASKS,
     check::TASKS,
     sizes::TASKS,
     build::TASKS,

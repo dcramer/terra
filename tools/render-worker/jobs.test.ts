@@ -98,6 +98,8 @@ test("a job's class: from its command unless --gpu or --cpu says; a bench always
   assert.equal(jobClass(["cargo", "xtask", "bench"]), "bench");
   assert.equal(jobClass(["cargo", "xtask", "gpu", "bench", "--", "x"]), "bench");
   assert.equal(jobClass(["cargo", "xtask", "bench"], "cpu"), "bench");
+  // A probe measures, as a bench does (D609).
+  assert.equal(jobClass(["cargo", "xtask", "probe", "a:; b: hide=X", "--", "--vantage", "1"]), "bench");
   assert.equal(jobClass(["cargo", "test", "-p", "terra_gen"]), "cpu");
   assert.equal(jobClass(["cargo", "+nightly", "clippy", "--workspace"]), "cpu");
   assert.equal(jobClass(["cargo", "-q", "check"]), "cpu");

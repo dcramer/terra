@@ -2,6 +2,7 @@
 //! scripted modes that let a run be checked without anyone watching.
 
 use crate::debug::{FRAME_BUDGET_MS, STUTTER_MS};
+use crate::detail::Sweep;
 use crate::recorder::FREEZE_MS;
 use crate::{
     audio, debug,
@@ -63,6 +64,12 @@ usage: terra_sandbox [options]
   --bench               measure frame times with vsync off, print them and how they hold
                         to the frame budget, then exit
   --bench-frames <n>    how many frames --bench times (default 600)
+  --probe \"<name>: <lever>, …\"
+                        a variant to measure, repeated for each: once playing, hold the
+                        clock and measure each variant's GPU passes A B A B in one load,
+                        counting only settled frames, then exit; a lever is
+                        tune.name=value or hide=<material part>; probe.* tunables set its
+                        frames and rounds (`cargo xtask probe`, D609)
   --remote              let a script drive this run over Bevy's remote protocol, on
                         localhost:15702 (tools/sandbox/remote.ts)
   --remote-port <port>  listen on this port instead, so several runs can be driven apart
@@ -283,6 +290,8 @@ pub struct Options {
     pub shots: Option<Shots>,
     /// Detail swept over frames, the clock held still (`--detail-sweep`, D230).
     pub detail_sweep: Option<crate::detail::Sweep>,
+    /// Variants measured A B A B in one load, on settled frames (`--probe`, D609).
+    pub probe: Option<crate::debug::probe::Plan>,
     /// The yard's ground rolling gently rather than flat, as the lush forest stands on.
     pub rolling: bool,
     pub settle_frames: u32,
@@ -576,6 +585,7 @@ impl Options {
             shot: None,
             shots: None,
             detail_sweep: None,
+            probe: None,
             rolling: false,
             settle_frames: SETTLE_FRAMES,
             bench: false,
@@ -724,10 +734,8 @@ impl Options {
                     *options.file(flag).expect("a flag naming a file") = Some(file);
                 }
                 "--shots" => options.shots = Some(Shots::parse(&value("--shots")?)?),
-                "--detail-sweep" => {
-                    options.detail_sweep =
-                        Some(crate::detail::Sweep::parse(&value("--detail-sweep")?)?)
-                }
+                "--detail-sweep" => options.detail_sweep = Some(Sweep::parse(&value(&arg)?)?),
+                "--probe" => options.probe.get_or_insert_default().add(&value(&arg)?)?,
                 "--walls" => {
                     options.walls = match value("--walls")?.as_str() {
                         kind @ ("logs" | "plain") => Some(kind.to_string()),
@@ -1121,6 +1129,7 @@ impl Plugin for ShellPlugin {
         if self.0.remote || self.0.calls.is_some() {
             crate::remote::plugin(app);
         }
+        crate::debug::probe::plugin(app);
         // Meshes share slabs of GPU memory, one set a vertex layout; a full slab is copied
         // into a bigger one, after which every mesh in it is prepared and batched again
         // (D283). Slabs are pages of at most 64 MiB, as engines keep fixed-size pages:
@@ -1665,7 +1674,7 @@ const CLOSING_S: u64 = 5;
 /// Ends a scripted run whose work is done. Closing normally is given a few seconds, for
 /// whatever happens as the game closes; then the process is ended, because Bevy's
 /// shutdown sometimes never finishes, waiting on its render thread (seen on macOS).
-fn finish(exit: &mut MessageWriter<AppExit>, how: AppExit) {
+pub(crate) fn finish(exit: &mut MessageWriter<AppExit>, how: AppExit) {
     let success = how.is_success();
     exit.write(how);
     std::thread::spawn(move || {

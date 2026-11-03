@@ -227,7 +227,7 @@ const CPU_XTASK = ["check", "sizes", "seed", "decision"];
 const CPU_CARGO = ["build", "check", "clippy", "doc", "fmt", "test", "tree"];
 
 /// A job's class from its command, `--gpu` or `--cpu` overriding: a bench (`cargo xtask bench`,
-/// `cargo xtask gpu bench`) always has the box alone; the push hook's check (`cargo xtask
+/// `cargo xtask gpu bench`, and `cargo xtask probe`, which measures too, D609) always has the box alone; the push hook's check (`cargo xtask
 /// check`, the command itself and not `--all`'s tests, `--cpu` or not) is a check; cargo's
 /// builds, tests and lints, and `cargo xtask check --all`, are CPU; anything else (a trailer,
 /// the sandbox, a script) may draw.
@@ -235,7 +235,7 @@ export function jobClass(command: string[], flag?: "cpu" | "gpu"): Class {
   const cargo = command.indexOf("cargo");
   const words = command.slice(cargo + 1).filter((w) => !w.startsWith("-") && !w.startsWith("+"));
   const xtask = cargo >= 0 && words[0] === "xtask";
-  if (xtask && (words[1] === "bench" || (words[1] === "gpu" && words[2] === "bench"))) return "bench";
+  if (xtask && (words[1] === "bench" || words[1] === "probe" || (words[1] === "gpu" && words[2] === "bench"))) return "bench";
   if (cargo === 0 && xtask && words[1] === "check" && !command.includes("--all") && flag !== "gpu") return "check";
   if (flag) return flag;
   if (cargo < 0) return "gpu";

@@ -827,7 +827,7 @@ fn append_line(path: &Path, header: &str, line: &str) -> bool {
 /// WSL that is the Windows build, the only one with a real GPU. Optimised, it is the `bench`
 /// profile: a release with nothing built incrementally, as a player's build is, where the
 /// release that shots and films build has our crates incremental (Cargo.toml).
-fn sandbox_program(release: bool, copy: &str) -> Option<(PathBuf, PathBuf)> {
+pub(crate) fn sandbox_program(release: bool, copy: &str) -> Option<(PathBuf, PathBuf)> {
     let profile = if release { "bench" } else { "dev" };
     if on_wsl() {
         return windows_program("terra_sandbox", profile, None, Some(copy));

@@ -33,6 +33,7 @@ use std::{
 
 mod busy;
 mod entities;
+pub mod probe;
 
 /// The frame rate the game is made to hold (D25), at the high preset on the developers'
 /// RTX 3080 at 1080p, at its 99th percentile.
