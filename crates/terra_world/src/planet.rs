@@ -819,8 +819,7 @@ pub fn plugin(app: &mut App) {
         .world_resource::<GroundLook>()
         .init_world_resource::<GroundCoverMap>()
         .init_world_resource::<crate::climate::ClimateMaps>()
-        // The ground is drawn at a quality, chosen by the world layer when it runs; the
-        // default otherwise, as on the workbench.
+        // The ground's quality: the world layer's when it runs, else the default (workbench).
         .init_resource::<crate::quality::Quality>()
         .insert_resource(GlobalAmbientLight {
             brightness: 120.0,
