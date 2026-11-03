@@ -495,6 +495,7 @@ fn follow_wind(
     mut materials: ResMut<Assets<WindMaterial>>,
     mut own: Local<crate::wind::OwnSway<WindMaterial>>,
 ) {
+    terra_gen::stat_scope!("flora");
     let Some(wind) = wind.filter(|wind| wind.is_changed()) else {
         return;
     };
@@ -1127,6 +1128,7 @@ fn make_way(
     mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
     ticks: SystemChangeTick,
 ) {
+    terra_gen::stat_scope!("flora");
     let Some(mut meadow) = meadow else { return };
     let mut changes: Vec<(&Footprint, Vec<Footprint>)> = Vec::new();
     for (entity, footprint) in &footprints {
@@ -1245,6 +1247,7 @@ fn regrown(
     meadow: Option<ResMut<Meadow>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
+    terra_gen::stat_scope!("flora");
     let Some(mut meadow) = meadow else { return };
     if meadow.growing.is_empty() {
         return;
@@ -1274,6 +1277,7 @@ fn clear_new(
     mut obstacles: ResMut<Obstacles>,
     mut growth: Query<(&Growth, &Transform, &mut Visibility), Added<Growth>>,
 ) {
+    terra_gen::stat_scope!("flora");
     if footprints.is_empty() {
         return;
     }
@@ -1302,6 +1306,7 @@ fn follow_digs(
     mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
     mut seen: Local<usize>,
 ) {
+    terra_gen::stat_scope!("flora");
     let Some(mut meadow) = meadow else { return };
     let count = planet.voxels().edit_count();
     if count == *seen {
@@ -1344,6 +1349,7 @@ fn mow_around(
     mut obstacles: ResMut<Obstacles>,
     mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
 ) {
+    terra_gen::stat_scope!("flora");
     for &MowAround(at, radius) in asked.read() {
         let up = at.normalize();
         for (growth, transform, mut visibility) in &mut growth {
@@ -1363,6 +1369,7 @@ fn clear_around(
     mut obstacles: ResMut<Obstacles>,
     mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
 ) {
+    terra_gen::stat_scope!("flora");
     for &ClearAround(at, radius) in asked.read() {
         let up = at.normalize();
         for (growth, transform, mut visibility) in &mut growth {

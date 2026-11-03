@@ -98,6 +98,7 @@ pub fn compress(
     mut materials: ResMut<Assets<StandardMaterial>>,
     device: Option<Res<RenderDevice>>,
 ) {
+    terra_gen::stat_scope!("building");
     let samples_bc = device.is_some_and(|device| {
         device
             .features()

@@ -101,6 +101,7 @@ fn load(
     mut kinds: ResMut<Kinds>,
     mut done: Local<bool>,
 ) {
+    terra_gen::stat_scope!("folk");
     if *done {
         return;
     }
@@ -130,6 +131,7 @@ fn prepare(
     mut kinds: ResMut<Kinds>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
+    terra_gen::stat_scope!("folk");
     let waiting: Vec<String> = kinds
         .kinds
         .keys()
@@ -182,6 +184,7 @@ fn prepare(
 
 /// Every animal of a drawn kind as a body, once its model is ready.
 fn spawn(mut commands: Commands, market: Res<Market>, mut kinds: ResMut<Kinds>) {
+    terra_gen::stat_scope!("folk");
     if kinds.spawned || kinds.kinds.is_empty() || kinds.ready.len() < kinds.kinds.len() {
         return;
     }
@@ -241,6 +244,7 @@ fn place(
     mut beasts: Query<(&Beast, &mut Transform, &mut Visibility)>,
     rising: Option<Res<crate::rising::Rising>>,
 ) {
+    terra_gen::stat_scope!("folk");
     for (beast, mut at, mut shown) in &mut beasts {
         let Some(animal) = market.animals.animals.get(beast.index) else {
             continue;
@@ -274,6 +278,7 @@ fn animate(
     mut players: Query<(&mut Plays, &mut AnimationPlayer, &mut AnimationTransitions)>,
     rising: Option<Res<crate::rising::Rising>>,
 ) {
+    terra_gen::stat_scope!("folk");
     for (mut plays, mut player, mut transitions) in &mut players {
         let Ok(beast) = beasts.get(plays.beast) else {
             continue;

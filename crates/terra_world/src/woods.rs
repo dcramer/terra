@@ -151,6 +151,7 @@ fn see_horizon(
     horizon: Res<crate::horizon::HorizonPicture>,
     mut materials: ResMut<Assets<FarWoods>>,
 ) {
+    terra_gen::stat_scope!("flora");
     let (middle, east, north, map) = horizon.uniforms();
     for (_, material) in materials.iter_mut() {
         if material.extension.horizon_map != map {
@@ -412,6 +413,7 @@ fn stream_cards(
     mut cards: ResMut<FarCards>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
+    terra_gen::stat_scope!("flora");
     if let Some((middle, seed, material)) = cards.asked.take() {
         let planet = planet.clone();
         let task = (streaming.0).spawn(async move { coarse_squares(&planet, middle, seed) });

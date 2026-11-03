@@ -586,6 +586,7 @@ fn populate(
     viewers: Query<(Entity, &Transform), With<Viewpoint>>,
     placed: Query<(&Transform, &creatures::Creature)>,
 ) {
+    terra_gen::stat_scope!("creatures");
     // A town put up after its cells were looked at: looked at again, so its birds sit on its
     // roofs too. Asked every frame, so the change is not missed.
     if around.new_ridges() {

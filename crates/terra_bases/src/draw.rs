@@ -797,6 +797,7 @@ fn repaint(
     mut meshes: ResMut<Assets<Mesh>>,
     mut waited: Local<u32>,
 ) {
+    terra_gen::stat_scope!("building");
     let Some(mut arrays) = arrays else {
         return;
     };
@@ -979,6 +980,7 @@ fn upload(
         Res<bevy::diagnostic::FrameCount>,
     ),
 ) {
+    terra_gen::stat_scope!("building");
     let all = options.scripted() && !options.bench;
     let now = time.elapsed_secs();
     // A build whose sections wear a texture set not yet resident waits for it, so nothing is
@@ -1687,6 +1689,7 @@ fn stream(
     time: Res<Time<Real>>,
     mut was: Local<Option<Vec3>>,
 ) {
+    terra_gen::stat_scope!("building");
     let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
         return;
     };
@@ -1774,6 +1777,7 @@ pub fn aside(
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
 ) {
+    terra_gen::stat_scope!("building");
     let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
         return;
     };
@@ -1838,6 +1842,7 @@ pub fn aside(
 /// Draws every build again when the quality preset changes, so each detail is seen as far
 /// as the new one has it.
 fn follow_quality(quality: Res<Quality>, mut site: ResMut<Site>, mut builds: Query<&mut Built>) {
+    terra_gen::stat_scope!("building");
     if !quality.is_changed() || quality.is_added() {
         return;
     }

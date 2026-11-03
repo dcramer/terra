@@ -24,6 +24,7 @@ fn find(
     bestiary: Res<Bestiary>,
     mut told: Local<Vec<Species>>,
 ) {
+    terra_gen::stat_scope!("creatures");
     for (entity, creature) in &creatures {
         let defs = &bestiary.get(creature.species).zones;
         if defs.is_empty() {

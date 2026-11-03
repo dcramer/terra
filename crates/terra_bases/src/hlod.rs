@@ -62,6 +62,7 @@ fn make(
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
 ) {
+    terra_gen::stat_scope!("building");
     let eye = camera.iter().next().map(GlobalTransform::translation);
     let pool = AsyncComputeTaskPool::get();
     let no_kits: Arc<Kits> = Arc::new(Kits(Vec::new()));

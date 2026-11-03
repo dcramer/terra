@@ -130,6 +130,7 @@ fn track(terrain: Res<Terrain>, mut progress: ResMut<Progress>) {
 /// Once the loading screen has lifted, meshes the first view's far chunks on the streaming
 /// pool, the nearer (finer) levels first.
 fn stream_far(planet: Res<Planet>, streaming: Res<Streaming>, mut terrain: ResMut<Terrain>) {
+    terra_gen::stat_scope!("terrain");
     if terrain.later.is_empty() {
         return;
     }
@@ -738,6 +739,7 @@ fn choose(
     quality: Res<crate::quality::Quality>,
     mut terrain: ResMut<Terrain>,
 ) {
+    terra_gen::stat_scope!("terrain");
     let viewer = camera.translation();
     let edits = planet.voxels().edit_count();
     let reach = quality.ground_reach();
@@ -839,6 +841,7 @@ fn receive(
     mut meshes: ResMut<Assets<Mesh>>,
     mut terrain: ResMut<Terrain>,
 ) {
+    terra_gen::stat_scope!("terrain");
     let Some(look) = look else { return };
     let ids: Vec<ChunkId> = terrain.pending.keys().copied().collect();
     for id in ids {

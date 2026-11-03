@@ -109,6 +109,7 @@ fn weather(
     mut images: ResMut<Assets<Image>>,
     device: Option<Res<RenderDevice>>,
 ) {
+    terra_gen::stat_scope!("building");
     if state.done || frames.0 < AFTER_FRAMES {
         return;
     }

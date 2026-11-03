@@ -165,6 +165,7 @@ pub fn plugin(app: &mut App) {
 
 /// Gives a plan shown so far through what stands of it, once worked out.
 fn stand(mut site: ResMut<Site>, mut builds: Query<&mut Built>) {
+    terra_gen::stat_scope!("building");
     for build in each(&mut site, &mut builds) {
         let Some(task) = build.sections.standing.as_mut() else {
             continue;
@@ -187,6 +188,7 @@ pub fn each<'a>(
 /// Notices which builds have changed since last looked at, works out again where they
 /// stand on the ground, and sets the sections their changes reach waiting to be laid.
 fn notice(planet: Res<Planet>, mut site: ResMut<Site>, mut builds: Query<&mut Built>) {
+    terra_gen::stat_scope!("building");
     for (index, build) in each(&mut site, &mut builds).enumerate() {
         // The player's own base, the first, is the one edited: drawn a section at a time.
         let unit = if index == 0 { 1 } else { GROUP };

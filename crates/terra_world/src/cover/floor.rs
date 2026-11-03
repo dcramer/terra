@@ -112,6 +112,7 @@ fn paint(
     meadow: Option<Res<Meadow>>,
     mut built: Local<Option<Arc<Vec<Footprint>>>>,
 ) {
+    terra_gen::stat_scope!("flora");
     let Some(camera) = camera.iter().next() else {
         return;
     };

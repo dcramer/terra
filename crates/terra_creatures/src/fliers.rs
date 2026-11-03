@@ -264,6 +264,7 @@ fn prepare(
     mut kinds: ResMut<Kinds>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
+    terra_gen::stat_scope!("creatures");
     for i in 0..kinds.defs.len() {
         if kinds.ready[i].is_some() || !assets.is_loaded_with_dependencies(&kinds.models[i]) {
             continue;
@@ -326,6 +327,7 @@ fn level_angle(from: Vec3, to: Vec3, up: Vec3) -> f32 {
 /// its turns and flared as it brakes, easing to a hover at its end; or holding at its hover,
 /// turned to face what it faces. Then its rearing to breathe counted down.
 fn fly(time: Res<Time>, kinds: Res<Kinds>, mut fliers: Query<(&mut Flier, &mut Transform)>) {
+    terra_gen::stat_scope!("creatures");
     let step = time.delta_secs();
     if step <= 0.0 {
         return;
@@ -434,6 +436,7 @@ fn animate(
     mut fliers: Query<&mut Flier>,
     mut flapping: Query<(&mut Flaps, &mut AnimationPlayer)>,
 ) {
+    terra_gen::stat_scope!("creatures");
     let step = time.delta_secs();
     for (mut flaps, mut player) in &mut flapping {
         let Ok(mut flier) = fliers.get_mut(flaps.flier) else {
@@ -537,6 +540,7 @@ fn breathe(
     mut fliers: Query<(&mut Flier, &Transform)>,
     mut mouths: Query<(&Mouth, &GlobalTransform, &mut BreathesFire)>,
 ) {
+    terra_gen::stat_scope!("creatures");
     let step = time.delta_secs();
     for (mouth, at, mut breath) in &mut mouths {
         let Ok((mut flier, body)) = fliers.get_mut(mouth.0) else {

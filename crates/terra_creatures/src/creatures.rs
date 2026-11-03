@@ -378,6 +378,7 @@ fn prepare(
     mut graphs: ResMut<Assets<AnimationGraph>>,
     options: Res<terra_world::shell::Options>,
 ) {
+    terra_gen::stat_scope!("creatures");
     // Where each of a herd stands round its home, drawn once in the bestiary's order.
     let mut dice = planet.seed().derive("herds").rng();
     if kinds
@@ -540,6 +541,7 @@ fn form(
     planet: Res<Planet>,
     mut asked: MessageReader<Form>,
 ) {
+    terra_gen::stat_scope!("creatures");
     for &Form(species, at) in asked.read() {
         spawn(&mut commands, (&kinds, &bestiary), &planet, species, at);
     }
@@ -672,6 +674,7 @@ fn walk(
     (trunks, obstacles): (Res<Trunks>, Res<Obstacles>),
     mut memo: Local<HeightMemo>,
 ) {
+    terra_gen::stat_scope!("creatures");
     let dt = time.delta_secs().min(0.1);
     // The ground each asks, through the land's lattice points it asked last tick (D53, as
     // a body's mover does): unmemoised, fifty at the lake took a tick past its budget.
@@ -842,6 +845,7 @@ fn animate(
         &mut AnimationTransitions,
     )>,
 ) {
+    terra_gen::stat_scope!("creatures");
     for (mut animates, mut player, mut transitions) in &mut animators {
         let Ok(creature) = creatures.get(animates.creature) else {
             continue;
@@ -922,6 +926,7 @@ fn butcher(
     bestiary: Res<Bestiary>,
     bodies: Query<(Entity, &Creature)>,
 ) {
+    terra_gen::stat_scope!("creatures");
     for used in interacted.read() {
         let Some(entity) = used.on(Interactable::Carcass) else {
             continue;

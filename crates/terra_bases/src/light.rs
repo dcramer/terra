@@ -209,6 +209,7 @@ fn shelter(
     rooms: Query<(&GlobalTransform, &Indoors)>,
     bodies: Query<(Entity, &GlobalTransform, Option<&Sheltered>), With<ClimateSample>>,
 ) {
+    terra_gen::stat_scope!("building");
     for (entity, at, sheltered) in &bodies {
         // Chest high, so a body standing on a floor is in the room over it.
         let chest = at.translation() + at.translation().normalize_or(Vec3::Y) * 1.2;
@@ -237,6 +238,7 @@ fn place(
     mut shared: ResMut<RoomLight>,
     planet: Res<Planet>,
 ) {
+    terra_gen::stat_scope!("building");
     // Nothing to dim until the sky lights the camera.
     let Some(sky) = camera.iter().next().cloned() else {
         return;
@@ -451,6 +453,7 @@ fn follow(
     mut images: ResMut<Assets<Image>>,
     mut shared: ResMut<RoomLight>,
 ) {
+    terra_gen::stat_scope!("building");
     let Some(sky) = camera.iter().next() else {
         return;
     };
@@ -511,6 +514,7 @@ fn inside(
     air: Option<ResMut<terra_world::scene::IndoorSky>>,
     time: Res<Time>,
 ) {
+    terra_gen::stat_scope!("building");
     let Some(mut indoors) = indoors else {
         return;
     };

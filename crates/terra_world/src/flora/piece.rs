@@ -37,6 +37,7 @@ pub(super) fn draw(
     mut materials: ResMut<Assets<WindMaterial>>,
     mut built: ResMut<Built>,
 ) {
+    terra_gen::stat_scope!("flora");
     let Some(flora) = flora else {
         return;
     };

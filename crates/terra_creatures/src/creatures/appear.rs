@@ -152,6 +152,7 @@ pub fn fade(
     children: Query<&Children>,
     mut ranges: Query<&mut VisibilityRange>,
 ) {
+    terra_gen::stat_scope!("creatures");
     let step = time.delta_secs() / FADE_S;
     for (entity, mut shown, at) in &mut creatures {
         if !shown.ready {

@@ -344,6 +344,7 @@ fn grow(
     quality: Res<crate::quality::Quality>,
     parting: Option<Res<crate::parting::Parting>>,
 ) {
+    terra_gen::stat_scope!("flora");
     let density = quality.grass();
     let Some(camera) = camera.iter().next() else {
         return;
@@ -633,6 +634,7 @@ fn follow_climate(
     mut materials: ResMut<Assets<GrassMaterial>>,
     mut litters: ResMut<Assets<litter::LitterMaterial>>,
 ) {
+    terra_gen::stat_scope!("flora");
     let (Some(maps), Some(meadow)) = (maps, meadow) else {
         return;
     };
@@ -669,6 +671,7 @@ fn measure(
     mut last: Local<f32>,
     mut bare: ResMut<BareGround>,
 ) {
+    terra_gen::stat_scope!("flora");
     let (Some(meadow), Some(camera)) = (meadow, camera.iter().next()) else {
         return;
     };

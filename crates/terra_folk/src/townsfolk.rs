@@ -280,6 +280,7 @@ fn prepare(
     mut figures: ResMut<Figures>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
+    terra_gen::stat_scope!("folk");
     let Some(market) = market else {
         return;
     };
@@ -384,6 +385,7 @@ fn spawn(
     market: Res<Market>,
     mut done: Local<bool>,
 ) {
+    terra_gen::stat_scope!("folk");
     if *done || figures.0.iter().any(|f| f.ready.is_none()) {
         return;
     }
@@ -526,6 +528,7 @@ fn place(
     rising: Option<Res<crate::rising::Rising>>,
     decks: Option<Res<crate::scaffold::Decks>>,
 ) {
+    terra_gen::stat_scope!("folk");
     let eye = camera.single().ok().map(|c| market.local(c.translation()));
     for (entity, one, mut at, mut shown) in &mut folk {
         let Some(person) = market.life.people.get(one.index) else {
@@ -607,6 +610,7 @@ fn animate(
     rising: Option<Res<crate::rising::Rising>>,
     mut players: Query<(&mut Plays, &mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
+    terra_gen::stat_scope!("folk");
     // A time-lapse's people live faster than the film, their clips with them (D381).
     let lived = rising.as_ref().map_or(1.0, |r| r.lapse.pace);
     let Some(market) = market else {
@@ -685,6 +689,7 @@ fn hold(
     in_hand: Query<(), With<InHand>>,
     mut folk: Query<(&Folk, &mut Hand)>,
 ) {
+    terra_gen::stat_scope!("folk");
     let Some(holds) = holds else {
         return;
     };
@@ -736,6 +741,7 @@ struct Gait {
 }
 
 fn tell_gait(time: Res<Time>, mut gait: ResMut<Gait>) {
+    terra_gen::stat_scope!("folk");
     gait.frames += 1;
     gait.wait -= time.delta_secs();
     if gait.wait > 0.0 {
@@ -767,6 +773,7 @@ fn skip(
     folk: Query<&Folk>,
     mut players: Query<(&Plays, &mut AnimationGraphHandle)>,
 ) {
+    terra_gen::stat_scope!("folk");
     for (plays, mut graph) in &mut players {
         let (Ok(one), Some(ready)) = (folk.get(plays.folk), figures.ready(plays.body)) else {
             continue;
@@ -795,6 +802,7 @@ fn seat(
     joints: Query<&GlobalTransform>,
     mut folk: Query<(Entity, &Folk, &mut Transform, Option<&Sat>)>,
 ) {
+    terra_gen::stat_scope!("folk");
     let Some(market) = market else {
         return;
     };
@@ -852,6 +860,7 @@ fn shade(
     meshes: Query<Has<bevy::light::NotShadowCaster>, With<Mesh3d>>,
     mut folk: Query<(Entity, &Folk, &GlobalTransform, &mut Casting)>,
 ) {
+    terra_gen::stat_scope!("folk");
     let Ok(eye) = camera.single() else {
         return;
     };

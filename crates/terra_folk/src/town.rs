@@ -262,6 +262,7 @@ fn burn(
     mut forges: Query<(&ForgeFire, &mut Smoke), Without<Hearth>>,
     rising: Option<Res<crate::rising::Rising>>,
 ) {
+    terra_gen::stat_scope!("folk");
     let life = &market.life;
     for (hearth, mut smoke) in &mut hearths {
         // Rising, a hearth is lit once its house is up and lived in (D381).
@@ -319,6 +320,7 @@ fn light(
     >,
     mut lit: ResMut<Lit>,
 ) {
+    terra_gen::stat_scope!("folk");
     // From when the sun is ten degrees up in the evening until it is up again, as people
     // light their fires and torches before the light has gone.
     let dark = sky.as_ref().map_or(0.0, |sky| {
@@ -392,6 +394,7 @@ fn report(
     lit: Res<Lit>,
     mut wait: Local<f32>,
 ) {
+    terra_gen::stat_scope!("folk");
     *wait -= time.delta_secs();
     if *wait > 0.0 {
         return;
@@ -971,6 +974,7 @@ fn lay(
         Option<ResMut<terra_creatures::wildlife::Perches>>,
     ),
 ) {
+    terra_gen::stat_scope!("folk");
     let (Some(site), Some(look)) = (site, look) else {
         return;
     };
@@ -1459,6 +1463,7 @@ fn live(
         Or<(With<terra_walker::Player>, With<MainCamera>)>,
     >,
 ) {
+    terra_gen::stat_scope!("folk");
     let viewers: Vec<Vec2> = viewers
         .iter()
         .map(|seen| market.local(seen.translation()))

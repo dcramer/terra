@@ -43,6 +43,7 @@ pub(super) fn lay(
     mut meshes: ResMut<Assets<Mesh>>,
     rules: Option<Res<crate::act::BuildRules>>,
 ) {
+    terra_gen::stat_scope!("building");
     if *done || !options.village {
         return;
     }
@@ -171,6 +172,7 @@ pub(super) fn lay_scale(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
+    terra_gen::stat_scope!("building");
     if *done || (options.town.is_none() && !options.castle && options.far.is_none()) {
         return;
     }

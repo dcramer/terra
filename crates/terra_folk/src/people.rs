@@ -217,6 +217,7 @@ fn prepare(
     mut figures: ResMut<Figures>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
+    terra_gen::stat_scope!("folk");
     for figure in figures.0.iter_mut().filter(|f| f.ready.is_none()) {
         if !assets.is_loaded_with_dependencies(&figure.model)
             || !assets.is_loaded_with_dependencies(&figure.clips)
@@ -277,6 +278,7 @@ fn arrive(
     mut asked: MessageReader<Arrive>,
     mut waiting: Local<Vec<Arrive>>,
 ) {
+    terra_gen::stat_scope!("folk");
     waiting.extend(asked.read().cloned());
     let mut later = Vec::new();
     for arrival in waiting.drain(..) {
@@ -386,6 +388,7 @@ fn free(
     mut people: Query<(&mut Person, &mut Worker, &Transform), Without<Creature>>,
     mut told: MessageWriter<Told>,
 ) {
+    terra_gen::stat_scope!("folk");
     for used in interacted.read() {
         let Some(entity) = used.on(Interactable::Prisoner) else {
             continue;
@@ -423,6 +426,7 @@ fn follow(
     players: Query<&Transform, With<Player>>,
     mut people: Query<(&mut Person, &mut Transform), Without<Player>>,
 ) {
+    terra_gen::stat_scope!("folk");
     let dt = time.delta_secs().min(0.1);
     for (mut person, mut at) in &mut people {
         let here = at.translation;
@@ -470,6 +474,7 @@ fn settle(
     mut people: Query<(&mut Person, &mut Worker, &Transform), Without<Prop>>,
     mut told: MessageWriter<Told>,
 ) {
+    terra_gen::stat_scope!("folk");
     for (mut person, mut worker, at) in &mut people {
         let Doing::Following(leader) = person.doing else {
             continue;
@@ -542,6 +547,7 @@ fn sit(
     names: Query<&Name>,
     mut people: Query<(Entity, &Person, &mut Transform, Option<&Seated>)>,
 ) {
+    terra_gen::stat_scope!("folk");
     for (entity, person, mut at, seated) in &mut people {
         if person.doing != Doing::Sitting {
             if seated.is_some() {
@@ -610,6 +616,7 @@ fn animate(
         &Transform,
     )>,
 ) {
+    terra_gen::stat_scope!("folk");
     let dt = time.delta_secs();
     for (mut animates, mut player, mut transitions, place, own) in &mut animators {
         let Ok((person, at)) = people.get(animates.person) else {

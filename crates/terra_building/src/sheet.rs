@@ -152,6 +152,7 @@ pub(super) fn lay(
     assets: Res<AssetServer>,
     rules: Option<Res<crate::act::BuildRules>>,
 ) {
+    terra_gen::stat_scope!("building");
     if *done || !options.kit_sheet {
         return;
     }

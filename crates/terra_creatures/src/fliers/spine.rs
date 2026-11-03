@@ -37,6 +37,7 @@ pub fn spine(
     mut spines: Query<&mut Spine>,
     mut bones: Query<&mut Transform, Without<Flier>>,
 ) {
+    terra_gen::stat_scope!("creatures");
     let step = time.delta_secs();
     if step <= 0.0 {
         return;

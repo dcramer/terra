@@ -442,6 +442,7 @@ pub fn ask(
     options: Res<terra_world::shell::Options>,
     viewers: Query<&Transform, With<Viewpoint>>,
 ) {
+    terra_gen::stat_scope!("creatures");
     let Some(cine) = cine else { return };
     if !asking.read {
         asking.read = true;

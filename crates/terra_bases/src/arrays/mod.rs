@@ -1032,6 +1032,7 @@ pub fn stream(
     time: Res<Time<Real>>,
     quality: Res<Quality>,
 ) {
+    terra_gen::stat_scope!("building");
     let arrays = &mut *arrays;
     let now = time.elapsed_secs();
     if arrays.relief != quality.relief_layers() {

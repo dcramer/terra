@@ -75,6 +75,7 @@ pub fn think(
     mut awake: Local<SpatialHash<Entity>>,
     filming: Option<Res<Cine>>,
 ) {
+    terra_gen::stat_scope!("creatures");
     let tick = time.delta_secs().min(0.1);
     // A shot that hides its player has them out of play (`Cine::hides_player`).
     let out_of_play = filming.is_some_and(|cine| cine.hides_player());

@@ -93,6 +93,7 @@ pub(super) fn file_thickets(
         (Without<Filed>, Without<ObstructionFade>),
     >,
 ) {
+    terra_gen::stat_scope!("creatures");
     for (plant, fade) in &plants {
         if let Some((centre, reach)) = fade.round() {
             if reach <= THICKET_REACH_M * 1.5 {

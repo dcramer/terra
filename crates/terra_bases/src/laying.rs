@@ -27,6 +27,7 @@ fn lay_out(
     driven: Option<Res<DrivenByPlayer>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
+    terra_gen::stat_scope!("building");
     let mut build = Build::new(&mut commands, &look, **start, "Base");
     // The player's base is built by plans, drawn as far as each cube is in.
     build.by_cubes = driven.is_some();

@@ -848,6 +848,7 @@ fn follow_climate(
     assets: Res<AssetServer>,
     mut materials: ResMut<Assets<Foliage>>,
 ) {
+    terra_gen::stat_scope!("flora");
     let Some(maps) = maps.filter(|maps| maps.is_changed()) else {
         return;
     };

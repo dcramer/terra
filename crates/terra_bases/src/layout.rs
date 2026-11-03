@@ -282,6 +282,7 @@ fn launch(
     mut builds: Query<&mut Built>,
     time: Res<Time<Real>>,
 ) {
+    terra_gen::stat_scope!("building");
     let pool = builders();
     jobs.budget_ms =
         (jobs.budget_ms + time.delta_secs() * 1000.0 * DETAIL_CORES).min(DETAIL_BURST_MS);
@@ -736,6 +737,7 @@ fn launch(
 /// Takes back what the workers have finished, for `draw`; in a scripted run, waits for
 /// all of it.
 fn collect(mut jobs: ResMut<Jobs>, options: Res<Options>) {
+    terra_gen::stat_scope!("building");
     let wait = options.scripted() && !options.bench;
     let running = std::mem::take(&mut jobs.running);
     for mut job in running {
