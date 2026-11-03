@@ -23,7 +23,8 @@
 // percentile for a group or schedule, over its median for a pass or the render CPU, rounded
 // up to 0.1 ms and at least 0.1, so a group's median fails only past its own spikes; never
 // tuned to pass. They are that machine's: a slower GPU or CPU (the developers' RTX 3080)
-// misses the pass and schedule budgets until a scene budgets by machine.
+// misses the pass and schedule budgets until a scene budgets by machine. `bin_unpacking`
+// has none since D613 merged its dispatches: 0.01 ms, it falls out of the costliest 20 passes.
 (
     // The time to playable every load is held to. D580 is Open (the developers set it):
     // until then this is its recommendation, provisional, said beside each load and failing
@@ -84,7 +85,7 @@
                 render_cpu_ms: 0.7,
                 groups: {"building": 0.1, "creatures": 0.6, "flora": 0.4, "folk": 0.1, "terrain": 1.1},
                 schedules: {"Crossing": 0.1, "First": 0.2, "Last": 0.3, "PostUpdate": 10.2, "PreUpdate": 0.5, "RunFixedMainLoop": 1.4, "SpawnScene": 0.1, "StateTransition": 0.1, "Update": 1.7, "render.First": 0.1, "render.Render": 12.5},
-                gpu: {"main_opaque_pass_3d": 6.1, "early prepass": 1.0, "uniform_allocation": 0.6, "bin_unpacking": 0.5, "volumetric_lighting": 0.5, "main_transmissive_pass_3d": 0.4, "per_view_shadow_pass": 0.7, "atmosphere_luts": 0.3, "ssao": 0.2, "clouds": 0.2},
+                gpu: {"main_opaque_pass_3d": 6.1, "early prepass": 1.0, "uniform_allocation": 0.6, "volumetric_lighting": 0.5, "main_transmissive_pass_3d": 0.4, "per_view_shadow_pass": 0.7, "atmosphere_luts": 0.3, "ssao": 0.2, "clouds": 0.2},
             ),
         ),
         // The forest's creatures spike: their 99th is nine times their median (0.30 of
@@ -98,7 +99,7 @@
                 render_cpu_ms: 0.7,
                 groups: {"building": 0.1, "creatures": 4.2, "flora": 0.3, "folk": 0.1, "terrain": 0.1},
                 schedules: {"Crossing": 0.1, "First": 0.2, "Last": 0.3, "PostUpdate": 8.6, "PreUpdate": 0.7, "RunFixedMainLoop": 3.5, "SpawnScene": 0.1, "StateTransition": 0.2, "Update": 4.0, "render.First": 0.1, "render.Render": 11.2},
-                gpu: {"main_opaque_pass_3d": 3.6, "early prepass": 2.0, "per_view_shadow_pass": 1.7, "uniform_allocation": 0.8, "bin_unpacking": 0.7, "volumetric_lighting": 0.5, "atmosphere_luts": 0.3, "ssao": 0.2, "clouds": 0.2},
+                gpu: {"main_opaque_pass_3d": 3.6, "early prepass": 2.0, "per_view_shadow_pass": 1.7, "uniform_allocation": 0.8, "volumetric_lighting": 0.5, "atmosphere_luts": 0.3, "ssao": 0.2, "clouds": 0.2},
             ),
         ),
         "town-dusk": (
@@ -110,7 +111,7 @@
                 render_cpu_ms: 1.1,
                 groups: {"building": 0.4, "creatures": 0.3, "flora": 0.5, "folk": 0.4, "terrain": 1.2},
                 schedules: {"Crossing": 0.1, "First": 0.2, "Last": 0.3, "PostUpdate": 10.9, "PreUpdate": 0.8, "RunFixedMainLoop": 2.4, "SpawnScene": 0.2, "StateTransition": 0.2, "Update": 1.9, "render.First": 0.1, "render.Render": 13.2},
-                gpu: {"main_opaque_pass_3d": 2.3, "per_view_shadow_pass": 1.4, "uniform_allocation": 0.8, "volumetric_lighting": 0.8, "bin_unpacking": 0.7, "early prepass": 0.7, "clouds": 0.5, "main_transparent_pass_3d": 0.4, "atmosphere_luts": 0.3, "ssao": 0.2},
+                gpu: {"main_opaque_pass_3d": 2.3, "per_view_shadow_pass": 1.4, "uniform_allocation": 0.8, "volumetric_lighting": 0.8, "early prepass": 0.7, "clouds": 0.5, "main_transparent_pass_3d": 0.4, "atmosphere_luts": 0.3, "ssao": 0.2},
             ),
         ),
         "castle": (

@@ -19,6 +19,9 @@ use crate::{
 };
 
 pub mod gpu_preprocessing;
+// Terra's patch (D613): one dispatch a (view, phase, mesh class) of the bin
+// unpacking and uniform allocation shaders.
+pub mod merged_unpacking;
 pub mod no_gpu_preprocessing;
 
 /// Add this component to mesh entities to disable automatic batching

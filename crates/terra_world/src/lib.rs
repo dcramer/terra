@@ -42,6 +42,7 @@ pub mod flora_kinds;
 pub mod footprint;
 pub mod frame_setup;
 pub mod gltf_gate;
+pub mod gpu_bookkeeping;
 pub mod gpu_memory;
 pub mod gpu_turn;
 pub mod grading;

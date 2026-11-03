@@ -833,6 +833,7 @@ pub fn plugin(app: &mut App) {
             crate::lakes::plugin,
             crate::horizon::plugin,
             crate::ground_lattice::plugin,
+            crate::gpu_bookkeeping::plugin,
         ))
         .add_plugins(
             ResourceInspectorPlugin::<Tweaks>::default()

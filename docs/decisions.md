@@ -596,6 +596,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D606](decisions/D606.md) | One table owns the game's threads and each kind of work's share of the cores | Tech | Agent | Decided | Every thread the game starts takes its count from one… |
 | [D608](decisions/D608.md) | Work after the load runs in priority classes under a per-frame budget | Tech | Agent | Decided | What streams after the loading screen lifts goes through… |
 | [D612](decisions/D612.md) | A sun's cascades measure levels of detail from their own camera, and shadows' LOD origin is the main camera | Tech | Agent | Decided | Bevy 0.20's `prepare_view_uniforms` set a directional… |
+| [D613](decisions/D613.md) | Bin unpacking and uniform allocation run once a view, phase and mesh class, not once a batch set | Tech | Agent | Decided | Bevy 0.20's GPU preprocessing ran its bookkeeping… |
 
 ## Tools and workflow
 

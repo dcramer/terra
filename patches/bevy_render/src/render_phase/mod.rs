@@ -251,7 +251,16 @@ pub struct RenderMultidrawableBatchSetGpuBuffers {
     /// Every change goes through this type's and `RenderMultidrawableBatchSet`'s methods,
     /// which set it; the GPU only reads the buffers.
     pub(crate) dirty: bool,
+
+    /// Terra's patch (D613): this batch set's number, unique for the run, so
+    /// `MergedBinBuffers` can tell its batch sets apart from frame to frame. Their buffers
+    /// are laid end to end in one buffer a (view, phase, mesh class), and only written in
+    /// place while the same batch sets keep the same lengths.
+    pub(crate) id: u64,
 }
+
+/// Terra's patch (D613): the next [`RenderMultidrawableBatchSetGpuBuffers::id`].
+static NEXT_BATCH_SET_ID: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
 impl RenderMultidrawableBatchSetGpuBuffers {
     /// Creates a new set of GPU buffers for a multidrawable batch set.
@@ -272,6 +281,7 @@ impl RenderMultidrawableBatchSetGpuBuffers {
             bin_index_to_bin_metadata_index_buffer,
             fan_buffer,
             dirty: true,
+            id: NEXT_BATCH_SET_ID.fetch_add(1, core::sync::atomic::Ordering::Relaxed),
         }
     }
 

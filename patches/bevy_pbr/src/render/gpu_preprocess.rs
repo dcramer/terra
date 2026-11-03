@@ -37,9 +37,10 @@ use bevy_platform::collections::HashMap;
 use bevy_render::{
     batching::gpu_preprocessing::{
         clear_scene_unpacking_buffers, BatchedInstanceBuffers, BinUnpackingMetadataIndex,
-        BuildIndirectParametersMetadata, GpuBinMetadata, GpuBinUnpackingMetadata,
-        GpuOcclusionCullingWorkItemBuffers, GpuPreprocessingMode, GpuPreprocessingSupport,
-        GpuUniformAllocationMetadata, IndirectBatchSet, IndirectParametersBuffers,
+        BuildIndirectParametersMetadata, GpuBinMetadata, GpuBinUnpackingJob,
+        GpuBinUnpackingMetadata, GpuOcclusionCullingWorkItemBuffers, GpuPreprocessingMode,
+        GpuPreprocessingSupport, GpuUniformAllocationJob, GpuUniformAllocationMetadata,
+        IndirectBatchSet, IndirectParametersBuffers,
         IndirectParametersBuildJob, IndirectParametersBuildJobs, IndirectParametersIndexed,
         IndirectParametersMetadata, IndirectParametersNonIndexed,
         LatePreprocessWorkItemIndirectParameters, PreprocessWorkItem, PreprocessWorkItemBuffers,
@@ -49,7 +50,7 @@ use bevy_render::{
     },
     diagnostic::RecordDiagnostics as _,
     occlusion_culling::OcclusionCulling,
-    render_phase::{GpuRenderBinnedMeshInstance, UNIFORM_ALLOCATION_WORKGROUP_SIZE},
+    render_phase::GpuRenderBinnedMeshInstance,
     render_resource::{
         binding_types::{storage_buffer, storage_buffer_read_only, texture_2d, uniform_buffer},
         BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries,
@@ -474,8 +475,16 @@ pub struct ViewPhaseUniformAllocationBindGroup {
     pub metadata_index: UniformAllocationMetadataIndex,
     /// The actual shader bind group.
     pub bind_group: BindGroup,
-    /// The total number of bins in this batch set.
-    pub bin_count: u32,
+    /// Terra's patch (D613): the number of chunks of 256 bins, every batch
+    /// set's in this (view, phase, mesh class): the local scan's and the fan's
+    /// workgroups.
+    pub chunk_count: u32,
+    /// Terra's patch (D613): the number of batch sets: the global scan's
+    /// workgroups.
+    pub job_count: u32,
+    /// Terra's patch (D613): whether a batch set has more than 256 bins, so the
+    /// global scan and the fan must run.
+    pub multi_chunk: bool,
 }
 
 /// Stops the `GpuPreprocessNode` attempting to generate the buffer for this view
@@ -675,27 +684,27 @@ pub fn allocate_uniforms(
                 .iter()
                 .chain(phase_uniform_allocation_bind_groups.non_indexed.iter())
             {
+                // Terra's patch (D613): each step once for every batch set of
+                // this (view, phase, mesh class), a workgroup a chunk of 256
+                // bins (the global scan a workgroup a batch set).
                 // Invoke the local scan (step 1).
                 compute_pass.set_pipeline(uniform_allocation_local_scan_pipeline);
                 compute_pass.set_bind_group(0, &uniform_allocation_bind_group.bind_group, &[]);
-                let local_scan_workgroup_count = uniform_allocation_bind_group
-                    .bin_count
-                    .div_ceil(UNIFORM_ALLOCATION_WORKGROUP_SIZE);
-                if local_scan_workgroup_count > 0 {
-                    compute_pass.dispatch_workgroups(local_scan_workgroup_count, 1, 1);
+                let chunk_count = uniform_allocation_bind_group.chunk_count;
+                if chunk_count > 0 {
+                    compute_pass.dispatch_workgroups(chunk_count, 1, 1);
                 }
 
-                // If there are 256 or fewer draws in this batch, we're
-                // done. Otherwise, perform the other two steps.
-                if local_scan_workgroup_count > 1 {
+                // If no batch set has more than 256 draws, we're done.
+                // Otherwise, perform the other two steps.
+                if chunk_count > 0 && uniform_allocation_bind_group.multi_chunk {
                     // Invoke the global scan (step 2).
                     compute_pass.set_pipeline(uniform_allocation_global_scan_pipeline);
-                    compute_pass.dispatch_workgroups(1, 1, 1);
+                    compute_pass.dispatch_workgroups(uniform_allocation_bind_group.job_count, 1, 1);
 
                     // Perform the fan operation (step 3).
                     compute_pass.set_pipeline(uniform_allocation_fan_pipeline);
-                    let fan_workgroup_count = local_scan_workgroup_count - 1;
-                    compute_pass.dispatch_workgroups(fan_workgroup_count, 1, 1);
+                    compute_pass.dispatch_workgroups(chunk_count, 1, 1);
                 }
             }
         }
@@ -1757,7 +1766,7 @@ fn gpu_occlusion_culling_bind_group_layout_entries() -> DynamicBindGroupLayoutEn
 
 /// Creates and returns bind group layout entries for the GPU bin unpacking
 /// shader (`unpack_bins`).
-fn bin_unpacking_bind_group_layout_entries() -> BindGroupLayoutEntries<5> {
+fn bin_unpacking_bind_group_layout_entries() -> BindGroupLayoutEntries<6> {
     BindGroupLayoutEntries::sequential(
         ShaderStages::COMPUTE,
         (
@@ -1776,13 +1785,16 @@ fn bin_unpacking_bind_group_layout_entries() -> BindGroupLayoutEntries<5> {
             // @group(0) @binding(4) var<storage>
             // bin_index_to_bin_metadata_index: array<u32>;
             storage_buffer_read_only::<u32>(false),
+            // Terra's patch (D613): @group(0) @binding(5) var<storage> jobs:
+            // array<BinUnpackingJob>;
+            storage_buffer_read_only::<GpuBinUnpackingJob>(false),
         ),
     )
 }
 
 /// Creates and returns bind group layout entries for the GPU uniform allocation
 /// shader (`allocate_uniforms`).
-fn uniform_allocation_bind_group_layout_entries() -> BindGroupLayoutEntries<4> {
+fn uniform_allocation_bind_group_layout_entries() -> BindGroupLayoutEntries<5> {
     BindGroupLayoutEntries::sequential(
         ShaderStages::COMPUTE,
         (
@@ -1797,6 +1809,9 @@ fn uniform_allocation_bind_group_layout_entries() -> BindGroupLayoutEntries<4> {
             // @group(0) @binding(3) var<storage, read_write> fan_buffer:
             // array<u32>;
             storage_buffer::<u32>(false),
+            // Terra's patch (D613): @group(0) @binding(4) var<storage> jobs:
+            // array<UniformAllocationJob>;
+            storage_buffer_read_only::<GpuUniformAllocationJob>(false),
         ),
     )
 }
@@ -3317,11 +3332,14 @@ fn create_bin_unpacking_bind_groups(
     scene_unpacking_buffers: &SceneUnpackingBuffers,
     view_entity: &RetainedViewEntity,
 ) {
-    let Some(bin_unpacking_metadata_buffer) =
-        scene_unpacking_buffers.bin_unpacking_metadata.buffer()
-    else {
+    // Terra's patch (D613): the jobs of the merged dispatches, with their metadata.
+    let (Some(bin_unpacking_metadata_buffer), Some(bin_unpacking_jobs_buffer)) = (
+        scene_unpacking_buffers.bin_unpacking_metadata.buffer(),
+        scene_unpacking_buffers.bin_unpacking_jobs.buffer(),
+    ) else {
         return;
     };
+    let bin_unpacking_metadata_buffer = (bin_unpacking_metadata_buffer, bin_unpacking_jobs_buffer);
 
     // We run the bin unpacking shader once per phase, so loop over all phases.
     for phase_type_id in indirect_parameters_buffers.keys() {
@@ -3412,7 +3430,7 @@ fn create_bin_unpacking_bind_group(
     preprocess_pipelines: &PreprocessPipelines,
     pipeline_cache: &PipelineCache,
     job: &SceneUnpackingJob,
-    bin_unpacking_metadata_buffer: &Buffer,
+    (bin_unpacking_metadata_buffer, bin_unpacking_jobs_buffer): (&Buffer, &Buffer),
     work_item_buffer: &Buffer,
     indexed: bool,
 ) -> ViewPhaseBinUnpackingBindGroup {
@@ -3448,6 +3466,9 @@ fn create_bin_unpacking_bind_group(
             // bin_index_to_bin_metadata_index: array<u32>;
             job.bin_index_to_bin_metadata_index_buffer
                 .as_entire_binding(),
+            // Terra's patch (D613): @group(0) @binding(5) var<storage> jobs:
+            // array<BinUnpackingJob>;
+            bin_unpacking_jobs_buffer.as_entire_binding(),
         )),
     );
     ViewPhaseBinUnpackingBindGroup {
@@ -3468,11 +3489,15 @@ fn create_uniform_allocation_bind_groups(
     scene_unpacking_buffers: &SceneUnpackingBuffers,
     view_entity: &RetainedViewEntity,
 ) {
-    let Some(uniform_allocation_metadata_buffer) =
-        scene_unpacking_buffers.uniform_allocation_metadata.buffer()
-    else {
+    // Terra's patch (D613): the jobs of the merged dispatches, with their metadata.
+    let (Some(uniform_allocation_metadata_buffer), Some(uniform_allocation_jobs_buffer)) = (
+        scene_unpacking_buffers.uniform_allocation_metadata.buffer(),
+        scene_unpacking_buffers.uniform_allocation_jobs.buffer(),
+    ) else {
         return;
     };
+    let uniform_allocation_metadata_buffer =
+        (uniform_allocation_metadata_buffer, uniform_allocation_jobs_buffer);
 
     for (phase_type_id, phase_indirect_parameters_buffers) in indirect_parameters_buffers.iter() {
         let Some(view_phase_bin_unpacking_buffers) = scene_unpacking_buffers
@@ -3547,7 +3572,7 @@ fn create_uniform_allocation_bind_group(
     preprocess_pipelines: &PreprocessPipelines,
     pipeline_cache: &PipelineCache,
     job: &SceneUnpackingJob,
-    uniform_allocation_metadata_buffer: &Buffer,
+    (uniform_allocation_metadata_buffer, uniform_allocation_jobs_buffer): (&Buffer, &Buffer),
     indirect_parameters_metadata_buffer: &Buffer,
     indexed: bool,
 ) -> ViewPhaseUniformAllocationBindGroup {
@@ -3581,12 +3606,17 @@ fn create_uniform_allocation_bind_group(
             // @group(0) @binding(3) var<storage, read_write> fan_buffer:
             // array<u32>;
             job.fan_buffer.as_entire_binding(),
+            // Terra's patch (D613): @group(0) @binding(4) var<storage> jobs:
+            // array<UniformAllocationJob>;
+            uniform_allocation_jobs_buffer.as_entire_binding(),
         )),
     );
     ViewPhaseUniformAllocationBindGroup {
         metadata_index: job.uniform_allocation_metadata_index,
         bind_group,
-        bin_count: job.bin_count,
+        chunk_count: job.chunk_count,
+        job_count: job.job_count,
+        multi_chunk: job.multi_chunk,
     }
 }
 
