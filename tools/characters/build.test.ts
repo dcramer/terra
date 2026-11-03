@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Builder, evict } from "./build.ts";
-import { bodiesData, buildSteps, closure, gearData, morphNames, type Step } from "./build_steps.ts";
+import { bodiesData, buildSteps, closure, gearData, morphNames, type Step, WARDROBE } from "./build_steps.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
@@ -143,14 +143,23 @@ test("the character build's steps: every need a step, every input there, each lo
   // Only a set's list is held (export_character.py --list): a change to the holds reaches the
   // fight's step and the figures dressed with its clips alone.
   const holds = steps.filter((s) => closure(s.inputs).includes("tools/characters/hold.py")).map((s) => s.name);
-  assert.deepEqual(holds, [fight.name, ...(bodies.dressed ?? []).map((d) => `dressed:${d.name}`)]);
-  // A dressed figure reads each piece of theirs with the buffers and textures it names, and the fight's clips.
-  for (const d of bodies.dressed ?? []) {
-    const s = steps.find((t) => t.name === `dressed:${d.name}`)!;
-    assert.ok(s.needs.includes(fight.name) && s.outputs.includes(`assets/models/character/${d.name}.glb`));
-    for (const p of d.pieces) assert.ok(s.inputs.includes(p) && s.inputs.includes(p.replace(/\.gltf$/, ".bin")), `${s.name} reads ${p} and its buffer`);
+  const w = bodies.wardrobe!;
+  assert.deepEqual(holds, [fight.name, ...Object.keys(w.bodies).map((name) => `wardrobe:${name}`)]);
+  // A wardrobe body (D611) reads each of its pieces' sources with the buffers and textures they
+  // name, the catalogue and the fight's clips, and writes the body's file and every piece's.
+  for (const [name, body] of Object.entries(w.bodies)) {
+    const s = steps.find((t) => t.name === `wardrobe:${name}`)!;
+    assert.ok(s.needs.includes(fight.name) && s.outputs.includes(`assets/${body.model}`) && s.inputs.includes(WARDROBE));
+    for (const [piece, p] of Object.entries(w.pieces).filter(([, p]) => p.body === name)) {
+      assert.ok(s.inputs.includes(p.source) && s.inputs.includes(p.source.replace(/\.gltf$/, ".bin")), `${s.name} reads ${p.source} and its buffer`);
+      assert.ok(s.outputs.includes(`assets/${body.pieces}/${piece}.gltf`), `${s.name} writes ${piece}`);
+    }
   }
-  assert.ok(steps.find((t) => t.name === "dressed:male-ranger")!.inputs.includes("art/characters/quaternius/modular-outfits-fantasy/T_Ranger_BaseColor.png"));
+  const man = steps.find((t) => t.name === "wardrobe:male")!;
+  assert.ok(man.inputs.includes("art/characters/quaternius/modular-outfits-fantasy/T_Ranger_BaseColor.png"));
+  // A texture two pieces share is one output, under one name: their full body's `_png` maps are their head's.
+  assert.equal(man.outputs.filter((o) => o.endsWith("/T_Regular_Male_Normal.png")).length, 1);
+  assert.ok(!man.outputs.some((o) => o.endsWith("_png.png")));
   // Every Blender step reads the mannequin (look.FIGURE), so the step cache keys hold it.
   assert.ok(steps.filter((s) => s.name.startsWith("fit:")).every((s) => closure(s.inputs).includes("assets/models/character/mannequin.glb")));
 });

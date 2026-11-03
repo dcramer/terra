@@ -1,7 +1,7 @@
 {
-  "about": "The body each sex stands on (D111, D599), read by the game (crates/terra_walker/src/appearance.rs): its model; the file its clips come from, on its skeleton (the model's own if none); and the folder of the worn looks made on it (none: it shows only what its model is dressed in, and gear worn on it is not drawn). The man is Quaternius's, dressed in their Ranger outfit as made (D602), with the fight's clips on his skeleton; the woman stands on the old base until her own body comes in (docs/v0-characters.md).",
+  "about": "The body each sex stands on (D111, D599), read by the game (crates/terra_walker/src/appearance.rs): its model; the file its clips come from, on its skeleton (the model's own if none); and the folder of the worn looks made on it (none: what is worn on it is drawn only from the wardrobe, or not at all). A wardrobe body (D611) names its row of the wardrobe catalogue, wardrobe.json, which gives its model (his skeleton, sockets and clips) and the pieces the game composes him from, a piece a slot. The man is Quaternius's, in the wardrobe; the woman stands on the old base until her own body comes in (docs/v0-characters.md).",
   "bodies": {
-    "male": { "model": "models/character/male-ranger.glb" },
+    "male": { "wardrobe": "male" },
     "female": { "model": "models/character/base.glb", "clips": "models/character/fight.glb", "gear": "models/gear" }
   }
 }

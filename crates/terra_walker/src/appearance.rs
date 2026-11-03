@@ -41,8 +41,13 @@ pub const BASE: &str = "models/character/base.glb";
 /// The files of the body a sex stands on (`models/character/bodies.json`).
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct BodyFiles {
-    /// The body's model, under `assets/`.
+    /// The body's model, under `assets/`: a wardrobe body's file (`wardrobe`) when it names one.
+    #[serde(default)]
     pub model: String,
+    /// The wardrobe body it is (D611, `wardrobe::wardrobe`): composed a piece a slot, its model
+    /// the wardrobe's file for it. None: its model is dressed as it is, or wears `gear`.
+    #[serde(default)]
+    pub wardrobe: Option<String>,
     /// The file its clips come from, on its skeleton; none: the model's own.
     #[serde(default)]
     clips: Option<String>,
@@ -77,7 +82,17 @@ fn parse_bodies(text: &str) -> Result<HashMap<String, BodyFiles>, serde_json::Er
     struct File {
         bodies: HashMap<String, BodyFiles>,
     }
-    Ok(serde_json::from_str::<File>(text)?.bodies)
+    let mut bodies = serde_json::from_str::<File>(text)?.bodies;
+    for (sex, body) in &mut bodies {
+        let Some(name) = &body.wardrobe else { continue };
+        match crate::wardrobe::wardrobe().bodies.get(name) {
+            Some(w) => body.model = w.model.clone(),
+            None => error!(
+                "models/character/bodies.json: {sex}'s wardrobe body {name} is not in the wardrobe"
+            ),
+        }
+    }
+    Ok(bodies)
 }
 
 /// The bodies the templates stand on, each once, by model: what a crowd of any of them loads.
@@ -147,6 +162,7 @@ fn old_base() -> &'static BodyFiles {
     static OLD: OnceLock<BodyFiles> = OnceLock::new();
     OLD.get_or_init(|| BodyFiles {
         model: BASE.to_string(),
+        wardrobe: None,
         clips: Some(crate::figure::CLIPS.to_string()),
         gear: Some("models/gear".to_string()),
     })

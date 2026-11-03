@@ -1,0 +1,118 @@
+{
+  "about": "The wardrobe catalogue (D611): every body, piece and look characters on Quaternius's bodies are composed from, per slot, by the game (crates/terra_walker/src/wardrobe.rs) and built by tools/characters/build_bodies.sh (a `wardrobe:<body>` step a body), checked by `node tools/characters/wardrobe.ts`. A new piece or look is a row here and a file, never code (D136). slots: what a look fills, one piece each. regions: the parts of a body, each drawn exactly once. bodies: the body's file (`model`: his skeleton, sockets and the fight's clips sampled on him, no mesh); the folder its pieces' game files go in (`pieces`, each <piece>.gltf with its textures shared in textures/); its head piece, shown unless a shown piece holds the head; a bare piece a slot (D600); its default look. pieces: `body` the body it was made on; `source` the file it comes from under art/ (theirs, untouched, D599), with `cut` the region cut_slots.py cuts from it for a bare piece; `slot` (none: the head); `item` the item it is the look of (none: bare skin); `layer` 0 skin, 1 worn; `regions` the body's regions it stands for, so hides; `colourways` their shipped colours it comes in; `dye_mask` its dye regions (later: the paint job); `tags`. looks: a piece a slot, a colourway, hair (none yet: their hairstyles are not vendored). pairings and populations are for later jobs (pairings measured by layers.ts and slots.ts; populations by role).",
+  "slots": ["body", "arms", "legs", "feet"],
+  "regions": ["head", "torso", "arms", "legs", "feet"],
+  "bodies": {
+    "male": {
+      "model": "models/character/male.glb",
+      "pieces": "models/character/male",
+      "head": "male_head",
+      "bare": { "body": "male_bare_torso", "arms": "male_bare_arms", "legs": "male_bare_legs", "feet": "male_bare_feet" },
+      "look": "ranger"
+    }
+  },
+  "pieces": {
+    "male_head": {
+      "body": "male",
+      "source": "art/characters/quaternius/universal-base-characters/Regular_Male_OnlyHead.gltf",
+      "layer": 0,
+      "regions": ["head"],
+      "colourways": ["shipped"],
+      "tags": []
+    },
+    "male_bare_arms": {
+      "body": "male",
+      "source": "art/characters/quaternius/universal-base-characters/Regular_Male_UpperBody.gltf",
+      "slot": "arms",
+      "layer": 0,
+      "regions": ["head", "arms"],
+      "colourways": ["shipped"],
+      "tags": []
+    },
+    "male_bare_torso": {
+      "body": "male",
+      "source": "art/characters/quaternius/universal-base-characters/Regular_Male_FullBody.gltf",
+      "cut": "torso",
+      "slot": "body",
+      "layer": 0,
+      "regions": ["torso"],
+      "colourways": ["shipped"],
+      "tags": []
+    },
+    "male_bare_legs": {
+      "body": "male",
+      "source": "art/characters/quaternius/universal-base-characters/Regular_Male_FullBody.gltf",
+      "cut": "legs",
+      "slot": "legs",
+      "layer": 0,
+      "regions": ["legs"],
+      "colourways": ["shipped"],
+      "tags": []
+    },
+    "male_bare_feet": {
+      "body": "male",
+      "source": "art/characters/quaternius/universal-base-characters/Regular_Male_FullBody.gltf",
+      "cut": "feet",
+      "slot": "feet",
+      "layer": 0,
+      "regions": ["feet"],
+      "colourways": ["shipped"],
+      "tags": []
+    },
+    "male_ranger_body": {
+      "body": "male",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Ranger_Body.gltf",
+      "slot": "body",
+      "item": "leather_coat",
+      "layer": 1,
+      "regions": ["torso"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "warm"]
+    },
+    "male_ranger_arms": {
+      "body": "male",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Ranger_Arms.gltf",
+      "slot": "arms",
+      "item": "leather_coat",
+      "layer": 1,
+      "regions": ["arms"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "warm"]
+    },
+    "male_ranger_legs": {
+      "body": "male",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Ranger_Legs.gltf",
+      "slot": "legs",
+      "item": "trousers",
+      "layer": 1,
+      "regions": ["legs"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work"]
+    },
+    "male_ranger_boots": {
+      "body": "male",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Ranger_Feet_Boots.gltf",
+      "slot": "feet",
+      "item": "boots",
+      "layer": 1,
+      "regions": ["feet"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work"]
+    }
+  },
+  "looks": {
+    "ranger": {
+      "about": "The starting kit's clothes (D602): the Ranger's body and arms as the leather coat, its leggings as the trousers, its boots.",
+      "body": "male",
+      "pieces": { "body": "male_ranger_body", "arms": "male_ranger_arms", "legs": "male_ranger_legs", "feet": "male_ranger_boots" },
+      "colourway": "shipped",
+      "hair": null
+    }
+  },
+  "pairings": [],
+  "populations": {}
+}

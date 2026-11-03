@@ -39,6 +39,10 @@ FIGURE = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswit
 # steps (aim.py), the takes of them tried as X#N included, as clip.ts scores them.
 LISTED = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--list=")), None)
 src, dst = look.args()[:2]
+# --skeleton: a wardrobe body's file (D611): the figure given is read for its sockets and lift,
+# and only its skeleton, sockets and clips are written; the game wears its pieces, each its own
+# file (export_pieces.py), per slot.
+SKELETON = "--skeleton" in look.args()
 
 look.reset()
 # Every mesh the skeleton moves is kept (Quaternius's body brings its eyes and brows as their
@@ -266,7 +270,7 @@ for a in actions:
     track.mute = True
 ad.action = None
 for o in bpy.context.scene.objects:
-    o.select_set(o is arm or o in skinned or o in sockets)
+    o.select_set(o is arm or (o in skinned and not SKELETON) or o in sockets)
 bpy.context.view_layer.objects.active = arm
 # A part painted to glow (an emissive map, wake.py) ships dark, its factor 0: the game lights
 # it when the creature wakes (staged.glow, D536).

@@ -48,6 +48,7 @@ pub mod swim;
 pub mod swing;
 pub mod underfoot;
 pub mod walker;
+pub mod wardrobe;
 
 /// The systems that fit the clip's pose to the body after the animation and before the
 /// joints' world places are worked out (its proportions, its lift). A fix-up that bends the

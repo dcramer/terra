@@ -131,6 +131,17 @@ fn take(
             warn!("Took nothing: there is no kind of item called {name}.");
             continue;
         };
+        // One worn is taken off into the backpack first, and taken from there, so a scripted
+        // run can undress the player (what the wardrobe then shows bare, D611).
+        let worn: Vec<_> = (gear.0.iter())
+            .filter(|(_, item)| item.is_some_and(|item| item.kind == kind))
+            .map(|(slot, _)| slot)
+            .collect();
+        for slot in worn {
+            if let Err(why) = inventory::take_off(&items, &mut backpack.0, &mut gear.0, slot) {
+                warn!("Could not take off {name}: {why:?}.");
+            }
+        }
         let loose = backpack.0.count(kind);
         let from_pack = count.unwrap_or(u32::MAX).min(loose);
         let paid = backpack.0.take(&[(kind, from_pack)]).is_ok();

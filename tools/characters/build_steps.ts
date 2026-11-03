@@ -66,13 +66,38 @@ export type Bodies = {
   creatures?: Creature[];
   /** A designed morph's model where it is not art/characters/<base>/morphs/<name>/model.glb (make_morph.sh --design); not in bodies.json. */
   designs?: Record<string, string>;
-  /** Figures of Quaternius's dressed as made, each the game's `assets/models/character/<name>.glb`. */
-  dressed?: Dressed[];
+  /** The wardrobe catalogue (D611), `assets/models/character/wardrobe.json`: its bodies' and
+   * pieces' game files are a `wardrobe:<body>` step each. Not in bodies.json. */
+  wardrobe?: Wardrobe;
 };
 
-/** A figure of Quaternius's dressed as made (D599, D602): their head-only body and outfit
- * pieces (`.gltf` under art/characters/quaternius/), joined on the head's skeleton. */
-export type Dressed = { name: string; pieces: string[] };
+/** The wardrobe catalogue as the build reads it (D611; the whole schema is in its `about`). */
+export type Wardrobe = {
+  slots: string[];
+  regions: string[];
+  bodies: Record<string, { model: string; pieces: string; head: string; bare: Record<string, string>; look: string }>;
+  pieces: Record<string, { body: string; source: string; cut?: string; slot?: string; item?: string | null; layer: number; regions: string[] }>;
+  looks: Record<string, { body: string; pieces: Record<string, string>; colourway?: string; hair?: string | null }>;
+};
+
+export const WARDROBE = "assets/models/character/wardrobe.json";
+
+export function wardrobeData(root = ROOT): Wardrobe {
+  return JSON.parse(readFileSync(join(root, WARDROBE), "utf8"));
+}
+
+/** A wardrobe piece's game file and the files beside it it names: its buffer and its textures,
+ * one name a picture (their full body's maps are `T_..._png.png`, the same as their head's). */
+export function pieceFiles(w: Wardrobe, piece: string, root = ROOT): string[] {
+  const p = w.pieces[piece];
+  const dir = w.bodies[p.body].pieces;
+  const images = gltfFiles(p.source, root).filter((f) => f.endsWith(".png"));
+  const textures = images.map((f) => `assets/${dir}/textures/${f.slice(f.lastIndexOf("/") + 1).replace(/(_png)?\.png$/, ".png")}`);
+  return [`assets/${dir}/${piece}.gltf`, `assets/${dir}/${piece}.bin`, ...textures];
+}
+
+/** The sex of a body of theirs, from its pieces' file names (`Regular_Female_...`). */
+const sexOf = (w: Wardrobe, body: string) => (Object.values(w.pieces).some((p) => p.body === body && /Female/.test(p.source)) ? "female" : "male");
 
 /** A .gltf and the files it names beside it (its buffers and images), which a step reading it reads. */
 export function gltfFiles(path: string, root = ROOT): string[] {
@@ -88,7 +113,8 @@ export function gltfFiles(path: string, root = ROOT): string[] {
 export type Creature = { name: string; height: number; triangles: number; set: string; colour: [number, number, number] };
 
 export function bodiesData(root = ROOT): Bodies {
-  return JSON.parse(readFileSync(join(root, HERE, "bodies.json"), "utf8"));
+  const b: Bodies = JSON.parse(readFileSync(join(root, HERE, "bodies.json"), "utf8"));
+  return existsSync(join(root, WARDROBE)) ? { ...b, wardrobe: wardrobeData(root) } : b;
 }
 
 /** Every morph's name, in the order the game's files carry them. */
@@ -263,23 +289,42 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
       "node $here/markers.ts assets/models/character/fight.glb   # each clip's foot-down markers (D455)",
     ].join("\n"),
   });
-  // Each figure of theirs dressed as made (bodies.json `dressed`): its pieces joined on the
-  // head's skeleton and exported with the fight's clips sampled on it, held as the fight's step
-  // holds them (a hold on a bone it lacks left as the clip has it, hold.py), the same passes
-  // after, then proved theirs piece for piece (intact.ts, D599).
+  // Each body of the wardrobe (D611, wardrobe.json): its bare pieces cut from a copy of their
+  // full body (cut_slots.py), every piece made on it written as its own glTF with shared
+  // textures (export_pieces.py) and proved theirs (intact.ts, D599); and the body's file, his
+  // skeleton, sockets and the fight's clips sampled on him with no mesh (export_character.py
+  // --skeleton), the sockets and lift read off his default look worn, held as the fight's step
+  // holds them (a hold on a bone it lacks left as the clip has it, hold.py), the same passes after.
   const after = ["clear.ts", "wrist_limit.ts", "mirror.ts", "additive.ts", "markers.ts"];
-  for (const d of b.dressed ?? []) {
-    const game = `assets/models/character/${d.name}.glb`;
+  const w = b.wardrobe;
+  for (const [name, body] of Object.entries(w?.bodies ?? {})) {
+    if (!w) break;
+    const game = `assets/${body.model}`;
+    const sex = sexOf(w, name);
+    const pieces = Object.keys(w.pieces)
+      .filter((p) => w.pieces[p].body === name)
+      .sort();
+    const cut = (p: string) => `${OUT}/quaternius-${sex}-bare-${w.pieces[p].cut}.glb`;
+    const source = (p: string) => (w.pieces[p].cut ? cut(p) : w.pieces[p].source);
+    const worn = [body.head, ...w.slots.map((s) => w.looks[body.look].pieces[s]).filter((p) => p)];
+    const cuts = pieces.filter((p) => w.pieces[p].cut);
     steps.push({
-      name: `dressed:${d.name}`,
+      name: `wardrobe:${name}`,
       section: 5,
       needs: ["base", "fight"],
-      inputs: [...py("export_character.py", "hold.py", "intact.ts", ...after), `${fight}.json`, ...new Set(d.pieces.flatMap((p) => gltfFiles(p)))],
-      outputs: [game],
+      inputs: [
+        ...py("export_character.py", "export_pieces.py", "hold.py", "intact.ts", ...(cuts.length ? ["cut_slots.py"] : []), ...after),
+        `${fight}.json`,
+        WARDROBE,
+        ...new Set(pieces.flatMap((p) => gltfFiles(w.pieces[p].source))),
+      ],
+      outputs: [...(cuts.length ? [...cuts.map(cut), `${OUT}/quaternius-${sex}-patched.glb`] : []), game, ...new Set(pieces.flatMap((p) => pieceFiles(w, p)))],
       run: [
-        blender("export_character.py", `${d.pieces.join("+")} ${game} "--clips=$out/fight-mannequin.glb" --list=${fight}.json --textures=2048`, "^(SHIELD|HOLD|EXPORTED)|Error"),
+        ...(cuts.length ? [blender("cut_slots.py", sex, "^(SLOTS|WROTE)|Error")] : []),
+        blender("export_pieces.py", `${name} --textures=2048`, "^PIECE|Error"),
+        `node $here/intact.ts ${pieces.map((p) => `assets/${body.pieces}/${p}.gltf`).join(" ")}   # every piece theirs as made, or an exact cut (D599)`,
+        blender("export_character.py", `${worn.map(source).join("+")} ${game} "--clips=$out/fight-mannequin.glb" --list=${fight}.json --skeleton`, "^(SHIELD|HOLD|EXPORTED)|Error"),
         ...after.map((t) => `node $here/${t} ${game}`),
-        `node $here/intact.ts ${game}   # every piece of theirs as made (D599)`,
       ].join("\n"),
     });
   }

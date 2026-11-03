@@ -10,6 +10,7 @@ use bevy::world_serialization::WorldAssetRoot;
 use bevy::{gltf::GltfAssetLabel, prelude::*};
 use terra_walker::appearance::gear_for_model;
 use terra_walker::character::{self, Body, BodyReady, Clothing, Outfit, Worn};
+use terra_walker::wardrobe::wardrobe;
 
 /// The outfit a body is shown wearing, so its looks are changed only when that changes.
 #[derive(Component)]
@@ -45,35 +46,71 @@ fn outfit_from_gear(
 }
 
 /// Puts on each loaded body what its character wears, when that changes: the looks made on
-/// the model it stands on (`appearance::gear_for_model`). A body with none, such as
-/// Quaternius's man dressed in his Ranger outfit as made (D602), shows only what its model
-/// wears: gear made on another body is never drawn on it, though it is still equipped and
-/// still counts.
+/// the model it stands on (`appearance::gear_for_model`), or on a wardrobe body (D611,
+/// Quaternius's man) the pieces the catalogue composes for it, a piece a slot, changing only
+/// the pieces that change. Gear made on another body is never drawn on it, though it is still
+/// equipped and still counts.
 fn show(
     mut commands: Commands,
     bodies: Query<
         (Entity, &ChildOf, Option<&Dressed>, Option<&WorldAssetRoot>),
         (With<Body>, With<BodyReady>),
     >,
-    outfits: Query<Ref<Outfit>>,
-    looks: Query<(Entity, &Worn)>,
+    outfits: Query<(Ref<Outfit>, Has<Gear>)>,
+    looks: Query<(Entity, &Worn, Option<&WorldAssetRoot>)>,
     assets: Res<AssetServer>,
 ) {
     for (root, parent, dressed, model) in &bodies {
-        let Ok(outfit) = outfits.get(parent.parent()) else {
+        let Ok((outfit, equipped)) = outfits.get(parent.parent()) else {
             continue;
         };
         if dressed.is_some_and(|dressed| !outfit.is_changed() || dressed.0 == *outfit) {
             continue;
         }
-        for (look, on) in &looks {
+        let path = model
+            .and_then(|model| model.0.path())
+            .map(|p| p.to_string());
+        commands
+            .entity(root)
+            .insert(Dressed(Outfit::clone(&outfit)));
+        // A wardrobe body (D611): a piece a slot, as the catalogue composes him.
+        if let Some((body, at)) = path.as_deref().and_then(|p| wardrobe().body_for_model(p)) {
+            let worn: Vec<String> = outfit.0.iter().map(|c| c.item.clone()).collect();
+            // Anyone with no equipment of their own (the town, the sparring partner) wears the
+            // body's look whole until populations draw theirs; the player's follows its gear.
+            let files: Vec<String> = wardrobe()
+                .compose(body, &at.look, equipped.then_some(worn.as_slice()))
+                .into_iter()
+                .filter_map(|piece| wardrobe().file(piece))
+                .collect();
+            let mut kept = Vec::new();
+            for (look, on, file) in &looks {
+                let file = file
+                    .and_then(|f| f.0.path())
+                    .map(|p| p.path().to_string_lossy().into_owned());
+                if on.body != root {
+                    continue;
+                }
+                match file.filter(|f| files.contains(f)) {
+                    Some(f) => kept.push(f),
+                    None => commands.entity(look).despawn(),
+                }
+            }
+            for file in files.into_iter().filter(|f| !kept.contains(f)) {
+                character::wear(
+                    &mut commands,
+                    assets.load(GltfAssetLabel::Scene(0).from_asset(file)),
+                    root,
+                );
+            }
+            continue;
+        }
+        for (look, on, _) in &looks {
             if on.body == root {
                 commands.entity(look).despawn();
             }
         }
-        let gear = model
-            .and_then(|model| model.0.path())
-            .and_then(|path| gear_for_model(&path.to_string()));
+        let gear = path.as_deref().and_then(gear_for_model);
         for (gear, clothing) in gear
             .into_iter()
             .flat_map(|gear| outfit.0.iter().map(move |c| (gear, c)))
@@ -88,8 +125,5 @@ fn show(
                 commands.entity(look).insert(clothing.tint.clone());
             }
         }
-        commands
-            .entity(root)
-            .insert(Dressed(Outfit::clone(&outfit)));
     }
 }

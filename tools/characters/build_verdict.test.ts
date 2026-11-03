@@ -79,8 +79,8 @@ test("a step that stopped early, or a check that never ran, fails the build", ()
 });
 
 test("the steps built alone (build.ts --step) fail on what they print or their exit, not on the full build's last line", () => {
-  const step = ["== 5. the game's files", "EXPORTED assets/models/character/male-ranger.glb", "✓ intact: assets/models/character/male-ranger.glb names 9 of their pieces"];
+  const step = ["== 5. the game's files", "EXPORTED assets/models/character/male.glb", "✓ intact: assets/models/character/male/male_head.gltf keeps 3 of their pieces as made"];
   assert.deepEqual(stepVerdict(step.join("\n")), []);
-  assert.match(stepVerdict([...step, "✗ intact: assets/models/character/male-ranger.glb"].join("\n")).join(), /✗ intact/);
+  assert.match(stepVerdict([...step, "✗ intact: assets/models/character/male/male_head.gltf"].join("\n")).join(), /✗ intact/);
   assert.match(stepVerdict(step.join("\n"), 1).join(), /a step failed \(exit 1\)/);
 });
