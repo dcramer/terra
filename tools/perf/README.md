@@ -1,6 +1,6 @@
 # tools/perf
 
-The perf row (D610): the play scenes benched once at each landing batch on main by the render worker, their numbers kept by commit, a change past its noise band retriggered, alerted and bisected to its first bad commit, unattended. As Chromium's perf bots chart every change and Pinpoint bisects a regression ([bisects](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/speed/bisects.md)), and Mozilla's Perfherder alerts on a sustained change and its sheriffs retrigger a suspect job to confirm it ([perf sheriffing](https://firefox-source-docs.mozilla.org/testing/perfdocs/perf-sheriffing.html)). Ideas only; no code is copied.
+The perf row (D610): the play scenes benched once at each landing batch on main by the render worker, their numbers kept by commit, a change past its noise band retriggered, alerted and bisected to its first bad commit, unattended. As Chromium's perf bots chart every change and Pinpoint bisects a regression ([bisects](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/speed/bisects.md)), and Mozilla's Perfherder alerts on a sustained change and its sheriffs retrigger a suspect job to confirm it ([perf sheriffing](https://firefox-source-docs.mozilla.org/testing/perfdocs/perf-sheriffing.html)), and as Unreal's Gauntlet runs a fixed set of sessions per changelist on its build farm ([Gauntlet](https://dev.epicgames.com/documentation/en-us/unreal-engine/gauntlet-automation-framework-in-unreal-engine)). Ideas only; no code is copied.
 
 ```bash
 node tools/perf/perf.ts                     # the row: last benched, in flight, alerts, its last lines
@@ -8,6 +8,8 @@ node tools/perf/perf.ts history [n]         # the history's last rows
 node tools/perf/perf.ts main <rev>          # main's numbers at or just before a commit
 node tools/perf/perf.ts ab <csv> [--base <rev>]   # your bench's rows against main's side, no bench of main
 node tools/perf/perf.ts bisect forest-run hitches <good> <bad>   # a bisect by hand
+node tools/perf/perf.ts bisect forest-run hitches <good> <bad> --scenes forest-run,lake-play --runs 5 --patch <sha> --cap 7
+                                            # a flaky metric: five runs a step, each its own load, <sha> applied where a step lacks it
 ```
 
 - **The row** is `row.json`: the scenes (lake-play, forest-run, town-dusk), one run each, what they read (a landing touching none of it is not benched), the rest between two of its benches (20 min, so other jobs' benches go between and it never holds the box with benches back to back, D319), the bisect's cap (5 benches) and how often it looks (5 min).
