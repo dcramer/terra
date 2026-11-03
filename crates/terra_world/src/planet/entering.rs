@@ -5,7 +5,7 @@ use super::{MainCamera, Planet, ROUND_M, Tweaks};
 use crate::instance::{Cross, InstanceKey, WorldSpec};
 use crate::shell::Options;
 use crate::start::{Sited, Start};
-use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
+use bevy::{camera::ShadowLodOrigin, camera_controller::free_camera::FreeCamera, prelude::*};
 use terra_core::{PlanetSpec, Seed};
 
 /// The seed of a run given none, and of every world kept from before worlds had their own.
@@ -138,11 +138,14 @@ pub(super) fn cross_to_the_first(mut commands: Commands, options: Res<Options>) 
 /// The camera every world is seen through (D469), made before any world is: each world
 /// stands it and sets how far it sees (`stand_the_camera`). It moves at speeds suited to a
 /// planet rather than a room (the wheel changes them). A player, once there is one, steers
-/// it instead.
+/// it instead. Shadows' levels of detail are measured from it (`ShadowLodOrigin`, D612):
+/// Bevy otherwise takes the camera of the lowest entity, which may be the interface's or an
+/// icon's, far from the ground, and the shadow stand-ins shrink with their distance from it.
 pub(super) fn spawn_camera(mut commands: Commands) {
     commands.spawn((
         Name::new("Camera"),
         MainCamera,
+        ShadowLodOrigin,
         Camera3d::default(),
         Projection::Perspective(PerspectiveProjection {
             near: 0.2,
@@ -189,7 +192,7 @@ pub(super) fn stand_the_camera(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy::ecs::system::RunSystemOnce;
+    use bevy::{camera::RenderTarget, ecs::system::RunSystemOnce};
 
     fn planet(radius_m: f32) -> Planet {
         Planet::smooth(PlanetSpec {
@@ -229,5 +232,34 @@ mod tests {
             far.push(seen_m);
         }
         assert!(far[1] > far[0], "{far:?}");
+    }
+
+    /// Shadows' levels of detail are measured from the main camera, not from whichever
+    /// camera has the lowest entity, as the interface's made first has (D612).
+    #[test]
+    fn shadows_are_measured_from_the_main_camera() {
+        let mut world = World::new();
+        // Both draw into the window, as the interface's camera and the main one do in play.
+        world.spawn(Camera::default());
+        world.run_system_once(spawn_camera).unwrap();
+        world.spawn(Camera::default());
+        let origin = world
+            .run_system_once(
+                |mut cameras: Query<(Entity, &RenderTarget), With<Camera>>,
+                 mut origins: Query<Entity, With<ShadowLodOrigin>>,
+                 mut lights: Query<Entity, Or<(With<PointLight>, With<SpotLight>)>>| {
+                    bevy::light::get_shadow_lod_origin(
+                        cameras.transmute_lens_filtered(),
+                        origins.transmute_lens_filtered(),
+                        lights.transmute_lens_filtered(),
+                    )
+                },
+            )
+            .unwrap();
+        let main = world
+            .query_filtered::<Entity, With<MainCamera>>()
+            .single(&world)
+            .unwrap();
+        assert_eq!(origin, Some(main));
     }
 }

@@ -1191,6 +1191,14 @@ pub fn prepare_view_uniforms(
 ) {
     let view_iter = views.iter();
     let view_count = view_iter.len();
+    let cameras = camera_positions(views.iter().filter_map(|(_, camera, view, ..)| {
+        camera.map(|_| {
+            (
+                view.retained_view_entity.main_entity,
+                view.world_from_view.translation(),
+            )
+        })
+    }));
     let Some(mut writer) =
         view_uniforms
             .uniforms
@@ -1264,16 +1272,15 @@ pub fn prepare_view_uniforms(
                 // present), we use the position of that camera as the LOD view
                 // position. This ensures that each rendered object has a shadow
                 // and that no invisible objects have shadows.
-                match extracted_view
-                    .retained_view_entity
-                    .auxiliary_entity
-                    .and_then(|entity| views.get(*entity).ok())
-                {
-                    Some((_, _, camera_view, _, _, _, _)) => {
-                        camera_view.world_from_view.translation()
-                    }
-                    None => shadow_lod_origin.0,
-                }
+                //
+                // Terra's patch (D612): the camera is found by its main-world
+                // entity, which the cascade names, not by looking that entity
+                // up among the render world's views, whose entities are others.
+                cascade_lod_position(
+                    extracted_view.retained_view_entity.auxiliary_entity,
+                    &cameras,
+                    shadow_lod_origin.0,
+                )
             }
         };
 
@@ -1302,6 +1309,29 @@ pub fn prepare_view_uniforms(
 
         commands.entity(entity).insert(view_uniforms);
     }
+}
+
+/// Terra's patch (D612): each camera's position by its main-world entity, as a directional
+/// light's cascade names its camera (`RetainedViewEntity::auxiliary_entity`).
+fn camera_positions(
+    cameras: impl Iterator<Item = (MainEntity, Vec3)>,
+) -> HashMap<MainEntity, Vec3> {
+    cameras.collect()
+}
+
+/// Terra's patch (D612): where a cascade's levels of detail are measured from, its camera's
+/// position. Bevy looked the camera's main-world entity up among the render world's views, a
+/// different set of entities, so it found nothing (and took the shadow LOD origin, any camera)
+/// or another view that happened to share the number: a crown's shadow stand-ins, which
+/// shrink with their distance from it, cast from nothing in some loads and not others.
+fn cascade_lod_position(
+    camera: Option<MainEntity>,
+    cameras: &HashMap<MainEntity, Vec3>,
+    shadow_lod_origin: Vec3,
+) -> Vec3 {
+    camera
+        .and_then(|camera| cameras.get(&camera).copied())
+        .unwrap_or(shadow_lod_origin)
 }
 
 #[derive(Clone)]
@@ -1523,5 +1553,30 @@ pub fn prepare_view_targets(
             main_texture_format,
             out_texture: out_attachment.cloned(),
         });
+    }
+}
+
+/// Terra's patch (D612).
+#[cfg(test)]
+mod cascade_lod_tests {
+    use super::*;
+
+    fn entity(index: u32) -> MainEntity {
+        Entity::from_raw_u32(index).unwrap().into()
+    }
+
+    /// A cascade is measured from its own camera, found by the camera's main-world entity,
+    /// whatever the render world numbered its views; with no camera of its own, from the
+    /// shadow LOD origin.
+    #[test]
+    fn a_cascade_is_measured_from_its_camera() {
+        let main = Vec3::new(0.0, 30_000.0, 0.0);
+        let interface = Vec3::ZERO;
+        let cameras = camera_positions([(entity(7), main), (entity(3), interface)].into_iter());
+        let origin = Vec3::new(1.0, 2.0, 3.0);
+        assert_eq!(cascade_lod_position(Some(entity(7)), &cameras, origin), main);
+        assert_eq!(cascade_lod_position(Some(entity(3)), &cameras, origin), interface);
+        assert_eq!(cascade_lod_position(Some(entity(9)), &cameras, origin), origin);
+        assert_eq!(cascade_lod_position(None, &cameras, origin), origin);
     }
 }
