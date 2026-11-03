@@ -92,6 +92,8 @@ def measure_mannequin():
     look.skin_as_game()
     actions = {a.name.split(".")[0]: a for a in bpy.data.actions}
     clips = {name: lowest(arm, body, actions[name]).tolist() for name in look.game_clips() if name in actions}
+    # A fresh checkout has no out/ yet; the build's first step makes it.
+    os.makedirs(look.OUT, exist_ok=True)
     with open(CACHE, "w") as f:
         json.dump({"stamp": stamp(), "clips": clips}, f)
     print("LIFT mannequin measured,", len(clips), "clips")
