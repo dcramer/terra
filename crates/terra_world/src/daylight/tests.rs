@@ -264,6 +264,28 @@ fn the_clock_goes_round() {
     assert!((clock.time().hour() - 0.1).abs() < 1e-3);
 }
 
+/// The clock's pace (`daylight.pace`) holds the hour at 0, so a long bench's sun stands still,
+/// and runs it so many times as fast above 1; the game's own pace is play's.
+#[test]
+fn the_clocks_pace_holds_or_quickens_the_hour() {
+    use bevy::ecs::system::RunSystemOnce;
+    use std::time::Duration;
+    let hour_after = |pace: f32| {
+        let mut world = World::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(DAY_SECONDS / 24.0));
+        world.insert_resource(time);
+        world.insert_resource(Clock { day: 0, hour: 17.0 });
+        PACE.set(pace, terra_gen::tune::SetBy::CommandLine).unwrap();
+        world.run_system_once(tick).unwrap();
+        PACE.reset();
+        world.resource::<Clock>().hour
+    };
+    assert!((hour_after(1.0) - 18.0).abs() < 1e-3);
+    assert_eq!(hour_after(0.0), 17.0);
+    assert!((hour_after(3.0) - 20.0).abs() < 1e-3);
+}
+
 fn climate() -> WorldClimate {
     WorldClimate(crate::data::read(WorldClimate::FILE))
 }

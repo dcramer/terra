@@ -26,6 +26,16 @@ use terra_gen::smoothstep;
 /// How long a whole day and night lasts, in seconds of play. Proposed: half an hour, as
 /// Valheim's and Enshrouded's are.
 pub const DAY_SECONDS: f32 = 30.0 * 60.0;
+/// How many times as fast as play the clock runs (D547): 0 holds the hour, so a long run's
+/// sun, shadows and sky stand still (the lake-stand bench, ten minutes that would otherwise
+/// pass eight hours of the day); more runs through a day to look at it. Every machine reads
+/// the same default, so one clock still draws one sky (D540).
+pub static PACE: terra_gen::tune::Tunable = terra_gen::tune::Tunable::new(
+    "daylight.pace",
+    1.0,
+    0.0..=60.0,
+    "how many times as fast as play the clock runs: 0 holds the hour, 1 is the game's day",
+);
 /// The sky lights the shade this many times as brightly as the keys below say. Open sky
 /// gives level ground something like a sixth of what the sun does; the keys gave it about a
 /// sixteenth, so every shadow was near black (D216). Under trees the shade is darker than open
@@ -372,6 +382,7 @@ fn moonlight(height: f32) -> f32 {
 /// world's (D469), set on entering it; the climate's rules are every world's.
 pub fn plugin(app: &mut App) {
     entering(app);
+    terra_gen::tune::register(&[&PACE]);
     app.insert_resource(WorldClimate(crate::data::read(WorldClimate::FILE)))
         .register_type::<Clock>()
         // On the yard, the flat test level, the sun stands still.
@@ -469,7 +480,7 @@ fn seen_from_the_camera(
 }
 
 fn tick(time: Res<Time>, mut clock: ResMut<Clock>) {
-    clock.advance(time.delta_secs());
+    clock.advance(time.delta_secs() * PACE.get());
 }
 
 /// The sun the air scatters for the hour, brighter than the world's at a low sun (D212,
