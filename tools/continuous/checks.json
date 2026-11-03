@@ -57,5 +57,12 @@
     "run": ["cargo", "xtask", "gpu", "bench", "--", "cargo", "xtask", "bench", "lake-play", "--runs", "1"],
     "rest": 6,
     "minutes": 60
+  },
+  {
+    "name": "lake stand",
+    "does": "the whole game at the mountain lake, the player standing ten minutes with the clock held (the lake-stand bench), its GPU's last third at most 5% over its first (xtask bench/ticks.rs GPU_FLAT), its ticks within 15.6 ms and its frames within the budget (D25, D138); at most every 12 hours, as one run takes the GPU alone for some 15 minutes",
+    "run": ["cargo", "xtask", "gpu", "bench", "--", "cargo", "xtask", "bench", "lake-stand", "--runs", "1"],
+    "rest": 12,
+    "minutes": 60
   }
 ]

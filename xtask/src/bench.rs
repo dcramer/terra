@@ -28,9 +28,9 @@ pub(crate) const TASKS: &[Task] = &[
 
 /// Frames run before any are timed, so shaders are ready and the scene has settled.
 const BENCH_SETTLE: &str = "240";
-/// A run that has not finished in this long is stuck, and is ended; counted from when it has
-/// its turn on the GPU (D319), not while it waits for it. The town scenes on the 30 km world
-/// load for over 300 s before their first timed frame, so 300 ended every one of them.
+/// A run that has not finished in this long, and its frames at 30 a second, is stuck, and is
+/// ended; counted from its turn on the GPU (D319), not while it waits for it. The town scenes
+/// on the 30 km world load for over 300 s before their first timed frame; lake-stand runs 600.
 const BENCH_TIMEOUT_S: u64 = 900;
 /// How much slower than the last recorded result counts as a regression to look into.
 const SLOWER_BY: f32 = 0.10;
@@ -190,8 +190,9 @@ fn worth_saying(line: &str) -> Option<&str> {
         "drawn, medians: ",
         // What `--tune` set, or why the run refused it (D547).
         "Tune: ",
-        // How long the load took, a play scene's second number (D578).
+        // How long the load took, a play scene's second number (D578); a long run's minutes.
         "Loaded in ",
+        "Last minute, ",
     ]
     .iter()
     .find_map(|key| line.find(key))
@@ -498,7 +499,7 @@ fn asked(args: &[String]) -> Option<Asked> {
     }
     let all_scenes = chosen.is_empty();
     if all_scenes {
-        chosen = SCENES.iter().collect();
+        chosen = ticks::every_scene();
     }
     tunes.sort();
     Some(Asked {
@@ -931,15 +932,16 @@ fn time_scene(
         }
         timing
     });
+    let most_s = BENCH_TIMEOUT_S + scene.frames.parse::<u64>().unwrap_or(0) / 30;
     let stuck = || {
         turn.lock()
-            .is_ok_and(|turn| !turn.0 && turn.1.elapsed().as_secs() > BENCH_TIMEOUT_S)
+            .is_ok_and(|turn| !turn.0 && turn.1.elapsed().as_secs() > most_s)
     };
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
             Ok(None) if stuck() => {
-                println!("  stuck after {BENCH_TIMEOUT_S} s, so ended");
+                println!("  stuck after {most_s} s, so ended");
                 child.kill().ok();
                 child.wait().ok();
                 break;
@@ -974,6 +976,7 @@ fn time_scene(
     let mut timing = reader.join().ok()??;
     (timing.from_start, timing.load_s) = (from_start, load_s);
     timing.load_most_s = play::load_most_s(scene);
+    timing.ticks.gpu_growth_most_pct = ticks::gpu_growth_most_pct(scene);
     println!(
         "  median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms; {:.2}% over budget, {} hitches, {:+.1}% by the end",
         timing.median_ms,

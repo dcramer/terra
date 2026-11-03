@@ -617,6 +617,27 @@ pub(crate) const SCENES: &[Scene] = &[
         frames: "1800",
     },
     Scene {
+        name: "lake-stand",
+        about: "the whole game at the mountain lake as in lake-play, the player standing on the shore for ten minutes with the clock held at five, so its GPU time is held flat over the run (bench/ticks.rs GPU_FLAT): the developer's lake doubled in four minutes; a continuous row, never a hook (D398)",
+        args: &[
+            "--experiment",
+            "play",
+            "--radius",
+            SCALE_RADIUS,
+            "--site",
+            "lake@-15.34,1.68",
+            "--date",
+            "06-10",
+            "--time",
+            "17",
+            // Ten minutes would pass eight hours of the day (daylight::DAY_SECONDS).
+            "--tune",
+            "daylight.pace=0",
+        ],
+        // Ten minutes at the worker's 100 frames a second; longer on a slower card.
+        frames: "60000",
+    },
+    Scene {
         name: "tundra-walk",
         about: "the tundra's heath walked into the wind and back, as a player would (docs/demos.md §2); the world and the walker alone, against the tundra's 10 ms",
         args: &[
