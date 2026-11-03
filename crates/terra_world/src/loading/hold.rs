@@ -38,6 +38,9 @@ pub struct Hold {
     paused_clock: bool,
     /// Gave up on what was coming: no hold again until nothing is.
     gave_up: bool,
+    /// A bench's settle phase (`bench_run::settle`, D607): the script stands still while the
+    /// world, its clock running, streams in.
+    pub settling: bool,
 }
 
 impl Default for Hold {
@@ -47,6 +50,7 @@ impl Default for Hold {
             since: None,
             paused_clock: false,
             gave_up: false,
+            settling: false,
         }
     }
 }
@@ -61,7 +65,7 @@ enum Turn {
 impl Hold {
     /// Whether the script stands still this frame.
     pub fn holds(&self) -> bool {
-        self.since.is_some()
+        self.since.is_some() || self.settling
     }
 
     /// One frame with `coming` things still coming, at `now`; the clock held while held.

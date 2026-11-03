@@ -64,6 +64,9 @@ usage: terra_sandbox [options]
   --bench               measure frame times with vsync off, print them and how they hold
                         to the frame budget, then exit
   --bench-frames <n>    how many frames --bench times (default 600)
+  --bench-settle <s>    --bench's settle phase: for so many seconds after the loading
+                        screen lifts the script stands still, the world streaming in,
+                        its frames and groups timed apart (D607; default 0, none)
   --probe \"<name>: <lever>, …\"
                         a variant to measure, repeated for each: once playing, hold the
                         clock and measure each variant's GPU passes A B A B in one load,
@@ -408,6 +411,9 @@ pub struct Options {
     pub route: Vec<(f32, f32)>,
     /// How many frames `--bench` times.
     pub bench_frames: usize,
+    /// How long `--bench`'s settle phase lasts after the loading screen lifts, the script
+    /// standing still and the frames timed apart (`bench_run::settle`, D607); 0 for none.
+    pub bench_settle_s: f32,
     /// In the workbench: the models to load, their clips to play, what they hold and
     /// wear, what to look at closely, and where to save a sheet, from which sides, at
     /// which moments.
@@ -641,6 +647,7 @@ impl Options {
             warps: Vec::new(),
             route: Vec::new(),
             bench_frames: BENCH_FRAMES,
+            bench_settle_s: 0.0,
             models: Vec::new(),
             props: Vec::new(),
             holds: Vec::new(),
@@ -707,12 +714,9 @@ impl Options {
                 "--route" => options
                     .route
                     .push(east_south("--route", &value("--route")?)?),
-                "--bench-frames" => {
-                    options.bench_frames = value("--bench-frames")?
-                        .parse()
-                        .ok()
-                        .filter(|&frames| frames >= 100)
-                        .ok_or_else(|| "--bench-frames needs a number, 100 or more".to_string())?;
+                "--bench-frames" => options.bench_frames = bench_frames(&value("--bench-frames")?)?,
+                "--bench-settle" => {
+                    options.bench_settle_s = bench_settle(&value("--bench-settle")?)?
                 }
                 "--warp" => {
                     let text = value("--warp")?;
@@ -885,6 +889,22 @@ fn numbers(name: &str, text: &str) -> Result<Vec<f32>, String> {
 }
 
 /// Metres east and south of the start, written like 70,-55.
+/// `--bench-frames`: how many frames a bench times, 100 or more.
+fn bench_frames(text: &str) -> Result<usize, String> {
+    text.parse()
+        .ok()
+        .filter(|&frames| frames >= 100)
+        .ok_or_else(|| "--bench-frames needs a number, 100 or more".to_string())
+}
+
+/// `--bench-settle`: how many seconds a bench's settle phase lasts, 0 or more.
+fn bench_settle(text: &str) -> Result<f32, String> {
+    text.parse()
+        .ok()
+        .filter(|&s: &f32| s >= 0.0)
+        .ok_or_else(|| "--bench-settle needs seconds, 0 or more".to_string())
+}
+
 fn east_south(name: &str, text: &str) -> Result<(f32, f32), String> {
     text.split_once(',')
         .and_then(|(east, south)| Some((east.trim().parse().ok()?, south.trim().parse().ok()?)))
@@ -1120,7 +1140,15 @@ impl Plugin for ShellPlugin {
                     .chain()
                     .after(InputSystems),
             )
-            .add_systems(Update, (scripted_run, crate::bench_run::gather).chain())
+            .add_systems(
+                Update,
+                (
+                    crate::bench_run::settle,
+                    scripted_run,
+                    crate::bench_run::gather,
+                )
+                    .chain(),
+            )
             .add_systems(
                 Last,
                 loading::hold::count_frames.after(bevy::diagnostic::update_frame_count),

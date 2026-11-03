@@ -446,9 +446,11 @@ fn follow_route(
     mut detour: Local<Detour>,
     player: Single<(&Transform, &mut View, &mut Intent), IsLocalPlayer>,
     cine: Option<Res<terra_world::cine::Cine>>,
+    hold: Option<Res<terra_world::loading::Hold>>,
 ) {
-    // In a shot, the walk starts as it rolls (`--cine`).
-    if cine.is_some_and(|cine| !cine.rolling()) {
+    // In a shot, the walk starts as it rolls (`--cine`); in a bench, after its settle phase
+    // (`terra_world::bench_run::settle`, D607).
+    if cine.is_some_and(|cine| !cine.rolling()) || hold.is_some_and(|hold| hold.settling) {
         return;
     }
     let (transform, mut view, mut intent) = player.into_inner();
