@@ -110,7 +110,8 @@ fn a_scots_pines_crown_is_pads_on_its_limbs() {
             .unwrap_or(0);
         assert!(most <= 2, "{form:?}: {most} limbs at one limb's height");
         assert!(
-            (15..=150).contains(&pine.branches),
+            // Pads a little under one across apart from a quarter of the way out (D598).
+            (15..=260).contains(&pine.branches),
             "{form:?}: {} pads",
             pine.branches
         );
