@@ -10,14 +10,13 @@
 //! The log gives its vantage points (`Town vantage: …`) as `--vantage` takes them.
 
 use bevy::prelude::*;
-use terra_game::play::town::{AT_THE_SITE_M, SEED, Wanted};
+use terra_game::play::town::{AT_THE_SITE_M, Wanted};
 use terra_world::instance::{Building, InWorld};
 use terra_world::planet::Planet;
 use terra_world::start::{Found, Sited, Start};
 
 fn wanted(lived_in: bool) -> Wanted {
     Wanted {
-        seed: SEED,
         near: Vec2::new(300.0, 0.0),
         within: 220.0,
         arrive: true,

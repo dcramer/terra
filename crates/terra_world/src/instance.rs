@@ -355,7 +355,7 @@ pub fn in_a_world(app: &mut App) {
             commands.queue(Cross(WorldSpec {
                 key: InstanceKey(0),
                 kind: "world".into(),
-                seed: 1,
+                seed: crate::planet::entering::FIRST_SEED,
             }));
         });
 }

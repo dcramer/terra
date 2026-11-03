@@ -26,19 +26,27 @@ use terra_world::smoke::{Burning, Smoke};
 use terra_world::start::Start;
 use terra_world::tick::Sim;
 
-/// The demo's town (terra_sandbox's `town` experiment): its seed, chosen for a long square
-/// with a side street up the slope.
-pub const SEED: u32 = 2;
+/// The seed of the town a realm lays, from the realm's own (D596): its seed derived for the
+/// town. Seed 1's home realm keeps the demo's town (terra_sandbox's `town` experiment,
+/// `terra_land::site::PINNED_TOWN_SEED`), as it keeps the planet's own start: its demo
+/// places, look baselines and scorecards stand on it (D393).
+pub fn seed_in(realm: terra_gen::Seed) -> u32 {
+    use terra_land::site::{PINNED_SEED, PINNED_TOWN_SEED};
+    match realm.0 == PINNED_SEED {
+        true => PINNED_TOWN_SEED,
+        false => realm.derive("town").0 as u32,
+    }
+}
 
 /// How far from the place the land's rules found the demo's town (`--site town` or
 /// `settlement`) its square may move, to the most level ground there on the ground as drawn.
 pub const AT_THE_SITE_M: f32 = 40.0;
 
-/// A town wanted: its seed, and near where, in metres east and south of the start; its
-/// square goes on the most level ground within `within` of there.
+/// A town wanted near where, in metres east and south of the start; its square goes on the
+/// most level ground within `within` of there, and it is laid from the realm's seed
+/// ([`seed_in`]).
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct Wanted {
-    pub seed: u32,
     pub near: Vec2,
     pub within: f32,
     /// Whether the player is taken there once it is laid: to its main street, looking
@@ -932,7 +940,7 @@ pub fn laid_out(
         let ground = planet.ground_at(middle + east * at.x + south * at.y);
         ground.length() - radius + at.length_squared() / (2.0 * radius)
     };
-    let town = terra_town::town::town_sized(wanted.seed, picks, &heights, size);
+    let town = terra_town::town::town_sized(seed_in(planet.seed()), picks, &heights, size);
     (middle, east, town)
 }
 
@@ -1048,7 +1056,7 @@ fn lay(
     }
 
     // The buildings, each stood on the ground where its door is, by the shortcuts.
-    let seed = wanted.seed;
+    let seed = seed_in(planet.seed());
     for (index, building) in town.buildings.iter().enumerate() {
         let door = at(Vec2::from(building.at));
         let up = door.normalize();
@@ -1174,7 +1182,7 @@ fn lay(
         std::fs::read_to_string(terra_world::data::path("market.ron"))
             .ok()
             .and_then(|text| terra_town::town::Market::parse(&text).ok())
-            .map(|market| market.looks(&town, wanted.seed).into_iter().collect())
+            .map(|market| market.looks(&town, seed).into_iter().collect())
             .unwrap_or_default();
     for (index, thing) in town.things.iter().enumerate() {
         let Some(file) = looks
@@ -1243,7 +1251,7 @@ fn lay(
         &site,
         &planet,
         &town,
-        wanted.seed,
+        seed,
         &at,
         &on_site,
     );

@@ -30,10 +30,11 @@ terra_town.workspace = true
 # The walker layer (D198, D407): the player, bodies, the character's look and pace.
 terra_walker.workspace = true
 terra_world.workspace = true
+# The seed the demos are pinned on and its town's (D393, D596); and the land round a town,
+# for the test that no house stands in a lake. Already under terra_world.
+terra_land.workspace = true
 
 [dev-dependencies]
-# The land round a town, for the test that no house stands in a lake.
-terra_land.workspace = true
 # The body file's clip markers, read in the stride clock's test.
 serde_json = "1"
 # The model files' contents, for the tests of the townsfolk's data.

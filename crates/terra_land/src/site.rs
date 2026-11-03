@@ -92,6 +92,11 @@ const PLACES: &str = include_str!("../../../tools/sandbox/places.ts");
 /// land has none of them, so its ground is all its own rules'.
 pub const PINNED_SEED: u64 = 1;
 
+/// The seed of the demo's town on [`PINNED_SEED`]'s home realm (terra_sandbox's `town`
+/// experiment; `terra_folk::town::seed_in`), chosen for a long square with a side street up
+/// the slope. Another realm's town takes its seed from the realm's.
+pub const PINNED_TOWN_SEED: u32 = 2;
+
 /// The pins of the demos' places on a world of this seed and so many metres' radius, by name,
 /// kilometres east and north of the start: each place in `places.ts` whose arguments give that
 /// `--radius` and a pinned `--site`, on [`PINNED_SEED`] only. The ground keeps them as they are

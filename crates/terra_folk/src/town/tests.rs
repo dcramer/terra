@@ -17,6 +17,16 @@ use super::*;
 use terra_town::village::{Kinds, Plan, Scheme};
 
 #[test]
+fn each_world_lays_its_own_town_and_seed_one_keeps_the_demos() {
+    // D596: the town is laid from its realm's seed, so worlds' towns differ; seed 1's home
+    // realm keeps the demo's town, on which its look baselines stand (D393).
+    use terra_gen::Seed;
+    assert_eq!(seed_in(Seed(1)), terra_land::site::PINNED_TOWN_SEED);
+    let towns: std::collections::HashSet<u32> = (2..66).map(|s| seed_in(Seed(s))).collect();
+    assert_eq!(towns.len(), 64, "two worlds were given one town");
+}
+
+#[test]
 fn a_meadows_drifts_vary_smoothly_over_its_whole_range() {
     // D381: the mix is drifts, not speckle: neighbours a few centimetres apart differ
     // little, and across the meadow both ends of the range are met.
@@ -209,7 +219,6 @@ fn the_settlements_pinned_site_still_lays_its_walled_town() {
     let start = found.start(&planet);
     let at = start.local(planet.surface(site.toward));
     let wanted = Wanted {
-        seed: SEED,
         near: Vec2::new(at.x, at.z),
         within: AT_THE_SITE_M,
         arrive: true,

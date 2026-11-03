@@ -6,8 +6,10 @@
 //! Three rules over the crates' own code (tests, benches, examples and programs are free to pick
 //! a seed, as they are about one world):
 //!
-//! - **No seed written in**: `Seed(1)`, `Seed(0x5EED)`. A stream is the world's seed derived
-//!   for its purpose. What is heard and not part of the world (a sound's dice) is listed in
+//! - **No seed written in**: `Seed(1)`, `Seed(0x5EED)`, or a number given a seed's name
+//!   (`const SEED: u32 = 2`, `let seed = 7`, `seed: 3` in a struct). A stream is the world's
+//!   seed derived for its purpose. What is heard and not part of the world (a sound's dice),
+//!   a look's grain baked once, and the seed of seed 1's pinned demos are listed in
 //!   [`ALLOWED`] with why.
 //! - **No system randomness**: `thread_rng`, `rand::random` and the like, anywhere. The clock
 //!   is the shared crates' rule (`check`); a Bevy crate times itself with it.
@@ -55,6 +57,46 @@ const ALLOWED: &[(&str, &str)] = &[
     (
         "crates/terra_world/src/rises.rs",
         "when a fish rises: a moment's effect, not the world",
+    ),
+    (
+        "crates/terra_world/src/audio/synth.rs",
+        "a synth's length measured from one voice: what is heard, not the world",
+    ),
+    (
+        "crates/terra_sandbox/src/bed.rs",
+        "a sound bed's layers' dice: what is heard, not the world",
+    ),
+    (
+        "crates/terra_folk/src/town_sound.rs",
+        "the town's murmur's dice: what is heard, not the world",
+    ),
+    (
+        "crates/terra_world/src/sky/noise3d.rs",
+        "the clouds' noise texture, baked once: a look's grain, the same sky texture in every world (the weather is the world's)",
+    ),
+    (
+        "crates/terra_world/src/fire/volume.rs",
+        "the flames' gas noise texture: a look's grain and a moment's effect",
+    ),
+    (
+        "crates/terra_build_layout/src/layout/roofs/frame.rs",
+        "a batten's own grain in its build's frame, as KEYED_BY_PLACE's terra_build_layout: the same in every world",
+    ),
+    (
+        "crates/terra_voxel/src/patterned.rs",
+        "ICE_WEDGES' placeholder seed: a world's ground gives its own (terra_land, seed.derive(\"ice wedges\"))",
+    ),
+    (
+        "crates/terra_items/src/assembly/command.rs",
+        "the assembly tool's default --seed, a command line's, not a world's",
+    ),
+    (
+        "crates/terra_world/src/planet/entering.rs",
+        "FIRST_SEED, the seed of a run given none and of a world kept from before seeds (D596)",
+    ),
+    (
+        "crates/terra_land/src/site.rs",
+        "PINNED_SEED, the world the demos' places are pinned on, and PINNED_TOWN_SEED, its demo town's (D393, D596)",
     ),
 ];
 
@@ -259,6 +301,58 @@ fn written_seed(line: &str) -> bool {
     })
 }
 
+/// Rust's integer types, which a seed written in as a number is declared as.
+const INTEGERS: [&str; 12] = [
+    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
+];
+
+/// Whether a line gives a name for a seed a number written in: `const SEED: u32 = 2;`,
+/// `let town_seed = 0x5EED;`, `Wanted { seed: 7, .. }`. A name holding `seed` in any case,
+/// then `=`, or `:` with an integer type and `=`, or `:` alone as a field is given, then a
+/// digit (`wanted.seed = 2` too). A parameter (`seed: u32`), a comparison (`seed == 1`) or a
+/// value taken from another name (`seed: wanted.seed`) is not one.
+fn named_seed_number(line: &str) -> bool {
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    // An integer: a digit first, and no `.` after its digits (`0.3` is a shader's float).
+    let number = |rest: &str| {
+        let rest = rest.trim_start();
+        let digits = rest.find(|c: char| !c.is_ascii_alphanumeric() && c != '_');
+        rest.starts_with(|c: char| c.is_ascii_digit())
+            && !digits.is_some_and(|end| rest[end..].starts_with('.'))
+    };
+    let assigned = |rest: &str| {
+        let rest = rest.trim_start();
+        rest.starts_with('=')
+            && !rest.starts_with("==")
+            && !rest.starts_with("=>")
+            && number(&rest[1..])
+    };
+    let lower = line.to_ascii_lowercase();
+    lower.match_indices("seed").any(|(at, _)| {
+        // The name ends in its word `seed` (`seed`, `TOWN_SEED`): `SEEDS` or `SEED_DIGITS`
+        // count something.
+        let end = at + "seed".len();
+        let word = line[..at].ends_with('_') || !line[..at].ends_with(ident);
+        if !word || line[end..].starts_with(ident) {
+            return false;
+        }
+        let rest = line[end..].trim_start();
+        match rest.strip_prefix(':') {
+            Some(typed) if !typed.starts_with(':') => {
+                let typed = typed.trim_start();
+                match INTEGERS
+                    .iter()
+                    .find(|int| typed.starts_with(**int) && !typed[int.len()..].starts_with(ident))
+                {
+                    Some(int) => assigned(&typed[int.len()..]),
+                    None => number(typed),
+                }
+            }
+            _ => assigned(rest),
+        }
+    })
+}
+
 /// The name of the function the end of `code` is in: the last `fn name` before it.
 fn enclosing_fn(code: &str) -> &str {
     let ident = |c: char| c.is_alphanumeric() || c == '_';
@@ -365,9 +459,10 @@ fn breaches(path: &str, text: &str) -> Vec<String> {
                 "{path}:{number}: {what} reads the system's randomness: derive a seed from the world's instead (terra_gen::Seed::derive)"
             ));
         }
-        if written_seed(line) && !ALLOWED.iter().any(|(file, _)| *file == path) {
+        let written = written_seed(line) || named_seed_number(line);
+        if written && !ALLOWED.iter().any(|(file, _)| *file == path) {
             found.push(format!(
-                "{path}:{number}: a seed written in: derive it from the world's seed (planet.seed().derive(\"what it is for\"), WorldSpec::seed); a sound's dice may be listed in xtask/src/world_seed.rs's ALLOWED"
+                "{path}:{number}: a seed written in: derive it from the world's seed (planet.seed().derive(\"what it is for\"), WorldSpec::seed); a sound's dice or a look's grain may be listed in xtask/src/world_seed.rs's ALLOWED with why"
             ));
         }
     }
@@ -451,6 +546,17 @@ mod tests {
         assert!(!checked("crates/terra_world/src/flora/tests.rs"));
         assert!(!checked("crates/terra_land/src/bin/fields.rs"));
         assert!(checked("crates/terra_world/src/flora.rs"));
+    }
+
+    #[test]
+    fn a_seed_named_and_written_in_as_a_number_is_found() {
+        let path = "crates/terra_folk/src/town.rs";
+        let written = "pub const SEED: u32 = 2;\nconst TOWN_SEED: u64 = 0x5EED;\nlet seed = 7;\nlet mut far_seed: usize = 3;\nWanted { seed: 9, near };\nwanted.seed = 4;\n";
+        let found = breaches(path, written);
+        assert_eq!(found.len(), 6, "{found:#?}");
+        let taken = "fn f(seed: u32, s: Seed) -> u32 {\n    let seed = planet.seed().derive(\"town\").0 as u32;\n    let w = Wanted { seed: SEED, near };\n    if seed == 1 { return 3; }\n    match seed { 1 => 2, _ => 3 }\n    let x: u32 = 2;\n    info!(\"seed: {seed} = 1\");\n}\nstruct A { seed: u32, seeds: Vec<u32> }\n";
+        let found = breaches(path, taken);
+        assert!(found.is_empty(), "{found:#?}");
     }
 
     #[test]
