@@ -331,7 +331,7 @@ impl Town {
             made += 1;
             match what {
                 0 if deep >= 6.0 && high.x - low.x >= 5.0 => {
-                    self.pen(home, at, facing, low.x, high.x, back, deep, kinds);
+                    self.pen(seed, home, at, facing, low.x, high.x, back, deep, kinds);
                 }
                 1 | 0 => {
                     self.things
@@ -374,10 +374,12 @@ impl Town {
         }
     }
 
-    /// A goat pen of low walls filling a yard, a gate in its side toward the house.
+    /// A goat pen of low walls filling a yard, a gate in its side toward the house, its walls
+    /// laid by the town's seed.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn pen(
         &mut self,
+        seed: u32,
         home: usize,
         at: Vec2,
         facing: f32,
@@ -409,7 +411,7 @@ impl Town {
             }
             // A low wall runs along its own x, its middle at its place; its face behind it.
             let wall = village::put_up(
-                hash::of(&[home as u32, index as u32]),
+                hash::of(&[seed, 19, home as u32, index as u32]),
                 (Plan::Wall, Scheme::Masonry, Roof::Gable, long),
                 ((from + to) * 0.5).to_array(),
                 libm::atan2f(-way.y, way.x),
