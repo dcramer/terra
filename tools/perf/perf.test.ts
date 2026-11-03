@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Bisect, found, next, start, step } from "./bisect.ts";
 import { appended, band, FLOORS, historyLine, judge, type Point, pointOf, readHistory, type Why } from "./history.ts";
-import { alertLine, empty, ingest, plan, type State } from "./sheriff.ts";
+import { alertLine, askBisect, cancelBisect, empty, ingest, plan, type State } from "./sheriff.ts";
 
 const commits = Array.from({ length: 30 }, (_, i) => `c${String(i).padStart(2, "0")}${"0".repeat(38)}`);
 const SCENES = ["lake-play", "forest-run", "town-dusk"];
@@ -158,6 +158,25 @@ test("a bisect measures its ends first when started by hand, skips a commit with
   const f = found(b);
   assert.equal(f.first, undefined);
   assert.ok(f.left.includes(commits[9]) && f.left.length > 1, "narrowed, the bad commit among those left");
+});
+
+test("a bisect cancelled by hand drops its step in flight and starts the next waiting", () => {
+  const range = commits.slice(1, 17);
+  const first = askBisect(empty(), "forest-run", "hitches", commits[0], commits[16], range);
+  const both = askBisect(first, "lake-play", "p99_ms", commits[0], commits[16], range);
+  const s: State = { ...both, job: { id: "20261103-100250-daf6", rev: commits[0], why: "bisect", end: "good" } };
+  const got = cancelBisect(s);
+  assert.equal(got.job, "20261103-100250-daf6", "its step in flight, for the box to cancel");
+  assert.equal(got.state.job, undefined);
+  assert.equal(got.state.bisect?.scene, "lake-play", "the next waiting starts");
+  assert.equal(got.state.waiting.length, 0);
+  assert.match(got.lines[0], /forest-run hitches .* cancelled by hand/);
+  const landing: State = { ...first, job: { id: "20261103-104001-20ba", rev: commits[16], why: "landing" } };
+  const kept = cancelBisect(landing);
+  assert.equal(kept.job, undefined, "a landing's bench in flight is the row's, not the bisect's");
+  assert.equal(kept.state.job?.id, "20261103-104001-20ba");
+  assert.equal(kept.state.bisect, undefined);
+  assert.deepEqual(cancelBisect(empty()).lines, [], "nothing to cancel");
 });
 
 test("the whole row on the fake bench bisects the alert to its first bad commit and names it", () => {

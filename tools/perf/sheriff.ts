@@ -189,6 +189,20 @@ function finishBisect(s: State): string[] {
   return lines;
 }
 
+/// The running bisect stopped by hand (`perf.ts bisect --cancel`, as Pinpoint's jobs are
+/// cancelled): dropped, its alert left open, the next waiting started; `job` is its step in
+/// flight, for the box to cancel, which the row then forgets so it plans again at once.
+export function cancelBisect(s0: State): { state: State; lines: string[]; job?: string } {
+  const b = s0.bisect;
+  if (!b) return { state: s0, lines: [] };
+  const s: State = { ...s0, alerts: s0.alerts.map((a) => (a.id === b.alert && a.state === "bisecting" ? { ...a, state: "open" } : a)), waiting: [...s0.waiting] };
+  const job = s.job?.why === "bisect" ? s.job.id : undefined;
+  if (job) s.job = undefined;
+  s.bisect = s.waiting.shift();
+  const lines = [`· perf bisect ${b.scene} ${b.metric} ${b.good.slice(0, 9)}..${b.bad.slice(0, 9)} cancelled by hand after ${b.benches} benches${job ? `, its step ${job} cancelled` : ""}${s.bisect ? `; next, ${s.bisect.scene} ${s.bisect.metric}` : ""}`];
+  return { state: s, lines, job };
+}
+
 /// A bisect asked for by hand (`perf.ts bisect`): its ends measured first unless known.
 export function askBisect(s: State, scene: string, metric: Metric, good: string, bad: string, range: string[], cap = CAP, options: Options = {}): State {
   const b = start(scene, metric, good, bad, range, {}, cap, undefined, options);

@@ -9,6 +9,7 @@ node tools/perf/perf.ts main <rev>          # main's numbers at or just before a
 node tools/perf/perf.ts ab <csv> [--base <rev>]   # your bench's rows against main's side, no bench of main
 node tools/perf/perf.ts bisect forest-run hitches <good> <bad>   # a bisect by hand
 node tools/perf/perf.ts bisect forest-run hitches <good> <bad> --scenes forest-run,lake-play --runs 5 --patch <sha> --cap 7
+node tools/perf/perf.ts bisect --cancel   # the running bisect stopped, its step cancelled, the next waiting started
                                             # a flaky metric: five runs a step, each its own load, <sha> applied where a step lacks it
 ```
 

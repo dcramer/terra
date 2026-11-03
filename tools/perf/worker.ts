@@ -14,7 +14,7 @@ import { type Box, box, boxEnv, git, outDir, readJob, wake, writeJob } from "../
 import { type Job, jobId } from "../render-worker/jobs.ts";
 import { appended, HISTORY_HEADER, historyLine, METRICS, type Metric, type Point, pointOf, readHistory, series, WINDOW } from "./history.ts";
 import type { Options } from "./bisect.ts";
-import { alertLine, askBisect, empty, ingest, plan, type State } from "./sheriff.ts";
+import { alertLine, askBisect, cancelBisect, empty, ingest, plan, type State } from "./sheriff.ts";
 
 export type Row = { scenes: string[]; runs: number; reads: string[]; origin: string; every: number; rest: number; cap: number; minutes: number };
 export const row = (): Row => JSON.parse(readFileSync(join(import.meta.dirname, "row.json"), "utf8"));
@@ -201,6 +201,20 @@ export function perfCommand(b: Box, args: string[]): number {
     console.log(JSON.stringify(mainSide(b, rev)));
     return 0;
   }
+  if (what === "bisect" && rest[0] === "--cancel") {
+    if (!s.bisect) return console.log("✗ perf: no bisect runs; `node tools/perf/perf.ts` shows the row"), 1;
+    const got = cancelBisect(s);
+    const j = got.job ? readJob(b, got.job) : undefined;
+    // Its step stopped as `remote-render --cancel` does: a queued job marked, a running one told.
+    if (j?.state === "queued") writeJob(b, { ...j, state: "cancelled", ended: new Date().toISOString(), note: "its bisect cancelled" });
+    if (j?.state === "running") writeFileSync(join(b.jobs, j.id, "cancel"), "");
+    saveState(b, got.state);
+    mkdirSync(dir(b), { recursive: true });
+    appendFileSync(file(b, "log.txt"), got.lines.map((l) => `${new Date().toISOString().slice(0, 16)} ${l}\n`).join(""));
+    if (j) wake(b);
+    console.log(`✓ ${got.lines.join("\n")}`);
+    return 0;
+  }
   if (what === "bisect" && rest.length >= 4 && (METRICS as string[]).includes(rest[1])) {
     const [scene, metric, goodArg, badArg, ...flags] = rest;
     // --scenes a,b  --runs 5  --patch <sha>  --cap 7: a flaky metric's bisect (bisect.ts Options).
@@ -221,7 +235,7 @@ export function perfCommand(b: Box, args: string[]): number {
     console.log(`✓ perf: bisect of ${scene} ${metric} over ${range.length} commits queued${s.bisect ? " behind the one running" : ""}; its ends are benched first; \`node tools/perf/perf.ts\` follows it`);
     return 0;
   }
-  console.log("usage: node tools/perf/worker.ts --dir DIR [status [lines] | history [lines] | main <rev> | bisect <scene> <median_ms|p99_ms|hitches|load_s> <good> <bad>]");
+  console.log("usage: node tools/perf/worker.ts --dir DIR [status [lines] | history [lines] | main <rev> | bisect <scene> <median_ms|p99_ms|hitches|load_s> <good> <bad> | bisect --cancel]");
   return 2;
 }
 

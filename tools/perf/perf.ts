@@ -11,6 +11,7 @@
 //                                                origin/main), each metric inside or past main's noise band
 //   node tools/perf/perf.ts bisect <scene> <median_ms|p99_ms|hitches|load_s> <good> <bad>
 //                                                a bisect asked by hand, its ends benched first, then by halving
+//   node tools/perf/perf.ts bisect --cancel      the running bisect stopped, its step in flight cancelled, the next waiting started
 //
 // The box answers through its `tools/perf/worker.ts` over ssh, as remote-render's do (TERRA_WORKERS). Node
 // 22.18 or later; no dependencies.
