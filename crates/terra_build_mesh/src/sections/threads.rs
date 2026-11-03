@@ -5,8 +5,11 @@ use super::*;
 
 /// Threads a process may start beside its workers to draw a section's parts side by side,
 /// all of them together: a few, so a storey's step comes back in a part's time without the
-/// main thread waiting for a core behind dozens of drawing threads (D308).
-pub(super) const SPARE_THREADS: usize = 4;
+/// main thread waiting for a core behind dozens of drawing threads (D308); how many is the
+/// parts' share of the background in the table of the game's threads (D606).
+pub(super) fn spare_threads() -> usize {
+    terra_gen::par::threads().parts
+}
 
 pub(super) static SPARE_IN_USE: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
@@ -15,8 +18,9 @@ impl Spare {
     pub fn take(wanted: usize) -> Spare {
         use std::sync::atomic::Ordering;
         let mut taken = 0;
+        let most = spare_threads();
         let _ = SPARE_IN_USE.fetch_update(Ordering::AcqRel, Ordering::Acquire, |in_use| {
-            taken = wanted.min(SPARE_THREADS.saturating_sub(in_use));
+            taken = wanted.min(most.saturating_sub(in_use));
             Some(in_use + taken)
         });
         Spare(taken)

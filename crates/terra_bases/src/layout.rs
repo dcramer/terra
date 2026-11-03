@@ -12,7 +12,7 @@ use super::draw::{self, Parts};
 use super::store::{self, each};
 use super::{BuildLook, Built, Site};
 use bevy::prelude::*;
-use bevy::tasks::{AsyncComputeTaskPool, Task, TaskPool, TaskPoolBuilder, block_on, poll_once};
+use bevy::tasks::{Task, TaskPool, block_on, poll_once};
 use draw::detail;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
@@ -183,20 +183,15 @@ pub fn reach(distance: f32, now: Option<Reach>, close: bool) -> Reach {
     }
 }
 
-/// Building's own threads, as many as Bevy's async compute pool has, for an edit's base laid
-/// again and its sections drawn: on that pool they queued behind the world's own streaming
-/// work (the ground, grass, the sky's occlusion), and an edit's few milliseconds of laying
-/// waited up to 200 ms for a thread. Shipped engines give such work a priority in one job
-/// system; Bevy's pools have none, so building has a pool of its own.
+/// Building's own threads, its share of the background in the table of the game's threads
+/// (D606), for an edit's base laid again and its sections drawn: on Bevy's async compute pool
+/// they queued behind the world's own streaming work (the ground, grass, the sky's
+/// occlusion), and an edit's few milliseconds of laying waited up to 200 ms for a thread.
+/// Shipped engines give such work a priority in one job system; Bevy's pools have none, so
+/// building has a pool of its own.
 pub fn builders() -> &'static TaskPool {
     static POOL: std::sync::OnceLock<TaskPool> = std::sync::OnceLock::new();
-    POOL.get_or_init(|| {
-        let threads = AsyncComputeTaskPool::try_get().map_or(2, |pool| pool.thread_num());
-        TaskPoolBuilder::new()
-            .num_threads(threads.max(2))
-            .thread_name("builds".to_string())
-            .build()
-    })
+    POOL.get_or_init(|| terra_world::threads::pool(terra_gen::par::Work::Building, "builds"))
 }
 
 /// How much further off than it is a group's detail needed only soon is taken to be, in

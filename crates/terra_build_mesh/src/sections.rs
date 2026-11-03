@@ -481,7 +481,8 @@ pub struct Drawing {
     roofs: Option<u64>,
 }
 
-/// Threads taken from [`SPARE_THREADS`], as many as are free up to those wanted, given back
+/// Threads taken from the parts' share of the game's threads (`terra_gen::par::Threads`,
+/// D606), as many as are free up to those wanted, given back
 /// when it goes.
 pub struct Spare(usize);
 
