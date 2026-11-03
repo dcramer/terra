@@ -47,6 +47,28 @@ fn the_hook_formats_and_lints_only_the_crates_changed() {
     assert!(names(&hook(&docs)).is_empty());
 }
 
+/// A push the scoping checks over everything (here a patched Bevy crate's file, which it does
+/// not place) runs the code-health lints as well as the workspace's clippy: c78201ec2 grew
+/// planet.rs past its size baseline beside patches/ and passed, and every later push touching
+/// Rust was refused until it was trimmed (D396, D37).
+#[test]
+fn a_push_checked_over_everything_runs_the_size_lint() {
+    let packages = std::collections::BTreeSet::from(["terra_world".to_string()]);
+    let files = [
+        "crates/terra_world/src/planet.rs".to_string(),
+        "patches/bevy_pbr/src/render/unpack_bins.wesl".to_string(),
+    ];
+    let scope = scope::classify(&files, &packages);
+    assert!(scope.all(), "{}", scope.summary());
+    let ran = names(&hook(&scope));
+    for lint in ["fmt", "sizes", "one definition", "world seed", "clippy"] {
+        assert!(ran.iter().any(|name| name == lint), "{lint}: {ran:?}");
+    }
+    // The workspace's own manifest checks everything too, with no Rust file among the changes.
+    let manifest = scope::classify(&["Cargo.toml".to_string()], &packages);
+    assert!(names(&hook(&manifest)).iter().any(|name| name == "sizes"));
+}
+
 /// The full check runs every stage, the tests and the ratchets among them.
 #[test]
 fn the_full_check_runs_the_tests_and_the_ratchets() {

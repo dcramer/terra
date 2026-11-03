@@ -168,7 +168,9 @@ fn code_health() -> [(Step, How); 3] {
 }
 
 /// The hook's stages: formatting, the code-health rules, and clippy of the crates changed,
-/// the workspace when the build itself changed (`Scope::all`).
+/// the workspace when the build itself changed (`Scope::all`). A change checked over
+/// everything runs the code-health lints too: `Scope::everything` leaves `rust` unset, and
+/// c78201ec2 grew planet.rs past its baseline beside a patched Bevy crate's file and passed.
 fn hook(scope: &Scope) -> Vec<(Step, How)> {
     let lint = if scope.all() {
         clippy(&["--workspace".to_string()])
@@ -181,7 +183,7 @@ fn hook(scope: &Scope) -> Vec<(Step, How)> {
         clippy(&scope::package_args(&scope.changed))
     };
     let mut stages = vec![fmt(scope)];
-    if scope.rust {
+    if scope.all() || scope.rust {
         stages.extend(code_health());
     }
     stages.push(lint);
