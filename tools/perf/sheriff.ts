@@ -146,7 +146,8 @@ export function ingest(s0: State, job: InFlight, points: Point[], history: Point
     s.since[key(j.scene, j.metric)] = r.rev;
     if (j.change === "worse") {
       worse = true;
-      if (range.length) s.waiting.push(start(j.scene, j.metric, good, r.rev, range, { goodValue: a.before, badValue: a.after }, cap, a.id));
+      // One commit is its own answer; more are bisected.
+      if (range.length > 1) s.waiting.push(start(j.scene, j.metric, good, r.rev, range, { goodValue: a.before, badValue: a.after }, cap, a.id));
     }
     raised.push(a);
   }

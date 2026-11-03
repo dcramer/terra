@@ -173,6 +173,19 @@ test("the whole row on the fake bench bisects the alert to its first bad commit 
   assert.equal(s.bisect, undefined);
 });
 
+test("a regression in a batch of one commit names it without a bisect", () => {
+  const bench = fakeBench(11);
+  const history: Point[] = [];
+  const lines: string[] = [];
+  let s = empty();
+  for (const tip of [commits[1], commits[3], commits[5], commits[8], commits[10], commits[11]]) s = drive(s, tip, bench, history, lines);
+  const alert = s.alerts.find((a) => a.scene === "forest-run");
+  assert.equal(alert?.state, "found", lines.join("\n"));
+  assert.equal(alert?.first, commits[11]);
+  assert.equal(s.bisect, undefined);
+  assert.equal(history.filter((p) => p.why === "bisect").length, 0, "no bench spent on it");
+});
+
 test("the plan rests after a bench, takes a batch at the tip once, and interleaves landings with a bisect", () => {
   const now = Date.parse("2026-11-03T12:00:00Z");
   const s = { ...empty(), benched: commits[3], lastEnded: "2026-11-03T11:50:00Z" };
