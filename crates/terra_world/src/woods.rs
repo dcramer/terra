@@ -30,6 +30,8 @@ use bevy::{
 };
 use std::sync::Arc;
 
+mod outline;
+
 pub use terra_land::woods::TreeKind;
 use terra_land::woods::{Tree, Woods};
 
@@ -637,10 +639,12 @@ struct Card {
 }
 
 /// A square's trees as one mesh of cards about its middle, in the far forest's form
-/// (far_forest.wesl): each card's four corners at its foot, the shader standing them up and
-/// turning them to the eye; the first texture coordinate the corner, the second the card's
-/// width and height, the colour its kind (oak 0, pine 0.5, spruce 1), its luck and, for a grown
-/// tree's card, where it comes in. Its bounds hold the cards turned any way.
+/// (far_forest.wesl): each card a quad for each band of its tree's outline ([`outline`]),
+/// the corners at its foot, the shader standing them up and turning them to the eye; the
+/// first texture coordinate the corner on the whole card, the second the card's width and
+/// height, the colour its kind (oak 0, pine 0.5, spruce 1), its luck, for a grown tree's card
+/// where it comes in, and which way the corner is widened ([`outward`]). Its bounds hold the
+/// cards turned any way.
 fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
     let middle = cards.iter().map(|c| c.tree.at).sum::<Vec3>() / cards.len() as f32;
     let up = middle.normalize();
@@ -672,7 +676,6 @@ fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
             low = low.min(p);
             high = high.max(p);
         }
-        let first = positions.len() as u32;
         let species = match kind {
             TreeKind::Oak => 0.0,
             TreeKind::Pine => 0.5,
@@ -681,14 +684,29 @@ fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
         let comes_in = card
             .grown
             .map_or(0.0, |drawn| drawn.to_m / HANDOVER_SCALE_M);
-        for corner in [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]] {
-            positions.push(at.to_array());
-            normals.push(up.to_array());
-            corners.push(corner);
-            sizes.push([width, height]);
-            colours.push([species, tree.luck, comes_in, 1.0]);
+        // The card cut to its tree's outline, a quad a band; each corner says in its colour's
+        // alpha which way the shader widens it (`outward`).
+        let bands = outline::outline(kind_index(kind), width, height);
+        for (i, band) in bands.iter().enumerate() {
+            let first = positions.len() as u32;
+            let below = (i == 0 || bands[i - 1].half < band.half) as i32;
+            let above = (i + 1 == bands.len() || bands[i + 1].half < band.half) as i32;
+            let (left, right) = (0.5 - band.half / width, 0.5 + band.half / width);
+            let (low, high) = (band.low / height, band.high / height);
+            for (corner, out) in [
+                ([left, low], [-1, -below]),
+                ([right, low], [1, -below]),
+                ([right, high], [1, above]),
+                ([left, high], [-1, above]),
+            ] {
+                positions.push(at.to_array());
+                normals.push(up.to_array());
+                corners.push(corner);
+                sizes.push([width, height]);
+                colours.push([species, tree.luck, comes_in, outward(out)]);
+            }
+            indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
         }
-        indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
     }
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -701,6 +719,13 @@ fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colours);
     mesh.insert_indices(Indices::U32(indices));
     (mesh, middle, Aabb::from_min_max(low, high))
+}
+
+/// Which way a band's corner is widened, across and up, each -1, 0 or 1, as one number for
+/// the colour's alpha, 2 to 10: far_forest.wesl's vertex shader reads it back (`outward`).
+/// An alpha of 1 is a whole card, not widened (the lush forest's far cards).
+fn outward([across, up]: [i32; 2]) -> f32 {
+    (2 + (across + 1) * 3 + up + 1) as f32
 }
 
 #[cfg(test)]
@@ -757,8 +782,17 @@ mod tests {
         else {
             panic!("no sizes");
         };
-        // Four corners a card, each telling the shader the same.
-        let card = |k: usize| (colours[k * 4], sizes[k * 4]);
+        let Some(VertexAttributeValues::Float32x3(feet)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("no feet");
+        };
+        // A card's corners (four a band of its outline) all at its foot, each telling the
+        // shader the same but for which way it is widened.
+        let firsts: Vec<usize> = (0..feet.len())
+            .filter(|&i| i == 0 || feet[i] != feet[i - 1])
+            .collect();
+        assert_eq!(firsts.len(), cards.len());
+        let card = |k: usize| (colours[firsts[k]], sizes[firsts[k]]);
         let (tall, tall_size) = card(0);
         assert_eq!(tall[0], 0.5, "a pine's card");
         assert!((tall[2] * HANDOVER_SCALE_M - 588.0).abs() < 1e-3);

@@ -5,9 +5,11 @@
 // drooping whorls, with low undergrowth round the oaks' and pines' feet. Each crown is
 // rounded as a mass of leaves, lit by Bevy's own lighting so it sits in the same sun, sky,
 // shadows and haze as the near forest, darker low and inside; its leaves' grain is the
-// bushes' leaf picture. The mesh holds each card's four corners at its foot: the first
-// texture coordinate is the corner, the second its width and height, its colour its kind
-// (0, 0.5, 1), its luck and, for a card standing for a grown tree, where it comes in.
+// bushes' leaf picture. The mesh holds each card's corners at its foot, a quad for each band
+// of its tree's outline (woods/outline.rs, whose bounds are `tree()`'s: change both): the
+// first texture coordinate is the corner on the whole card, the second its width and height,
+// its colour its kind (0, 0.5, 1), its luck, for a card standing for a grown tree where it
+// comes in, and which way the corner is widened (`widened`).
 
 import bevy_pbr::render::{
     mesh_functions,
@@ -94,6 +96,20 @@ fn facing(at: vec3<f32>) -> Facing {
     return f;
 }
 
+// A corner of one band of a card cut to its tree's outline (terra_world's woods/outline.rs),
+// widened by two pixels at the card's distance the way its colour's alpha says (woods.rs's
+// `outward`: 2 + 3 (across + 1) + up + 1), so the dithered edge of what the tree can be and
+// TAA's jitter stay on it; never off the whole card. An alpha of 1 is a whole card.
+fn widened(corner: vec2<f32>, alpha: f32, size: vec2<f32>, foot: vec3<f32>) -> vec2<f32> {
+    if alpha < 1.5 {
+        return corner;
+    }
+    let code = u32(round(alpha)) - 2u;
+    let out = vec2<f32>(f32(code / 3u), f32(code % 3u)) - vec2<f32>(1.0);
+    let pixel = 2.0 * distance(view.world_position, foot) / (view.clip_from_view[1][1] * view.viewport.w);
+    return clamp(corner + out * 2.0 * pixel / size, vec2<f32>(0.0), vec2<f32>(1.0));
+}
+
 @vertex
 fn vertex(vertex_in: Vertex) -> VertexOutput {
     var out: VertexOutput;
@@ -102,7 +118,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let foot = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(vertex.position, 1.0)).xyz;
     let f = facing(foot);
     let size = vertex.uv_b;
-    let corner = vertex.uv;
+    let corner = widened(vertex.uv, vertex.color.a, size, foot);
     let world = foot + f.right * (corner.x - 0.5) * size.x + f.up * corner.y * size.y;
     out.position = position_world_to_clip(world);
     out.world_position = vec4<f32>(world, 1.0);
@@ -198,6 +214,8 @@ fn crown(p: vec2<f32>, middle: vec2<f32>, half: vec2<f32>, masses: u32, lobe: f3
     return s;
 }
 
+// A card is cut to what this can reach (terra_world's woods/outline.rs): a change to a
+// crown's place, size or noise, the trunk or the undergrowth changes its bounds there too.
 fn tree(p: vec2<f32>, size: vec2<f32>, kind: u32, luck: f32) -> Shape {
     let w = size.x;
     let h = size.y;
