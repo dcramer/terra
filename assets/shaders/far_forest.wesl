@@ -31,6 +31,8 @@ import bevy_pbr::render::{
     pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
 };
 
+// The near trees' gusts and shared sway (D597), so the far forest stirs with them.
+import super::gusts::trunk_lean;
 @if(!PREPASS_PIPELINE)
 import super::horizon::horizon_lit;
 @if(!PREPASS_PIPELINE)
@@ -119,7 +121,16 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let f = facing(foot);
     let size = vertex.uv_b;
     let corner = widened(vertex.uv, vertex.color.a, size, foot);
-    let world = foot + f.right * (corner.x - 0.5) * size.x + f.up * corner.y * size.y;
+    var world = foot + f.right * (corner.x - 0.5) * size.x + f.up * corner.y * size.y;
+    // The crown sways as its near tree's trunk leans (gusts.wesl's `trunk_lean`, D597): the
+    // card sheared downwind by its height squared, its top by the lean times its height. One
+    // shear a card, so the cheapest crown-level sway, in every pass alike.
+    if parting.wind.w >= 0.0 {
+        let direction = normalize(parting.wind.xyz - f.up * dot(parting.wind.xyz, f.up) + vec3<f32>(1.0e-5, 0.0, 0.0));
+        let across = cross(f.up, direction);
+        let lean = trunk_lean(foot, direction, across, globals.time);
+        world += (direction * lean.x + across * lean.y) * corner.y * corner.y * size.y * parting.wind.w;
+    }
     out.position = position_world_to_clip(world);
     out.world_position = vec4<f32>(world, 1.0);
     out.uv = corner;
