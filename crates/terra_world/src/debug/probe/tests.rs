@@ -182,6 +182,41 @@ fn the_table_says_a_saving_past_the_noise_and_drops_undrawn_frames() {
     assert!(table(&["a", "b"], &[row])[1].contains("b within noise"));
 }
 
+/// A pass outside the costliest whose difference is past the noise floor is listed after them
+/// (D614's atmosphere_luts, 0.18 -> 0.15 ms, fell outside the 14 costliest and went unseen);
+/// one outside them within the noise is not.
+#[test]
+fn the_table_lists_a_cheap_pass_that_changed_past_the_noise() {
+    let variant = |luts: f64| -> Vec<Vec<Frame>> {
+        (0..3)
+            .map(|round| {
+                let wobble = 0.001 * f64::from(round);
+                (0..5)
+                    .map(|_| {
+                        let mut f = Frame::default();
+                        for (pass, ms) in [
+                            (TOTAL, 7.0),
+                            ("main_opaque", 3.0),
+                            ("shadows", 2.0),
+                            ("bloom", 0.5),
+                            ("atmosphere_luts", luts),
+                            ("tonemapping", 0.05),
+                        ] {
+                            f.passes.insert(pass.into(), ms + wobble);
+                        }
+                        f
+                    })
+                    .collect()
+            })
+            .collect()
+    };
+    let rows = rows(&[variant(0.18), variant(0.15)], 0.995, 2);
+    let passes: Vec<&str> = rows.iter().map(|r| r.pass.as_str()).collect();
+    assert_eq!(passes, [TOTAL, "main_opaque", "shadows", "atmosphere_luts"]);
+    let lines = table(&["every", "kept"], &rows);
+    assert!(lines[4].contains("kept saves 0.030"), "{}", lines[4]);
+}
+
 #[test]
 fn a_phase_run_clocked_down_is_warned_of() {
     let clocks = |mhz: f32, pstate: &str| {

@@ -277,10 +277,26 @@ impl Row {
             .filter(|n| n.is_finite())
             .fold(0.0, f64::max)
     }
+
+    /// Whether variant `v` differs from the first by more than the noise floor, with a floor
+    /// measured at all.
+    pub fn past(&self, v: usize) -> bool {
+        (self.medians[v] - self.medians[0]).abs() > self.floor()
+            && self.noise.iter().any(|n| n.is_finite())
+    }
+
+    /// Whether any variant differs from the first past the noise floor.
+    pub fn changed(&self) -> bool {
+        (1..self.medians.len()).any(|v| self.past(v))
+    }
 }
 
 /// The table's rows, TOTAL first, then the passes costliest in the first variant, `top` of
-/// them. `by_variant[v][r]` is variant v's counted frames of round r. A frame that drew less
+/// them, then every other pass whose variants differ past the noise floor, costliest first:
+/// a significant change is reported wherever it falls, as Chromium's Pinpoint and Mozilla's
+/// Perfherder list every metric whose difference is past it (atmosphere_luts' 0.03 ms under
+/// D614 fell outside the 14 costliest and went unseen). `by_variant[v][r]` is variant v's
+/// counted frames of round r. A frame that drew less
 /// than its variant did at its most over every round is dropped: one counted while something
 /// was still missing, which a later round's frames show.
 pub fn rows(by_variant: &[Vec<Vec<Frame>>], share: f64, top: usize) -> Vec<Row> {
@@ -335,7 +351,8 @@ pub fn rows(by_variant: &[Vec<Vec<Frame>>], share: f64, top: usize) -> Vec<Row> 
             .cmp(&(a.pass == TOTAL))
             .then(b.medians[0].total_cmp(&a.medians[0]))
     });
-    rows.truncate(top + 1);
+    let rest = rows.split_off((top + 1).min(rows.len()));
+    rows.extend(rest.into_iter().filter(Row::changed));
     rows
 }
 
@@ -364,8 +381,7 @@ pub fn table(variants: &[&str], rows: &[Row]) -> Vec<String> {
         for (v, m) in row.medians.iter().enumerate().skip(1) {
             let delta = m - row.medians[0];
             line += &format!(" {delta:>+9.3}");
-            let past = delta.abs() > floor && row.noise.iter().any(|n| n.is_finite());
-            verdicts.push(match (past, delta < 0.0) {
+            verdicts.push(match (row.past(v), delta < 0.0) {
                 (false, _) => format!("{} within noise", variants[v]),
                 (true, true) => format!("{} saves {:.3}", variants[v], -delta),
                 (true, false) => format!("{} costs {:.3}", variants[v], delta),

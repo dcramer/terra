@@ -67,7 +67,8 @@ static TIMEOUT: Tunable = Tunable::new(
 
 /// A counted frame draws at least this share of its variant's most vertices (j10's rule).
 const DRAWN_SHARE: f64 = 0.995;
-/// How many passes the table shows beside the total.
+/// How many of the costliest passes the table shows beside the total, before every other
+/// pass whose difference is past the noise floor (`plan::rows`).
 const TABLE_PASSES: usize = 14;
 /// How far the clock may move over the run, in hours, before the probe fails: a minute.
 const HOUR_DRIFT: f32 = 1.0 / 60.0;
@@ -541,8 +542,9 @@ fn print_table(probe: &Probe, round: usize) {
         .collect();
     let rows = plan::rows(&probe.by_variant, DRAWN_SHARE, TABLE_PASSES);
     println!(
-        "PROBE table after round {}, GPU ms, medians of every settled frame; A/A the spread of a \
-         variant's rounds, the noise floor:",
+        "PROBE table after round {}, GPU ms, medians of every settled frame; the {TABLE_PASSES} \
+         costliest passes, then any other past the noise floor; A/A the spread of a variant's \
+         rounds, the noise floor:",
         round + 1
     );
     for line in plan::table(&names, &rows) {
