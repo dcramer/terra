@@ -179,6 +179,17 @@ The first constants move far more than Enshrouded's, and the shared share falls 
 
 The tuned levels pass shared and r but buzz: the cards' flap at 7 to 12 rad/s with a 1.9× harmonic, and the short limbs' and twigs' paces up to 6 rad/s, are faster than half a second a swing, which the review read as an electric fan.
 
+**Slowed and scaled by distance** (job j3, base `125e05a8b`, one worker job for both sides). Every level under about 3.5 rad/s: cards' flap 1.5 to 2.5 rad/s with a 1.3× harmonic and 0.3 rad, limbs 1.6/√length and twigs 1.3/√size rad/s, both capped at 2.8. Each tree's levels scaled by its foot's distance from the eye over 8 m, from 0.4× overhead to 6× at 48 m (the cards 0.8× to 1.5×), and its trunk's lean mostly its own rocking. *Far* is the view's middle between the near trunks, cut from the same film and measured alone.
+
+| | scene | amplitude (p90) | shared | neighbour r | second against step | far: amplitude, tiles moving |
+|---|---|---|---|---|---|---|
+| Main | 107 tiles | 0.08 px (1.53) | 0.84 | 0.91 | 8.0 | 0.22 px, 108 of 108 |
+| Slowed, no distance scale (a second job, its main the same to 0.01) | bright, 111 | 0.08 px (0.47) | 0.12 | 0.53 | 8.1 | 0.03 px, 32 of 110 |
+| Slowed and scaled | bright, 112 | 0.05 px (0.24) | 0.05 | 0.47 | 7.9 | 0.05 px, 55 of 108 |
+| Slowed and scaled | dark, 83 | 0.02 px (0.12) | 0.20 | 0.37 | 7.7 | 0.05 px, 52 of 101 |
+
+All three of wind.ts's bars pass in both scenes, and the amplitude comes near Enshrouded's. The view's lighting flips between a lit and a shaded near spruce across runs of one build (83 against 111 textured tiles), so only rows of one scene compare. The review scored it 5.5 against main's 3: the buzz is gone, but the far crowns still move less than main's (main's whole-tree slide), nothing moves together, and no gust crosses the view. Its own tracker found Enshrouded's motion one period of about 2.5 s shared across the frame with two gusts crossing it, correlated 0.72 to 0.86 within a region, which wind.ts's step-to-step shift does not see. Scaling by distance from the eye also makes a tree's motion depend on the viewer.
+
 **Frame cost.** Main at `0945c0d92`, RTX 4090, median and 99th percentile: forest-run 8.31 and 10.12 ms; lake-play 9.76 and 13.64 ms. lake-play misses D25 on main already. The first experiment bench did not count: its pivoted pipelines failed to build (the two entry points), so no tree was drawn. The bench of the fixed patch is queued.
 
 **Crown hue** (look.ts, five stills at 15:00 on the clear default day, with each tint's red and blue scaled):
