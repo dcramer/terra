@@ -634,8 +634,9 @@ pub(crate) const SCENES: &[Scene] = &[
             "--tune",
             "daylight.pace=0",
         ],
-        // Ten minutes at the worker's 100 frames a second; longer on a slower card.
-        frames: "60000",
+        // Ten minutes at the worker's 7.6 ms a frame (its first run, 13a5b1ee7, 60,000 frames in
+        // 8 minutes); longer on a slower card.
+        frames: "80000",
     },
     Scene {
         name: "tundra-walk",
