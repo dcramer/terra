@@ -114,30 +114,165 @@ pub(crate) fn wait_for_quiet(most: Duration) -> (Option<Load>, Duration) {
     }
 }
 
-/// The load sampled every few seconds while something runs.
+/// The load sampled every few seconds while something runs, and the processors' clock every
+/// `CLOCK_EVERY`.
 pub(crate) struct Watch {
     stop: Arc<AtomicBool>,
     samples: Arc<Mutex<Vec<Load>>>,
-    thread: Option<std::thread::JoinHandle<()>>,
+    clocks: Arc<Mutex<Vec<f32>>>,
+    threads: Vec<std::thread::JoinHandle<()>>,
 }
 
-/// What the load was during a run: its mean and its most.
+/// What the load was during a run: its mean and its most; and the processors' clock, where
+/// it can be read.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct During {
     pub mean_cpu_pct: f32,
     pub most_cpu_pct: f32,
+    pub clock: Option<Clock>,
 }
 
 impl During {
     pub(crate) fn busy(&self) -> bool {
         self.mean_cpu_pct > BUSY_DURING_CPU_PCT || self.most_cpu_pct > BUSY_DURING_MOST_PCT
     }
+
+    /// The machine's clock collapsed at least once while the run went.
+    pub(crate) fn clock_fell(&self) -> bool {
+        self.clock.is_some_and(|clock| clock.collapses > 0)
+    }
+}
+
+/// The watched processors' clock is read this often: the render worker's collapses fall in
+/// one 20 ms step (perf-hitch j1).
+const CLOCK_EVERY: Duration = Duration::from_millis(20);
+/// A collapse (D185): the watched processors' mean clock under this share of the run's
+/// median clock. The render worker's i9-14900K fell from 5.0-5.7 GHz to 0.8-1.4 GHz and
+/// climbed back over ~600 ms, every frame of it slow; that is no work of the game's, as
+/// Chromium's perf bots flag frequency throttling and Google Benchmark warns of CPU scaling.
+pub(crate) const COLLAPSE_SHARE: f32 = 0.4;
+/// A collapse is a fall, not a wind-down: within the `SUDDEN` readings before it the clock was
+/// at least this share of the median (the worker's fell in one reading).
+const SUDDEN_SHARE: f32 = 0.8;
+const SUDDEN: usize = 5;
+
+/// The watched processors' clock over a run: its median, how many times it collapsed and the
+/// lowest it fell to in them (the lowest of all where it never did).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Clock {
+    pub median_mhz: f32,
+    pub lowest_mhz: f32,
+    pub collapses: u32,
+}
+
+/// The clock of a run from its readings, in MHz, one every `CLOCK_EVERY`; none for too few.
+pub(crate) fn clock(series: &[f32]) -> Option<Clock> {
+    if series.len() < SUDDEN * 2 {
+        return None;
+    }
+    let mut sorted = series.to_vec();
+    sorted.sort_by(f32::total_cmp);
+    let median_mhz = sorted[sorted.len() / 2];
+    if median_mhz <= 0.0 {
+        return None;
+    }
+    let (low, high) = (median_mhz * COLLAPSE_SHARE, median_mhz * SUDDEN_SHARE);
+    let (mut collapses, mut lowest, mut down) = (0, f32::MAX, false);
+    for (at, &mhz) in series.iter().enumerate() {
+        if mhz >= low {
+            down = false;
+            continue;
+        }
+        if !down
+            && series[at.saturating_sub(SUDDEN)..at]
+                .iter()
+                .any(|&b| b >= high)
+        {
+            collapses += 1;
+            down = true;
+        }
+        if down {
+            lowest = lowest.min(mhz);
+        }
+    }
+    Some(Clock {
+        median_mhz,
+        lowest_mhz: if collapses > 0 { lowest } else { sorted[0] },
+        collapses,
+    })
+}
+
+/// The processors listed as `0-3,8,10-11` (`Cpus_allowed_list`, `/sys/.../cpu/online`).
+pub(crate) fn parse_cpu_list(text: &str) -> Vec<usize> {
+    let mut cpus = Vec::new();
+    for part in text.trim().split(',').filter(|part| !part.is_empty()) {
+        let (from, to) = part.split_once('-').unwrap_or((part, part));
+        if let (Ok(from), Ok(to)) = (from.trim().parse(), to.trim().parse::<usize>()) {
+            cpus.extend(from..=to);
+        }
+    }
+    cpus
+}
+
+/// The `scaling_cur_freq` files of the processors a run goes on: those this task may use (its
+/// runs inherit them), of the fastest kind where a hybrid chip has two (the worker's P-cores
+/// top out at 5.7-6.0 GHz, its E-cores at 4.4, whose clock would hide a P-cores' collapse in
+/// the mean). Linux only; none under WSL, whose virtual processors have no cpufreq.
+fn watched_cpus() -> Vec<String> {
+    let allowed = std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| {
+            status
+                .lines()
+                .find_map(|line| line.strip_prefix("Cpus_allowed_list:").map(parse_cpu_list))
+        })
+        .unwrap_or_default();
+    let top = |cpu: usize| -> Option<f32> {
+        let path = format!("/sys/devices/system/cpu/cpu{cpu}/cpufreq/cpuinfo_max_freq");
+        std::fs::read_to_string(path).ok()?.trim().parse().ok()
+    };
+    let tops: Vec<(usize, f32)> = allowed
+        .into_iter()
+        .filter_map(|cpu| Some((cpu, top(cpu)?)))
+        .collect();
+    let fastest = tops.iter().map(|&(_, top)| top).fold(0.0, f32::max);
+    tops.into_iter()
+        .filter(|&(_, top)| top >= fastest * 0.9)
+        .map(|(cpu, _)| format!("/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_cur_freq"))
+        .collect()
+}
+
+/// The watched processors' mean clock now, in MHz.
+fn mean_clock(files: &[String]) -> Option<f32> {
+    let mut khz = 0.0;
+    for file in files {
+        khz += std::fs::read_to_string(file)
+            .ok()?
+            .trim()
+            .parse::<f32>()
+            .ok()?;
+    }
+    (!files.is_empty()).then(|| khz / files.len() as f32 / 1000.0)
 }
 
 impl Watch {
     pub(crate) fn start() -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let samples = Arc::new(Mutex::new(Vec::new()));
+        let clocks = Arc::new(Mutex::new(Vec::new()));
+        let mut threads = Vec::new();
+        let files = watched_cpus();
+        if !files.is_empty() {
+            let (stopping, kept) = (stop.clone(), clocks.clone());
+            threads.push(std::thread::spawn(move || {
+                while !stopping.load(Ordering::Relaxed) {
+                    if let (Some(mhz), Ok(mut kept)) = (mean_clock(&files), kept.lock()) {
+                        kept.push(mhz);
+                    }
+                    std::thread::sleep(CLOCK_EVERY);
+                }
+            }));
+        }
         let (stopping, kept) = (stop.clone(), samples.clone());
         let thread = std::thread::spawn(move || {
             while !stopping.load(Ordering::Relaxed) {
@@ -158,20 +293,24 @@ impl Watch {
                 }
             }
         });
+        threads.push(thread);
         Self {
             stop,
             samples,
-            thread: Some(thread),
+            clocks,
+            threads,
         }
     }
 
-    pub(crate) fn stop(mut self) -> Option<During> {
+    pub(crate) fn stop(self) -> Option<During> {
         self.stop.store(true, Ordering::Relaxed);
-        if let Some(thread) = self.thread.take() {
+        for thread in self.threads {
             thread.join().ok();
         }
         let samples = self.samples.lock().ok()?;
-        during(&samples)
+        let mut seen = during(&samples)?;
+        seen.clock = self.clocks.lock().ok().and_then(|series| clock(&series));
+        Some(seen)
     }
 }
 
@@ -184,6 +323,7 @@ pub(crate) fn during(samples: &[Load]) -> Option<During> {
     Some(During {
         mean_cpu_pct: cpu.iter().sum::<f32>() / cpu.len() as f32,
         most_cpu_pct: cpu.iter().copied().fold(0.0, f32::max),
+        clock: None,
     })
 }
 
@@ -384,6 +524,49 @@ mod tests {
         assert_eq!((seen.mean_cpu_pct, seen.most_cpu_pct), (60.0, 90.0));
         assert!(seen.busy());
         assert_eq!(during(&[]), None);
+    }
+
+    /// The worker's collapse as the probe saw it (perf-hitch j1): 5.0-5.7 GHz, down to
+    /// ~1 GHz in one reading, back up over ~600 ms; twice in a run. A wind-down to idle and a
+    /// dip to 60% are no collapse.
+    #[test]
+    fn a_collapse_is_a_sudden_fall_under_two_fifths_of_the_median() {
+        let steady =
+            |n: usize| -> Vec<f32> { (0..n).map(|i| 5000.0 + (i % 7) as f32 * 100.0).collect() };
+        let ramp: Vec<f32> = (0..30).map(|i| 900.0 + i as f32 * 140.0).collect();
+        let mut series = steady(200);
+        series.extend(&ramp);
+        series.extend(steady(200));
+        series.push(1300.0);
+        series.extend(&ramp[3..]);
+        series.extend(steady(100));
+        let seen = clock(&series).unwrap();
+        assert_eq!(seen.collapses, 2);
+        assert_eq!(seen.lowest_mhz, 900.0);
+        assert!((5000.0..=5600.0).contains(&seen.median_mhz));
+
+        // Nothing but steady, and a dip to 60% of it: none, the lowest of all said.
+        let mut dipped = steady(300);
+        dipped.extend([3100.0; 20]);
+        dipped.extend(steady(100));
+        let seen = clock(&dipped).unwrap();
+        assert_eq!((seen.collapses, seen.lowest_mhz), (0, 3100.0));
+
+        // A slow wind-down (the last readings as the program exits and the cores idle).
+        let mut idle = steady(300);
+        idle.extend((0..40).map(|i| 5000.0 - i as f32 * 110.0));
+        assert_eq!(clock(&idle).unwrap().collapses, 0);
+
+        // Too few readings to say, or none.
+        assert_eq!(clock(&[5000.0, 900.0]), None);
+        assert_eq!(clock(&[]), None);
+    }
+
+    #[test]
+    fn reads_cpu_lists() {
+        assert_eq!(parse_cpu_list("0-3,8,10-11\n"), vec![0, 1, 2, 3, 8, 10, 11]);
+        assert_eq!(parse_cpu_list("\t0-31").len(), 32);
+        assert!(parse_cpu_list("").is_empty());
     }
 
     /// The QA traces wait for and judge a quiet machine by the same numbers as the

@@ -171,10 +171,38 @@ fn busy_runs_are_left_out_when_enough_are_quiet() {
         during: Some(During {
             mean_cpu_pct: 80.0,
             most_cpu_pct: 95.0,
+            clock: None,
         }),
         ..run(5.0, quiet)
     };
     assert!(during.busy());
+}
+
+/// A run that hitched while the machine's clock collapsed is the machine's (D185), so it is
+/// busy and another stands in; a collapse without a hitch, or a hitch without one, is not.
+#[test]
+fn a_hitch_in_a_clock_collapse_is_the_machines() {
+    let run = |hitches, collapses| Run {
+        timing: Timing {
+            hitches,
+            ..timing(5.0, 9.0, 40.0)
+        },
+        before: None,
+        during: Some(During {
+            mean_cpu_pct: 5.0,
+            most_cpu_pct: 10.0,
+            clock: Some(crate::load::Clock {
+                median_mhz: 5300.0,
+                lowest_mhz: 900.0,
+                collapses,
+            }),
+        }),
+    };
+    assert!(run(2, 1).busy());
+    assert!(!run(0, 1).busy());
+    assert!(!run(2, 0).busy());
+    let (used, was_busy) = chosen_runs(&[run(0, 0), run(3, 1), run(0, 1)]);
+    assert_eq!((used.len(), was_busy), (2, false));
 }
 
 #[test]

@@ -204,9 +204,17 @@ struct Run {
 }
 
 impl Run {
-    /// Taken on a busy machine: it started busy, or was busy while it ran.
+    /// Taken on a busy machine: it started busy, or was busy while it ran, or it hitched and
+    /// the machine's clock collapsed meanwhile (D185), whose slow frames are the machine's.
     fn busy(&self) -> bool {
-        self.before.is_some_and(|load| !load.quiet()) || self.during.is_some_and(|d| d.busy())
+        self.before.is_some_and(|load| !load.quiet())
+            || self.during.is_some_and(|d| d.busy())
+            || self.clock_hitched()
+    }
+
+    /// It hitched while the machine's clock collapsed.
+    fn clock_hitched(&self) -> bool {
+        self.timing.hitches > 0 && self.during.is_some_and(|d| d.clock_fell())
     }
 }
 
@@ -577,6 +585,21 @@ pub(crate) fn bench(args: &[String]) -> bool {
                     during.most_cpu_pct,
                     if during.busy() { ", busy" } else { "" }
                 );
+                if let Some(clock) = during.clock.filter(|clock| clock.collapses > 0) {
+                    let hitched = timing.as_ref().is_some_and(|t| t.hitches > 0);
+                    println!(
+                        "  the box's CPU clock fell to {:.0} MHz {} time{} from its {:.0} MHz (its power management, not the game){}",
+                        clock.lowest_mhz,
+                        clock.collapses,
+                        if clock.collapses == 1 { "" } else { "s" },
+                        clock.median_mhz,
+                        if hitched {
+                            ": its hitches are the machine's, so the run counts as busy and another stands in"
+                        } else {
+                            ""
+                        }
+                    );
+                }
             }
             match timing {
                 Some(timing) => timed.push(Run {
