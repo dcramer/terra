@@ -12,6 +12,11 @@
 //   node tools/perf/perf.ts bisect <scene> <median_ms|p99_ms|hitches|load_s> <good> <bad>
 //                                                a bisect asked by hand, its ends benched first, then by halving
 //   node tools/perf/perf.ts bisect --cancel      the running bisect stopped, its step in flight cancelled, the next waiting started
+//   node tools/perf/perf.ts alert <id> --invalid <reason>
+//                                                an alert closed as not the code (the box, noise; an A/B's numbers
+//                                                as the reason), its bisect dropped, its band re-based at the level since
+//   node tools/perf/perf.ts alert <id> --accept <reason>
+//                                                an alert closed as a real change kept on purpose, the same way
 //
 // The box answers through its `tools/perf/worker.ts` over ssh, as remote-render's do (TERRA_WORKERS). Node
 // 22.18 or later; no dependencies.
@@ -74,7 +79,7 @@ export function compare(mine: Point[], window: Point[]): { lines: string[]; wors
 
 function main(argv: string[]): number {
   const [what, ...rest] = argv;
-  if (what === undefined || what === "status" || what === "history" || what === "bisect") {
+  if (what === undefined || what === "status" || what === "history" || what === "bisect" || what === "alert") {
     const r = ask(what ? [what, ...rest] : ["status"]);
     console.log(r.out);
     return r.ok ? 0 : 1;

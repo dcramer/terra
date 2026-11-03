@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Bisect, found, next, start, step } from "./bisect.ts";
 import { appended, band, FLOORS, historyLine, judge, type Point, pointOf, readHistory, type Why } from "./history.ts";
-import { alertLine, askBisect, cancelBisect, empty, ingest, plan, type State } from "./sheriff.ts";
+import { alertLine, askBisect, cancelBisect, closeAlert, empty, ingest, plan, type State } from "./sheriff.ts";
 
 const commits = Array.from({ length: 30 }, (_, i) => `c${String(i).padStart(2, "0")}${"0".repeat(38)}`);
 const SCENES = ["lake-play", "forest-run", "town-dusk"];
@@ -226,6 +226,36 @@ test("the whole row on the fake bench bisects the alert to its first bad commit 
   assert.equal(alert?.first, commits[13]);
   assert.ok(lines.at(-1)?.includes("first bad c13000000"), lines.at(-1));
   assert.equal(s.bisect, undefined);
+});
+
+test("an alert closed as invalid drops its bisect, re-bases its band and raises nothing again", () => {
+  const bench = fakeBench(13);
+  const history: Point[] = [];
+  const lines: string[] = [];
+  let s = empty();
+  for (const tip of [commits[1], commits[3], commits[5], commits[8], commits[10]]) s = drive(s, tip, bench, history, lines);
+  s = drive(s, commits[20], bench, history, lines, 2);
+  const a = s.alerts.find((a) => a.scene === "forest-run");
+  assert.equal(a?.state, "bisecting", lines.join("\n"));
+  const inFlight: State = { ...s, job: { id: "jb", rev: commits[15], why: "bisect" } };
+  assert.match((closeAlert(inFlight, "forest-run/hitches", "invalid", " ", history, "2026-11-03T16:00:00Z") as { error: string }).error, /needs a reason/);
+  assert.match((closeAlert(inFlight, "town-dusk", "invalid", "x", history, "2026-11-03T16:00:00Z") as { error: string }).error, /no open alert is town-dusk \(open: forest-run\/hitches@c20000000\)/);
+  const got = closeAlert(inFlight, "forest-run/hitches", "invalid", "A/B: 9.71 ms at c10, 9.63 ms at c13", history, "2026-11-03T16:00:00Z");
+  assert.ok(!("error" in got));
+  assert.equal(got.job, "jb", "its bisect's step in flight, for the box to cancel");
+  assert.equal(got.state.bisect, undefined);
+  assert.equal(got.state.job, undefined);
+  const closed = got.state.alerts.find((x) => x.id === a.id);
+  assert.deepEqual(closed?.closed, { as: "invalid", reason: "A/B: 9.71 ms at c10, 9.63 ms at c13", when: "2026-11-03T16:00:00Z" });
+  assert.match(alertLine(closed as NonNullable<typeof closed>), /^· perf .*; closed invalid 2026-11-03 16:00 UTC: A\/B: 9\.71 ms/);
+  assert.equal(got.state.since["forest-run hitches"], commits[20], "the band from the level its bad end saw");
+  assert.match((closeAlert(got.state, a.id, "accepted", "x", history, "2026-11-03T16:00:00Z") as { error: string }).error, /none is open/, "closed once");
+  // The level stays where the alert saw it: the next landings are in their band.
+  s = got.state;
+  lines.length = 0;
+  for (const tip of [commits[22], commits[25], commits[28]]) s = drive(s, tip, bench, history, lines);
+  assert.equal(s.alerts.length, 1, lines.join("\n"));
+  assert.equal(s.good, commits[28], lines.join("\n"));
 });
 
 test("a flaky metric's bisect judges every run: a step is bad when one run hitched past the good end's worst", () => {

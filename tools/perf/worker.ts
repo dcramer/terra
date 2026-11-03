@@ -14,7 +14,7 @@ import { type Box, box, boxEnv, git, outDir, readJob, wake, writeJob } from "../
 import { type Job, jobId } from "../render-worker/jobs.ts";
 import { appended, HISTORY_HEADER, historyLine, METRICS, type Metric, type Point, pointOf, readHistory, series, WINDOW } from "./history.ts";
 import type { Options } from "./bisect.ts";
-import { alertLine, askBisect, cancelBisect, empty, ingest, plan, type State } from "./sheriff.ts";
+import { alertLine, askBisect, cancelBisect, closeAlert, empty, ingest, plan, type State } from "./sheriff.ts";
 
 export type Row = { scenes: string[]; runs: number; reads: string[]; origin: string; every: number; rest: number; cap: number; minutes: number };
 export const row = (): Row => JSON.parse(readFileSync(join(import.meta.dirname, "row.json"), "utf8"));
@@ -201,11 +201,10 @@ export function perfCommand(b: Box, args: string[]): number {
     console.log(JSON.stringify(mainSide(b, rev)));
     return 0;
   }
-  if (what === "bisect" && rest[0] === "--cancel") {
-    if (!s.bisect) return console.log("✗ perf: no bisect runs; `node tools/perf/perf.ts` shows the row"), 1;
-    const got = cancelBisect(s);
+  // A bisect stopped (by hand or with its alert): its step in flight stopped as `remote-render
+  // --cancel` does, a queued job marked, a running one told; the new state saved and logged.
+  const stop = (got: { state: State; lines: string[]; job?: string }) => {
     const j = got.job ? readJob(b, got.job) : undefined;
-    // Its step stopped as `remote-render --cancel` does: a queued job marked, a running one told.
     if (j?.state === "queued") writeJob(b, { ...j, state: "cancelled", ended: new Date().toISOString(), note: "its bisect cancelled" });
     if (j?.state === "running") writeFileSync(join(b.jobs, j.id, "cancel"), "");
     saveState(b, got.state);
@@ -214,6 +213,15 @@ export function perfCommand(b: Box, args: string[]): number {
     if (j) wake(b);
     console.log(`✓ ${got.lines.join("\n")}`);
     return 0;
+  };
+  if (what === "bisect" && rest[0] === "--cancel") {
+    if (!s.bisect) return console.log("✗ perf: no bisect runs; `node tools/perf/perf.ts` shows the row"), 1;
+    return stop(cancelBisect(s));
+  }
+  if (what === "alert" && rest[0] && (rest[1] === "--invalid" || rest[1] === "--accept")) {
+    const got = closeAlert(s, rest[0], rest[1] === "--invalid" ? "invalid" : "accepted", rest.slice(2).join(" "), history(b), new Date().toISOString());
+    if ("error" in got) return console.log(`✗ perf: ${got.error}`), 1;
+    return stop(got);
   }
   if (what === "bisect" && rest.length >= 4 && (METRICS as string[]).includes(rest[1])) {
     const [scene, metric, goodArg, badArg, ...flags] = rest;
@@ -235,7 +243,7 @@ export function perfCommand(b: Box, args: string[]): number {
     console.log(`✓ perf: bisect of ${scene} ${metric} over ${range.length} commits queued${s.bisect ? " behind the one running" : ""}; its ends are benched first; \`node tools/perf/perf.ts\` follows it`);
     return 0;
   }
-  console.log("usage: node tools/perf/worker.ts --dir DIR [status [lines] | history [lines] | main <rev> | bisect <scene> <median_ms|p99_ms|hitches|load_s> <good> <bad> | bisect --cancel]");
+  console.log("usage: node tools/perf/worker.ts --dir DIR [status [lines] | history [lines] | main <rev> | bisect <scene> <median_ms|p99_ms|hitches|load_s> <good> <bad> | bisect --cancel | alert <id> --invalid|--accept <reason>]");
   return 2;
 }
 

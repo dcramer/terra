@@ -29,6 +29,9 @@ export type Alert = {
   state: "bisecting" | "found" | "narrowed" | "open" | "better";
   first?: string;
   left?: string[];
+  /// Closed by hand, as Perfherder's sheriffs triage an alert: invalid (not the code: the box,
+  /// noise, a false bisect) or accepted (a real change kept on purpose), with why.
+  closed?: { as: "invalid" | "accepted"; reason: string; when: string };
 };
 
 /// The perf job in flight: its id, commit and why; a bisect's end, when it measures one.
@@ -73,12 +76,13 @@ const alertId = (scene: string, metric: Metric, bad: string) => `${scene}/${metr
 
 /// An alert in a line: what changed, by how much, where, and what the bisect found.
 export function alertLine(a: Alert): string {
-  const mark = a.state === "better" ? "✓" : "✗";
+  const mark = a.closed ? "·" : a.state === "better" ? "✓" : "✗";
   const where = `in ${a.good.slice(0, 9)}..${a.bad.slice(0, 9)} (${a.commits} commit${a.commits === 1 ? "" : "s"} touching the row)`;
   const what = changeLine(a.scene, { metric: a.metric, before: a.before, after: a.after, width: a.width, change: "worse" });
   const tail =
     a.state === "found" ? `; first bad ${a.first?.slice(0, 9)}` : a.state === "narrowed" ? `; bisect narrowed it to ${a.left?.length} commits: ${a.left?.map((c) => c.slice(0, 9)).join(" ")}` : a.state === "bisecting" ? "; bisecting" : a.state === "better" ? "; better, not bisected" : "";
-  return `${mark} perf ${a.when.slice(0, 16).replace("T", " ")} UTC: ${what}, ${where}${tail}`;
+  const closed = a.closed ? `; closed ${a.closed.as} ${a.closed.when.slice(0, 16).replace("T", " ")} UTC: ${a.closed.reason}` : "";
+  return `${mark} perf ${a.when.slice(0, 16).replace("T", " ")} UTC: ${what}, ${where}${tail}${closed}`;
 }
 
 /// A job's points taken in: the new state and the lines it says. `history` is every point
@@ -215,6 +219,38 @@ export function cancelBisect(s0: State): { state: State; lines: string[]; job?: 
   if (job) s.job = undefined;
   s.bisect = s.waiting.shift();
   const lines = [`· perf bisect ${b.scene} ${b.metric} ${b.good.slice(0, 9)}..${b.bad.slice(0, 9)} cancelled by hand after ${b.benches} benches${job ? `, its step ${job} cancelled` : ""}${s.bisect ? `; next, ${s.bisect.scene} ${s.bisect.metric}` : ""}`];
+  return { state: s, lines, job };
+}
+
+/// An alert closed by hand (`perf.ts alert <id> --invalid|--accept <reason>`), as Perfherder's
+/// sheriffs mark one invalid or acknowledged: its bisect, running or waiting, dropped (`job` its
+/// step in flight, for the box to cancel), and its series' band re-based at the level since its
+/// bad end, unless a later change point already did, so the level it saw raises nothing again.
+/// `history` is every point, in the order benched; `id` the alert's id or a prefix naming one.
+export function closeAlert(s0: State, id: string, as: "invalid" | "accepted", reason: string, history: Point[], now: string): { state: State; lines: string[]; job?: string } | { error: string } {
+  const open = s0.alerts.filter((a) => !a.closed);
+  const hits = open.filter((a) => a.id === id).length ? open.filter((a) => a.id === id) : open.filter((a) => a.id.startsWith(id));
+  if (hits.length !== 1) {
+    const which = open.length ? `open: ${open.map((a) => a.id).join(", ")}` : "none is open";
+    return { error: `${hits.length ? "more than one" : "no"} open alert is ${id} (${which}); name one by its id, as \`node tools/perf/perf.ts\` lists them` };
+  }
+  const a = hits[0];
+  if (!reason.trim()) return { error: `closing ${a.id} needs a reason: what shows it ${as === "invalid" ? "is not the code (an A/B's numbers, the box's state)" : "is kept on purpose (the commit and why)"}` };
+  let s: State = { ...s0, waiting: s0.waiting.filter((b) => b.alert !== a.id) };
+  const lines: string[] = [];
+  let job: string | undefined;
+  if (s.bisect?.alert === a.id) {
+    const got = cancelBisect(s);
+    s = got.state;
+    job = got.job;
+    lines.push(...got.lines);
+  }
+  const k = key(a.scene, a.metric);
+  const at = (rev?: string) => (rev ? history.findIndex((p) => p.rev === rev && p.why !== "bisect") : -1);
+  const since = at(s.since[k]) > at(a.bad) ? s.since[k] : a.bad;
+  s = { ...s, since: { ...s.since, [k]: since }, alerts: s.alerts.map((x) => (x.id === a.id ? { ...x, state: x.state === "bisecting" ? "open" : x.state, closed: { as, reason: reason.trim(), when: now } } : x)) };
+  const closed = s.alerts.find((x) => x.id === a.id) as Alert;
+  lines.push(alertLine(closed), `· perf: ${a.scene} ${a.metric}'s band re-based at ${since.slice(0, 9)}, the level since then`);
   return { state: s, lines, job };
 }
 
