@@ -15,8 +15,8 @@ use std::path::Path;
 /// The tasks this module runs (D410).
 pub(crate) const TASKS: &[Task] = &[Task {
     name: "profile",
-    takes: "[walk|play] [--seconds 60] [--build optimised|debug] [--tracy] [-- game args]",
-    does: "what a session spends (D576): build with the frame recorder, walk play-walk's route by script for --seconds (walk, the default) or play until you quit (play) on the real GPU, and print the session report's head; the whole report lands in logs/. --tracy (D577): a Tracy build; a walk also keeps a capped Tracy capture in logs/ and prints its costliest zones, a game played opens Tracy's profiler live",
+    takes: "[walk|play] [--scene play-walk] [--seconds 60] [--build optimised|debug] [--tracy] [-- game args]",
+    does: "what a session spends (D576): build with the frame recorder, walk play-walk's route (or --scene's, any bench scene) by script for --seconds (walk, the default) or play until you quit (play) on the real GPU, and print the session report's head; the whole report lands in logs/. --tracy (D577): a Tracy build; a walk also keeps a capped Tracy capture in logs/ and prints its costliest zones, a game played opens Tracy's profiler live",
     group: "Play and check",
     run: profile,
 }];
@@ -31,7 +31,7 @@ const HEAD_LINES: usize = 4;
 const OUTPUT_LINES: usize = 12;
 
 fn profile(args: &[String]) -> bool {
-    let usage = "`cargo xtask profile [walk|play] [--seconds 60] [--build optimised|debug] [--tracy] [-- game args]`";
+    let usage = "`cargo xtask profile [walk|play] [--scene play-walk] [--seconds 60] [--build optimised|debug] [--tracy] [-- game args]`";
     let (ours, extra) = match args.iter().position(|a| a == "--") {
         Some(at) => (&args[..at], &args[at + 1..]),
         None => (args, &[][..]),
@@ -40,10 +40,23 @@ fn profile(args: &[String]) -> bool {
     let mut seconds = 60u32;
     let mut build = Build::Optimised;
     let mut tracy = false;
+    let mut scene = "play-walk".to_string();
     let mut ours = ours.iter();
     while let Some(arg) = ours.next() {
         match arg.as_str() {
             "--tracy" => tracy = true,
+            "--scene" => match ours.next() {
+                Some(name) if crate::scenes::SCENES.iter().any(|s| s.name == name) => {
+                    scene = name.clone();
+                }
+                other => {
+                    eprintln!(
+                        "✗ profile: --scene takes a bench scene's name, one of xtask/src/scenes.rs (forest-run, lake-play, …), not `{}`. {usage}",
+                        other.map_or("", String::as_str)
+                    );
+                    return false;
+                }
+            },
             "walk" => walk = true,
             "play" => walk = false,
             "--seconds" => match ours.next().and_then(|s| s.parse().ok()) {
@@ -73,7 +86,7 @@ fn profile(args: &[String]) -> bool {
         }
     }
     let game = if walk {
-        walk_args(seconds, extra)
+        walk_args(&scene, seconds, extra)
     } else {
         let mut game: Vec<String> = vec!["--experiment".into(), "play".into()];
         game.extend(extra.iter().cloned());
@@ -87,14 +100,15 @@ fn profile(args: &[String]) -> bool {
     report(build, &game, if walk { "walk" } else { "play" }, tracy).0
 }
 
-/// The game's arguments for a scripted walk: `play-walk`'s new game and route (D578),
+/// The game's arguments for a scripted walk: a bench scene's (`play-walk`'s new game and
+/// route by default, D578; `--scene` another, to catch what its bench saw, such as a hitch),
 /// offscreen, timed from the start, a sixtieth of a second of play a frame, ended by the
 /// recorder `seconds` by the clock after the load, however fast frames are drawn; the
 /// bench's frames, at a thousand a second, only bound it.
-pub(crate) fn walk_args(seconds: u32, extra: &[String]) -> Vec<String> {
+pub(crate) fn walk_args(name: &str, seconds: u32, extra: &[String]) -> Vec<String> {
     let scene = crate::scenes::SCENES
         .iter()
-        .find(|scene| scene.name == "play-walk")
+        .find(|scene| scene.name == name)
         .map_or(&[][..], |scene| scene.args);
     let mut game: Vec<String> = scene.iter().map(|arg| arg.to_string()).collect();
     game.extend(extra.iter().cloned());
@@ -283,11 +297,16 @@ mod tests {
 
     #[test]
     fn a_walk_is_play_walks_route_ended_by_the_clock_after_its_seconds() {
-        let game = walk_args(30, &["--quality".into(), "low".into()]);
+        let game = walk_args("play-walk", 30, &["--quality".into(), "low".into()]);
         let joined = game.join(" ");
         assert!(
             joined.starts_with("--experiment play --time 17 --route"),
             "{joined}"
+        );
+        let forest = walk_args("forest-run", 30, &[]).join(" ");
+        assert!(
+            forest.starts_with("--experiment forest-walk --route"),
+            "{forest}"
         );
         assert!(
             joined.ends_with(
