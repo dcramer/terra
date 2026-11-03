@@ -342,7 +342,8 @@ fn a_tuned_key_is_recorded_only_when_new() {
 fn a_settled_scenes_load_is_recorded_and_said_against_the_last() {
     let mut town = timing(9.7, 12.2, 16.8);
     town.load_s = Some(76.8);
-    let row = csv_row(["2026-11-03", "abc", "release", "town-dusk"], &town, 3);
+    let key = ["2026-11-03", "abc", "release", "town-dusk"];
+    let row = csv_row(key, &town, 3, false);
     let cells: Vec<&str> = row.split(',').collect();
     let header: Vec<&str> = BENCHMARKS_HEADER.split(',').collect();
     assert_eq!(cells.len(), header.len());
@@ -358,6 +359,23 @@ fn a_settled_scenes_load_is_recorded_and_said_against_the_last() {
         "loaded in 40.0 s, -48% on abc"
     );
     town.load_s = None;
-    let unsaid = csv_row(["2026-11-03", "abc", "release", "town-dusk"], &town, 3);
+    let unsaid = csv_row(key, &town, 3, false);
     assert_eq!(unsaid.split(',').nth(load), Some(""));
+}
+
+/// A result taken on a busy machine says so in its row's last column, `busy`, which the perf
+/// row reads to record it without judging it (D610); a quiet one says 0.
+#[test]
+fn a_busy_result_is_marked_in_its_row() {
+    let forest = timing(8.9, 12.0, 57.1);
+    let header: Vec<&str> = BENCHMARKS_HEADER.split(',').collect();
+    assert_eq!(header.last(), Some(&"busy"));
+    let key = ["2026-11-03", "abc", "release", "forest-run"];
+    let busy = csv_row(key, &forest, 20, true);
+    let quiet = csv_row(key, &forest, 10, false);
+    for (row, want) in [(&busy, "1"), (&quiet, "0")] {
+        let cells: Vec<&str> = row.split(',').collect();
+        assert_eq!(cells.len(), header.len());
+        assert_eq!(cells.last(), Some(&want));
+    }
 }

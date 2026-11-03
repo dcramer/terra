@@ -30,10 +30,13 @@ export type Point = {
   build: string;
   scene: string;
   values: Partial<Record<Metric, number>>;
+  /// Taken on a busy machine (the bench's `busy` column, D185): recorded, never judged nor in
+  /// a band, as Perfherder ignores a run its infrastructure flagged.
+  busy?: boolean;
 };
 
 /// The history file's header: ours, then the bench's own row as it records it.
-export const HISTORY_HEADER = "rev,job,why,date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches,drift_pct,load_s,freezes";
+export const HISTORY_HEADER = "rev,job,why,date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches,drift_pct,load_s,freezes,busy";
 const BENCH_COLUMNS = HISTORY_HEADER.split(",").slice(3);
 
 /// The rows a bench appended to its csv (`--record`): those past the file at its commit.
@@ -52,7 +55,9 @@ export function pointOf(row: string, rev: string, job: string, why: Why): Point 
     const v = at(m);
     if (v !== undefined && v !== "" && Number.isFinite(Number(v))) values[m] = Number(v);
   }
-  return { rev, job, why, date: at("date"), gpu: at("gpu"), size: at("size"), build: at("build"), scene: at("scene"), values };
+  const point: Point = { rev, job, why, date: at("date"), gpu: at("gpu"), size: at("size"), build: at("build"), scene: at("scene"), values };
+  if (at("busy") === "1") point.busy = true;
+  return point;
 }
 
 /// A history line: our three columns, then the bench's row.
@@ -103,10 +108,10 @@ export function band(values: number[], floor: Floor): { base: number; width: num
 }
 
 /// The points one series is judged against: the same scene on the same card, picture and
-/// build, from landings and retriggers (a bisect's points are of older commits), in the order
-/// they were benched.
+/// build, from landings and retriggers (a bisect's points are of older commits), none taken on
+/// a busy machine, in the order they were benched.
 export function series(points: Point[], like: Pick<Point, "scene" | "gpu" | "size" | "build">): Point[] {
-  return points.filter((p) => p.why !== "bisect" && p.scene === like.scene && p.gpu === like.gpu && p.size === like.size && p.build === like.build);
+  return points.filter((p) => p.why !== "bisect" && !p.busy && p.scene === like.scene && p.gpu === like.gpu && p.size === like.size && p.build === like.build);
 }
 
 /// What a value says against the window before it.

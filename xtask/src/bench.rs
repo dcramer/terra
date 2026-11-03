@@ -34,9 +34,11 @@ const BENCH_SETTLE: &str = "240";
 const BENCH_TIMEOUT_S: u64 = 900;
 /// How much slower than the last recorded result counts as a regression to look into.
 const SLOWER_BY: f32 = 0.10;
-/// Where `--record` keeps results, one line per scene per run of the task.
+/// Where `--record` keeps results, one line per scene per run of the task. `busy` is 1 for a
+/// result taken on a busy machine (fewer than half its runs quiet, D185), which the perf row
+/// records but does not judge (D610), as Perfherder ignores an infra-flagged run.
 const BENCHMARKS: &str = "research/benchmarks.csv";
-const BENCHMARKS_HEADER: &str = "date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches,drift_pct,load_s,freezes";
+const BENCHMARKS_HEADER: &str = "date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches,drift_pct,load_s,freezes,busy";
 
 /// One timed run, as the sandbox prints it.
 #[derive(Debug, Clone, PartialEq)]
@@ -601,7 +603,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
         };
         lines.push((name.clone(), timing.clone(), against, note));
         if record {
-            let row = csv_row([&date, &commit, build, &name], &timing, used.len());
+            let row = csv_row([&date, &commit, build, &name], &timing, used.len(), busy);
             ok &= append_line(&root().join(BENCHMARKS), BENCHMARKS_HEADER, &row);
         }
     }
@@ -722,10 +724,16 @@ fn print_table(
 }
 
 /// A scene's line in `BENCHMARKS`, under `BENCHMARKS_HEADER`, from its date, commit, build
-/// and name: the load empty for a scene that does not time one.
-fn csv_row([date, commit, build, name]: [&str; 4], timing: &Timing, runs: usize) -> String {
+/// and name: the load empty for a scene that does not time one; `busy` 1 when it was taken on
+/// a busy machine, else 0.
+fn csv_row(
+    [date, commit, build, name]: [&str; 4],
+    timing: &Timing,
+    runs: usize,
+    busy: bool,
+) -> String {
     format!(
-        "{date},{commit},{},{},{build},{name},{:.2},{:.2},{:.2},{runs},{:.2},{},{:.1},{},{}",
+        "{date},{commit},{},{},{build},{name},{:.2},{:.2},{:.2},{runs},{:.2},{},{:.1},{},{},{}",
         timing.gpu,
         timing.size,
         timing.median_ms,
@@ -738,6 +746,7 @@ fn csv_row([date, commit, build, name]: [&str; 4], timing: &Timing, runs: usize)
             .load_s
             .map_or(String::new(), |load| format!("{load:.1}")),
         timing.freezes,
+        u8::from(busy),
     )
 }
 

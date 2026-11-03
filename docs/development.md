@@ -170,7 +170,7 @@ cargo xtask bench forest --runs 5    # one scene
 cargo xtask bench --record           # and add the results to research/benchmarks.csv
 ```
 
-Each scene's load (its `Loaded in` line) is said under its row in the table, against the last recorded, and recorded in `load_s` beside its frames. On the render worker, `cargo xtask remote-render --collect research/benchmarks.csv -- cargo xtask bench <scenes> --record` brings the box's file back to `~/.cache/terra-review/remote/<job>/research/`; copy its new rows into ours rather than typing them from the table.
+Each scene's load (its `Loaded in` line) is said under its row in the table, against the last recorded, and recorded in `load_s` beside its frames; a result taken on a busy machine (fewer than half its runs quiet) is recorded with `busy` 1, which the perf row keeps but never judges (D610). On the render worker, `cargo xtask remote-render --collect research/benchmarks.csv -- cargo xtask bench <scenes> --record` brings the box's file back to `~/.cache/terra-review/remote/<job>/research/`; copy its new rows into ours rather than typing them from the table.
 
 It builds the sandbox in the `bench` profile, a release with nothing incremental as a player's build is (D408; the first in a worktree compiles our crates whole, minutes, beside the incremental release shots use), and runs each **scene**, a scripted run that comes out the same on every machine, at 17:00, whose long shadows cost the most:
 

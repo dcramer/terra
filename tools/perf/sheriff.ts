@@ -87,6 +87,13 @@ export function alertLine(a: Alert): string {
 export function ingest(s0: State, job: InFlight, points: Point[], history: Point[], commits: (good: string, bad: string) => string[], now: string, cap = CAP): { state: State; lines: string[] } {
   const s: State = { ...s0, job: undefined, lastEnded: now, lastWhy: job.why, alerts: [...s0.alerts], waiting: [...s0.waiting], since: { ...s0.since } };
   const lines: string[] = [];
+  // A scene taken on a busy machine (D185: the box's CPU clock collapsing under its runs) is
+  // recorded in the history but judged nowhere, as Perfherder ignores an infra-flagged run.
+  for (const p of points.filter((p) => p.busy)) {
+    lines.push(`· perf: ${job.rev.slice(0, 9)} ${p.scene} was taken on a busy machine (the bench's note, D185): recorded, not judged, so no alert (D610)`);
+  }
+  const all = points;
+  points = points.filter((p) => !p.busy);
   if (job.why === "bisect") {
     const b = s.bisect;
     if (!b) return { state: s, lines };
@@ -105,7 +112,8 @@ export function ingest(s0: State, job: InFlight, points: Point[], history: Point
     return { state: s, lines };
   }
   if (!points.length) {
-    lines.push(`✗ perf: ${job.id} at ${job.rev.slice(0, 9)} gave no numbers (its log says why); the next landing is benched as usual`);
+    if (!all.length) lines.push(`✗ perf: ${job.id} at ${job.rev.slice(0, 9)} gave no numbers (its log says why); the next landing is benched as usual`);
+    else if (job.why === "retrigger" && s.retrigger) lines.push(`· perf: ${job.rev.slice(0, 9)}'s retrigger was all busy, so its suspects are neither confirmed nor raised; the next landing is benched as usual`);
     if (job.why === "landing") s.benched = job.rev;
     else s.retrigger = undefined;
     return { state: s, lines };
@@ -125,6 +133,9 @@ export function ingest(s0: State, job: InFlight, points: Point[], history: Point
     if (suspects.length) {
       s.retrigger = { rev: job.rev, good: s.good, suspects };
       lines.push(`· perf: ${job.rev.slice(0, 9)} past its band, retriggered: ${suspects.map((j) => changeLine(j.scene, j)).join("; ")}`);
+    } else if (all.length > points.length) {
+      // A busy scene was not judged, so this is no landing every band held at.
+      lines.push(`✓ perf: ${job.rev.slice(0, 9)} within every band it judged`);
     } else {
       s.good = job.rev;
       lines.push(`✓ perf: ${job.rev.slice(0, 9)} within every band`);
@@ -138,6 +149,10 @@ export function ingest(s0: State, job: InFlight, points: Point[], history: Point
   let worse = false;
   const raised: Alert[] = [];
   for (const j of r.suspects) {
+    if (all.some((p) => p.scene === j.scene && p.busy)) {
+      lines.push(`· perf: ${changeLine(j.scene, j)} not confirmed: its retrigger was taken on a busy machine, so no alert`);
+      continue;
+    }
     const v = points.find((p) => p.scene === j.scene)?.values[j.metric];
     const held = v !== undefined && (j.change === "worse" ? v > j.before + j.width : v < j.before - j.width);
     if (!held) {

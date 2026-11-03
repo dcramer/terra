@@ -122,6 +122,42 @@ test("a one-off spike that does not hold on its retrigger is noise", () => {
   assert.equal(s.good, commits[6]);
 });
 
+test("a row's busy column marks its point; a row without one is quiet", () => {
+  const row = "2026-11-03,4688fd3d7,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,forest-run,8.88,12.01,57.10,20,0.70,20,6.0,31.5,0";
+  assert.equal(pointOf(`${row},1`, "4688fd3d7", "j1", "landing")?.busy, true);
+  assert.equal(pointOf(`${row},0`, "4688fd3d7", "j1", "landing")?.busy, undefined);
+  assert.equal(pointOf(row, "4688fd3d7", "j1", "landing")?.busy, undefined, "a row from before the column");
+  const back = readHistory(`header\n${historyLine(`${row},1`, "4688fd3d7", "j1", "landing")}\n`);
+  assert.equal(back[0]?.busy, true);
+});
+
+test("a scene taken on a busy machine is recorded but raises nothing, on a landing or a retrigger", () => {
+  const history: Point[] = [];
+  const lines: string[] = [];
+  const steady = fakeBench(99);
+  let s = empty();
+  for (const tip of commits.slice(1, 6)) s = drive(s, tip, steady, history, lines);
+  const good = s.good;
+  // forest-run's 20 hitches on a busy box (the CPU clock collapsing), its MISSED an upper bound.
+  const busy = (rev: string, why: Why) => steady(rev, why).map((p) => (p.scene === "forest-run" ? { ...p, busy: true, values: { ...p.values, hitches: 20 } } : p));
+  lines.length = 0;
+  s = drive(s, commits[6], busy, history, lines);
+  assert.equal(s.alerts.length, 0, lines.join("\n"));
+  assert.equal(s.retrigger, undefined, "nothing to retrigger: the busy scene was not judged");
+  assert.ok(lines.some((l) => /c06000000 forest-run was taken on a busy machine .*recorded, not judged, so no alert/.test(l)), lines.join("\n"));
+  assert.ok(lines.some((l) => /c06000000 within every band it judged/.test(l)), lines.join("\n"));
+  assert.equal(s.benched, commits[6]);
+  assert.equal(s.good, good, "a landing with a scene unjudged is no good end of a range");
+  assert.ok(history.some((p) => p.rev === commits[6] && p.busy), "recorded in the history");
+  // A suspect whose retrigger came out busy is neither confirmed nor alerted.
+  const spikeThenBusy = (rev: string, why: Why) =>
+    steady(rev, why).map((p) => (p.scene === "town-dusk" ? { ...p, busy: why === "retrigger" || undefined, values: { ...p.values, p99_ms: 40 } } : p));
+  lines.length = 0;
+  s = drive(s, commits[7], spikeThenBusy, history, lines);
+  assert.equal(s.alerts.length, 0, lines.join("\n"));
+  assert.ok(lines.some((l) => /town-dusk p99_ms .* not confirmed: its retrigger was taken on a busy machine, so no alert/.test(l)), lines.join("\n"));
+});
+
 test("the bisect halves the range: its choice of commits and the first bad commit", () => {
   const range = commits.slice(11, 21); // c11..c20, the bad c13
   let b: Bisect = start("forest-run", "hitches", commits[10], commits[20], range, { goodValue: 0.5, badValue: 10 });
