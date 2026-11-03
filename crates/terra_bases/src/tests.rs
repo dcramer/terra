@@ -52,3 +52,45 @@ fn the_base_runs_without_the_world_layer() {
             .contains_resource::<terra_world::scene::Indoors>()
     );
 }
+
+/// A build not the player's (a village's house, a town's) goes with its world on a crossing,
+/// as its root does (D469): one left behind had its details and far cells drawn under the
+/// gone root, the warnings after the title's crossing to a new world (seeds j7).
+#[test]
+fn a_build_not_the_players_goes_with_its_world() {
+    use terra_world::instance::{Cross, InstanceKey, WorldSpec};
+    let mut app = alone();
+    for _ in 0..3 {
+        app.update();
+    }
+    let look = app.world().resource::<BuildLook>().clone();
+    let root = {
+        let mut commands = app.world_mut().commands();
+        let build = Build::new(&mut commands, &look, Transform::default(), "a house");
+        let root = build.root;
+        commands.spawn((Name::new("a house, as built"), Built(build)));
+        root
+    };
+    app.world_mut().flush();
+    app.update();
+    assert!(app.world().get_entity(root).is_ok());
+    app.world_mut().commands().queue(Cross(WorldSpec {
+        key: InstanceKey(2),
+        kind: "world".into(),
+        seed: 2,
+    }));
+    app.world_mut().flush();
+    for _ in 0..6 {
+        app.update();
+    }
+    let mut built = app.world_mut().query::<&Built>();
+    assert_eq!(
+        built.iter(app.world()).count(),
+        0,
+        "a house outlived its world"
+    );
+    assert!(
+        app.world().get_entity(root).is_err(),
+        "its root outlived its world"
+    );
+}

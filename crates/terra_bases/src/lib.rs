@@ -298,8 +298,12 @@ fn give_footprints(
     }
 }
 
-/// A build that is not the player's, such as a house in a village.
+/// A build that is not the player's, such as a house in a village. The world's (D469): it
+/// has no `Transform`, so it says so itself, and goes with its world on a crossing, as its
+/// root does. Left behind, it had its details and far cells drawn under a root already
+/// gone (Bevy's "ChildOf relates to an entity that does not exist" after a crossing).
 #[derive(Component, Deref, DerefMut)]
+#[require(terra_world::instance::WorldScoped)]
 pub struct Built(pub Build);
 
 /// What every build is drawn with: its kits and their materials and maps, what no kit
