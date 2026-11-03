@@ -16,6 +16,7 @@ mod nightly;
 mod primitives;
 mod probe;
 mod profile;
+mod ron;
 mod scenes;
 mod scope;
 mod seed;

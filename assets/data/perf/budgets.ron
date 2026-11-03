@@ -1,0 +1,70 @@
+// Performance budgets (D607): what each benchmark scene of `cargo xtask bench` may spend,
+// by phase, the one place they are set. The bench fails a scene whose phase or group is
+// over, naming the group, its budget, what it measured and where to look (D556).
+//
+// As shipped engines keep them: Unreal carries its frame targets as data
+// (`FEnginePerformanceTargets`: the target frame and a hitch's threshold) and checks CSV
+// profiler captures (`csvprofile`, PerfReportTool's budgets a stat) against a budget for each
+// named stat group (`DECLARE_STATS_GROUP`, timed by `SCOPE_CYCLE_COUNTER`); ours are the
+// groups `terra_gen::stat` times, the render world's CPU and the GPU's passes.
+//
+// The phases, each timed apart:
+// - load: the program's start to the first playable frame (the `Loaded in` line).
+// - settle: the first `seconds` after the loading screen lifts, the world streaming in round
+//   a player standing at the start; looser on the frame, held to no drift.
+// - play: the scene's timed frames after it.
+//
+// A group's budget is its median ms a frame, every thread's time in it summed. A budget is
+// raised by a change that says why, and lowered only by the full run (D414). The first
+// budgets are the 2026-11-03 bench on the worker's RTX 4090 with headroom over its spread,
+// never tuned to pass.
+(
+    // The time to playable every load is held to. D580 is Open (the developers set it):
+    // until then this is its recommendation, provisional, said beside each load and failing
+    // none; a scene's own `load_s` below is what fails.
+    load: (
+        target_s: 10.0,
+        provisional: true,
+    ),
+    // Every scene's phases, unless its own entry says otherwise.
+    every: (
+        settle: (
+            seconds: 30.0,
+            // Twice the frame's budget: a hitch, as D25 counts one.
+            frame_p99_ms: 26.7,
+            freezes: 0,
+            tick_p99_ms: 15.6,
+        ),
+        play: (
+            // D25: 75 fps on the developers' RTX 3080 at the high preset.
+            frame_p99_ms: 13.3,
+            over_pct: 1.0,
+            hitches: 0,
+            freezes: 0,
+            drift_pct: 15.0,
+            // D138: a tick's 99th percentile under its timestep, 1/64 s.
+            tick_p99_ms: 15.6,
+            // D239: on an integrated GPU at the low preset, 30 fps at the median.
+            integrated_median_ms: 33.3,
+        ),
+    ),
+    scenes: {
+        // D578: a play scene is timed from the program's start, the walk out through ground
+        // not yet streamed held only to no freeze (`bench/play.rs`); it has no settle.
+        "play-walk": (
+            settle: (seconds: 0.0),
+        ),
+        // The mountain lake as the developer plays it, under a minute (the developers,
+        // 2026-11-02, from 350 s on the worker and 6 min on their 3080).
+        "lake-play": (
+            load_s: 60.0,
+        ),
+        // Standing ten minutes with its clock held, its GPU held flat: the developer's lake run
+        // of 2026-11-02 doubled its GPU time in four minutes (a card clocked down while the
+        // tick death spiral left it idle); a quiet worker held within 0.7% over 14 minutes
+        // (perf-growth j1/j2), so 5% is noise's room.
+        "lake-stand": (
+            play: (gpu_growth_pct: 5.0),
+        ),
+    },
+)

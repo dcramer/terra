@@ -14,7 +14,8 @@ pub(crate) fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
         freezes: 0,
         from_start: false,
         load_s: None,
-        load_most_s: None,
+        // A scene held to every scene's budgets and no load of its own.
+        budget: budgets::of("world").unwrap(),
         device: "DiscreteGpu".into(),
         preset: "high".into(),
         ticks: ticks::Said::default(),
@@ -47,12 +48,17 @@ fn reads_how_a_run_held_to_the_budget() {
 fn a_scene_holds_to_the_budget_unless_it_misses_a_gate() {
     assert!(timing(5.0, 9.0, 20.0).misses().is_empty());
     assert_eq!(timing(5.0, 14.0, 20.0).misses().len(), 1);
-    // Judged against the budget the run said, not one of its own.
+    // Judged against the budgets' file (D607), whatever budget the run said.
     let at_60 = Timing {
         budget_ms: 16.7,
         ..timing(5.0, 14.0, 20.0)
     };
-    assert!(at_60.misses().is_empty());
+    assert_eq!(at_60.misses().len(), 1);
+    assert!(
+        at_60.misses()[0].contains("budgets.ron"),
+        "{:?}",
+        at_60.misses()
+    );
     // A run that never said how it held is not taken to have held.
     let unsaid = Timing {
         budget_ms: 0.0,
@@ -76,6 +82,7 @@ fn reads_the_sandboxs_frame_times() {
         budget_ms: 0.0,
         device: String::new(),
         preset: String::new(),
+        budget: budgets::Scene::default(),
         ..timing(7.51, 15.39, 16.40)
     };
     assert_eq!(parse_timing(line), Some(read));

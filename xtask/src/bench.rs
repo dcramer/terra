@@ -37,15 +37,6 @@ const SLOWER_BY: f32 = 0.10;
 /// Where `--record` keeps results, one line per scene per run of the task.
 const BENCHMARKS: &str = "research/benchmarks.csv";
 const BENCHMARKS_HEADER: &str = "date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches,drift_pct,load_s,freezes";
-/// What a scene must hold to on the machine it runs on, against the frame budget (D25)
-/// the sandbox judged its frames by and says (`terra_world::debug::FRAME_BUDGET_MS`, the
-/// one place it is set): at most this share of frames over it, no hitch (a frame over
-/// twice it), and its last third no slower than its first by more than this.
-const MOST_OVER_PCT: f32 = 1.0;
-const MOST_DRIFT_PCT: f32 = 15.0;
-/// The integrated GPU's target at the low preset (D239): 30 frames a second, a median under
-/// this.
-const INTEGRATED_MEDIAN_MS: f32 = 1000.0 / 30.0;
 
 /// One timed run, as the sandbox prints it.
 #[derive(Debug, Clone, PartialEq)]
@@ -66,8 +57,8 @@ struct Timing {
     freezes: u32,
     from_start: bool,
     load_s: Option<f32>,
-    /// The most its load may take, for a scene held to one (`play::load_most_s`).
-    load_most_s: Option<f32>,
+    /// What its scene is held to (`budgets`, D607).
+    budget: budgets::Scene,
     /// The kind of GPU it ran on as wgpu says it (`DiscreteGpu`, `IntegratedGpu`) and the
     /// preset it drew at, from the run's own line; empty if it did not say.
     device: String,
@@ -87,56 +78,9 @@ impl Timing {
         if self.integrated() { "D239" } else { "D25" }
     }
 
-    /// What the scene missed of its target, if anything: a play scene's walk, through ground
-    /// streaming in, no freeze (D578); the integrated GPU's median at the low preset (D239);
-    /// or every gate of the frame budget (D25). A scene held to a load's length misses past it
-    /// too, whatever its frames did (`play::load_most_s`).
+    /// What the scene missed of its budgets (`judge::missed`).
     fn misses(&self) -> Vec<String> {
-        let mut missed = play::load_missed(self.load_s, self.load_most_s);
-        missed.extend(self.frames_missed());
-        missed
-    }
-
-    /// What its frames missed of their target.
-    fn frames_missed(&self) -> Vec<String> {
-        if self.from_start {
-            return (self.freezes > 0)
-                .then(|| {
-                    format!(
-                        "{} freezes of {:.0} ms or more",
-                        self.freezes,
-                        play::FREEZE_MS
-                    )
-                })
-                .into_iter()
-                .collect();
-        }
-        if self.integrated() {
-            return if self.median_ms > INTEGRATED_MEDIAN_MS {
-                vec![format!(
-                    "median over {INTEGRATED_MEDIAN_MS:.1} ms, the integrated GPU's 30 fps"
-                )]
-            } else {
-                Vec::new()
-            };
-        }
-        let mut missed = Vec::new();
-        if self.budget_ms <= 0.0 {
-            missed.push("the run did not say how it held to the budget".to_string());
-        } else if self.p99_ms > self.budget_ms {
-            missed.push(format!("99th percentile over {:.1} ms", self.budget_ms));
-        }
-        if self.over_pct > MOST_OVER_PCT {
-            missed.push(format!("{:.1}% of frames over budget", self.over_pct));
-        }
-        if self.hitches > 0 {
-            missed.push(format!("{} hitches", self.hitches));
-        }
-        missed.extend(self.ticks.misses());
-        if self.drift_pct > MOST_DRIFT_PCT {
-            missed.push(format!("{:+.0}% slower by the end", self.drift_pct));
-        }
-        missed
+        judge::missed(self)
     }
 }
 
@@ -229,7 +173,7 @@ fn parse_timing(line: &str) -> Option<Timing> {
         freezes: 0,
         from_start: false,
         load_s: None,
-        load_most_s: None,
+        budget: budgets::Scene::default(),
         device: String::new(),
         preset: String::new(),
         ticks: ticks::Said::default(),
@@ -536,6 +480,14 @@ pub(crate) fn bench(args: &[String]) -> bool {
     else {
         return false;
     };
+    // Every chosen scene's budgets, read before anything is built, so a broken file fails first.
+    let budgets: Vec<budgets::Scene> = match chosen.iter().map(|s| budgets::of(s.name)).collect() {
+        Ok(budgets) => budgets,
+        Err(error) => {
+            eprintln!("✗ bench: {error}");
+            return false;
+        }
+    };
     let csv = std::fs::read_to_string(root().join(BENCHMARKS)).unwrap_or_default();
     let key = |scene: &Scene| result_key(scene.name, quality.as_deref(), &tunes);
     if record && !tunes.is_empty() {
@@ -569,7 +521,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
     let mut lines = Vec::new();
     let mut waiting_left = load::MOST_WAITING;
     let held = quality.as_deref() != Some("ultra");
-    for scene in chosen {
+    for (scene, budget) in chosen.into_iter().zip(&budgets) {
         let name = key(scene);
         let mut timed: Vec<Run> = Vec::new();
         // Its runs, each after waiting (a bounded time) for a quiet machine; then, while the
@@ -606,7 +558,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
             let timing = time_scene(
                 &program,
                 &folder,
-                scene,
+                (scene, budget),
                 quality.as_deref(),
                 &tunes,
                 picture.as_deref(),
@@ -763,15 +715,11 @@ fn print_table(
             }
         }
         println!(
-            "  The budget is {:.1} ms (D25: 75 fps on the developers' RTX 3080 at the high preset): \
-             a scene holds to it with its 99th percentile under it, at most {MOST_OVER_PCT}% of \
-             frames over, no hitch over twice it, and no more than {MOST_DRIFT_PCT}% slower by \
-             the end, on the machine it runs on. On an integrated GPU, at the low preset, a \
-             median under {INTEGRATED_MEDIAN_MS:.1} ms (D239). A median is SLOWER than the last \
+            "  {} A median is SLOWER than the last \
              recorded past {:.0}% or the runs' own spread, whichever is more; a run is busy \
              when the processors were over {:.0}% busy (or the GPU {:.0}%) before it, after \
              waiting for them, or everything but the run over {:.0}% on average ({:.0}% at once) while it ran.",
-            first.budget_ms,
+            judge::said(&first.budget),
             SLOWER_BY * 100.0,
             load::QUIET_CPU_PCT,
             load::QUIET_GPU_PCT,
@@ -847,7 +795,7 @@ pub(crate) fn sandbox_program(release: bool, copy: &str) -> Option<(PathBuf, Pat
 fn time_scene(
     program: &Path,
     folder: &Path,
-    scene: &Scene,
+    (scene, budget): (&Scene, &budgets::Scene),
     quality: Option<&str>,
     tunes: &[String],
     picture: Option<&str>,
@@ -974,8 +922,7 @@ fn time_scene(
     }
     let mut timing = reader.join().ok()??;
     (timing.from_start, timing.load_s) = (from_start, load_s);
-    timing.load_most_s = play::load_most_s(scene);
-    timing.ticks.gpu_growth_most_pct = ticks::gpu_growth_most_pct(scene);
+    timing.budget = budget.clone();
     println!(
         "  median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms; {:.2}% over budget, {} hitches, {:+.1}% by the end",
         timing.median_ms,
@@ -988,6 +935,10 @@ fn time_scene(
     Some(timing)
 }
 
+#[path = "bench/budgets.rs"]
+mod budgets;
+#[path = "bench/judge.rs"]
+mod judge;
 #[path = "bench/play.rs"]
 mod play;
 #[path = "bench/ticks.rs"]
