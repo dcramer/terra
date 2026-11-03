@@ -14,6 +14,7 @@ use super::{
     NEIGHBOURS_KEPT_M, Range,
 };
 use glam::{IVec3, Vec3};
+use std::cell::RefCell;
 use std::f32::consts::TAU;
 use terra_gen::smoothstep;
 
@@ -158,80 +159,50 @@ impl Range {
         let mut with_ribs: f32 = 0.0;
         // How much of a horn stands over the point, 0 between them to 1 at a point.
         let mut shape: f32 = 0.0;
-        for dx in -1..=1 {
-            for dy in -1..=1 {
-                for dz in -1..=1 {
-                    let c = cell + IVec3::new(dx, dy, dz);
-                    let jitter = self.tops.point_in(c.x, c.y, c.z);
-                    let site =
-                        (c.as_vec3() + Vec3::splat(0.5) + (jitter - 0.5) * HORN_JITTER) * across;
-                    let offset = point - site;
-                    // Only sites near the ground: the lattice is laid through space.
-                    if offset.dot(up).abs() > across * 0.5 {
-                        continue;
-                    }
-                    let flat = offset - up * offset.dot(up);
-                    let out = flat.length();
-                    if out >= reach {
-                        continue;
-                    }
-                    let pick = self.faces.point_in(c.x, c.y, c.z);
-                    if pick.x > HORNS_KEPT {
-                        continue;
-                    }
-                    // The cirques' ways round the site, three or four, turned at random, each
-                    // face its own steepness and its way strayed from even (`FACE_LEAN`).
-                    let (east, north) = horn_ways(site);
-                    let site_up = site.normalize_or(Vec3::Y);
-                    let count = if pick.y < 0.5 { 3 } else { 4 };
-                    let turn = pick.z * TAU;
-                    let height = m.horns_m * (HORN_LEAST + (1.0 - HORN_LEAST) * jitter.y);
-                    let profile = horn_profile(pick.x);
-                    let way_of = |a: f32| east * libm::cosf(a) + north * libm::sinf(a);
-                    let (d, second, way_at) = self.faces_at(
-                        c,
-                        (east, north),
-                        (flat, reach),
-                        FaceSet::new(count, turn, 0),
-                    );
-                    let across_face = flat.dot(site_up.cross(way_at));
-                    let d = towered(d, second, out, reach, pick.y);
-                    let fade = 1.0 - smoothstep(0.55, 1.0, out / reach);
-                    let stand = |d: f32, reach: f32| {
-                        libm::powf(1.0 - (d / reach).clamp(0.0, 1.0), profile) * fade
-                    };
-                    // The shoulder, on the arête after a face chosen by the horn's hash: a small
-                    // horn of its own faces added onto the arête's fall, so the arête rises to it
-                    // and dips to a col behind it.
-                    let shoulder = self.leans(c, -1);
-                    let arete =
-                        turn + TAU * ((count as f32 * shoulder.x).floor() + 0.5) / count as f32;
-                    let s_reach = reach * SHOULDER_REACH;
-                    let s_flat = flat - way_of(arete) * (reach * SHOULDER_OUT);
-                    let s_out = s_flat.length();
-                    let s_stand = if s_out < s_reach {
-                        let s_turn = turn + shoulder.y * TAU;
-                        let (s_d, s_second, _) = self.faces_at(
-                            c,
-                            (east, north),
-                            (s_flat, s_reach),
-                            FaceSet::new(3, s_turn, 7),
-                        );
-                        let s_d = towered(s_d, s_second, s_out, s_reach, shoulder.z);
-                        stand(s_d, s_reach) * (1.0 - smoothstep(0.55, 1.0, s_out / s_reach))
-                    } else {
-                        0.0
-                    };
-                    let rise = SHOULDER_RISE.0 + (SHOULDER_RISE.1 - SHOULDER_RISE.0) * shoulder.z;
-                    let shouldered = height * rise * s_stand;
-                    let standing = (stand(d, reach) + rise * s_stand).min(1.0);
-                    highest = highest.max(height * stand(d, reach) + shouldered);
-                    let rib_d = ribbed(d, second, across_face, reach, pick.y);
-                    with_ribs = with_ribs.max(height * stand(rib_d, reach) + shouldered);
-                    shape = shape.max(standing);
+        AROUND.with_borrow_mut(|around| {
+            for site in around.round(self, cell) {
+                let offset = point - site.site;
+                // Only sites near the ground: the lattice is laid through space.
+                if offset.dot(up).abs() > across * 0.5 {
+                    continue;
                 }
+                let flat = offset - up * offset.dot(up);
+                let out = flat.length();
+                if out >= reach {
+                    continue;
+                }
+                let Some(horn) = site.horn(self) else {
+                    continue;
+                };
+                let (d, second, way_at) =
+                    faces_from(&horn.ways[..horn.count as usize], flat, reach);
+                let across_face = flat.dot(horn.site_up.cross(way_at));
+                let d = towered(d, second, out, reach, horn.key);
+                let fade = 1.0 - smoothstep(0.55, 1.0, out / reach);
+                let stand = |d: f32, reach: f32| {
+                    libm::powf(1.0 - (d / reach).clamp(0.0, 1.0), horn.profile) * fade
+                };
+                // The shoulder (`Horn::arete`): a small horn of its own faces added onto the
+                // arête's fall, so the arête rises to it and dips to a col behind it.
+                let s_reach = reach * SHOULDER_REACH;
+                let s_flat = flat - horn.arete * (reach * SHOULDER_OUT);
+                let s_out = s_flat.length();
+                let s_stand = if s_out < s_reach {
+                    let (s_d, s_second, _) = faces_from(&horn.shoulder_ways[..3], s_flat, s_reach);
+                    let s_d = towered(s_d, s_second, s_out, s_reach, horn.shoulder_key);
+                    stand(s_d, s_reach) * (1.0 - smoothstep(0.55, 1.0, s_out / s_reach))
+                } else {
+                    0.0
+                };
+                let rise = horn.shoulder_rise;
+                let shouldered = horn.height * rise * s_stand;
+                let standing = (stand(d, reach) + rise * s_stand).min(1.0);
+                highest = highest.max(horn.height * stand(d, reach) + shouldered);
+                let rib_d = ribbed(d, second, across_face, reach, horn.key);
+                with_ribs = with_ribs.max(horn.height * stand(rib_d, reach) + shouldered);
+                shape = shape.max(standing);
             }
-        }
+        });
         // The ground the horns leave between them is cut down into cirques, so the massif's
         // upper slopes are eaten back into bowls under arêtes and cols rather than standing
         // as a dome the horns sit on (the r6 review).
@@ -241,28 +212,57 @@ impl Range {
         )
     }
 
+    /// A horn's site in lattice cell `c`, as [`Range::horn_tops`] lays it.
+    fn horn_site(&self, c: IVec3) -> HornSite {
+        let jitter = self.tops.point_in(c.x, c.y, c.z);
+        let across = self.mountains.horns_across_m;
+        HornSite {
+            c,
+            site: (c.as_vec3() + Vec3::splat(0.5) + (jitter - 0.5) * HORN_JITTER) * across,
+            tall: jitter.y,
+            horn: None,
+        }
+    }
+
+    /// The horn at a site, laid out once, or none where the site is left out (`HORNS_KEPT`).
+    fn horn_at(&self, c: IVec3, site: Vec3, tall: f32) -> Option<Horn> {
+        let m = &self.mountains;
+        let pick = self.faces.point_in(c.x, c.y, c.z);
+        if pick.x > HORNS_KEPT {
+            return None;
+        }
+        // The cirques' ways round the site, three or four, turned at random, each face its own
+        // steepness and its way strayed from even (`FACE_LEAN`).
+        let (east, north) = horn_ways(site);
+        let count = if pick.y < 0.5 { 3 } else { 4 };
+        let turn = pick.z * TAU;
+        let way_of = |a: f32| east * libm::cosf(a) + north * libm::sinf(a);
+        // The shoulder, on the arête after a face chosen by the horn's hash.
+        let shoulder = self.leans(c, -1);
+        let arete = turn + TAU * ((count as f32 * shoulder.x).floor() + 0.5) / count as f32;
+        let s_turn = turn + shoulder.y * TAU;
+        Some(Horn {
+            site_up: site.normalize_or(Vec3::Y),
+            count,
+            ways: self.face_ways(c, (east, north), FaceSet::new(count, turn, 0)),
+            key: pick.y,
+            height: m.horns_m * (HORN_LEAST + (1.0 - HORN_LEAST) * tall),
+            profile: horn_profile(pick.x),
+            arete: way_of(arete),
+            shoulder_ways: self.face_ways(c, (east, north), FaceSet::new(3, s_turn, 7)),
+            shoulder_key: shoulder.z,
+            shoulder_rise: SHOULDER_RISE.0 + (SHOULDER_RISE.1 - SHOULDER_RISE.0) * shoulder.z,
+        })
+    }
+
     /// A horn's hash for one of its faces or parts (`i`), each 0 to 1.
     pub(super) fn leans(&self, c: IVec3, i: i32) -> Vec3 {
         self.faces.point_in(c.x + 101 * (i + 1), c.y, c.z)
     }
 
-    /// The face distance of a horn's faces at a point `flat` off its site, laid level in its
-    /// `(east, north)`: its `set` of cirque faces, each its own steepness and its way strayed
-    /// from even by the horn's hash, each a bowl (`HORN_BOWL`) hollowed into the mountain; the
-    /// largest face distance, the next, and the way of the face it is on.
-    pub(super) fn faces_at(
-        &self,
-        c: IVec3,
-        (east, north): (Vec3, Vec3),
-        (flat, reach): (Vec3, f32),
-        set: FaceSet,
-    ) -> (f32, f32, Vec3) {
-        let ways = self.face_ways(c, (east, north), set);
-        faces_from(&ways[..set.count as usize], flat, reach)
-    }
-
     /// The ways and steepness of a horn's `set` of cirque faces (at most four), laid level in
-    /// its `(east, north)`, as [`Range::faces_at`] takes them.
+    /// its `(east, north)`, each its own steepness and its way strayed from even by the horn's
+    /// hash, as [`faces_from`] takes them.
     pub(super) fn face_ways(
         &self,
         c: IVec3,
@@ -296,8 +296,95 @@ impl FaceSet {
     }
 }
 
+/// How many neighbourhoods of the horns' lattice each thread remembers (`AROUND`): a rise's
+/// slope asks points `SLOPE_STEP_M` either way of its own, in at most two cells each way.
+const AROUND_SLOTS: usize = 8;
+
+thread_local! {
+    /// The horns' sites round the lattice cells last asked, by the cell and the range's key:
+    /// what a site holds depends only on its cell, and the ground's samples, metres apart, and
+    /// each rise's slope, asking seven points 20 m apart, ask the same cells many times over.
+    static AROUND: RefCell<Around> = const { RefCell::new(Around { held: Vec::new(), next: 0 }) };
+}
+
+/// The neighbourhoods a thread remembers, each the 27 sites round a cell, in the order
+/// [`Range::horn_tops`] looks at them, and which is replaced next.
+struct Around {
+    held: Vec<((IVec3, u64), [HornSite; 27])>,
+    next: usize,
+}
+
+impl Around {
+    /// The 27 sites round `cell` of a range, worked out the first time they are asked.
+    fn round(&mut self, range: &Range, cell: IVec3) -> &mut [HornSite; 27] {
+        let tag = (cell, range.key);
+        let slot = match self.held.iter().position(|(held, _)| *held == tag) {
+            Some(slot) => slot,
+            None => {
+                let mut sites = [HornSite::default(); 27];
+                let mut k = 0;
+                for dx in -1..=1 {
+                    for dy in -1..=1 {
+                        for dz in -1..=1 {
+                            sites[k] = range.horn_site(cell + IVec3::new(dx, dy, dz));
+                            k += 1;
+                        }
+                    }
+                }
+                if self.held.len() < AROUND_SLOTS {
+                    self.held.push((tag, sites));
+                    self.held.len() - 1
+                } else {
+                    let slot = self.next;
+                    self.next = (self.next + 1) % AROUND_SLOTS;
+                    self.held[slot] = (tag, sites);
+                    slot
+                }
+            }
+        };
+        &mut self.held[slot].1
+    }
+}
+
+/// A lattice cell's horn site: the cell, where the site is, its hash for how tall a horn it
+/// holds, and the horn once asked for (`Range::horn_at`), `Some(None)` where it is left out.
+#[derive(Clone, Copy, Default)]
+struct HornSite {
+    c: IVec3,
+    site: Vec3,
+    tall: f32,
+    horn: Option<Option<Horn>>,
+}
+
+impl HornSite {
+    fn horn(&mut self, range: &Range) -> Option<&Horn> {
+        let (c, site, tall) = (self.c, self.site, self.tall);
+        self.horn
+            .get_or_insert_with(|| range.horn_at(c, site, tall))
+            .as_ref()
+    }
+}
+
+/// A horn laid out at its site, as each point it reaches takes it: the site's up, its faces'
+/// count, ways and steepness, its hash for its towers and ribs, how high it stands and its
+/// profile's power, and its shoulder's way out along its arête, faces, hash and rise.
+#[derive(Clone, Copy)]
+struct Horn {
+    site_up: Vec3,
+    count: i32,
+    ways: [(Vec3, f32); 4],
+    key: f32,
+    height: f32,
+    profile: f32,
+    arete: Vec3,
+    shoulder_ways: [(Vec3, f32); 4],
+    shoulder_key: f32,
+    shoulder_rise: f32,
+}
+
 /// The face distance at a point `flat` off a horn's site of its faces' `ways` and steepness
-/// ([`Range::face_ways`]): [`Range::faces_at`].
+/// ([`Range::face_ways`]), each face a bowl (`HORN_BOWL`) hollowed into the mountain: the
+/// largest face distance, the next, and the way of the face it is on.
 pub(super) fn faces_from(ways: &[(Vec3, f32)], flat: Vec3, reach: f32) -> (f32, f32, Vec3) {
     let (mut d, mut second, mut way_at) = (f32::MIN, f32::MIN, ways[0].0);
     for &(way, steep) in ways {

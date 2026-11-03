@@ -516,6 +516,61 @@ fn every_massif_has_neighbours() {
     );
 }
 
+/// The horns' memo of their sites round the cells last asked (`horns::AROUND`) answers as
+/// working them out afresh would, whatever it held before: the horns at points far apart and
+/// 20 m apart, as a rise's slope asks them, the same to the bit in either order, each order
+/// on a thread of its own, starting empty, and on one after the other.
+#[test]
+fn the_horns_answer_alike_whatever_their_memo_held() {
+    let range = range();
+    let mut points: Vec<Vec3> = directions(400_000)
+        .map(|d| d * RADIUS)
+        .filter(|&p| range.horns(p, 1.0, 1.0, HORNS_ALONE).0 > 0.0)
+        .take(300)
+        .collect();
+    let near: Vec<Vec3> = points
+        .iter()
+        .flat_map(|&p| [Vec3::X, Vec3::Y, Vec3::Z].map(|axis| p + axis * 20.0))
+        .collect();
+    points.extend(near);
+    let horns = |points: Vec<Vec3>| {
+        let range = range.clone();
+        std::thread::spawn(move || {
+            points
+                .iter()
+                .map(|&p| {
+                    let (h, r, w) = range.horns(p, 1.0, 1.0, HORNS_ALONE);
+                    [h.to_bits(), r.to_bits(), w.to_bits()]
+                })
+                .collect::<Vec<_>>()
+        })
+        .join()
+        .expect("the horns are worked out")
+    };
+    let forward = horns(points.clone());
+    let mut backward = horns(points.iter().rev().copied().collect());
+    backward.reverse();
+    assert!(
+        forward
+            .iter()
+            .filter(|h| f32::from_bits(h[0]) > 0.0)
+            .count()
+            >= 300,
+        "too few points on the horns to judge"
+    );
+    assert_eq!(
+        forward, backward,
+        "the horns differ by the order they were asked in"
+    );
+    let both = horns([points.clone(), points].concat());
+    assert_eq!(both[..forward.len()], forward[..]);
+    assert_eq!(
+        both[forward.len()..],
+        forward[..],
+        "asked again, the horns differ"
+    );
+}
+
 /// What a range's rise costs by part, at points within it, on one thread. A measure, not a
 /// check: `cargo test --release -p terra_voxel --lib rise_by_part -- --ignored --nocapture`.
 #[test]
