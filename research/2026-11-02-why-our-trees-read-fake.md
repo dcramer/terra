@@ -168,6 +168,17 @@ D597 and D598 stay Open; the look changes are patches, not on main (`~/.cache/te
 
 The first constants move far more than Enshrouded's, and the shared share falls but does not pass. Looking up under one crown, a few great limbs fill the view, so one limb's turn reads as shared. A second set of constants is queued: trunk a quarter, limbs 0.4 times, cards' flap 1.7 times. Its numbers are in the handoff.
 
+**Sway or buzz** (`wind.ts`'s *second against step*, added after the review: how much further the median moving tile goes in a second than in a tenth; a slow sway is near 10, random jitter 3.2, a buzz under 2; it fails under 5):
+
+| | second against step |
+|---|---|
+| Enshrouded, Springlands at 5:00 and 30:00 | 7.3 and 7.2 |
+| Main (`47819bc98`) | 7.9 |
+| Wind in levels, j1's tuned constants (shared 0.27, r 0.28) | 2.0 |
+| Wind in levels with a twig level, flap 0.2 or limbs and twigs doubled | 2.9 to 3.1 |
+
+The tuned levels pass shared and r but buzz: the cards' flap at 7 to 12 rad/s with a 1.9× harmonic, and the short limbs' and twigs' paces up to 6 rad/s, are faster than half a second a swing, which the review read as an electric fan.
+
 **Frame cost.** Main at `0945c0d92`, RTX 4090, median and 99th percentile: forest-run 8.31 and 10.12 ms; lake-play 9.76 and 13.64 ms. lake-play misses D25 on main already. The first experiment bench did not count: its pivoted pipelines failed to build (the two entry points), so no tree was drawn. The bench of the fixed patch is queued.
 
 **Crown hue** (look.ts, five stills at 15:00 on the clear default day, with each tint's red and blue scaled):
