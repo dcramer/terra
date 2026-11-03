@@ -592,7 +592,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D603](decisions/D603.md) | The start's far view streams in after the loading screen | Tech | Agent | Decided | The loading screen waits for what is near the start… |
 | [D604](decisions/D604.md) | The volumetric fog takes the air's dimming of the sun at a ray's two ends, not at every lit step | Tech | Agent | Decided | Bevy 0.20's `volumetric_fog.wesl`, with an atmosphere on… |
 | [D605](decisions/D605.md) | The mountains' slopes are blended between every so many lattice points | Tech | Agent | Decided | A mountain's ground point takes the two slopes its shape… |
-| [D606](decisions/D606.md) | One table owns the game's threads and each kind of work's share of the cores | Tech | Agent | Leaning | Every thread the game starts takes its count from one… |
+| [D606](decisions/D606.md) | One table owns the game's threads and each kind of work's share of the cores | Tech | Agent | Decided | Every thread the game starts takes its count from one… |
 | [D608](decisions/D608.md) | Work after the load runs in priority classes under a per-frame budget | Tech | Agent | Decided | What streams after the loading screen lifts goes through… |
 
 ## Tools and workflow
