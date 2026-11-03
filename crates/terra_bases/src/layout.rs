@@ -230,9 +230,27 @@ pub fn plugin(app: &mut App) {
             )
                 .chain(),
         )
+        // Building's group (D607), timed where they are added: `launch`, `draw.rs` and its
+        // `upload` are over the size limit (D396), so no system of theirs takes a line more.
         .add_systems(
             Update,
-            (super::draw::aside, launch).chain().in_set(Drawing::Launch),
+            (
+                terra_world::timed!("building", draw::aside),
+                terra_world::timed!("building", launch),
+            )
+                .chain()
+                .in_set(Drawing::Launch),
+        )
+        .add_systems(
+            Update,
+            (
+                terra_world::timed!("building", draw::follow_quality),
+                terra_world::timed!("building", draw::repaint),
+                terra_world::timed!("building", draw::upload),
+                terra_world::timed!("building", draw::stream),
+            )
+                .chain()
+                .in_set(Drawing::Upload),
         )
         .add_systems(Update, collect.in_set(Drawing::Collect))
         .add_systems(Update, track.in_set(terra_world::loading::Track));
@@ -282,7 +300,6 @@ fn launch(
     mut builds: Query<&mut Built>,
     time: Res<Time<Real>>,
 ) {
-    terra_gen::stat_scope!("building");
     let pool = builders();
     jobs.budget_ms =
         (jobs.budget_ms + time.delta_secs() * 1000.0 * DETAIL_CORES).min(DETAIL_BURST_MS);

@@ -9,7 +9,7 @@
 //! near the camera and dropped when the camera leaves them.
 
 use super::arrays::{Arrays, BuildMaterial, Layers};
-use super::layout::{Done, Drawing, Jobs, Outcome, close, reach, suffices};
+use super::layout::{Done, Jobs, Outcome, close, reach, suffices};
 use super::store::{self, Drawn, Section, each};
 use super::views::Level;
 use super::{Build, BuildLook, Built, Site};
@@ -768,12 +768,7 @@ pub fn plugin(app: &mut App) {
     if app.is_plugin_added::<bevy::pbr::PbrPlugin>() {
         app.add_plugins(MaterialPlugin::<GhostMaterial>::default());
     }
-    app.add_systems(
-        Update,
-        (follow_quality, repaint, upload, stream)
-            .chain()
-            .in_set(Drawing::Upload),
-    );
+    // Its systems in `Drawing::Upload` are added by `layout`'s plugin, timed (D607).
 }
 
 /// How many frames a repaint waits for its new texture sets to be resident before it is
@@ -787,7 +782,7 @@ const REPAINT_WAIT_FRAMES: u32 = 30;
 /// again behind it, as for any change, and replace it when they come back, with the new
 /// kind's weathering and how it meets its neighbours. A corner's cube is the one it lies in,
 /// a little in from its face.
-fn repaint(
+pub(super) fn repaint(
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
     look: Res<BuildLook>,
@@ -797,7 +792,6 @@ fn repaint(
     mut meshes: ResMut<Assets<Mesh>>,
     mut waited: Local<u32>,
 ) {
-    terra_gen::stat_scope!("building");
     let Some(mut arrays) = arrays else {
         return;
     };
@@ -962,7 +956,7 @@ const HOLD_FRAMES: u32 = 120;
 /// section shown new beside one still old could show a piece twice or not at all, or a seam,
 /// for a frame. Only sections held `HOLD_FRAMES` are shown as they are, and say so.
 #[allow(clippy::too_many_arguments)]
-fn upload(
+pub(super) fn upload(
     mut commands: Commands,
     mut jobs: ResMut<Jobs>,
     look: Res<BuildLook>,
@@ -980,7 +974,6 @@ fn upload(
         Res<bevy::diagnostic::FrameCount>,
     ),
 ) {
-    terra_gen::stat_scope!("building");
     let all = options.scripted() && !options.bench;
     let now = time.elapsed_secs();
     // A build whose sections wear a texture set not yet resident waits for it, so nothing is
@@ -1678,7 +1671,7 @@ fn show(
 /// (`detail`) waits for the details it lacks that it needs now or will a second ahead, and
 /// those held that it needs neither now nor soon stay while there is room for them.
 #[allow(clippy::too_many_arguments)]
-fn stream(
+pub(super) fn stream(
     mut commands: Commands,
     scale: Res<DetailScale>,
     quality: Res<Quality>,
@@ -1689,7 +1682,6 @@ fn stream(
     time: Res<Time<Real>>,
     mut was: Local<Option<Vec3>>,
 ) {
-    terra_gen::stat_scope!("building");
     let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
         return;
     };
@@ -1777,7 +1769,6 @@ pub fn aside(
     mut site: ResMut<Site>,
     mut builds: Query<&mut Built>,
 ) {
-    terra_gen::stat_scope!("building");
     let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
         return;
     };
@@ -1841,8 +1832,11 @@ pub fn aside(
 
 /// Draws every build again when the quality preset changes, so each detail is seen as far
 /// as the new one has it.
-fn follow_quality(quality: Res<Quality>, mut site: ResMut<Site>, mut builds: Query<&mut Built>) {
-    terra_gen::stat_scope!("building");
+pub(super) fn follow_quality(
+    quality: Res<Quality>,
+    mut site: ResMut<Site>,
+    mut builds: Query<&mut Built>,
+) {
     if !quality.is_changed() || quality.is_added() {
         return;
     }

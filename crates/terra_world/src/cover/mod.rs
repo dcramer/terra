@@ -269,7 +269,8 @@ pub fn plugin(app: &mut App) {
         .world_resource::<Meadow>()
         .add_systems(
             Update,
-            (grow, measure, follow_climate)
+            // `grow` is over the size limit (D396): timed where it is added (D607).
+            (crate::timed!("flora", grow), measure, follow_climate)
                 .chain()
                 .run_if(resource_exists::<CoverRules>),
         )
@@ -344,7 +345,6 @@ fn grow(
     quality: Res<crate::quality::Quality>,
     parting: Option<Res<crate::parting::Parting>>,
 ) {
-    terra_gen::stat_scope!("flora");
     let density = quality.grass();
     let Some(camera) = camera.iter().next() else {
         return;

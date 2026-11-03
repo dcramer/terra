@@ -152,7 +152,8 @@ pub fn plugin(app: &mut App) {
         .init_resource::<asked::Asking>()
         .add_systems(
             Update,
-            (populate, asked::ask)
+            // `populate` is over the size limit (D396): timed where it is added (D607).
+            (terra_world::timed!("creatures", populate), asked::ask)
                 .chain()
                 .run_if(something_grows)
                 .run_if(wild_shown),
@@ -586,7 +587,6 @@ fn populate(
     viewers: Query<(Entity, &Transform), With<Viewpoint>>,
     placed: Query<(&Transform, &creatures::Creature)>,
 ) {
-    terra_gen::stat_scope!("creatures");
     // A town put up after its cells were looked at: looked at again, so its birds sit on its
     // roofs too. Asked every frame, so the change is not missed.
     if around.new_ridges() {

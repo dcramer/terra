@@ -834,7 +834,7 @@ fn draw_children(plant: &mut ChildSpawnerCommands, variant: &Variant, height: f3
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<Foliage>::default())
         .insert_resource(Cards::read())
-        .add_systems(Update, follow_climate);
+        .add_systems(Update, crate::timed!("flora", follow_climate));
 }
 
 /// Every grown plant's material reads the climate's maps again each time they are painted,
@@ -848,7 +848,6 @@ fn follow_climate(
     assets: Res<AssetServer>,
     mut materials: ResMut<Assets<Foliage>>,
 ) {
-    terra_gen::stat_scope!("flora");
     let Some(maps) = maps.filter(|maps| maps.is_changed()) else {
         return;
     };
