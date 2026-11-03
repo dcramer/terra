@@ -223,7 +223,7 @@ pub fn plane(
                         0.5 + 0.5 * noise.sample(Vec3::new(p.x * scale.x, p.y * scale.y, k))
                     };
                     let motifs = match &solved {
-                        None => by_masks(&wants, &n, p),
+                        None => by_masks(&wants, &n, p, settings.seed),
                         Some(solved) => {
                             let grid = Vec2::new(
                                 (place[0] - plane.min[0]) as f32 + fu,
@@ -262,7 +262,7 @@ fn masked(m: &Masks, age: f32, n: &dyn Fn(Vec2, f32) -> f32) -> [f32; 3] {
 
 /// The motif layers as classic procedural weathering draws them: each its mask cut by noise
 /// at a threshold. Crack, loss, moss, streak, lichen, soot.
-fn by_masks(w: &Wants, n: &dyn Fn(Vec2, f32) -> f32, p: Vec2) -> [f32; 6] {
+fn by_masks(w: &Wants, n: &dyn Fn(Vec2, f32) -> f32, p: Vec2, seed: u32) -> [f32; 6] {
     // Ridged noise for cracks, its ridges thin wandering lines.
     let ridge = 1.0 - (2.0 * n(Vec2::splat(2.6), 13.0) - 1.0).abs();
     let crack = smoothstep(0.95, 0.99, ridge) * smoothstep(0.05, 0.5, w.crack);
@@ -281,7 +281,12 @@ fn by_masks(w: &Wants, n: &dyn Fn(Vec2, f32) -> f32, p: Vec2) -> [f32; 6] {
     );
     // Lichen in spots, a few centimetres across.
     let cell = (p * 18.0).floor();
-    let spot = hash::unit(hash::of(&[cell.x as i32 as u32, cell.y as i32 as u32, 23]));
+    let spot = hash::unit(hash::of(&[
+        cell.x as i32 as u32,
+        cell.y as i32 as u32,
+        seed,
+        23,
+    ]));
     let inside = ((p * 18.0).fract() - 0.5).length();
     let lichen = if spot < w.lichen * 0.35 {
         1.0 - smoothstep(0.25, 0.45, inside)

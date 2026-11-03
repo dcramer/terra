@@ -118,7 +118,9 @@ thread_local! {
 pub(super) fn key(seed: u64, parts: impl IntoIterator<Item = u64>) -> u64 {
     parts
         .into_iter()
-        .fold(hash::splitmix64(seed), |k, part| hash::splitmix64(k ^ part))
+        .fold(hash::splitmix64(seed), |state, part| {
+            hash::splitmix64(state ^ part)
+        })
 }
 
 /// The bits of a list of spots, as a key's parts.
