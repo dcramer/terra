@@ -14,10 +14,16 @@
 //   a player standing at the start; looser on the frame, held to no drift.
 // - play: the scene's timed frames after it.
 //
-// A group's budget is its median ms a frame, every thread's time in it summed. A budget is
-// raised by a change that says why, and lowered only by the full run (D414). The first
-// budgets are the 2026-11-03 bench on the worker's RTX 4090 with headroom over its spread,
-// never tuned to pass.
+// A group's budget is its median ms a frame, every thread's time in it summed; a schedule's
+// (the recorder's marks, D576: `PostUpdate`, the render world's `render.Render`, which holds
+// its wait for the GPU) and a GPU pass's the same; a name timed but not budgeted is said and
+// fails nothing. A budget is raised by a change that says why, and lowered only by the full
+// run (D414). The first budgets are the 2026-11-03 bench on the worker (commit 8dd30ef39,
+// RTX 4090, three runs a scene, job 20261103-075814-2a8b): 25% over the worst run's 99th
+// percentile for a group or schedule, over its median for a pass or the render CPU, rounded
+// up to 0.1 ms and at least 0.1, so a group's median fails only past its own spikes; never
+// tuned to pass. They are that machine's: a slower GPU or CPU (the developers' RTX 3080)
+// misses the pass and schedule budgets until a scene budgets by machine.
 (
     // The time to playable every load is held to. D580 is Open (the developers set it):
     // until then this is its recommendation, provisional, said beside each load and failing
@@ -58,6 +64,54 @@
         // 2026-11-02, from 350 s on the worker and 6 min on their 3080).
         "lake-play": (
             load_s: 60.0,
+            settle: (
+                groups: {"building": 0.1, "creatures": 0.5, "flora": 0.3, "folk": 0.1, "terrain": 1.3},
+                schedules: {"Crossing": 0.1, "First": 0.2, "Last": 0.3, "PostUpdate": 9.0, "PreUpdate": 0.5, "RunFixedMainLoop": 1.1, "SpawnScene": 0.1, "StateTransition": 0.2, "Update": 2.1, "render.First": 0.1, "render.Render": 9.9},
+            ),
+            play: (
+                render_cpu_ms: 0.7,
+                groups: {"building": 0.1, "creatures": 0.6, "flora": 0.4, "folk": 0.1, "terrain": 1.1},
+                schedules: {"Crossing": 0.1, "First": 0.2, "Last": 0.3, "PostUpdate": 10.2, "PreUpdate": 0.5, "RunFixedMainLoop": 1.4, "SpawnScene": 0.1, "StateTransition": 0.1, "Update": 1.7, "render.First": 0.1, "render.Render": 12.5},
+                gpu: {"main_opaque_pass_3d": 6.1, "early prepass": 1.0, "uniform_allocation": 0.6, "bin_unpacking": 0.5, "volumetric_lighting": 0.5, "main_transmissive_pass_3d": 0.4, "per_view_shadow_pass": 0.7, "atmosphere_luts": 0.3, "ssao": 0.2, "clouds": 0.2},
+            ),
+        ),
+        // The forest's creatures spike: their 99th is nine times their median (0.30 of
+        // 2.6-3.4 ms), so their budget is loose on the median.
+        "forest-run": (
+            settle: (
+                groups: {"building": 0.1, "creatures": 3.5, "flora": 0.3, "folk": 0.1, "terrain": 0.1},
+                schedules: {"Crossing": 0.1, "First": 0.2, "Last": 0.2, "PostUpdate": 7.5, "PreUpdate": 0.7, "RunFixedMainLoop": 2.7, "SpawnScene": 0.1, "StateTransition": 0.1, "Update": 3.5, "render.First": 0.1, "render.Render": 9.8},
+            ),
+            play: (
+                render_cpu_ms: 0.7,
+                groups: {"building": 0.1, "creatures": 4.2, "flora": 0.3, "folk": 0.1, "terrain": 0.1},
+                schedules: {"Crossing": 0.1, "First": 0.2, "Last": 0.3, "PostUpdate": 8.6, "PreUpdate": 0.7, "RunFixedMainLoop": 3.5, "SpawnScene": 0.1, "StateTransition": 0.2, "Update": 4.0, "render.First": 0.1, "render.Render": 11.2},
+                gpu: {"main_opaque_pass_3d": 3.6, "early prepass": 2.0, "per_view_shadow_pass": 1.7, "uniform_allocation": 0.8, "bin_unpacking": 0.7, "volumetric_lighting": 0.5, "atmosphere_luts": 0.3, "ssao": 0.2, "clouds": 0.2},
+            ),
+        ),
+        "town-dusk": (
+            settle: (
+                groups: {"building": 0.3, "creatures": 0.4, "flora": 0.3, "folk": 0.5, "terrain": 1.2},
+                schedules: {"Crossing": 0.1, "First": 0.2, "Last": 0.3, "PostUpdate": 9.6, "PreUpdate": 0.5, "RunFixedMainLoop": 2.1, "SpawnScene": 0.1, "StateTransition": 0.1, "Update": 2.0, "render.First": 0.1, "render.Render": 11.7},
+            ),
+            play: (
+                render_cpu_ms: 1.1,
+                groups: {"building": 0.4, "creatures": 0.3, "flora": 0.5, "folk": 0.4, "terrain": 1.2},
+                schedules: {"Crossing": 0.1, "First": 0.2, "Last": 0.3, "PostUpdate": 10.9, "PreUpdate": 0.8, "RunFixedMainLoop": 2.4, "SpawnScene": 0.2, "StateTransition": 0.2, "Update": 1.9, "render.First": 0.1, "render.Render": 13.2},
+                gpu: {"main_opaque_pass_3d": 2.3, "per_view_shadow_pass": 1.4, "uniform_allocation": 0.8, "volumetric_lighting": 0.8, "bin_unpacking": 0.7, "early prepass": 0.7, "clouds": 0.5, "main_transparent_pass_3d": 0.4, "atmosphere_luts": 0.3, "ssao": 0.2},
+            ),
+        ),
+        "castle": (
+            settle: (
+                groups: {"building": 0.1, "creatures": 0.1, "flora": 0.1, "folk": 0.1, "terrain": 0.1},
+                schedules: {"Crossing": 0.1, "First": 0.1, "Last": 0.2, "PostUpdate": 3.0, "PreUpdate": 0.3, "RunFixedMainLoop": 0.5, "SpawnScene": 0.1, "StateTransition": 0.1, "Update": 0.7, "render.First": 0.1, "render.Render": 4.7},
+            ),
+            play: (
+                render_cpu_ms: 0.3,
+                groups: {"building": 0.1, "creatures": 0.1, "flora": 0.1, "folk": 0.1, "terrain": 0.1},
+                schedules: {"Crossing": 0.1, "First": 0.2, "Last": 0.3, "PostUpdate": 3.1, "PreUpdate": 0.3, "RunFixedMainLoop": 0.5, "SpawnScene": 0.1, "StateTransition": 0.1, "Update": 0.7, "render.First": 0.1, "render.Render": 6.6},
+                gpu: {"main_opaque_pass_3d": 0.9, "per_view_shadow_pass": 0.7, "volumetric_lighting": 0.4, "atmosphere_luts": 0.3, "clouds": 0.2, "ssao": 0.2, "early prepass": 0.2, "uniform_allocation": 0.2},
+            ),
         ),
         // Standing ten minutes with its clock held, its GPU held flat: the developer's lake run
         // of 2026-11-02 doubled its GPU time in four minutes (a card clocked down while the
