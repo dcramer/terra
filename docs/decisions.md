@@ -476,7 +476,7 @@ The look, models, bodies and gear, textures and audio.
 | [D585](decisions/D585.md) | A gait's clip is shown within a tenth of as made at its speed; the game's speeds are fitted to the clips | Tech | Agent | Decided | Every gait (walk, jog, sprint) is played at the speed… |
 | [D588](decisions/D588.md) | Moves with a start and an end are keyed from a generated pose sheet, on our own skeleton | Design | Developers | Decided | Moves with a clear start and end that no source does… |
 | [D593](decisions/D593.md) | The base body's arms and legs are stretched in the character pipeline | Design | Agent | Leaning | The base body's arms are lengthened to a 1.86 m reach… |
-| [D597](decisions/D597.md) | Trees sway as a hierarchy: trunk, each branch about its own root with its own phase, leaf clusters on their stalks | Tech | — | Open | Open: whether to replace the one bend every vertex of a… |
+| [D597](decisions/D597.md) | Trees sway as a hierarchy: trunk, each branch about its own root with its own phase, leaf clusters on their stalks | Tech | Developers | Decided | Every tree the game grows sways in levels, as SpeedTree… |
 | [D599](decisions/D599.md) | Characters are built on Quaternius's bodies and outfits, in our paint | Design | Developers | Decided | Terra's people are built on Quaternius's base bodies… |
 | [D600](decisions/D600.md) | What shows in an empty clothing slot on Quaternius's bodies | Design | Developers | Decided | **The swap.** Each clothing slot always holds one piece… |
 
