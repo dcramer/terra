@@ -66,7 +66,21 @@ export type Bodies = {
   creatures?: Creature[];
   /** A designed morph's model where it is not art/characters/<base>/morphs/<name>/model.glb (make_morph.sh --design); not in bodies.json. */
   designs?: Record<string, string>;
+  /** Figures of Quaternius's dressed as made, each the game's `assets/models/character/<name>.glb`. */
+  dressed?: Dressed[];
 };
+
+/** A figure of Quaternius's dressed as made (D599, D602): their head-only body and outfit
+ * pieces (`.gltf` under art/characters/quaternius/), joined on the head's skeleton. */
+export type Dressed = { name: string; pieces: string[] };
+
+/** A .gltf and the files it names beside it (its buffers and images), which a step reading it reads. */
+export function gltfFiles(path: string, root = ROOT): string[] {
+  const g = JSON.parse(readFileSync(join(root, path), "utf8")) as { buffers?: { uri?: string }[]; images?: { uri?: string }[] };
+  const dir = path.slice(0, path.lastIndexOf("/"));
+  const named = [...(g.buffers ?? []), ...(g.images ?? [])].flatMap((x) => (x.uri && !x.uri.startsWith("data:") ? [`${dir}/${decodeURIComponent(x.uri)}`] : []));
+  return [path, ...named];
+}
 
 /** A creature: `art/characters/<name>/rigged.glb` converted as a creature's at its height and
  * triangle budget, exported with the game's clips and its set's (`art/animation/sets/<set>`)
@@ -249,6 +263,26 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
       "node $here/markers.ts assets/models/character/fight.glb   # each clip's foot-down markers (D455)",
     ].join("\n"),
   });
+  // Each figure of theirs dressed as made (bodies.json `dressed`): its pieces joined on the
+  // head's skeleton and exported with the fight's clips sampled on it, held as the fight's step
+  // holds them (a hold on a bone it lacks left as the clip has it, hold.py), the same passes
+  // after, then proved theirs piece for piece (intact.ts, D599).
+  const after = ["clear.ts", "wrist_limit.ts", "mirror.ts", "additive.ts", "markers.ts"];
+  for (const d of b.dressed ?? []) {
+    const game = `assets/models/character/${d.name}.glb`;
+    steps.push({
+      name: `dressed:${d.name}`,
+      section: 5,
+      needs: ["base", "fight"],
+      inputs: [...py("export_character.py", "hold.py", "intact.ts", ...after), `${fight}.json`, ...new Set(d.pieces.flatMap((p) => gltfFiles(p)))],
+      outputs: [game],
+      run: [
+        blender("export_character.py", `${d.pieces.join("+")} ${game} "--clips=$out/fight-mannequin.glb" --list=${fight}.json --textures=2048`, "^(SHIELD|HOLD|EXPORTED)|Error"),
+        ...after.map((t) => `node $here/${t} ${game}`),
+        `node $here/intact.ts ${game}   # every piece of theirs as made (D599)`,
+      ].join("\n"),
+    });
+  }
   // The creatures (bodies.json `creatures`): each converted from its own rig as a creature's
   // (its hands and feet kept, its triangle budget), checked, its set's takes made onto a copy of
   // the mannequin beside the game's clips, exported with both, and its colour laid on. Windows'

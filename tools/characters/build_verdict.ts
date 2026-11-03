@@ -46,6 +46,13 @@ export function verdict(log: string, rig: string | undefined, status = 0): strin
   return out;
 }
 
+/** `build.ts --step`'s verdict on the steps it ran: every failure they printed, and their exit; not the full build's count of looks. */
+export function stepVerdict(log: string, status = 0): string[] {
+  const out = [...new Set(log.split("\n").filter((l) => FAILED.some((re) => re.test(l))).map((l) => l.slice(0, 160)))];
+  if (status !== 0) out.push(`a step failed (exit ${status}): read the log's last lines`);
+  return out;
+}
+
 /** build_item.sh's verdict on its item's steps' log: the look made, checked on every body and none over the bar, its game file written. */
 export function itemVerdict(log: string, bodies: number, status = 0): string[] {
   const lines = log.split("\n");

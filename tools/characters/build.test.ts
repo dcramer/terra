@@ -140,9 +140,17 @@ test("the character build's steps: every need a step, every input there, each lo
   // The fight's clips are built from its list, its takes and its holds' shield targets.
   const fight = steps.find((s) => s.outputs.includes("assets/models/character/fight.glb"))!;
   assert.ok(["art/animation/sets/fight.json", "art/animation/sets/fight", "tools/characters/hold.py", "art/animation/shield_targets.json"].every((p) => closure(fight.inputs).includes(p)));
-  // Only a set's list is held (export_character.py --list): a change to the holds reaches the fight's step alone.
+  // Only a set's list is held (export_character.py --list): a change to the holds reaches the
+  // fight's step and the figures dressed with its clips alone.
   const holds = steps.filter((s) => closure(s.inputs).includes("tools/characters/hold.py")).map((s) => s.name);
-  assert.deepEqual(holds, [fight.name]);
+  assert.deepEqual(holds, [fight.name, ...(bodies.dressed ?? []).map((d) => `dressed:${d.name}`)]);
+  // A dressed figure reads each piece of theirs with the buffers and textures it names, and the fight's clips.
+  for (const d of bodies.dressed ?? []) {
+    const s = steps.find((t) => t.name === `dressed:${d.name}`)!;
+    assert.ok(s.needs.includes(fight.name) && s.outputs.includes(`assets/models/character/${d.name}.glb`));
+    for (const p of d.pieces) assert.ok(s.inputs.includes(p) && s.inputs.includes(p.replace(/\.gltf$/, ".bin")), `${s.name} reads ${p} and its buffer`);
+  }
+  assert.ok(steps.find((t) => t.name === "dressed:male-ranger")!.inputs.includes("art/characters/quaternius/modular-outfits-fantasy/T_Ranger_BaseColor.png"));
   // Every Blender step reads the mannequin (look.FIGURE), so the step cache keys hold it.
   assert.ok(steps.filter((s) => s.name.startsWith("fit:")).every((s) => closure(s.inputs).includes("assets/models/character/mannequin.glb")));
 });

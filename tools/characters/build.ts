@@ -8,6 +8,7 @@
 //
 //   node tools/characters/build.ts [--jobs N]     # every step (build_bodies.sh)
 //   node tools/characters/build.ts --item ITEM    # what ITEM's game file needs (build_item.sh)
+//   node tools/characters/build.ts --step S1,S2   # S1, S2 and what they need (one game file)
 //   node tools/characters/build.ts --plan         # each step's state, running nothing
 //   node tools/characters/build.ts --again S1,S2  # S1 and S2 run a second time: the same bytes?
 //
@@ -27,7 +28,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, openSync, closeSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { FAILED, itemVerdict, verdict } from "./build_verdict.ts";
+import { FAILED, itemVerdict, stepVerdict, verdict } from "./build_verdict.ts";
 import { glbDiff } from "./glb_diff.ts";
 import { bodiesData, buildSteps, builtLine, closure, gearData, morphNames, SECTIONS, type Step } from "./build_steps.ts";
 
@@ -520,12 +521,16 @@ async function main() {
     console.log(`✓ ${item} pass: made, carried onto ${1 + morphNames(bodies).length} bodies and checked, assets/models/gear/${item}.glb written (${rel})`);
     return;
   }
-  const ok = await b.build(undefined, jobs, plan);
+  // --step S1,S2: those steps and what they need, logged apart, failing on what they print.
+  const only = flag("--step")?.split(",");
+  const ok = await b.build(only, jobs, plan);
   if (plan) return;
-  const log = join(out, "build.log");
-  writeFileSync(log, b.joinedLog(steps.map((s) => s.name)) + (ok ? `${builtLine(bodies, items)}\n` : ""));
+  const log = join(out, only ? "build-step.log" : "build.log");
+  const ran = only ? steps.filter((s) => b.outcomes.has(s.name)) : steps;
+  writeFileSync(log, b.joinedLog(ran.map((s) => s.name)) + (ok && !only ? `${builtLine(bodies, items)}\n` : ""));
   const rig = join(out, `rig-check-${base}.json`);
-  const failed = verdict(readFileSync(log, "utf8"), existsSync(rig) ? readFileSync(rig, "utf8") : undefined, ok ? 0 : 1);
+  const text = readFileSync(log, "utf8");
+  const failed = only ? stepVerdict(text, ok ? 0 : 1) : verdict(text, existsSync(rig) ? readFileSync(rig, "utf8") : undefined, ok ? 0 : 1);
   console.log(failed.length ? `BUILD fail\n${failed.join("\n")}` : "BUILD pass");
   process.exit(failed.length ? 1 : 0);
 }
