@@ -10,6 +10,8 @@ import bevy_pbr::render::{
     mesh_view_bindings::view,
     view_transformations::position_world_to_clip,
 };
+// The gusts (D255) and the forest's shared sway (D597), as the far forest's cards have them.
+import super::gusts::{gusts, trunk_lean, wave};
 
 @if(PREPASS_PIPELINE)
 import bevy_pbr::prepass::io::{Vertex, VertexOutput, decompress_vertex};
@@ -193,21 +195,6 @@ fn hash(p: vec3<f32>) -> f32 {
     return fract((r.x + r.y) * r.z);
 }
 
-// Gusts (D255): one wind for the grass, the bushes and the trees, as Ghost of Tsushima has it.
-// Its strength rises and falls as fronts roll downwind at about 6 m/s, waves 40 and 90 m long
-// (a gust every 7 to 15 s), so they never line up the same way twice, sharpened so calm spells
-// are still and gusts come through as fronts; the whole breathes slowly. From under a half to
-// one and a half times the old steady wind, about the same on average: at two and a half, as
-// it was, a gust swung an oak's crown a metre (D282).
-fn gusts(downwind: f32, crosswind: f32, time: f32) -> f32 {
-    let front = downwind - time * 6.0;
-    let a = sin(front * 0.157 + crosswind * 0.05);
-    let b = sin(front * 0.07 - crosswind * 0.083 + 1.7);
-    let g = 0.5 + 0.5 * (0.55 * a + 0.45 * b);
-    let breath = 0.8 + 0.2 * sin(time * 0.13 + 0.4);
-    return (0.45 + 1.1 * g * g * g) * breath;
-}
-
 fn sway(world: vec3<f32>, weights: vec2<f32>, time: f32) -> vec3<f32> {
     // The world's wind, with how much this plant sways in it; its own way until there is one.
     let blowing = parting.wind.w >= 0.0;
@@ -235,52 +222,46 @@ fn flutter(world: vec3<f32>, weights: vec2<f32>, strength: f32, time: f32) -> ve
     ) * weights.y * 0.015 * (0.5 + 0.5 * strength);
 }
 
-// Wind in levels (D597, an experiment), for a grown tree whose vertices carry their great
-// limb's pivot (lush/pivots.rs), as SpeedTree's, Crysis's and Unreal's Pivot Painter 2's move
+// Wind in levels (D597), for a grown tree whose vertices carry their great limb's pivot
+// (terra_world's grown/pivots.rs), as SpeedTree's, Crysis's and Unreal's Pivot Painter 2's move
 // theirs: each level about its own pivot with its own phase, the offsets added (Pivot
-// Painter's way, cheaper than chaining the turns). Returns where the vertex goes.
+// Painter's way, cheaper than chaining the turns). Returns where the vertex goes. The same for
+// every viewer: nothing here depends on the eye, so two players see one tree alike.
 // - The trunk leans downwind by its height squared and rocks a little across, about its foot
-//   and kept at its length (Crysis's main bending, GPU Gems 3 ch. 16), its phase the tree's:
-//   barely, as Enshrouded's trunks stand still.
-// - Each great limb turns about its root, pushed downwind and bobbing, its phase its own
-//   (SpeedTree's Independence), quicker the shorter it is, bending more toward its tip.
+//   and kept at its length (Crysis's main bending, GPU Gems 3 ch. 16), by the forest's shared
+//   wave (gusts.wesl's `wave`) and a rocking of its own; its top moves by a share of its
+//   height (gusts.wesl's `trunk_lean`), so a tall crown 10 to 25 m off moves by its metres, not a bush's.
+// - Each great limb turns about its root, pushed downwind and bobbing, part by the shared
+//   wave at its root (LIMB_WAVE) and part by a phase its own (SpeedTree's Independence),
+//   quicker the shorter it is, bending more toward its tip.
 // - Each leaf card flaps about its middle with a phase and a pace of its own (Crysis's
 //   per-leaf phase); a phase taken per vertex, not per card, made D282's jelly.
 // `packed` is the limb's length in decimetres plus its phase, or -1 on the trunk; `middle`'s
 // w is 1 where the card's middle is known.
 // How far each level turns, radians at a gust's full strength (D597's experiment, tuned
 // against Enshrouded's still-camera numbers by tools/sandbox/wind.ts).
-const LIMB_PUSH: f32 = 0.012;
+const LIMB_PUSH: f32 = 0.02;
 const LIMB_BOB: f32 = 0.008;
 const TWIG_NOD: f32 = 0.05;
 const TWIG_SWING: f32 = 0.035;
 const CARD_FLAP: f32 = 0.3;
-// How much of the trunk's lean is steady downwind rather than its own rocking.
-const LEAN_STEADY: f32 = 0.3;
-// How quickly each level swings, radians a second. Every level stays under about 3.5, a
-// period near two seconds, so a crown sways rather than buzzes: tools/sandbox/wind.ts's second
-// against step falls under 5 once any level's motion goes much faster (at 7 to 12 rad/s the
-// cards made 2.0, Enshrouded's still-camera Springlands 7.2).
+// How much of a great limb's push follows the shared wave, the rest its own phase.
+const LIMB_WAVE: f32 = 0.3;
+// How quickly each level swings, radians a second. The limbs and twigs stay under about 3.5,
+// a period near two seconds, so a crown sways rather than buzzes: tools/sandbox/wind.ts's
+// second against step falls under 5 once much of the motion goes faster (at 7 to 12 rad/s the
+// cards made 2.0, Enshrouded's still-camera Springlands 7.2). The cards flutter a little
+// quicker, each its own, so neighbouring sprays part while the trunks' shared wave sways a
+// region together. Quicker and wider still (5 rad/s, 0.45) the numbers came nearer
+// Enshrouded's (neighbour r 0.44 on the lake's pines against 0.55 here, 0.36 to 0.43), but the
+// lush crowns' leaves flicked all over at a tenth of a second where Enshrouded's stand nearly
+// still (the harsh judge, veg-wind j5): the eye wins.
 const LIMB_PACE: f32 = 1.6;
 const TWIG_PACE: f32 = 1.3;
 const PACE_MOST: f32 = 2.8;
-const CARD_PACE: f32 = 1.5;
+const CARD_PACE: f32 = 3.5;
 const CARD_PACE_SPREAD: f32 = 1.0;
 const CARD_HARMONIC: f32 = 1.3;
-// A crown far off moves more, as the metres of a near one's motion shrink to nothing a few
-// dozen metres away (the wind round's judge: the far crowns barely move), and one overhead
-// less, as a few centimetres there fill the view: every level of a tree turns by its distance
-// from the eye over FAR_FROM, held between NEAR_LEAST and FAR_MOST (its limbs, twigs and
-// cards by FAR_LIMBS of the change, the cards between CARD_LEAST and CARD_MOST, since their
-// own flap is what keeps neighbouring patches apart). LOD wind exaggeration, so a crown reads
-// as stirring by about the same on the screen near and far.
-const FAR_FROM: f32 = 8.0;
-const FAR_MOST: f32 = 6.0;
-const NEAR_LEAST: f32 = 0.4;
-const FAR_LIMBS: f32 = 1.0;
-const CARD_LEAST: f32 = 0.8;
-const CARD_MOST: f32 = 1.5;
-
 fn levels(world: vec3<f32>, foot: vec3<f32>, pivot: vec3<f32>, packed: f32, twig: vec4<f32>, middle: vec4<f32>, weights: vec2<f32>, time: f32) -> vec3<f32> {
     let blowing = parting.wind.w >= 0.0;
     let direction = select(wind.direction, parting.wind.xyz, blowing);
@@ -289,12 +270,9 @@ fn levels(world: vec3<f32>, foot: vec3<f32>, pivot: vec3<f32>, packed: f32, twig
     // The gusts' fronts as they reach the tree's foot: one strength a tree.
     let strength = gusts(dot(foot, direction), dot(foot, across), time);
     let phase = hash(foot) * 6.2832;
-    let lean = (LEAN_STEADY + (1.0 - LEAN_STEADY) * sin(time * (0.6 + 0.2 * hash(foot + 7.0)) + phase)) * strength;
-    let rock = 0.3 * sin(time * 0.53 + phase * 1.3);
+    let lean = trunk_lean(foot, direction, across, time);
     let reach = world - foot;
-    let gain = clamp(distance(foot, view.lod_view_world_position) / FAR_FROM, NEAR_LEAST, FAR_MOST);
-    let limbs = 1.0 + (gain - 1.0) * FAR_LIMBS;
-    var moved = world + (direction * lean + across * rock) * weights.x * 0.015 * gain * scale;
+    var moved = world + (direction * lean.x + across * lean.y) * weights.x * length(reach) * scale;
     if dot(reach, reach) > 1.0e-4 {
         moved = foot + normalize(moved - foot) * length(reach);
     }
@@ -303,11 +281,15 @@ fn levels(world: vec3<f32>, foot: vec3<f32>, pivot: vec3<f32>, packed: f32, twig
         let own = fract(packed) * 6.2832 + phase;
         let pace = min(LIMB_PACE / sqrt(span), PACE_MOST);
         let r = world - pivot;
-        let push = strength * (0.55 + 0.45 * sin(time * pace + own));
+        // The gust and the shared wave as they reach the limb's root, so a front is seen to
+        // cross a wide crown.
+        let at_root = wave(dot(pivot, direction), dot(pivot, across), time);
+        let swing = LIMB_WAVE * at_root + (1.0 - LIMB_WAVE) * sin(time * pace + own);
+        let push = gusts(dot(pivot, direction), dot(pivot, across), time) * (0.55 + 0.45 * swing);
         let bob = (0.4 + 0.6 * strength) * sin(time * pace * 1.21 + own * 1.9 + 1.0);
         let outward = normalize(cross(vec3<f32>(r.x, 0.0, r.z), vec3<f32>(0.0, 1.0, 0.0)) + vec3<f32>(0.0, 0.0, 1.0e-5));
         let bends = min(length(r) / span, 1.5);
-        moved += (cross(across, r) * push * LIMB_PUSH + cross(outward, r) * bob * LIMB_BOB) * bends * limbs * scale;
+        moved += (cross(across, r) * push * LIMB_PUSH + cross(outward, r) * bob * LIMB_BOB) * bends * scale;
     }
     // The twig's level: each clump of leaves turns about where it sits on its limb, nodding
     // downwind and swinging round its limb, its phase its own, so a great limb's sprays stir
@@ -320,14 +302,14 @@ fn levels(world: vec3<f32>, foot: vec3<f32>, pivot: vec3<f32>, packed: f32, twig
         let r = world - twig.xyz;
         let nod = (0.35 + 0.65 * strength) * (0.65 * sin(time * pace + own) + 0.35 * sin(time * pace * 1.45 + own * 1.7));
         let swing = (0.35 + 0.65 * strength) * sin(time * pace * 0.83 + own * 2.9 + 2.0);
-        moved += (cross(across, r) * nod * TWIG_NOD + cross(vec3<f32>(0.0, 1.0, 0.0), r) * swing * TWIG_SWING) * limbs * scale;
+        moved += (cross(across, r) * nod * TWIG_NOD + cross(vec3<f32>(0.0, 1.0, 0.0), r) * swing * TWIG_SWING) * scale;
     }
     if middle.w > 0.5 && CARD_FLAP > 0.0 {
         let c = world - middle.xyz;
         let own = hash(middle.xyz * 1.7) * 6.2832;
         let pace = CARD_PACE + CARD_PACE_SPREAD * hash(middle.xyz * 3.1 + 11.0);
         let flap = 0.7 * sin(time * pace + own) + 0.3 * sin(time * pace * CARD_HARMONIC + own * 2.3);
-        moved += cross(across, c) * flap * weights.y * CARD_FLAP * clamp(limbs, CARD_LEAST, CARD_MOST) * (0.5 + 0.5 * strength) * scale;
+        moved += cross(across, c) * flap * weights.y * CARD_FLAP * (0.5 + 0.5 * strength) * scale;
     } else {
         moved += flutter(world, weights, strength, time) * scale;
     }
@@ -347,8 +329,8 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     return foliage_vertex(vertex_in, vec4<f32>(0.0, 0.0, 0.0, -1.0), vec4<f32>(0.0, 0.0, 0.0, -1.0), false);
 }
 
-// A grown tree's mesh carrying its limbs' and clumps' pivots (lush/pivots.rs, D597), which its
-// material specialises to read at locations 15 and 14.
+// A grown tree's mesh carrying its limbs' and clumps' pivots (terra_world's grown/pivots.rs,
+// D597), which its material specialises to read at locations 15 and 14.
 @vertex
 fn vertex_pivoted(vertex_in: Vertex, @location(15) pivot: vec4<f32>, @location(14) twig: vec4<f32>) -> VertexOutput {
     return foliage_vertex(vertex_in, pivot, twig, true);
