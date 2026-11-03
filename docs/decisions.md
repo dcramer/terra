@@ -597,6 +597,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D608](decisions/D608.md) | Work after the load runs in priority classes under a per-frame budget | Tech | Agent | Decided | What streams after the loading screen lifts goes through… |
 | [D612](decisions/D612.md) | A sun's cascades measure levels of detail from their own camera, and shadows' LOD origin is the main camera | Tech | Agent | Decided | Bevy 0.20's `prepare_view_uniforms` set a directional… |
 | [D613](decisions/D613.md) | Bin unpacking and uniform allocation run once a view, phase and mesh class, not once a batch set | Tech | Agent | Decided | Bevy 0.20's GPU preprocessing ran its bookkeeping… |
+| [D614](decisions/D614.md) | The air's transmittance and multiscattering tables are drawn only when the air changes | Tech | Agent | Decided | Bevy 0.20 draws all four of the atmosphere's lookup… |
 
 ## Tools and workflow
 

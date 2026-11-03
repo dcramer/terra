@@ -37,6 +37,8 @@
 //! [Unreal Engine Implementation]: https://github.com/sebh/UnrealEngineSkyAtmosphere
 
 mod environment;
+// Terra's patch (D614).
+pub mod kept_luts;
 mod node;
 pub mod resources;
 
@@ -184,6 +186,9 @@ impl Plugin for AtmospherePlugin {
                     prepare_atmosphere_probe_bind_groups.in_set(RenderSystems::PrepareBindGroups),
                     prepare_atmosphere_transforms.in_set(RenderSystems::PrepareResources),
                     prepare_atmosphere_bind_groups.in_set(RenderSystems::PrepareBindGroups),
+                    // Terra's patch (D614).
+                    kept_luts::prepare_kept_atmosphere_luts
+                        .in_set(RenderSystems::PrepareBindGroups),
                     prepare_atmosphere_buffers.in_set(RenderSystems::PrepareResources),
                 ),
             )

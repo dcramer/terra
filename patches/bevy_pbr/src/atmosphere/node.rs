@@ -13,6 +13,7 @@ use bevy_render::{
 use crate::{resources::GpuAtmosphere, ViewLightsUniformOffset};
 
 use super::{
+    kept_luts::KeptAtmosphereLuts,
     resources::{
         AtmosphereBindGroups, AtmosphereLutPipelines, AtmosphereTransformsOffset,
         RenderSkyPipelineId,
@@ -29,6 +30,7 @@ pub fn atmosphere_luts(
         &AtmosphereTransformsOffset,
         &ViewUniformOffset,
         &ViewLightsUniformOffset,
+        Option<&KeptAtmosphereLuts>,
     )>,
     pipelines: Res<AtmosphereLutPipelines>,
     pipeline_cache: Res<PipelineCache>,
@@ -42,7 +44,11 @@ pub fn atmosphere_luts(
         atmosphere_transforms_offset,
         view_uniforms_offset,
         lights_uniforms_offset,
+        kept,
     ) = view.into_inner();
+    // Terra's patch (D614): the transmittance and multiscattering LUTs already hold this
+    // frame's when their inputs are unchanged.
+    let kept = kept.is_some_and(|k| k.0);
 
     let (
         Some(transmittance_lut_pipeline),
@@ -77,37 +83,39 @@ pub fn atmosphere_luts(
         compute_pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
     }
 
-    // Transmittance LUT
+    if !kept {
+        // Transmittance LUT
 
-    luts_pass.set_pipeline(transmittance_lut_pipeline);
-    luts_pass.set_bind_group(
-        0,
-        &bind_groups.transmittance_lut,
-        &[
-            atmosphere_uniforms_offset.index(),
-            settings_uniforms_offset.index(),
-        ],
-    );
+        luts_pass.set_pipeline(transmittance_lut_pipeline);
+        luts_pass.set_bind_group(
+            0,
+            &bind_groups.transmittance_lut,
+            &[
+                atmosphere_uniforms_offset.index(),
+                settings_uniforms_offset.index(),
+            ],
+        );
 
-    dispatch_2d(&mut luts_pass, settings.transmittance_lut_size);
+        dispatch_2d(&mut luts_pass, settings.transmittance_lut_size);
 
-    // Multiscattering LUT
+        // Multiscattering LUT
 
-    luts_pass.set_pipeline(multiscattering_lut_pipeline);
-    luts_pass.set_bind_group(
-        0,
-        &bind_groups.multiscattering_lut,
-        &[
-            atmosphere_uniforms_offset.index(),
-            settings_uniforms_offset.index(),
-        ],
-    );
+        luts_pass.set_pipeline(multiscattering_lut_pipeline);
+        luts_pass.set_bind_group(
+            0,
+            &bind_groups.multiscattering_lut,
+            &[
+                atmosphere_uniforms_offset.index(),
+                settings_uniforms_offset.index(),
+            ],
+        );
 
-    luts_pass.dispatch_workgroups(
-        settings.multiscattering_lut_size.x,
-        settings.multiscattering_lut_size.y,
-        1,
-    );
+        luts_pass.dispatch_workgroups(
+            settings.multiscattering_lut_size.x,
+            settings.multiscattering_lut_size.y,
+            1,
+        );
+    }
 
     // Sky View LUT
 
