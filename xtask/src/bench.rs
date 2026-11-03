@@ -268,7 +268,9 @@ fn combine(runs: &[Timing]) -> Option<Timing> {
     })
 }
 
-/// The last recorded median for a scene on the same GPU, size and build, and its commit.
+/// The last recorded median for a scene on the same GPU, size and build, and its commit; a
+/// result taken on a busy machine (`busy` 1, D185) is no baseline, as the perf row judges it
+/// nowhere either (D610). Rows from before the column count as quiet.
 fn last_recorded(csv: &str, timing: &Timing, build: &str, scene: &str) -> Option<(f32, String)> {
     csv.lines()
         .skip(1)
@@ -277,7 +279,8 @@ fn last_recorded(csv: &str, timing: &Timing, build: &str, scene: &str) -> Option
             let [_, commit, gpu, size, built, named, median, ..] = cells[..] else {
                 return None;
             };
-            (gpu == timing.gpu && size == timing.size && built == build && named == scene)
+            let busy = cells.get(15) == Some(&"1");
+            (!busy && gpu == timing.gpu && size == timing.size && built == build && named == scene)
                 .then(|| Some((median.parse().ok()?, commit.to_string())))?
         })
         .last()

@@ -125,6 +125,21 @@ fn compares_with_the_last_result_on_the_same_kind_of_run() {
 }
 
 #[test]
+fn a_result_taken_on_a_busy_machine_is_no_baseline() {
+    let csv = format!(
+        "{BENCHMARKS_HEADER}\n\
+             2026-11-03,aaa,RTX 4090,1920x1080 offscreen,release,forest,6.00,7,8,3,0,0,0,,0,0\n\
+             2026-11-03,bbb,RTX 4090,1920x1080 offscreen,release,forest,9.00,12,40,3,0,20,0,,0,1\n"
+    );
+    let mut now = timing(6.0, 7.0, 8.0);
+    now.gpu = "RTX 4090".to_string();
+    assert_eq!(
+        last_recorded(&csv, &now, "release", "forest"),
+        Some((6.0, "aaa".to_string()))
+    );
+}
+
+#[test]
 fn the_integrated_gpu_is_held_to_its_median_not_the_budget() {
     let line = "SANDBOX drawn at the low preset on a IntegratedGpu GPU";
     assert_eq!(
