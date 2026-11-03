@@ -1,3 +1,5 @@
+use core::sync::atomic::Ordering;
+
 use bevy_camera::{MainPassResolutionOverride, Viewport};
 use bevy_ecs::system::Res;
 use bevy_math::{UVec2, Vec3Swizzles};
@@ -14,6 +16,7 @@ use crate::{resources::GpuAtmosphere, ViewLightsUniformOffset};
 
 use super::{
     kept_luts::KeptAtmosphereLuts,
+    spread_aerial::{spread_workgroups, SPREAD_AERIAL_VIEW_LUT},
     resources::{
         AtmosphereBindGroups, AtmosphereLutPipelines, AtmosphereTransformsOffset,
         RenderSkyPipelineId,
@@ -136,7 +139,12 @@ pub fn atmosphere_luts(
 
     // Aerial View LUT
 
-    luts_pass.set_pipeline(aerial_view_lut_pipeline);
+    // Terra's patch (D615): a workgroup a column once its pipeline is compiled, the same texels.
+    let spread = SPREAD_AERIAL_VIEW_LUT
+        .load(Ordering::Relaxed)
+        .then(|| pipeline_cache.get_compute_pipeline(pipelines.aerial_view_lut_spread))
+        .flatten();
+    luts_pass.set_pipeline(spread.unwrap_or(aerial_view_lut_pipeline));
     luts_pass.set_bind_group(
         0,
         &bind_groups.aerial_view_lut,
@@ -148,7 +156,12 @@ pub fn atmosphere_luts(
         ],
     );
 
-    dispatch_2d(&mut luts_pass, settings.aerial_view_lut_size.xy());
+    if spread.is_some() {
+        let groups = spread_workgroups(settings.aerial_view_lut_size);
+        luts_pass.dispatch_workgroups(groups.x, groups.y, groups.z);
+    } else {
+        dispatch_2d(&mut luts_pass, settings.aerial_view_lut_size.xy());
+    }
     pass_span.end(&mut luts_pass);
 }
 

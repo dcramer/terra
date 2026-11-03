@@ -41,6 +41,8 @@ mod environment;
 pub mod kept_luts;
 mod node;
 pub mod resources;
+// Terra's patch (D615).
+pub mod spread_aerial;
 
 use bevy_app::{App, Plugin};
 use bevy_asset::{embedded_asset, AssetId};

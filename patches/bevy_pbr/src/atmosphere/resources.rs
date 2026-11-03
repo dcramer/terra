@@ -252,6 +252,8 @@ pub(crate) struct AtmosphereLutPipelines {
     pub multiscattering_lut: CachedComputePipelineId,
     pub sky_view_lut: CachedComputePipelineId,
     pub aerial_view_lut: CachedComputePipelineId,
+    /// Terra's patch (D615): the same table drawn a workgroup a column (`main_spread`).
+    pub aerial_view_lut_spread: CachedComputePipelineId,
 }
 
 impl FromWorld for AtmosphereLutPipelines {
@@ -285,14 +287,27 @@ impl FromWorld for AtmosphereLutPipelines {
             label: Some("aerial_view_lut_pipeline".into()),
             layout: vec![layouts.aerial_view_lut.clone()],
             shader: load_embedded_asset!(world, "aerial_view_lut.wesl"),
+            // Terra's patch (D615): named, the module holding `main_spread` too.
+            entry_point: Some("main".into()),
             ..default()
         });
+
+        // Terra's patch (D615).
+        let aerial_view_lut_spread =
+            pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+                label: Some("aerial_view_lut_spread_pipeline".into()),
+                layout: vec![layouts.aerial_view_lut.clone()],
+                shader: load_embedded_asset!(world, "aerial_view_lut.wesl"),
+                entry_point: Some("main_spread".into()),
+                ..default()
+            });
 
         Self {
             transmittance_lut,
             multiscattering_lut,
             sky_view_lut,
             aerial_view_lut,
+            aerial_view_lut_spread,
         }
     }
 }

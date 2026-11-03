@@ -29,7 +29,9 @@ use bevy::{
         Atmosphere, AtmosphereEnvironmentMapLight, GeneratedEnvironmentMapLight, SunDisk,
         atmosphere::{Falloff, PhaseFunction, ScatteringMedium, ScatteringTerm},
     },
-    pbr::{AtmosphereSettings, kept_luts::KEEP_UNCHANGED_LUTS},
+    pbr::{
+        AtmosphereSettings, kept_luts::KEEP_UNCHANGED_LUTS, spread_aerial::SPREAD_AERIAL_VIEW_LUT,
+    },
     prelude::*,
     render::sync_world::SyncToRenderWorld,
 };
@@ -217,16 +219,28 @@ pub static KEPT_LUTS: Tunable = Tunable::new(
     "1 draws the air's transmittance and multiscattering tables only when the air changes; 0 every frame",
 );
 
-/// Hands the tunable to the render world, which reads it as it prepares the tables.
+/// Whether the air's aerial-view table is drawn a workgroup a column (1) or a thread a column
+/// as Bevy 0.20 did (0), the same texels; D615, `patches/bevy_pbr`'s
+/// `atmosphere::spread_aerial`. A probe measures the one against the other.
+pub static SPREAD_AERIAL: Tunable = Tunable::new(
+    "render.spread_aerial_view_lut",
+    1.0,
+    0.0..=1.0,
+    "1 draws the air's aerial-view table a workgroup a column; 0 a thread a column",
+);
+
+/// Hands the tunables to the render world, which reads them as it prepares and draws the
+/// tables.
 fn keep_luts() {
     KEEP_UNCHANGED_LUTS.store(KEPT_LUTS.get() >= 0.5, Ordering::Relaxed);
+    SPREAD_AERIAL_VIEW_LUT.store(SPREAD_AERIAL.get() >= 0.5, Ordering::Relaxed);
 }
 
 /// The air of the world the run is in: its atmosphere, its scale and dust and the picture of
 /// it are the world's (D469); the camera's tables are set again for each world's air.
 pub fn plugin(app: &mut App) {
     entering(app);
-    terra_gen::tune::register(&[&KEPT_LUTS]);
+    terra_gen::tune::register(&[&KEPT_LUTS, &SPREAD_AERIAL]);
     app.add_systems(
         Update,
         (
