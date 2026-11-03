@@ -515,3 +515,32 @@ fn every_massif_has_neighbours() {
         "summits with under three neighbours: {lone:#?}"
     );
 }
+
+/// What a range's rise costs by part, at points within it, on one thread. A measure, not a
+/// check: `cargo test --release -p terra_voxel --lib rise_by_part -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn rise_by_part() {
+    let range = range();
+    let points: Vec<Vec3> = directions(2_000_000)
+        .map(|d| d * RADIUS)
+        .filter(|&p| range.inside(p) > 0.0)
+        .take(50_000)
+        .collect();
+    let time = |name: &str, f: &dyn Fn(Vec3) -> f32| {
+        let at = std::time::Instant::now();
+        let sum: f32 = points.iter().map(|&p| f(p)).sum();
+        let us = at.elapsed().as_secs_f64() * 1e6 / points.len() as f64;
+        eprintln!("{name}: {us:.2} µs a point ({sum})");
+    };
+    time("rise", &|p| range.rise(p.normalize(), RADIUS).height_m);
+    time("ridged_upper_and_foot", &|p| {
+        range.ridged_upper_and_foot(p).0
+    });
+    time("inside_and_front", &|p| range.inside_and_front(p).0);
+    time("ridges", &|p| range.ridges(p / range.mountains.ridges_m));
+    time("tops_at", &|p| range.tops_at(p));
+    time("deep_inside", &|p| range.deep_inside(p));
+    time("horns", &|p| range.horns(p, 1.0, 1.0, HORNS_ALONE).0);
+    time("face_shaping", &|p| range.face_shaping(p).0);
+}

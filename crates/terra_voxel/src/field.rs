@@ -487,13 +487,15 @@ impl GeneratedPlanet {
     /// hold anything, scree under a cliff, gravel in a gully's bed (D322). Only in mountains.
     fn lying_in(&self, direction: Vec3, land: Node, memo: &mut HeightMemo) -> Option<MaterialId> {
         self.range.as_ref()?;
-        let bed = land.bed;
-        let (uphill, slope) = self.rising_in(direction, memo);
-        // A stepped wall's ledges are its rock, as its risers are (`Rise::wall`).
-        if slope > BARE_ROCK_DEG || land.wall > 0.5 {
+        // A stepped wall's ledges are rock as its risers are (`Rise::wall`), before any slope.
+        if land.wall > 0.5 {
             return Some(material::STONE);
         }
-        if bed > GRAVEL_BED && (GRAVEL_OVER_DEG..GRAVEL_UNDER_DEG).contains(&slope) {
+        let (uphill, slope) = self.rising_in(direction, memo);
+        if slope > BARE_ROCK_DEG {
+            return Some(material::STONE);
+        }
+        if land.bed > GRAVEL_BED && (GRAVEL_OVER_DEG..GRAVEL_UNDER_DEG).contains(&slope) {
             return Some(material::GRAVEL);
         }
         let radius = self.spec.radius_m;
@@ -508,8 +510,7 @@ impl GeneratedPlanet {
             }
         }
         if slope < SCREE_DEG.1 {
-            // A wall's foot, however level the ground under it: the ground some way off on
-            // one side or another stands as high over it as a wall does.
+            // A wall's foot, however level: the ground some way off stands as high as a wall.
             let here = self.height_in(direction, memo);
             let around = memo.around(CLIFF_LOOK_M);
             let (a, b) = (
