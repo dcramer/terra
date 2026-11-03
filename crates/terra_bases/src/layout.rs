@@ -261,6 +261,13 @@ fn track(
     );
 }
 
+/// How many more jobs building's workers may have, `running` already: the phase's share of
+/// the cores (D606), behind the loading screen all but the main and render threads', in play
+/// a quarter's, though the pool has threads for the load.
+fn room_beside(running: usize) -> usize {
+    terra_gen::par::share(terra_gen::par::Work::Building).saturating_sub(running)
+}
+
 /// Sends the waiting sections nearest the camera to the workers, as many as they have
 /// threads for.
 #[allow(clippy::too_many_arguments)]
@@ -282,7 +289,7 @@ fn launch(
     let room = if options.scripted() && !options.bench {
         usize::MAX
     } else {
-        pool.thread_num().max(2).saturating_sub(jobs.running.len())
+        room_beside(jobs.running.len())
     };
     let eye = camera
         .iter()

@@ -6,9 +6,10 @@ use super::*;
 /// Threads a process may start beside its workers to draw a section's parts side by side,
 /// all of them together: a few, so a storey's step comes back in a part's time without the
 /// main thread waiting for a core behind dozens of drawing threads (D308); how many is the
-/// parts' share of the background in the table of the game's threads (D606).
+/// parts' share in the table of the game's threads for the phase (D606): behind the loading
+/// screen half the cores but the main and render threads', in play the background's quarter.
 pub(super) fn spare_threads() -> usize {
-    terra_gen::par::threads().parts
+    terra_gen::par::share(terra_gen::par::Work::Parts)
 }
 
 pub(super) static SPARE_IN_USE: std::sync::atomic::AtomicUsize =

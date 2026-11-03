@@ -6,7 +6,7 @@
 
 use std::cell::Cell;
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// A kind of work the game's threads do, by how soon the game needs it, each with its share
 /// of the cores in [`Threads`] (D606). The shape is shipped practice: Unreal's named threads
@@ -59,6 +59,24 @@ pub struct Threads {
     pub streaming: usize,
     pub io: usize,
     pub load: usize,
+    /// Building's jobs behind the loading screen ([`Phase::Load`]): with its parts, all the
+    /// cores but the main and render threads'.
+    pub load_building: usize,
+    pub load_parts: usize,
+}
+
+/// Which part of the game is running, for the shares of the cores that differ by it (D606).
+/// Shipped engines size background work by it: behind a loading screen the load takes every
+/// core it can, in play it is capped, as Unity's `Application.backgroundLoadingPriority`
+/// (`High` behind a loading screen, `BelowNormal` or `Low` in play) and Unreal's
+/// `FlushAsyncLoading` on a map's load against `s.AsyncLoadingTimeLimit` in play have it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Phase {
+    /// The loading screen is up: building's work, the scene's buildings laid and drawn before
+    /// the first thing is seen (D135), takes all but the main and render threads' cores.
+    Load,
+    /// The game plays: the background holds its quarter.
+    Play,
 }
 
 /// The main and render threads.
@@ -78,6 +96,11 @@ impl Threads {
         let async_compute = clamp(cores / 8, 1, 4);
         let io = clamp(cores / 4, 1, 4);
         let others = NAMED + async_compute + streaming + building + parts;
+        // Behind the loading screen building and its parts share every core but the named
+        // threads', half each, never fewer than in play.
+        let loading = max(1, cores.saturating_sub(NAMED));
+        let load_building = max(building, loading / 2);
+        let load_parts = max(parts, loading.saturating_sub(load_building));
         Self {
             cores,
             named: NAMED,
@@ -88,10 +111,31 @@ impl Threads {
             streaming,
             io,
             load: cores,
+            load_building,
+            load_parts,
         }
     }
 
-    /// The threads `work` has.
+    /// The threads `work` has in `phase`: building and its parts more behind the loading
+    /// screen, every other kind the same in both.
+    pub const fn during(&self, phase: Phase, work: Work) -> usize {
+        match (phase, work) {
+            (Phase::Load, Work::Building) => self.load_building,
+            (Phase::Load, Work::Parts) => self.load_parts,
+            _ => self.of(work),
+        }
+    }
+
+    /// The most threads `work` has in either phase: a pool's size, its work rationed to the
+    /// phase's share ([`share`]) by whoever sends it.
+    pub const fn most(&self, work: Work) -> usize {
+        max(
+            self.during(Phase::Load, work),
+            self.during(Phase::Play, work),
+        )
+    }
+
+    /// The threads `work` has while the game plays.
     pub const fn of(&self, work: Work) -> usize {
         match work {
             Work::Frame => self.frame,
@@ -134,6 +178,31 @@ pub fn cores() -> usize {
 /// This machine's table.
 pub fn threads() -> Threads {
     Threads::on(cores())
+}
+
+/// Whether the game is behind its loading screen ([`Phase::Load`]): it starts there, as every
+/// build starts on the loading screen; `terra_world`'s loading screen sets it as it goes up
+/// and lifts.
+static LOADING: AtomicBool = AtomicBool::new(true);
+
+/// The game is now in `phase`: work rationed by [`share`] takes the phase's share from its
+/// next job on.
+pub fn set_phase(phase: Phase) {
+    LOADING.store(phase == Phase::Load, Ordering::Relaxed);
+}
+
+/// Which phase the game is in.
+pub fn phase() -> Phase {
+    if LOADING.load(Ordering::Relaxed) {
+        Phase::Load
+    } else {
+        Phase::Play
+    }
+}
+
+/// The threads `work` may keep busy now, in this machine's table for the [`phase`].
+pub fn share(work: Work) -> usize {
+    threads().during(phase(), work)
 }
 
 /// How many threads work shared out on this thread may use: one on a background pool's
@@ -296,6 +365,41 @@ mod tests {
         // (all but its IO and async compute pools' quarter each).
         let t = Threads::on(16);
         assert!(t.frame >= 16 - 4 - 4, "{t:?}");
+    }
+
+    #[test]
+    fn behind_the_loading_screen_building_takes_all_but_the_named_threads() {
+        for cores in 0..=256 {
+            let t = Threads::on(cores);
+            let load = t.during(Phase::Load, Work::Building) + t.during(Phase::Load, Work::Parts);
+            if cores >= 4 {
+                assert_eq!(load, cores - NAMED, "{cores} cores: {t:?}");
+            }
+            for work in [Work::Building, Work::Parts] {
+                // Never fewer than in play, and the pool sized for the more of the two.
+                assert!(t.during(Phase::Load, work) >= t.of(work), "{t:?}");
+                assert_eq!(t.most(work), t.during(Phase::Load, work), "{t:?}");
+                assert_eq!(t.during(Phase::Play, work), t.of(work), "{t:?}");
+            }
+            // Every other kind the same in both.
+            for work in [
+                Work::Frame,
+                Work::Async,
+                Work::Streaming,
+                Work::Io,
+                Work::Load,
+            ] {
+                assert_eq!(t.during(Phase::Load, work), t.of(work), "{t:?}");
+            }
+        }
+        // The game starts behind the loading screen; lifting it caps building to its quarter.
+        assert_eq!(phase(), Phase::Load);
+        assert_eq!(share(Work::Building), threads().load_building);
+        set_phase(Phase::Play);
+        assert_eq!(share(Work::Building), threads().building);
+        assert_eq!(share(Work::Parts), threads().parts);
+        set_phase(Phase::Load);
+        assert_eq!(share(Work::Parts), threads().load_parts);
     }
 
     #[test]

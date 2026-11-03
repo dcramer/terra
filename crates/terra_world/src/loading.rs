@@ -310,8 +310,14 @@ pub fn plugin(app: &mut App) {
             Track.run_if(in_state(Screen::Loading)).before(watch),
         )
         .add_systems(OnEnter(crate::instance::Travel::Leaving), leaving)
-        .add_systems(OnEnter(Screen::Loading), (cover, hold_clock))
-        .add_systems(OnExit(Screen::Loading), (uncover, release_clock))
+        .add_systems(
+            OnEnter(Screen::Loading),
+            (cover, hold_clock, crate::threads::loading),
+        )
+        .add_systems(
+            OnExit(Screen::Loading),
+            (uncover, release_clock, crate::threads::playing),
+        )
         .add_systems(
             Update,
             (

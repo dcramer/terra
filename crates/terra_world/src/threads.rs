@@ -8,7 +8,7 @@ use bevy::{
     app::{TaskPoolOptions, TaskPoolPlugin, TaskPoolThreadAssignmentPolicy},
     tasks::{TaskPool, TaskPoolBuilder},
 };
-use terra_gen::par::{Threads, Work};
+use terra_gen::par::{Phase, Threads, Work};
 
 /// Bevy's task pools as the table has them on this machine.
 pub fn plugin() -> TaskPoolPlugin {
@@ -37,14 +37,18 @@ fn options(threads: Threads) -> TaskPoolOptions {
     }
 }
 
-/// A pool of the game's own for `work`, of the table's threads for it, named `name` (as a
-/// profiler shows its threads). A background pool's threads each work their task alone
-/// (`terra_gen::par::keep_to_this_thread`), so a map asked on one never fans out over the
+/// A pool of the game's own for `work`, of the most threads the table gives it in either
+/// phase, named `name` (as a profiler shows its threads): its sender keeps no more tasks
+/// running than the phase's share (`terra_gen::par::share`), so building's pool has the
+/// loading screen's threads and in play works on its quarter's. A pool's threads are fixed
+/// when it is made, and an idle one costs nothing. A background pool's threads each work
+/// their task alone (`terra_gen::par::keep_to_this_thread`), so a map asked on one never fans
+/// out over the
 /// cores the frame's threads hold, as Unreal's background workers sit below the game and
 /// render threads and Godot's low-priority tasks keep to their share.
 pub fn pool(work: Work, name: &str) -> TaskPool {
     let builder = TaskPoolBuilder::new()
-        .num_threads(terra_gen::par::threads().of(work))
+        .num_threads(terra_gen::par::threads().most(work))
         .thread_name(name.to_string());
     if matches!(work, Work::Building | Work::Streaming) {
         builder
@@ -53,6 +57,16 @@ pub fn pool(work: Work, name: &str) -> TaskPool {
     } else {
         builder.build()
     }
+}
+
+/// The loading screen goes up: building's work takes the load's share of the cores (D606).
+pub(crate) fn loading() {
+    terra_gen::par::set_phase(Phase::Load);
+}
+
+/// The loading screen lifts: building's work keeps to its quarter of the cores (D606).
+pub(crate) fn playing() {
+    terra_gen::par::set_phase(Phase::Play);
 }
 
 #[cfg(test)]
@@ -86,7 +100,7 @@ mod tests {
     #[test]
     fn a_background_pool_has_its_share_and_never_fans_out() {
         let pool = pool(Work::Building, "test");
-        assert_eq!(pool.thread_num(), terra_gen::par::threads().building);
+        assert_eq!(pool.thread_num(), terra_gen::par::threads().load_building);
         let items: Vec<u32> = (0..64).collect();
         let (here, workers) = bevy::tasks::block_on(pool.spawn(async move {
             let workers = terra_gen::par::map(&items, |_| {
