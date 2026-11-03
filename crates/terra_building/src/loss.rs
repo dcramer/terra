@@ -27,6 +27,7 @@ use terra_build::{CELL_M, Cube, Kind, Scorch};
 use terra_build_mesh::fragments::{self, Breaking, Breaks, Cut, Fragment, Rubble, Shape};
 use terra_walker::shake::Shake;
 use terra_walker::{LocalPlayer, Player};
+use terra_world::instance::InstanceApp;
 use terra_world::planet::{MainCamera, Planet};
 use terra_world::quality::Quality;
 
@@ -92,7 +93,10 @@ pub fn plugin(app: &mut App) {
     } else {
         app.init_asset::<dust::DustMaterial>();
     }
-    app.init_resource::<Shards>().add_systems(
+    // The world's (D469): its fragments, heaps and the meshes drawn to warm up are of the
+    // world's entities, so a world left takes them with it; kept for the app, a crossing
+    // left `warming` naming entities gone with the old world, despawned again once warm.
+    app.init_world_resource::<Shards>().add_systems(
         Update,
         (harm_aimed, burst, (step, puff))
             .chain()

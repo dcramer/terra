@@ -731,3 +731,55 @@ fn what_comes_down_of_a_burnt_wall_is_drawn_as_blackened_as_it_stood() {
     }
     assert!(drawn > 100, "{drawn} fragments drawn in the arrays");
 }
+
+/// What the fragments keep is the world's (D469): crossing to another world leaves nothing
+/// naming the old one's entities. Kept for the app, the meshes drawn to warm up were gone with
+/// the old world and despawned again once warm, 160 warnings at once in the game's first
+/// world after the title's (seeds j4).
+#[test]
+fn a_crossing_leaves_the_fragments_naming_no_entity_of_the_old_world() {
+    use terra_world::instance::{Cross, InstanceKey, WorldSpec};
+    let mut app = building_app();
+    give_arrays(&mut app);
+    // Warmed again, now there are arrays to draw them in.
+    app.world_mut().resource_mut::<Shards>().warmed = false;
+    app.update();
+    let warming = app.world().resource::<Shards>().warming.clone();
+    assert!(
+        !warming.is_empty(),
+        "the fragments' meshes are drawn to warm up"
+    );
+    app.world_mut().commands().queue(Cross(WorldSpec {
+        key: InstanceKey(1),
+        kind: "world".into(),
+        seed: 2,
+    }));
+    app.world_mut().flush();
+    for _ in 0..6 {
+        app.update();
+    }
+    assert!(
+        warming
+            .iter()
+            .all(|&entity| app.world().get_entity(entity).is_err()),
+        "the old world's warming meshes went with it"
+    );
+    let shards = app.world().resource::<Shards>();
+    let named: Vec<Entity> = shards
+        .warming
+        .iter()
+        .copied()
+        .chain(shards.live.iter().map(|live| live.entity))
+        .chain(shards.rubble.keys().copied())
+        .chain(shards.heaps.values().flat_map(|(drawn, ..)| drawn.clone()))
+        .filter(|&entity| entity != Entity::PLACEHOLDER)
+        .collect();
+    let gone: Vec<Entity> = named
+        .into_iter()
+        .filter(|&entity| app.world().get_entity(entity).is_err())
+        .collect();
+    assert!(
+        gone.is_empty(),
+        "the fragments name entities gone with the old world: {gone:?}"
+    );
+}
