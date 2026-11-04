@@ -411,7 +411,9 @@ pub fn plugin(app: &mut App) {
             (
                 prepare,
                 build,
-                crate::scaffold::scaffold,
+                crate::scaffold::scaffold.run_if(terra_world::loading::hold::every_frames(
+                    crate::scaffold::EVERY,
+                )),
                 reveal,
                 hide_ghosts,
                 wear,

@@ -410,8 +410,9 @@ pub fn struck(all: u32, since: f32) -> u32 {
     ((since.max(0.0) / every) as u32).min(steps)
 }
 
-/// How often, in frames, each rising building's scaffold is looked at again.
-const EVERY: u32 = 6;
+/// How often, in frames of the game's count (D472), each rising building's scaffold is looked
+/// at again: on the same script frames however long the load took.
+pub(crate) const EVERY: u32 = 6;
 
 /// Puts up, raises and strikes each rising building's scaffold as its walls go up.
 #[allow(clippy::too_many_arguments)]
@@ -428,17 +429,12 @@ pub fn scaffold(
         &crate::rising::Rises,
         Option<&mut Scaffolded>,
     )>,
-    mut frame: Local<u32>,
     decks: Option<ResMut<Decks>>,
 ) {
     let Some(mut decks) = decks else {
         commands.init_resource::<Decks>();
         return;
     };
-    *frame += 1;
-    if !(*frame).is_multiple_of(EVERY) {
-        return;
-    }
     let Some(looks) = looks else {
         commands.insert_resource(ScaffoldLooks::new(&assets, &mut materials));
         return;
