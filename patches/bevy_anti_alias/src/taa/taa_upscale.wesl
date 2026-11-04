@@ -5,7 +5,8 @@
 // by a Lanczos kernel narrowed by the scale (FSR 2's `ComputeUpsampledColorAndWeight`), and
 // blends them into its reprojected history by that weight, the history first clamped to the
 // samples' box (`RectifyHistory`, `ComputeBaseAccumulationWeight`, `Accumulate`). Left out
-// for now: FSR 2's depth-clip pass, locks, luma instability and reactive masks; the motion
+// for now: FSR 2's depth-clip pass, locks, luma instability, reactive masks and the
+// accumulation cut a clamped history takes without the last two (`RectifyHistory`); the motion
 // vector is dilated to the nearest depth of the 3x3 drawn pixels, as FSR 2's reconstruct pass
 // does.
 //
@@ -207,17 +208,20 @@ fn taa(@location(0) uv: vec2<f32>) -> Output {
         accumulation = min(accumulation, mix(accumulation, upsampled_weight * 10.0, in_motion));
         accumulation = min(accumulation, mix(accumulation, upsampled_weight, saturate(velocity / 20.0)));
 
-        // RectifyHistory (no locks, no luma instability): the box widened by the scale while
-        // still, the samples' own spread when moving, within the samples' extremes.
+        // RectifyHistory: the box widened by the scale while still, the samples' own spread
+        // when moving, within the samples' extremes. FSR 2 also cuts the accumulation to 0.1
+        // where it clamps, unless a lock or its luma instability (a pixel flickering frame to
+        // frame) keeps the history; without those two, the cut let one frame's dither through
+        // wherever a drawn frame's noise left the box: contact shadows' speckle, on about a
+        // tenth of the drawn pixels and rarely in the same place twice, stood as dark dots on
+        // the lake's rock (play-3080 j6). So the history is clamped, as Bevy's native TAA
+        // clamps it, and keeps its weight; motion still lowers it (above).
         let scale = render_size / display_size;
         let influence = min(20.0, pow(1.0 / (scale.x * scale.y), 3.0));
         let box_scale = mix(influence, 1.0, saturate(velocity / 20.0));
         let rect_min = max(box_min, box_centre - box_vec * box_scale);
         let rect_max = min(box_max, box_centre + box_vec * box_scale);
-        if any(rect_min > history_color) || any(history_color > rect_max) {
-            history_color = clamp(history_color, rect_min, rect_max);
-            accumulation = min(accumulation, 0.1);
-        }
+        history_color = clamp(history_color, rect_min, rect_max);
 
         // Accumulate.
         accumulation = max(EPSILON, accumulation + upsampled_weight);
