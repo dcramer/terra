@@ -22,6 +22,7 @@
 // cloud_noise.wesl), so the low preset's sky and this one agree.
 
 import bevy_render::view::View;
+import super::cloud_frame::Frame;
 import super::cloud_noise::wrapped_noise;
 import super::dusk::dusk_sky;
 import super::far_land::hides;
@@ -63,6 +64,7 @@ struct Params {
 // The weather map's, mirrored past its edges (the air's cube ignores it).
 @group(0) @binding(8) var mirrored: sampler;
 @group(0) @binding(9) var picture: texture_storage_2d<rgba16float, write>;
+@group(0) @binding(10) var<uniform> frame: Frame;
 
 // The 3D noise's tiles, metres (clouds::SHAPE_TILE_M, DETAIL_TILE_M), and its side in texels.
 const SHAPE_TILE_M: f32 = 6000.0;
@@ -391,15 +393,18 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
     if id.x >= size.x || id.y >= size.y {
         return;
     }
-    let uv = (vec2<f32>(id.xy) + 0.5) / vec2<f32>(size);
+    // Through this frame's offset inside the pixel, unjittered by the main pass's TAA, so the
+    // resolve (cloud_resolve.wesl, D617) averages the pixel's whole footprint: one ray through
+    // its middle fell inside or outside a heap's face, and every edge stair-stepped.
+    let uv = (vec2<f32>(id.xy) + 0.5 + frame.jitter.xy) / vec2<f32>(size);
     let ndc = vec2<f32>(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
     let eye = view.world_position;
-    // The ray's way from the view's own space, turned into the world's: a point on the near plane
-    // in the world less the eye is the difference of two numbers some 30 km from the planet's
-    // middle, which f32 holds to 2 mm, a 2% error over the 10 cm to the near plane, and the
-    // picture fell into blocks a degree across.
-    let near = view.view_from_clip * vec4<f32>(ndc, 1.0, 1.0);
-    let direction = normalize((view.world_from_view * vec4<f32>(near.xyz / near.w, 0.0)).xyz);
+    // The ray's way from the view's turn and projection alone: a point on the near plane in the
+    // world less the eye is the difference of two numbers some 30 km from the planet's middle,
+    // which f32 holds to 2 mm, a 2% error over the 10 cm to the near plane, and the picture fell
+    // into blocks a degree across.
+    let near = frame.world_from_clip * vec4<f32>(ndc, 1.0, 1.0);
+    let direction = normalize(near.xyz / near.w);
 
     // The scene's nearest depth under this half-resolution pixel (reversed: 0 is infinitely far).
     // A main pass drawn smaller than the view for temporal upscaling (D616) fills only the
