@@ -175,7 +175,10 @@ const SCRIPT_COUNT_FROM: u32 = 1 << 20;
 /// (`prepare_taa_jitter`), the history textures' turn, the shadows', SSAO's, the fog's and
 /// the dither's noise — then differed run to run on one frame of one script, and a film of
 /// one build was not the same film twice (D472). Offline renderers seed their sampling by
-/// the frame being rendered for the same reason. After Bevy's count, in `Last`.
+/// the frame being rendered for the same reason. After Bevy's count, in `Last`, for the render
+/// world; and right after the script's frame moves on (`scripted_presses`, in `PreUpdate`), so
+/// the frame's own systems read this frame's count too: on the script's first frame they read
+/// the loading screen's last count otherwise, as many as the load took.
 pub(crate) fn count_frames(
     options: Res<Options>,
     script: Res<ScriptFrame>,
@@ -184,6 +187,15 @@ pub(crate) fn count_frames(
     if options.scripted() && !options.bench && script.0 > 0 {
         count.0 = SCRIPT_COUNT_FROM + script.0;
     }
+}
+
+/// A run condition for a system that does its work every `n` frames: true on every `n`th of
+/// the game's frame count (D472), so a scripted run's system works on the same script frames
+/// however long the load took. A count of the system's own frames took in the loading screen's,
+/// and what it last did differed run to run on one script frame, as the clouds' noise did
+/// before b877c3da5.
+pub fn every_frames(n: u32) -> impl FnMut(Res<FrameCount>) -> bool + Clone {
+    move |count: Res<FrameCount>| count.0.is_multiple_of(n.max(1))
 }
 
 /// A scripted run's script opens on a camera cut: on its first frame every camera's temporal
@@ -256,6 +268,61 @@ mod tests {
         assert_eq!(fast, counts(1000, 4));
         // Still a frame a frame, as the jitter and the history textures take turns by it.
         assert!(fast.windows(2).all(|w| w[1].1 == w[0].1 + 1));
+    }
+
+    /// The script frames on which a system run every four frames worked, for a load of
+    /// `loading` frames and a hold of `held` after the third script frame, the count set where
+    /// the shell sets it: after the script frame moves on and after Bevy's count.
+    fn worked(loading: usize, held: usize) -> Vec<u32> {
+        #[derive(Resource, Default)]
+        struct Worked(Vec<u32>);
+        let mut app = App::new();
+        app.add_plugins(bevy::diagnostic::FrameCountPlugin)
+            .insert_resource(
+                Options::from_args(["--shots", "out/x@5"].map(String::from).into_iter()).unwrap(),
+            )
+            .init_resource::<ScriptFrame>()
+            .init_resource::<Worked>()
+            .add_systems(PreUpdate, count_frames)
+            .add_systems(
+                Last,
+                count_frames.after(bevy::diagnostic::update_frame_count),
+            )
+            .add_systems(
+                Update,
+                (|script: Res<ScriptFrame>, mut worked: ResMut<Worked>| {
+                    if script.0 > 0 && worked.0.last() != Some(&script.0) {
+                        worked.0.push(script.0);
+                    }
+                })
+                .run_if(every_frames(4)),
+            );
+        let mut steps = vec![false; loading];
+        steps.extend([true; 3]);
+        steps.extend(vec![false; held]);
+        steps.extend([true; 16]);
+        for counted in steps {
+            if counted {
+                app.world_mut().resource_mut::<ScriptFrame>().0 += 1;
+            }
+            app.update();
+        }
+        app.world_mut().remove_resource::<Worked>().unwrap().0
+    }
+
+    #[test]
+    fn a_system_run_every_few_frames_works_on_the_same_script_frames_however_long_the_load() {
+        let fast = worked(3, 0);
+        // Every fourth script frame, whichever four the count starts on.
+        assert!(fast.len() >= 4, "{fast:?}");
+        assert!(fast.windows(2).all(|w| w[1] - w[0] == 4), "{fast:?}");
+        for (loading, held) in [(4, 0), (5, 0), (6, 0), (241, 17), (1000, 4)] {
+            assert_eq!(
+                worked(loading, held),
+                fast,
+                "a load of {loading} frames and a hold of {held} moved the frames it worked on"
+            );
+        }
     }
 
     /// The real frames on which a scripted run's camera dropped its temporal history, counted

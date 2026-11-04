@@ -1136,7 +1136,12 @@ impl Plugin for ShellPlugin {
             )
             .add_systems(
                 PreUpdate,
-                (loading::hold::watch, scripted_presses, move_the_vantage)
+                (
+                    loading::hold::watch,
+                    scripted_presses,
+                    loading::hold::count_frames,
+                    move_the_vantage,
+                )
                     .chain()
                     .after(InputSystems),
             )
