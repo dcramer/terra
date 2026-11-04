@@ -145,6 +145,11 @@ where
     /// See the `custom_phase_item` example for an example of how to use this.
     pub non_mesh_items: IndexMap<(BPI::BatchSetKey, BPI::BinKey), NonMeshEntities>,
 
+    /// Terra's patch (D618): the draw priority of each batch set given one
+    /// ([`Self::set_draw_priority`]); the rest are 0. `sort_binned_render_phase` draws the
+    /// multidrawable and batchable batch sets lowest priority first, then by key.
+    pub draw_priorities: HashMap<BPI::BatchSetKey, i32>,
+
     /// Information on each batch set.
     ///
     /// A *batch set* is a set of entities that will be batched together unless
@@ -1082,6 +1087,30 @@ impl<BPI> BinnedRenderPhase<BPI>
 where
     BPI: BinnedPhaseItem,
 {
+    /// Terra's patch (D618): gives a batch set its draw priority, lowest drawn first, as a
+    /// material's `prepass_draw_priority` says; 0, every batch set's unless given, is dropped.
+    pub fn set_draw_priority(&mut self, batch_set_key: &BPI::BatchSetKey, priority: i32) {
+        if priority == 0 {
+            self.draw_priorities.remove(batch_set_key);
+        } else if self.draw_priorities.get(batch_set_key) != Some(&priority) {
+            self.draw_priorities.insert(batch_set_key.clone(), priority);
+        }
+    }
+
+    /// Terra's patch (D618): forgets the priorities of batch sets no longer binned, once
+    /// they outnumber the batch sets there are, so the table stays as small as the phase.
+    pub fn prune_draw_priorities(&mut self) {
+        let batch_sets = self.multidrawable_meshes.len() + self.batchable_meshes.len();
+        if self.draw_priorities.len() <= batch_sets {
+            return;
+        }
+        let multidrawable = &self.multidrawable_meshes;
+        let batchable = &self.batchable_meshes;
+        self.draw_priorities.retain(|key, _| {
+            multidrawable.contains_key(key) || batchable.keys().any(|(set, _)| set == key)
+        });
+    }
+
     /// Bins a new entity.
     ///
     /// The `phase_type` parameter specifies whether the entity is a
@@ -1560,6 +1589,7 @@ where
             batchable_meshes: IndexMap::default(),
             unbatchable_meshes: IndexMap::default(),
             non_mesh_items: IndexMap::default(),
+            draw_priorities: HashMap::default(),
             batch_sets: match gpu_preprocessing {
                 GpuPreprocessingMode::Culling => {
                     BinnedRenderPhaseBatchSets::MultidrawIndirect(vec![])

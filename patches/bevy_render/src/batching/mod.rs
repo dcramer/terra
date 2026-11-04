@@ -203,11 +203,63 @@ pub fn sort_binned_render_phase<BPI>(mut phases: ResMut<ViewBinnedRenderPhases<B
 where
     BPI: BinnedPhaseItem,
 {
+    let prioritised = DRAW_PRIORITIES.load(core::sync::atomic::Ordering::Relaxed);
     for phase in phases.values_mut() {
-        phase.multidrawable_meshes.sort_unstable_keys();
-        phase.batchable_meshes.sort_unstable_keys();
+        // Terra's patch (D618): a phase whose batch sets were given draw priorities draws
+        // them lowest first, then by key; one given none keeps Bevy's order, by key alone.
+        if prioritised && !phase.draw_priorities.is_empty() {
+            phase.prune_draw_priorities();
+            let priorities = &phase.draw_priorities;
+            let of = |key: &BPI::BatchSetKey| priorities.get(key).copied().unwrap_or(0);
+            sort_by_draw_priority(&mut phase.multidrawable_meshes, of);
+            sort_by_draw_priority(&mut phase.batchable_meshes, |(key, _)| of(key));
+        } else {
+            phase.multidrawable_meshes.sort_unstable_keys();
+            phase.batchable_meshes.sort_unstable_keys();
+        }
         phase.unbatchable_meshes.sort_unstable_keys();
         phase.non_mesh_items.sort_unstable_keys();
+    }
+}
+
+/// Terra's patch (D618): whether binned phases draw their batch sets in the priorities their
+/// materials gave them (`BinnedRenderPhase::set_draw_priority`), or in Bevy's order by key
+/// alone, which is the order their pipelines were made in. On; off only to measure the one
+/// against the other in one load (`render.draw_priorities`).
+pub static DRAW_PRIORITIES: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(true);
+
+/// Terra's patch (D618): sorts a phase's bins by the draw priority of their batch set, lowest
+/// first, then by key, as Godot's `render_priority` sorts a material ahead of its key and
+/// Unreal's translucency sort priority a primitive ahead of its distance.
+pub fn sort_by_draw_priority<K: Ord, V>(
+    bins: &mut indexmap::IndexMap<K, V, impl core::hash::BuildHasher>,
+    priority: impl Fn(&K) -> i32,
+) {
+    bins.sort_unstable_by(|a, _, b, _| priority(a).cmp(&priority(b)).then_with(|| a.cmp(b)));
+}
+
+#[cfg(test)]
+mod draw_priority_tests {
+    use super::sort_by_draw_priority;
+    use indexmap::IndexMap;
+
+    fn order(priorities: &[(u32, i32)]) -> Vec<u32> {
+        let mut bins: IndexMap<u32, ()> = [3, 1, 4, 2].into_iter().map(|k| (k, ())).collect();
+        sort_by_draw_priority(&mut bins, |key| {
+            priorities.iter().find(|(k, _)| k == key).map_or(0, |(_, p)| *p)
+        });
+        bins.keys().copied().collect()
+    }
+
+    #[test]
+    fn without_priorities_bins_keep_the_key_order() {
+        assert_eq!(order(&[]), [1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn a_lower_priority_draws_first_and_ties_go_by_key() {
+        assert_eq!(order(&[(4, -2), (2, -1), (3, -1), (1, 1)]), [4, 2, 3, 1]);
     }
 }
 
