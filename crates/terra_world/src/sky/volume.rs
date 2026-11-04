@@ -242,6 +242,15 @@ fn target(size: UVec2) -> Image {
     image
 }
 
+/// The main camera as the clouds read it: marked or not, and the size its main pass is drawn
+/// at when that is smaller than its view (D616).
+type CloudCamera<'a> = (
+    Entity,
+    &'a Camera,
+    Has<CloudVolumeView>,
+    Option<&'a crate::upscale::Drawn>,
+);
+
 /// Tells the march where the clouds are this frame, keeps its picture the view's half size,
 /// and marks the camera and shows the veil on high and ultra only.
 #[allow(clippy::too_many_arguments)]
@@ -262,17 +271,7 @@ fn tell(
         Res<Planet>,
         Option<Res<crate::air::AirScale>>,
     ),
-    camera: Option<
-        Single<
-            (
-                Entity,
-                &Camera,
-                Has<CloudVolumeView>,
-                Option<&crate::upscale::Drawn>,
-            ),
-            With<MainCamera>,
-        >,
-    >,
+    camera: Option<Single<CloudCamera<'_>, With<MainCamera>>>,
     volume: Option<ResMut<CloudVolume>>,
     mut veil: Query<(&mut Visibility, &MeshMaterial3d<VeilMaterial>), With<Veil>>,
     (mut images, mut meshes, mut veils, mut frame): (
@@ -306,8 +305,7 @@ fn tell(
         commands.entity(entity).insert(CloudVolumeView);
         sky.set_changed();
     }
-    // Half the size the world is drawn at: the main pass's, when it is drawn smaller than the
-    // view for temporal upscaling (D616).
+    // Half the size the world is drawn at, the main pass's when upscaled temporally (D616).
     let drawn = drawn.map(|d| d.0).or(view.physical_viewport_size());
     let size = (drawn.unwrap_or(UVec2::ONE) / 2).max(UVec2::ONE);
     // A new picture when the view's size changes, so the veil's material is prepared again.
