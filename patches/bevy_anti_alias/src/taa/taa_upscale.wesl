@@ -4,7 +4,10 @@
 // Resolution 2 does, in one pass: each shown pixel takes the drawn samples near it, weighted
 // by a Lanczos kernel narrowed by the scale (FSR 2's `ComputeUpsampledColorAndWeight`), and
 // blends them into its reprojected history by that weight, the history first clamped to the
-// samples' box (`RectifyHistory`, `ComputeBaseAccumulationWeight`, `Accumulate`). Left out
+// samples' box (`RectifyHistory`, `ComputeBaseAccumulationWeight`, `Accumulate`). The kernel
+// reads the 3x3 drawn pixels round the one the shown pixel falls in, as FSR 2.2 does: it loads
+// a 4x4 block, [-2, 1] or [-1, 2] by the jitter's side, but flips it so its weights and box
+// take only offsets -1 to 1 (`bFlipRow`, `bFlipCol`). Left out
 // for now: FSR 2's depth-clip pass, locks, luma instability, reactive masks and the
 // accumulation cut a clamped history takes without the last two (`RectifyHistory`); the motion
 // vector is dilated to the nearest depth of the 3x3 drawn pixels, as FSR 2's reconstruct pass
