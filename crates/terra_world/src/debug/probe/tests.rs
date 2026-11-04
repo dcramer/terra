@@ -182,6 +182,36 @@ fn the_table_says_a_saving_past_the_noise_and_drops_undrawn_frames() {
     assert!(table(&["a", "b"], &[row])[1].contains("b within noise"));
 }
 
+/// A floor never measured is not a floor of zero: when every variant's first round drew less
+/// than its second and was dropped (play-3080 j6's probe, 17.09M then 17.23M vertices), the
+/// A/A column read 0.000 and a 5.8 ms saving was called noise. The difference is said, marked
+/// unmeasured; a floor measured as exactly zero still judges a difference past it.
+#[test]
+fn the_table_says_a_difference_when_no_floor_was_measured() {
+    let variant = |total: f64| -> Vec<Vec<Frame>> {
+        vec![
+            (0..5).map(|_| frame(total, 0.5, 0.99e6)).collect(),
+            (0..5).map(|_| frame(total, 0.5, 1.0e6)).collect(),
+        ]
+    };
+    let rows = rows(&[variant(12.458), variant(6.650)], 0.995, 4);
+    assert_eq!(rows[0].floor(), None, "{:?}", rows[0]);
+    let lines = table(&["native", "spatial"], &rows);
+    assert!(
+        lines[1].contains("spatial saves 5.808 (A/A unmeasured)"),
+        "{}",
+        lines[1]
+    );
+    assert!(!lines[1].contains("0.000"), "{}", lines[1]);
+    let row = Row {
+        pass: "x".into(),
+        medians: vec![1.0, 0.5],
+        noise: vec![0.0, 0.0],
+    };
+    assert_eq!(row.floor(), Some(0.0));
+    assert!(table(&["a", "b"], &[row])[1].contains("b saves 0.500"));
+}
+
 /// A pass outside the costliest whose difference is past the noise floor is listed after them
 /// (D614's atmosphere_luts, 0.18 -> 0.15 ms, fell outside the 14 costliest and went unseen);
 /// one outside them within the noise is not.

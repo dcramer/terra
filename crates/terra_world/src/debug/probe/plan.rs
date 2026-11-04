@@ -269,20 +269,21 @@ pub struct Row {
 }
 
 impl Row {
-    /// The largest A/A spread of any variant: a difference within it is noise.
-    pub fn floor(&self) -> f64 {
+    /// The largest A/A spread of any variant: a difference within it is noise. None where no
+    /// variant has two rounds counted, so no spread was measured: not a floor of zero.
+    pub fn floor(&self) -> Option<f64> {
         self.noise
             .iter()
             .copied()
             .filter(|n| n.is_finite())
-            .fold(0.0, f64::max)
+            .reduce(f64::max)
     }
 
     /// Whether variant `v` differs from the first by more than the noise floor, with a floor
     /// measured at all.
     pub fn past(&self, v: usize) -> bool {
-        (self.medians[v] - self.medians[0]).abs() > self.floor()
-            && self.noise.iter().any(|n| n.is_finite())
+        self.floor()
+            .is_some_and(|floor| (self.medians[v] - self.medians[0]).abs() > floor)
     }
 
     /// Whether any variant differs from the first past the noise floor.
@@ -381,13 +382,21 @@ pub fn table(variants: &[&str], rows: &[Row]) -> Vec<String> {
         for (v, m) in row.medians.iter().enumerate().skip(1) {
             let delta = m - row.medians[0];
             line += &format!(" {delta:>+9.3}");
-            verdicts.push(match (row.past(v), delta < 0.0) {
-                (false, _) => format!("{} within noise", variants[v]),
-                (true, true) => format!("{} saves {:.3}", variants[v], -delta),
-                (true, false) => format!("{} costs {:.3}", variants[v], delta),
+            let said = if delta < 0.0 {
+                format!("{} saves {:.3}", variants[v], -delta)
+            } else {
+                format!("{} costs {:.3}", variants[v], delta)
+            };
+            // With no floor measured (each variant had at most one round counted), the
+            // difference is said as it is and marked unjudged, never hidden as noise.
+            verdicts.push(match (floor, row.past(v)) {
+                (None, _) => format!("{said} (A/A unmeasured)"),
+                (Some(_), false) => format!("{} within noise", variants[v]),
+                (Some(_), true) => said,
             });
         }
-        line += &format!(" {floor:>7.3}  {}", verdicts.join(", "));
+        let floor = floor.map_or("-".to_string(), |f| format!("{f:.3}"));
+        line += &format!(" {floor:>7}  {}", verdicts.join(", "));
         lines.push(line);
     }
     lines
