@@ -292,6 +292,95 @@ mod tests {
         assert!(!well_named("sky..cloud"));
     }
 
+    /// Every tunable declared in the workspace's crates is in its owner's `register` call (D547):
+    /// one only a read registers is unknown to `--tune` and `cargo xtask probe` until something
+    /// reads it, so they refuse it, as `sky.cloud.history` was refused until 775435455. Reads the
+    /// sources, since only the plugins (which need an engine) would register them at run time.
+    /// Tunables named `test.*` belong to tests, which may leave one to a read on purpose.
+    #[test]
+    fn every_declared_tunable_is_registered_by_its_owner() {
+        use std::path::{Path, PathBuf};
+        fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
+            for entry in std::fs::read_dir(dir).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    rust_files(&path, out);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    out.push(path);
+                }
+            }
+        }
+        let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut unregistered = Vec::new();
+        let mut seen = 0;
+        for krate in std::fs::read_dir(&crates).unwrap().flatten() {
+            let mut files = Vec::new();
+            if krate.path().join("src").is_dir() {
+                rust_files(&krate.path().join("src"), &mut files);
+            }
+            let (mut declared, mut registered) = (Vec::new(), Vec::new());
+            for file in &files {
+                let text = std::fs::read_to_string(file).unwrap();
+                let shown = Path::new("crates").join(file.strip_prefix(&crates).unwrap());
+                for (ident, name, line) in declarations(&text) {
+                    declared.push((ident, name, format!("{}:{line}", shown.display())));
+                }
+                registered.extend(registrations(&text));
+            }
+            seen += declared.len();
+            for (ident, name, place) in declared {
+                if !name.starts_with("test.") && !registered.contains(&ident) {
+                    unregistered.push(format!(
+                        "tunable {name} ({ident}, {place}) is declared but no `tune::register` \
+                         names it, so `--tune {name}=...` and `cargo xtask probe` refuse it until \
+                         something reads it (D547). Fix: add `&{ident}` to the `tune::register(&[...])` \
+                         in its owner's plugin build; don't count on the read in `Tunable::get`."
+                    ));
+                }
+            }
+        }
+        assert!(seen > 0, "found no tunables under {}", crates.display());
+        assert!(unregistered.is_empty(), "{}", unregistered.join("\n"));
+    }
+
+    /// `(IDENT, "dotted.name", line)` of each `static IDENT: Tunable = Tunable::new("name", ...)`.
+    fn declarations(text: &str) -> Vec<(String, String, usize)> {
+        let lines: Vec<&str> = text.lines().collect();
+        let mut found = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            let Some((_, rest)) = line.split_once("static ") else {
+                continue;
+            };
+            let Some((ident, rest)) = rest.split_once(':') else {
+                continue;
+            };
+            let Some((ty, _)) = rest.split_once('=') else {
+                continue;
+            };
+            if !ty.trim().ends_with("Tunable") {
+                continue;
+            }
+            let after = [&[rest][..], &lines[i + 1..]].concat().join("\n");
+            let name = after.split('"').nth(1).unwrap_or("?").to_string();
+            found.push((ident.trim().to_string(), name, i + 1));
+        }
+        found
+    }
+
+    /// The idents in every `register(&[&A, &b::B])` call: `A`, `B`.
+    fn registrations(text: &str) -> Vec<String> {
+        text.split("register(&[")
+            .skip(1)
+            .flat_map(|call| call.split(']').next().unwrap_or("").split(','))
+            .filter_map(|item| item.trim().trim_start_matches('&').rsplit("::").next())
+            .filter(|ident| !ident.is_empty())
+            .map(str::to_string)
+            .collect()
+    }
+
     #[test]
     fn the_command_line_takes_name_equals_value() {
         assert_eq!(
