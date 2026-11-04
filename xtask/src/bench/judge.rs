@@ -12,7 +12,7 @@ pub(super) fn missed(timing: &Timing) -> Vec<String> {
     let mut missed = play::load_missed(timing.load_s, budget.load_s);
     let limits = &budget.play;
     if timing.from_start {
-        missed.extend(freezes(timing.freezes, limits));
+        missed.extend(freezes(timing, limits));
         return missed;
     }
     if timing.integrated() {
@@ -62,7 +62,7 @@ fn frames(timing: &Timing, limits: &Limits) -> Vec<String> {
             timing.longest.look()
         ));
     }
-    missed.extend(freezes(timing.freezes, limits));
+    missed.extend(freezes(timing, limits));
     missed.extend(
         timing
             .ticks
@@ -79,14 +79,16 @@ fn frames(timing: &Timing, limits: &Limits) -> Vec<String> {
     missed
 }
 
-/// Freezes past the most a phase allows: each is in the log as a `freeze:` line naming its
-/// world and what held it (D576).
-fn freezes(freezes: u32, limits: &Limits) -> Option<String> {
+/// Freezes past the most a phase allows, with what held the worst as the run's freeze
+/// warnings said, which the bench keeps (`freezes`, D576).
+fn freezes(timing: &Timing, limits: &Limits) -> Option<String> {
     let most = limits.freezes?;
-    (freezes > most).then(|| {
+    (timing.freezes > most).then(|| {
         format!(
-            "{freezes} freezes of {:.0} ms or more, past the {most} allowed ({FILE}): each is a `freeze:` line in the run's log naming what held it",
-            play::FREEZE_MS
+            "{} freezes of {:.0} ms or more, past the {most} allowed ({FILE}): {}",
+            timing.freezes,
+            play::FREEZE_MS,
+            timing.froze.look()
         )
     })
 }

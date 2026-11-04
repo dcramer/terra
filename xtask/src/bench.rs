@@ -71,8 +71,10 @@ struct Timing {
     /// phase, groups, schedules, render CPU and GPU passes (`phases`).
     ticks: ticks::Said,
     phases: phases::Said,
-    /// Which systems its log's hitch warnings found longest in its hitch frames.
+    /// Which systems its log's hitch warnings found longest in its hitch frames, and its
+    /// freeze warnings' worst.
     longest: hitches::Longest,
+    froze: freezes::Freezes,
 }
 
 impl Timing {
@@ -195,6 +197,7 @@ fn parse_timing(line: &str) -> Option<Timing> {
         ticks: ticks::Said::default(),
         phases: phases::Said::default(),
         longest: hitches::Longest::default(),
+        froze: freezes::Freezes::default(),
     })
 }
 
@@ -264,6 +267,7 @@ fn combine(runs: &[Timing]) -> Option<Timing> {
         ticks: ticks::Said::middle(runs.iter().map(|t| &t.ticks)),
         phases: phases::Said::middle(runs.iter().map(|t| &t.phases)),
         longest: hitches::Longest::sum(runs.iter().map(|t| &t.longest)),
+        froze: freezes::Freezes::sum(runs.iter().map(|t| &t.froze)),
         freezes: runs.iter().map(|t| t.freezes).max().unwrap_or(0),
         load_s: first
             .load_s
@@ -838,18 +842,19 @@ fn time_scene(
         .spawn()
         .ok()?;
     let stdout = child.stdout.take()?;
-    // The log, read only for what is worth saying beside the frames, and its hitch warnings'
-    // systems, summed.
+    // The log, read only for what is worth saying beside the frames, its hitch warnings'
+    // systems, summed, and its freeze warnings' worst.
     let stderr = child.stderr.take()?;
     let said = std::thread::spawn(move || {
         let mut longest = hitches::Longest::default();
+        let mut froze = freezes::Freezes::default();
         let said = BufReader::new(stderr)
             .lines()
             .map_while(Result::ok)
-            .filter(|line| !longest.read(line))
+            .filter(|line| !longest.read(line) && !froze.read(line))
             .filter_map(|line| worth_saying(&line).map(str::to_string))
             .collect::<Vec<String>>();
-        (said, longest)
+        (said, longest, froze)
     });
     // A run waiting its turn on the GPU (D319) is not stuck: its time starts once it has it.
     let turn = std::sync::Arc::new(std::sync::Mutex::new((false, std::time::Instant::now())));
@@ -911,13 +916,14 @@ fn time_scene(
             Err(_) => break,
         }
     }
-    let (said, longest) = said.join().unwrap_or_default();
-    if let Some(line) = longest.said() {
+    let (said, longest, froze) = said.join().unwrap_or_default();
+    for line in longest.said().into_iter().chain(froze.said()) {
         println!("  {line}");
     }
     let load_s = say_log(said);
     let mut timing = reader.join().ok()??;
-    (timing.from_start, timing.load_s, timing.longest) = (from_start, load_s, longest);
+    (timing.from_start, timing.load_s) = (from_start, load_s);
+    (timing.longest, timing.froze) = (longest, froze);
     timing.budget = budget.clone();
     println!(
         "  median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms; {:.2}% over budget, {} hitches, {:+.1}% by the end",
@@ -961,6 +967,8 @@ fn say_log(said: Vec<String>) -> Option<f32> {
 
 #[path = "bench/budgets.rs"]
 mod budgets;
+#[path = "bench/freezes.rs"]
+mod freezes;
 #[path = "bench/hitches.rs"]
 mod hitches;
 #[path = "bench/judge.rs"]

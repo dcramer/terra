@@ -27,6 +27,7 @@ pub(crate) fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
         ticks: ticks::Said::default(),
         phases: phases::Said::default(),
         longest: hitches::Longest::default(),
+        froze: freezes::Freezes::default(),
     }
 }
 
@@ -99,6 +100,39 @@ fn a_scene_holds_to_the_budget_unless_it_misses_a_gate() {
     let said = hitched(&named);
     assert!(
         said.ends_with("the longest system was forest::stream in 6 of the 9 hitch frames the recorder explained"),
+        "{said}"
+    );
+}
+
+/// A scene that froze says what held its worst freeze, from the warnings the bench kept, or
+/// the command that will; never a `freeze:` line in a log the bench dropped.
+#[test]
+fn a_freezing_scene_says_what_held_it() {
+    let froze = Timing {
+        freezes: 1,
+        ..timing(5.0, 9.0, 20.0)
+    };
+    let missed = |timing: &Timing| {
+        timing
+            .misses()
+            .into_iter()
+            .find(|miss| miss.starts_with("1 freezes of 100 ms or more, past the 0 allowed"))
+            .unwrap()
+    };
+    let said = missed(&froze);
+    assert!(
+        said.contains("warned of none") && said.contains("cargo xtask profile walk"),
+        "{said}"
+    );
+    assert!(!said.contains("`freeze:` line"), "{said}");
+    let mut warned = freezes::Freezes::default();
+    warned.read("WARN terra_world::recorder: freeze: frame 88 took 312 ms, held by the game world: forest::stream 290 ms; 22 ms outside anything timed (a wait on the GPU, a lock or the other world, or work on the task pools).");
+    let said = missed(&Timing {
+        froze: warned,
+        ..froze
+    });
+    assert!(
+        said.ends_with("the worst of the run's 1 freeze warning was frame 88 took 312 ms, held by the game world: forest::stream 290 ms; 22 ms outside anything timed"),
         "{said}"
     );
 }
