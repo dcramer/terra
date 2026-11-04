@@ -1,5 +1,5 @@
 use super::plan::{Frame, Gate, Lever, Plan, Row, Rules, Seen, TOTAL, Verdict, Why, rows, table};
-use super::{Probe, apply, gpu, hide, start};
+use super::{Probe, apply, end_phase, gpu, hide, levers, start};
 use bevy::prelude::*;
 
 const RULES: Rules = Rules {
@@ -348,6 +348,44 @@ fn a_hide_matching_nothing_fails_naming_what_is_drawn() {
     apply(&mut world, &mut lights).unwrap();
     hide(&mut world, &mut lights);
     assert_eq!(world.get::<Visibility>(light), Some(&Visibility::Hidden));
+}
+
+/// What the culling does at the end of a frame, after the probe's levers: a mesh hidden is
+/// out of view, any other in it.
+fn cull(world: &mut World) {
+    let mut meshes = world.query_filtered::<(&Visibility, &mut ViewVisibility), With<Mesh3d>>();
+    for (visibility, mut view) in meshes.iter_mut(world) {
+        *view = if *visibility == Visibility::Hidden {
+            ViewVisibility::HIDDEN
+        } else {
+            ViewVisibility::VISIBLE
+        };
+    }
+}
+
+/// Two variants hiding the same material: the second is checked once the first's hides are
+/// shown again and a frame's culling has seen them, not against meshes still hidden by the
+/// first (tonight's probe failed such a pair as matching 111 meshes, none in view).
+#[test]
+fn a_variant_hiding_what_the_last_hid_is_checked_with_it_shown() {
+    let (mut world, mesh) = scene(true);
+    let mut probe = Probe::new(Plan::parse("plain: hide=Standard; again: hide=Standard").unwrap());
+    probe.phases = probe.plan.phases(1);
+    levers(&mut world, &mut probe).unwrap();
+    assert!(probe.applied);
+    assert_eq!(world.get::<Visibility>(mesh), Some(&Visibility::Hidden));
+    cull(&mut world);
+    end_phase(&mut probe, None);
+    assert_eq!(probe.at, 1);
+    // The switch's frame shows what the first hid, the next applies the second.
+    let mut frames = 0;
+    while !probe.applied && frames < 3 {
+        levers(&mut world, &mut probe).unwrap();
+        cull(&mut world);
+        frames += 1;
+    }
+    assert!(probe.applied, "the second variant never applied");
+    assert_eq!(world.get::<Visibility>(mesh), Some(&Visibility::Hidden));
 }
 
 #[test]

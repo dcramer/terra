@@ -194,12 +194,12 @@ fn step(world: &mut World) {
                 return fail(&mut probe, why);
             }
         }
-        if !probe.applied
-            && let Err(why) = apply(world, &mut probe)
-        {
+        if let Err(why) = levers(world, &mut probe) {
             return fail(&mut probe, why);
         }
-        hide(world, &mut probe);
+        if !probe.applied {
+            return;
+        }
         let store = world.resource::<DiagnosticsStore>();
         let Some(then) = passes_timed(store).filter(|&t| probe.last_timed != Some(t)) else {
             return;
@@ -269,8 +269,29 @@ fn start(probe: &mut Probe) -> Result<(), String> {
     Ok(())
 }
 
-/// The phase's variant: its tunables set, the rest back to where they began, what the last
-/// hid shown again, and its hides checked to match meshes in view.
+/// The phase's levers, each frame. Between phases, what the last variant hid is shown again
+/// first, a frame before the next is applied: its meshes' view visibility is the culling's
+/// of the frame before, so a variant hiding what the last did was checked against meshes
+/// still hidden by it and failed as matching meshes none in view. The culling of the frame
+/// that shows them, later in this one's `PostUpdate`, sees them again.
+fn levers(world: &mut World, probe: &mut Probe) -> Result<(), String> {
+    if !probe.applied {
+        if !probe.hidden.is_empty() {
+            for (e, was) in probe.hidden.drain(..) {
+                if let Ok(mut entity) = world.get_entity_mut(e) {
+                    entity.insert(was);
+                }
+            }
+            return Ok(());
+        }
+        apply(world, probe)?;
+    }
+    hide(world, probe);
+    Ok(())
+}
+
+/// The phase's variant, once the last's hides are shown again (`levers`): its tunables set,
+/// the rest back to where they began, and its hides checked to match meshes in view.
 fn apply(world: &mut World, probe: &mut Probe) -> Result<(), String> {
     let (v, round) = probe.phases[probe.at];
     let variant = probe.plan.variants[v].clone();
@@ -284,11 +305,6 @@ fn apply(world: &mut World, probe: &mut Probe) -> Result<(), String> {
             })
             .unwrap_or(base);
         tunable.set(value, SetBy::CommandLine)?;
-    }
-    for (e, was) in probe.hidden.drain(..) {
-        if let Ok(mut entity) = world.get_entity_mut(e) {
-            entity.insert(was);
-        }
     }
     for part in hides(&variant) {
         let matched = matching(world, part);
