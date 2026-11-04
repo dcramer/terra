@@ -87,11 +87,12 @@ impl Run {
             None => String::new(),
         };
         Some(format!(
-            "the box's CPU clock fell to {:.0} MHz {times} time{} from its {:.0} MHz, at {} s (its power management, not the game){verdict}",
+            "the box's CPU clock fell to {:.0} MHz {times} time{} from its {:.0} MHz, at {} s ({}){verdict}",
             clock.lowest_mhz,
             if times == 1 { "" } else { "s" },
             clock.median_mhz,
             at.join(", "),
+            clock.cause(),
         ))
     }
 }

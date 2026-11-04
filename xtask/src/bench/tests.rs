@@ -239,6 +239,8 @@ fn a_hitch_in_a_clock_collapse_is_the_machines() {
                 lowest_mhz: 900.0,
                 at_s: vec![25.0, 40.0],
                 start_epoch_s: start,
+                package_c: Vec::new(),
+                tjmax_c: None,
             }),
         }),
     };
@@ -247,6 +249,20 @@ fn a_hitch_in_a_clock_collapse_is_the_machines() {
     assert!(run(Some(&inside)).busy());
     let said = run(Some(&inside)).clock_said().unwrap();
     assert!(said.contains("fell to 900 MHz 2 times") && said.contains("another stands in"));
+    assert!(
+        said.contains("(its power management, not the game)"),
+        "{said}"
+    );
+    // The package at its TjMax before the falls: the box's heat, which its line says.
+    let mut hot = run(Some(&inside));
+    if let Some(clock) = hot.during.as_mut().and_then(|d| d.clock.as_mut()) {
+        (clock.package_c, clock.tjmax_c) = (vec![Some(100.0), Some(98.0)], Some(100.0));
+    }
+    let said = hot.clock_said().unwrap();
+    assert!(
+        said.contains("at 25.0, 40.0 s (thermal: package at 98-100 °C before each, its TjMax 100 °C; check the box's cooling, not the game)"),
+        "{said}"
+    );
     // One a second and a half after a fall, or before it: the game's, so the run is not busy.
     let late = [start + 25.05, start + 26.5];
     assert_eq!(run(Some(&late)).hitches_split(), Some((1, 1)));

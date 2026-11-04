@@ -13,6 +13,9 @@
 //! a benchmark has the GPU to itself (D319), so no other sandbox runs then. The GPU's, where
 //! `nvidia-smi` answers.
 
+mod thermal;
+
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -120,6 +123,9 @@ pub(crate) struct Watch {
     stop: Arc<AtomicBool>,
     samples: Arc<Mutex<Vec<Load>>>,
     clocks: Arc<Mutex<Vec<(f32, f32)>>>,
+    /// The CPU package's sensor, and its °C read beside each clock reading.
+    sensor: Option<thermal::Sensor>,
+    temps: Arc<Mutex<Vec<(f32, f32)>>>,
     threads: Vec<std::thread::JoinHandle<()>>,
     start_epoch_s: f64,
 }
@@ -161,6 +167,17 @@ pub(crate) struct Clock {
     pub at_s: Vec<f32>,
     /// The run's start, seconds since the Unix epoch, to lay the sandbox's hitches beside.
     pub start_epoch_s: f64,
+    /// The CPU package's hottest in the `thermal::BEFORE_S` before each collapse, °C (none
+    /// where it was not read), and its TjMax where the chip says one.
+    pub package_c: Vec<Option<f32>>,
+    pub tjmax_c: Option<f32>,
+}
+
+impl Clock {
+    /// What its collapses were: the box's heat, or its power management (`thermal::cause`).
+    pub(crate) fn cause(&self) -> String {
+        thermal::cause(&self.package_c, self.tjmax_c)
+    }
 }
 
 /// Seconds since the Unix epoch now, as the sandbox stamps its hitches.
@@ -203,6 +220,8 @@ pub(crate) fn clock(series: &[(f32, f32)]) -> Option<Clock> {
         lowest_mhz: if at_s.is_empty() { sorted[0] } else { lowest },
         at_s,
         start_epoch_s: 0.0,
+        package_c: Vec::new(),
+        tjmax_c: None,
     })
 }
 
@@ -274,13 +293,23 @@ impl Watch {
         let mut threads = Vec::new();
         let start_epoch_s = epoch_s();
         let files = watched_cpus();
+        let temps = Arc::new(Mutex::new(Vec::new()));
+        let sensor = thermal::sensor(Path::new("/sys/class"));
         if !files.is_empty() {
             let (stopping, kept) = (stop.clone(), clocks.clone());
+            let (package, heat) = (sensor.clone(), temps.clone());
             let started = Instant::now();
             threads.push(std::thread::spawn(move || {
                 while !stopping.load(Ordering::Relaxed) {
+                    let second = started.elapsed().as_secs_f32();
                     if let (Some(mhz), Ok(mut kept)) = (mean_clock(&files), kept.lock()) {
-                        kept.push((started.elapsed().as_secs_f32(), mhz));
+                        kept.push((second, mhz));
+                    }
+                    if let (Some(c), Ok(mut heat)) = (
+                        package.as_ref().and_then(thermal::Sensor::now_c),
+                        heat.lock(),
+                    ) {
+                        heat.push((second, c));
                     }
                     std::thread::sleep(CLOCK_EVERY);
                 }
@@ -311,6 +340,8 @@ impl Watch {
             stop,
             samples,
             clocks,
+            sensor,
+            temps,
             threads,
             start_epoch_s,
         }
@@ -326,6 +357,10 @@ impl Watch {
         seen.clock = self.clocks.lock().ok().and_then(|series| clock(&series));
         if let Some(clock) = seen.clock.as_mut() {
             clock.start_epoch_s = self.start_epoch_s;
+            if let (Some(sensor), Ok(temps)) = (&self.sensor, self.temps.lock()) {
+                clock.package_c = thermal::hottest_before(&clock.at_s, &temps);
+                clock.tjmax_c = sensor.tjmax_c;
+            }
         }
         Some(seen)
     }
