@@ -403,8 +403,15 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
     // world less the eye is the difference of two numbers some 30 km from the planet's middle,
     // which f32 holds to 2 mm, a 2% error over the 10 cm to the near plane, and the picture fell
     // into blocks a degree across.
-    let near = frame.world_from_clip * vec4<f32>(ndc, 1.0, 1.0);
-    let direction = normalize(near.xyz / near.w);
+    var near = frame.world_from_clip * vec4<f32>(ndc, 1.0, 1.0);
+    var direction = normalize(near.xyz / near.w);
+    if frame.jitter.w > 0.5 {
+        // No history of their own: the ray follows the view's own projection, jittered by the
+        // main pass's TAA, so its history averages the clouds' edges as it does the scene's, as
+        // the sky and every other thing drawn with the view does (D617).
+        near = view.view_from_clip * vec4<f32>(ndc, 1.0, 1.0);
+        direction = normalize((view.world_from_view * vec4<f32>(near.xyz / near.w, 0.0)).xyz);
+    }
 
     // The scene's nearest depth under this half-resolution pixel (reversed: 0 is infinitely far).
     // A main pass drawn smaller than the view for temporal upscaling (D616) fills only the

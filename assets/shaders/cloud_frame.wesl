@@ -8,6 +8,7 @@ struct Frame {
     // Last frame's, the other way: a way in the world to its clip space.
     clip_from_world_before: mat4x4<f32>,
     // xy the march's offset inside its pixel this frame, in pixels; z 1 when there is no history
-    // to blend (the first frame, or a new picture size).
+    // to blend (the first frame, or a new picture size); w 1 when the clouds keep no history and
+    // the ray follows the view's own projection, jittered by the main pass's TAA.
     jitter: vec4<f32>,
 }

@@ -214,7 +214,8 @@ fn next_frame(view: &ExtractedView, history: Option<&History>, size: UVec2) -> (
     let kept = history.filter(|h| h.size == size);
     let frames = kept.map_or(0, |h| h.frames.wrapping_add(1));
     let index = frames % OFFSETS + 1;
-    // Off, one ray through each pixel's middle and nothing kept, as before D617.
+    // Off, one ray through each pixel's middle of the view's own (TAA-jittered) projection and
+    // nothing kept, as before D617.
     let on = super::HISTORY.get() >= 0.5;
     let offset = Vec2::new(halton(index, 2), halton(index, 3)) - 0.5;
     let frame = Frame {
@@ -222,7 +223,7 @@ fn next_frame(view: &ExtractedView, history: Option<&History>, size: UVec2) -> (
         clip_from_world_before: kept.map_or(now, |h| h.clip_from_world),
         jitter: (if on { offset } else { Vec2::ZERO })
             .extend(if on && kept.is_some() { 0.0 } else { 1.0 })
-            .extend(0.0),
+            .extend(if on { 0.0 } else { 1.0 }),
     };
     let history = History {
         clip_from_world: now,
