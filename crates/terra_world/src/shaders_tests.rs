@@ -337,6 +337,10 @@ const PIPELINES: &[(&str, &str)] = &[
     ),
     ("cloud_volume", "the clouds' march (sky/volume/render.rs)"),
     (
+        "cloud_resolve",
+        "the clouds' temporal resolve (sky/volume/render.rs)",
+    ),
+    (
         "fire_haze",
         "the heat haze, a FullscreenMaterial (fire/haze.rs)",
     ),
