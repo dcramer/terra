@@ -306,7 +306,10 @@ fn calculate_contact_shadow(
     @else
     let noise = utils::interleaved_gradient_noise(frag_coord, view_bindings::globals.frame_count);
 
-    let depth_size = vec2<f32>(textureDimensions(view_bindings::depth_prepass_texture));
+    // Terra's patch (D616): the size the depth was drawn at, the view's viewport, which is the
+    // texture's corner when the main pass is drawn smaller (`MainPassResolutionOverride`); the
+    // texture's own size marched the whole texture, so the contact shadows missed.
+    let depth_size = view_bindings::view.viewport.zw;
     var rm = raymarch::depth_ray_march_new_from_depth(depth_size);
     raymarch::depth_ray_march_from_cs(&rm, position_world_to_ndc(world_position));
     raymarch::depth_ray_march_to_ws(&rm, world_position + light_dir * view_bindings::contact_shadows_settings.length);

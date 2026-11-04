@@ -62,16 +62,23 @@ fn depth_sample_bilinear_clamped(uv: vec2<f32>, tex_size: vec2<f32>) -> f32 {
     return mix(d0, d1, frac.y);
 }
 
+// Terra's patch (D616): `tex_size` is the size the depth was drawn at, which may be a corner of
+// the texture (`MainPassResolutionOverride`); a sampler reads the texture's whole, so its uv is
+// scaled into the corner (by 1 when the two are the same).
+fn depth_sampled_uv(uv: vec2<f32>, tex_size: vec2<f32>) -> vec2<f32> {
+    return uv * tex_size / vec2<f32>(textureDimensions(depth_prepass_texture));
+}
+
 fn depth_sample_linear(uv: vec2<f32>, tex_size: vec2<f32>) -> f32 {
     @if(USE_DEPTH_SAMPLERS)
-    return textureSampleLevel(depth_prepass_texture, depth_linear_sampler, uv, 0u);
+    return textureSampleLevel(depth_prepass_texture, depth_linear_sampler, depth_sampled_uv(uv, tex_size), 0u);
     @else
     return depth_sample_bilinear_clamped(uv, tex_size);
 }
 
 fn depth_sample_nearest(uv: vec2<f32>, tex_size: vec2<f32>) -> f32 {
     @if(USE_DEPTH_SAMPLERS)
-    return textureSampleLevel(depth_prepass_texture, depth_nearest_sampler, uv, 0u);
+    return textureSampleLevel(depth_prepass_texture, depth_nearest_sampler, depth_sampled_uv(uv, tex_size), 0u);
     @else
     return depth_sample_nearest_clamped(uv, tex_size);
 }
