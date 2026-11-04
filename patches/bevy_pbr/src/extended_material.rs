@@ -46,6 +46,12 @@ pub trait MaterialExtension: Asset + AsBindGroup + Clone + Sized {
         None
     }
 
+    /// Terra's patch (D618): this material's `Material::prepass_draw_priority`; `None` takes
+    /// the base material's.
+    fn prepass_draw_priority(&self) -> Option<i32> {
+        None
+    }
+
     /// Controls if the prepass is enabled for the Material.
     /// For more information about what a prepass is, see the [`bevy_core_pipeline::prepass`] docs.
     #[inline]
@@ -252,6 +258,12 @@ impl<B: Material, E: MaterialExtension> Material for ExtendedMaterial<B, E> {
 
     fn depth_bias(&self) -> f32 {
         B::depth_bias(&self.base)
+    }
+
+    fn prepass_draw_priority(&self) -> i32 {
+        self.extension
+            .prepass_draw_priority()
+            .unwrap_or_else(|| B::prepass_draw_priority(&self.base))
     }
 
     fn reads_view_transmission_texture(&self) -> bool {

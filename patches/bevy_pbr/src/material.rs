@@ -179,6 +179,14 @@ pub trait Material: Asset + AsBindGroup + Clone + Sized {
     }
 
     #[inline]
+    /// Terra's patch (D618): where this material's meshes draw in the alpha-mask prepass,
+    /// lowest first, as Godot's `render_priority` orders materials; 0 is Bevy's order, by
+    /// pipeline. A cut-out material drawn early fills the depth that rejects the rest.
+    fn prepass_draw_priority(&self) -> i32 {
+        0
+    }
+
+    #[inline]
     /// Returns whether the material would like to read from [`ViewTransmissionTexture`].
     ///
     /// This allows taking color output from the [`Opaque3d`] pass as an input, (for screen-space transmission) but requires
@@ -1541,6 +1549,8 @@ pub struct ShadowsDepthOnlyDrawFunction;
 pub struct PreparedMaterial {
     pub binding: MaterialBindingId,
     pub properties: Arc<MaterialProperties>,
+    /// Terra's patch (D618): `Material::prepass_draw_priority`.
+    pub prepass_draw_priority: i32,
 }
 
 pub fn base_specialize(
@@ -1764,6 +1774,7 @@ where
 
         Ok(PreparedMaterial {
             binding,
+            prepass_draw_priority: material.prepass_draw_priority(),
             properties: Arc::new(MaterialProperties {
                 alpha_mode,
                 depth_bias: material.depth_bias(),

@@ -1489,13 +1489,17 @@ pub fn queue_prepass_material_meshes(
                             ),
                         );
                     } else if let Some(alpha_mask_phase) = alpha_mask_phase.as_mut() {
+                        let batch_set_key = OpaqueNoLightmap3dBatchSetKey {
+                            draw_function,
+                            pipeline: pipeline_id,
+                            material_bind_group_index: Some(material.binding.group.0),
+                            slabs: mesh_slabs,
+                        };
+                        // Terra's patch (D618): the material says where its batch set draws.
+                        alpha_mask_phase
+                            .set_draw_priority(&batch_set_key, material.prepass_draw_priority);
                         alpha_mask_phase.add(
-                            OpaqueNoLightmap3dBatchSetKey {
-                                draw_function,
-                                pipeline: pipeline_id,
-                                material_bind_group_index: Some(material.binding.group.0),
-                                slabs: mesh_slabs,
-                            },
+                            batch_set_key,
                             OpaqueNoLightmap3dBinKey {
                                 asset_id: mesh_instance.mesh_asset_id().into(),
                             },
