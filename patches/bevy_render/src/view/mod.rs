@@ -1172,6 +1172,16 @@ impl ViewDepthStencilTexture {
     }
 }
 
+/// Terra's patch: a view's `view_from_world`, made one way for this frame's view uniforms and
+/// for the previous frame's (`bevy_pbr`'s `PreviousViewData`), so a camera that has not moved
+/// gives the two the same matrix, bit for bit. Bevy 0.20 made last frame's through
+/// `Affine3A::inverse` and this frame's through `Mat4::inverse`; far from the origin (Terra's
+/// ground is 30 km from it) the two round apart by millimetres, which the motion vectors read
+/// as the camera moving: a pixel and more a frame on near ground, less with distance.
+pub fn view_from_world(world_from_view: &GlobalTransform) -> Mat4 {
+    world_from_view.to_matrix().inverse()
+}
+
 pub fn prepare_view_uniforms(
     mut commands: Commands,
     render_device: Res<RenderDevice>,
@@ -1232,7 +1242,7 @@ pub fn prepare_view_uniforms(
 
         let view_from_clip = clip_from_view.inverse();
         let world_from_view = extracted_view.world_from_view.to_matrix();
-        let view_from_world = world_from_view.inverse();
+        let view_from_world = view_from_world(&extracted_view.world_from_view);
 
         let clip_from_world = if temporal_jitter.is_some() {
             clip_from_view * view_from_world

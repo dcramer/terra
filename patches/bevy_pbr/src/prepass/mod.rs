@@ -39,8 +39,9 @@ use bevy_render::{
     renderer::{RenderAdapter, RenderDevice, RenderQueue},
     sync_world::{MainEntityHashSet, RenderEntity},
     view::{
-        ExtractedView, Msaa, RenderVisibilityRanges, RenderVisibleEntities, RetainedViewEntity,
-        ViewUniform, ViewUniformOffset, ViewUniforms, VISIBILITY_RANGES_STORAGE_BUFFER_COUNT,
+        view_from_world, ExtractedView, Msaa, RenderVisibilityRanges, RenderVisibleEntities,
+        RetainedViewEntity, ViewUniform, ViewUniformOffset, ViewUniforms,
+        VISIBILITY_RANGES_STORAGE_BUFFER_COUNT,
     },
     Extract, ExtractSchedule, GpuResourceAppExt, Render, RenderApp, RenderDebugFlags,
     RenderStartup, RenderSystems,
@@ -198,21 +199,34 @@ pub fn update_previous_view_data(
     query: Query<(Entity, &Camera, &GlobalTransform), Or<(With<Camera3d>, With<ShadowView>)>>,
 ) {
     for (entity, camera, camera_transform) in &query {
-        let world_from_view = camera_transform.affine();
-        let view_from_world = Mat4::from(world_from_view.inverse());
-        let view_from_clip = camera.clip_from_view().inverse();
-
         // Note: this main-world system cannot know the temporal jitter (it's applied in
         // the render world). Jitter is applied in `prepare_previous_view_uniforms`
         // using `PreviousTemporalJitter`.
-        commands.entity(entity).try_insert(PreviousViewData {
-            view_from_world,
-            clip_from_world: camera.clip_from_view() * view_from_world,
-            unjittered_clip_from_world: camera.clip_from_view() * view_from_world,
-            clip_from_view: camera.clip_from_view(),
-            world_from_clip: Mat4::from(world_from_view) * view_from_clip,
-            view_from_clip,
-        });
+        commands
+            .entity(entity)
+            .try_insert(previous_view_data(camera_transform, camera.clip_from_view()));
+    }
+}
+
+/// Terra's patch: a view's matrices as next frame reads them, unjittered. `view_from_world` is
+/// `bevy_render`'s, the one this frame's view uniforms use, so a camera that has not moved
+/// gives the prepass the same `unjittered_clip_from_world` on both sides and static ground no
+/// motion. Bevy 0.20 inverted the `Affine3A` here, which rounds apart from the render world's
+/// `Mat4::inverse` by millimetres 30 km from the origin: a pixel of motion a frame on near
+/// ground, which the temporal resolve reprojected its history by (D616).
+pub fn previous_view_data(
+    world_from_view: &GlobalTransform,
+    clip_from_view: Mat4,
+) -> PreviousViewData {
+    let view_from_world = view_from_world(world_from_view);
+    let view_from_clip = clip_from_view.inverse();
+    PreviousViewData {
+        view_from_world,
+        clip_from_world: clip_from_view * view_from_world,
+        unjittered_clip_from_world: clip_from_view * view_from_world,
+        clip_from_view,
+        world_from_clip: world_from_view.to_matrix() * view_from_clip,
+        view_from_clip,
     }
 }
 
@@ -759,20 +773,7 @@ pub fn prepare_previous_view_uniforms(
     {
         let mut prev_view_data = match maybe_previous_view_uniforms {
             Some(previous_view) => previous_view.clone(),
-            None => {
-                let world_from_view = camera.world_from_view.affine();
-                let view_from_world = Mat4::from(world_from_view.inverse());
-                let view_from_clip = camera.clip_from_view.inverse();
-
-                PreviousViewData {
-                    view_from_world,
-                    clip_from_world: camera.clip_from_view * view_from_world,
-                    unjittered_clip_from_world: camera.clip_from_view * view_from_world,
-                    clip_from_view: camera.clip_from_view,
-                    world_from_clip: Mat4::from(world_from_view) * view_from_clip,
-                    view_from_clip,
-                }
-            }
+            None => previous_view_data(&camera.world_from_view, camera.clip_from_view),
         };
 
         // The previous frame's depth/gbuffer were rasterized with that frame's temporal
@@ -1617,3 +1618,64 @@ pub type DrawDepthOnlyPrepass = (
     SetPrepassEmptyMaterialBindGroup<3>,
     DrawMesh,
 );
+
+/// Terra's patch.
+#[cfg(test)]
+mod previous_view_tests {
+    use super::*;
+    use bevy_math::{Vec3, Vec4Swizzles};
+    use bevy_transform::components::Transform;
+
+    const SHOWN: Vec2 = Vec2::new(3816.0, 1550.0);
+
+    /// A camera standing on ground 30 km from the origin, as Terra's, looking along it.
+    fn camera(i: u32) -> GlobalTransform {
+        let f = i as f32;
+        let eye = Vec3::new(-8_123.4 + 37.1 * f, 26_765.4 - 11.3 * f, 9_321.9 + 23.7 * f)
+            .normalize()
+            * 30_001.7;
+        let along = Vec3::new(0.6, 0.0, -0.8).reject_from(eye).normalize();
+        Transform::from_translation(eye)
+            .looking_at(eye + along * 10.0 - eye.normalize() * 1.5, eye.normalize())
+            .into()
+    }
+
+    /// The motion of `at`, in shown pixels, as the prepass works it out (prepass.wesl).
+    fn motion(current: Mat4, previous: Mat4, at: Vec3) -> f32 {
+        let a = current * at.extend(1.0);
+        let b = previous * at.extend(1.0);
+        ((a.xy() / a.w - b.xy() / b.w) * 0.5 * SHOWN).length()
+    }
+
+    /// The worst motion of ground 2 to 30 m ahead of each camera.
+    fn worst(previous: impl Fn(&GlobalTransform, Mat4) -> Mat4) -> f32 {
+        let clip_from_view = Mat4::perspective_infinite_reverse_rh(1.0, SHOWN.x / SHOWN.y, 0.1);
+        let mut worst = 0.0f32;
+        for i in 0..32 {
+            let t = camera(i);
+            // This frame's, as `prepare_view_uniforms` makes it.
+            let current = clip_from_view * view_from_world(&t);
+            let previous = previous(&t, clip_from_view);
+            for d in [2.0, 3.0, 5.0, 10.0, 30.0] {
+                let at = t.translation() + *t.forward() * d - *t.up() * 1.5;
+                worst = worst.max(motion(current, previous, at));
+            }
+        }
+        worst
+    }
+
+    /// A camera that has not moved gives static ground no motion, however far from the origin:
+    /// last frame's matrices are made as this frame's are. Bevy 0.20's (`Affine3A::inverse`)
+    /// gave it a shown pixel and more, which the temporal resolve reprojected history by.
+    #[test]
+    fn a_still_camera_far_from_the_origin_moves_nothing() {
+        let ours = worst(|t, p| previous_view_data(t, p).unjittered_clip_from_world);
+        assert_eq!(ours, 0.0, "a still camera moved static ground {ours} pixels");
+        let bevys = worst(|t, p| p * Mat4::from(t.affine().inverse()));
+        assert!(
+            bevys > 0.1,
+            "Bevy 0.20's previous view moved static ground only {bevys} pixels: the test no \
+             longer shows the rounding it guards against"
+        );
+    }
+}
