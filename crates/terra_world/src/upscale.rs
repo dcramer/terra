@@ -14,15 +14,32 @@
 //! (`PIXEL_BUDGET`, D616), as shipped games cap their render resolution below a large output
 //! (Unreal's screen percentage, consoles' fixed internal resolution): shading pixels is most
 //! of the frame at the lake, so a window of twice 1080p's pixels costs about twice its frame.
+//!
+//! With `TEMPORAL` on, a world drawn smaller is not stretched: the main camera keeps drawing
+//! to the screen, its main pass drawn in a corner the drawn size (`Drawn`, Bevy's
+//! `MainPassResolutionOverride` in the render world), and its temporal anti-aliasing resolves
+//! the jittered frames to the screen's size, as FidelityFX Super Resolution 2 and Unreal's
+//! TSR do (D616 step 2; the patched `bevy_anti_alias`'s `taa_upscale.wesl`). Textures are
+//! sampled a mip finer by the share (`MipBias`), as FSR 2 asks, so the detail the history
+//! gathers is there to gather.
 
 use crate::planet::MainCamera;
 use crate::quality::Quality;
 use crate::shell::Picture;
 use bevy::{
-    anti_alias::contrast_adaptive_sharpening::ContrastAdaptiveSharpening,
-    camera::{ImageRenderTarget, RenderTarget, visibility::RenderLayers},
+    anti_alias::{
+        contrast_adaptive_sharpening::ContrastAdaptiveSharpening, taa::TemporalAntiAliasing,
+    },
+    camera::{
+        ImageRenderTarget, MainPassResolutionOverride, RenderTarget, visibility::RenderLayers,
+    },
     prelude::*,
-    render::render_resource::{TextureFormat, TextureUsages},
+    render::{
+        Extract, ExtractSchedule, RenderApp,
+        camera::MipBias,
+        render_resource::{TextureFormat, TextureUsages},
+        sync_world::RenderEntity,
+    },
     window::{PrimaryWindow, WindowRef},
 };
 use terra_gen::tune::Tunable;
@@ -51,12 +68,86 @@ pub fn share(preset: f32, screen: UVec2, budget_mpx: f32) -> f32 {
     preset.min(libm::floorf(within * 100.0) / 100.0)
 }
 
+/// Whether a world drawn smaller than the screen is resolved to it by the temporal
+/// anti-aliasing (1) rather than stretched (0), D616.
+pub static TEMPORAL: Tunable = Tunable::new(
+    "render.temporal_upscale",
+    0.0,
+    0.0..=1.0,
+    "1 resolves a world drawn below the screen's size to it temporally, as FSR 2; 0 stretches it",
+);
+
+/// The size, in pixels, a camera's main pass is drawn at when it is smaller than the camera's
+/// view and resolved to it by the temporal anti-aliasing (D616).
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Drawn(pub UVec2);
+
+/// The mip bias of a world drawn at `share` of the screen and resolved temporally: TAA's own
+/// (Bevy's default) less the octaves the share leaves out, as FSR 2's integration guide asks.
+fn mip_bias(share: f32) -> f32 {
+    MipBias::default().0 + libm::log2f(share)
+}
+
 pub fn plugin(app: &mut App) {
-    terra_gen::tune::register(&[&PIXEL_BUDGET]);
+    terra_gen::tune::register(&[&PIXEL_BUDGET, &TEMPORAL]);
     app.add_systems(PostUpdate, (follow, sharpen)).add_systems(
         PostUpdate,
         stand_with_the_camera.before(bevy::transform::TransformSystems::Propagate),
     );
+    if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+        render_app.add_systems(ExtractSchedule, extract_drawn);
+    }
+}
+
+/// A camera's `Drawn` size is its main pass's in the render world, which Bevy's passes and the
+/// patched ones read (`MainPassResolutionOverride`); Bevy extracts it for none.
+fn extract_drawn(
+    mut commands: Commands,
+    cameras: Extract<Query<(RenderEntity, Option<&Drawn>), With<Camera3d>>>,
+) {
+    for (entity, drawn) in &cameras {
+        let Ok(mut camera) = commands.get_entity(entity) else {
+            continue;
+        };
+        match drawn {
+            Some(drawn) => {
+                camera.insert(MainPassResolutionOverride(drawn.0));
+            }
+            None => {
+                camera.remove::<MainPassResolutionOverride>();
+            }
+        }
+    }
+}
+
+/// The camera's main pass drawn at `wanted` and resolved temporally, or at its view's size.
+fn draw_at(
+    commands: &mut Commands,
+    camera: Entity,
+    now: Option<Drawn>,
+    wanted: Option<(UVec2, f32)>,
+    screen: UVec2,
+) {
+    if now.map(|d| d.0) == wanted.map(|(size, _)| size) {
+        return;
+    }
+    match wanted {
+        Some((size, share)) => {
+            commands
+                .entity(camera)
+                .insert((Drawn(size), MipBias(mip_bias(share))));
+            info!(
+                "Graphics: the world drawn at {}x{} and resolved temporally to {}x{}.",
+                size.x, size.y, screen.x, screen.y
+            );
+        }
+        None => {
+            commands
+                .entity(camera)
+                .remove::<Drawn>()
+                .insert(MipBias::default());
+        }
+    }
 }
 
 /// The world's picture sharpened after its temporal anti-aliasing, as the preset says
@@ -121,15 +212,26 @@ fn follow(
     mut scaled: Local<Option<Scaled>>,
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
-    mut camera: Query<(&mut RenderTarget, &mut Projection), (With<MainCamera>, Without<Presenter>)>,
+    mut camera: Query<
+        (
+            Entity,
+            &mut RenderTarget,
+            &mut Projection,
+            Option<&Drawn>,
+            Has<TemporalAntiAliasing>,
+        ),
+        (With<MainCamera>, Without<Presenter>),
+    >,
     window: Query<&Window, With<PrimaryWindow>>,
     picture: Option<Res<Picture>>,
     presenters: Query<Entity, With<Presenter>>,
     mut shown: Query<&mut Sprite, With<Shown>>,
 ) {
-    let Some((mut target, mut projection)) = camera.iter_mut().next() else {
+    let Some((entity, mut target, mut projection, drawn, accumulates)) = camera.iter_mut().next()
+    else {
         return;
     };
+    let drawn = drawn.copied();
     // Where the world is shown: where the main camera drew before it was scaled.
     let shown_on = scaled
         .as_ref()
@@ -151,8 +253,22 @@ fn follow(
         _ => return,
     };
     let share = share(quality.render_scale(), size, PIXEL_BUDGET.get());
-    if share >= 1.0 || size.x == 0 || size.y == 0 {
-        // Full size: drawn straight to the screen.
+    // A picture drawn offscreen is the screen; one drawn for anything else is left alone.
+    let ours = match &shown_on {
+        RenderTarget::Image(image) => picture.as_ref().is_some_and(|p| p.0 == image.handle),
+        _ => true,
+    };
+    let temporal =
+        TEMPORAL.get() >= 0.5 && accumulates && share < 1.0 && size.x > 0 && size.y > 0 && ours;
+    let wanted = (size.as_vec2() * share).round().as_uvec2().max(UVec2::ONE);
+    if !temporal {
+        draw_at(&mut commands, entity, drawn, None, size);
+    }
+    if share >= 1.0 || size.x == 0 || size.y == 0 || temporal {
+        // Full size, or resolved to it temporally: drawn straight to the screen.
+        if temporal {
+            draw_at(&mut commands, entity, drawn, Some((wanted, share)), size);
+        }
         if let Some(scaled) = scaled.take() {
             *target = scaled.shown_on;
             // Bevy 0.20's `camera_system` measures a camera's target again only when the
@@ -170,15 +286,9 @@ fn follow(
         }
         return;
     }
-    // A picture drawn offscreen is the screen; one drawn for anything else is left alone.
-    if let RenderTarget::Image(image) = &shown_on
-        && picture
-            .as_ref()
-            .is_none_or(|picture| picture.0 != image.handle)
-    {
+    if !ours {
         return;
     }
-    let wanted = (size.as_vec2() * share).round().as_uvec2().max(UVec2::ONE);
     let logical = size.as_vec2() / factor;
     if let Some(scaled) = scaled.as_ref()
         && scaled.size == wanted

@@ -80,6 +80,9 @@ bevy_gltf = { path = "patches/bevy_gltf" }
 bevy_pbr = { path = "patches/bevy_pbr" }
 # A multidrawn batch set's bin buffers written to the GPU only when they changed (D583).
 bevy_render = { path = "patches/bevy_render" }
+# The temporal anti-aliasing resolves a smaller main pass to the screen's size, as FSR 2 does
+# (D616).
+bevy_anti_alias = { path = "patches/bevy_anti_alias" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

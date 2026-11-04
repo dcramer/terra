@@ -288,6 +288,7 @@ pub fn volumetric_fog(
         &ViewVolumetricFog,
         &MeshViewBindGroup,
         &Msaa,
+        Option<&bevy_camera::MainPassResolutionOverride>,
     )>,
     pipeline_cache: Res<PipelineCache>,
     volumetric_lighting_pipeline: Res<VolumetricFogPipeline>,
@@ -305,6 +306,7 @@ pub fn volumetric_fog(
         view_fog_volumes,
         view_bind_group,
         msaa,
+        resolution_override,
     ) = view.into_inner();
 
     // Fetch the uniform buffer and binding.
@@ -423,6 +425,11 @@ pub fn volumetric_fog(
         let command_encoder = ctx.command_encoder();
         let mut render_pass = command_encoder.begin_render_pass(&render_pass_descriptor);
 
+        // Terra's patch (D616): a main pass drawn smaller is fogged in the corner it was
+        // drawn in, which its shader reads as the view's viewport.
+        if let Some(drawn) = resolution_override {
+            render_pass.set_viewport(0.0, 0.0, drawn.0.x as f32, drawn.0.y as f32, 0.0, 1.0);
+        }
         render_pass.set_vertex_buffer(0, *vertex_buffer_slice.buffer.slice(..));
         render_pass.set_pipeline(pipeline);
 

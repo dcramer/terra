@@ -1075,11 +1075,14 @@ pub fn prepare_lights(
         mut max_rect_lights_warning_emitted,
         mut max_cascades_per_light_warning_emitted,
         mut live_shadow_mapping_lights,
+        resolution_overrides,
     ): (
         Local<bool>,
         Local<bool>,
         Local<bool>,
         Local<HashSet<RetainedViewEntity>>,
+        // Terra's patch (D616): views whose main pass is drawn smaller.
+        Query<&bevy_camera::MainPassResolutionOverride>,
     ),
     (
         mut point_lights,
@@ -1742,6 +1745,12 @@ pub fn prepare_lights(
         });
 
         let is_orthographic = extracted_view.clip_from_view.w_axis.w == 1.0;
+        let drawn = resolution_overrides
+            .get(entity)
+            .map_or(
+                bevy_math::UVec2::new(extracted_view.viewport.z, extracted_view.viewport.w),
+                |o| o.0,
+            );
         let cluster_factors_zw = calculate_cluster_factors(
             clusters.near,
             clusters.far,
@@ -1847,9 +1856,11 @@ pub fn prepare_lights(
             directional_lights: gpu_directional_lights,
             ambient_color: Vec4::from_slice(&LinearRgba::from(ambient_light.color).to_f32_array())
                 * ambient_light.brightness,
+            // Terra's patch (D616): the clusters tile the drawn picture, which is smaller
+            // than the view's viewport when its main pass is drawn smaller.
             cluster_factors: Vec4::new(
-                clusters.dimensions.x as f32 / extracted_view.viewport.z as f32,
-                clusters.dimensions.y as f32 / extracted_view.viewport.w as f32,
+                clusters.dimensions.x as f32 / drawn.x as f32,
+                clusters.dimensions.y as f32 / drawn.y as f32,
                 cluster_factors_zw.x,
                 cluster_factors_zw.y,
             ),

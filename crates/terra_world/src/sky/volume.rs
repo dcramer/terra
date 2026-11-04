@@ -262,7 +262,17 @@ fn tell(
         Res<Planet>,
         Option<Res<crate::air::AirScale>>,
     ),
-    camera: Option<Single<(Entity, &Camera, Has<CloudVolumeView>), With<MainCamera>>>,
+    camera: Option<
+        Single<
+            (
+                Entity,
+                &Camera,
+                Has<CloudVolumeView>,
+                Option<&crate::upscale::Drawn>,
+            ),
+            With<MainCamera>,
+        >,
+    >,
     volume: Option<ResMut<CloudVolume>>,
     mut veil: Query<(&mut Visibility, &MeshMaterial3d<VeilMaterial>), With<Veil>>,
     (mut images, mut meshes, mut veils, mut frame): (
@@ -275,7 +285,7 @@ fn tell(
     let (Some(noise), Some(camera)) = (noise, camera) else {
         return;
     };
-    let (entity, view, marked) = *camera;
+    let (entity, view, marked, drawn) = *camera;
     // Over the air only, and only where the start gives the air's flat frame.
     let on = quality.is_none_or(|q| q.volume_clouds())
         && VOLUME.get() >= 0.5
@@ -296,7 +306,10 @@ fn tell(
         commands.entity(entity).insert(CloudVolumeView);
         sky.set_changed();
     }
-    let size = (view.physical_viewport_size().unwrap_or(UVec2::ONE) / 2).max(UVec2::ONE);
+    // Half the size the world is drawn at: the main pass's, when it is drawn smaller than the
+    // view for temporal upscaling (D616).
+    let drawn = drawn.map(|d| d.0).or(view.physical_viewport_size());
+    let size = (drawn.unwrap_or(UVec2::ONE) / 2).max(UVec2::ONE);
     // A new picture when the view's size changes, so the veil's material is prepared again.
     let target = match volume.as_ref().map(|v| v.target.clone()) {
         Some(handle) if images.get(&handle).is_some_and(|i| i.size() == size) => handle,

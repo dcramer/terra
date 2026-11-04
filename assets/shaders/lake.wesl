@@ -345,7 +345,7 @@ fn on_screen(world: vec3<f32>, ray: vec3<f32>, pixel: vec2<f32>, distance: f32) 
                 if last.x >= 0.0 && last.y < 0.08 {
                     let drawn = prepass_depth(vec4<f32>(last * size, 0.0, 1.0), 0u);
                     if drawn > 0.0 {
-                        let colour = textureSampleLevel(view_transmission_texture, view_transmission_sampler, last, 0.0).rgb;
+                        let colour = drawn_colour(last, size);
                         found = vec4<f32>(colour, 0.85 * smoothstep(0.0, 0.05, min(last.x, 1.0 - last.x)));
                     }
                 }
@@ -367,7 +367,7 @@ fn on_screen(world: vec3<f32>, ray: vec3<f32>, pixel: vec2<f32>, distance: f32) 
                 }
                 let hit = where_seen(world + ray * far, size);
                 if hit.w >= 0.0 && hit.z < max(step, 1.0) * 1.5 {
-                    let colour = textureSampleLevel(view_transmission_texture, view_transmission_sampler, hit.xy, 0.0).rgb;
+                    let colour = drawn_colour(hit.xy, size);
                     // Faded toward the screen's sides and foot, where what the ray meets
                     // changes as the view turns; not toward its top, past which it goes on.
                     let edge = min(min(hit.x, 1.0 - hit.x), 1.0 - hit.y);
@@ -384,6 +384,14 @@ fn on_screen(world: vec3<f32>, ray: vec3<f32>, pixel: vec2<f32>, distance: f32) 
 
 // Where a point is on screen and how far it lies behind what is drawn there, in metres
 // along the view (negative in front of it): x and y the screen's 0 to 1, w -1 off screen.
+// What the main pass drew at `uv` of the view's `size`: a main pass drawn smaller than the
+// view for temporal upscaling (D616) fills only the top-left `size` pixels of the picture.
+@if(DEPTH_PREPASS && VIEW_TRANSMISSION_TEXTURE)
+fn drawn_colour(uv: vec2<f32>, size: vec2<f32>) -> vec3<f32> {
+    let share = size / vec2<f32>(textureDimensions(view_transmission_texture));
+    return textureSampleLevel(view_transmission_texture, view_transmission_sampler, uv * share, 0.0).rgb;
+}
+
 fn where_seen(point: vec3<f32>, size: vec2<f32>) -> vec4<f32> {
     let clip = view.clip_from_world * vec4<f32>(point, 1.0);
     if clip.w <= 0.0 {

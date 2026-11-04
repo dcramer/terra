@@ -1307,7 +1307,11 @@ pub fn prepare_view_uniforms(
                 exposure: extracted_camera
                     .map(|c| c.exposure)
                     .unwrap_or_else(|| Exposure::default().exposure()),
-                viewport,
+                // Terra's patch (D616): a view whose main pass is drawn smaller
+                // (`MainPassResolutionOverride`) tells its shaders the drawn viewport, which
+                // every pass before the temporal upscale draws and reads in; the passes
+                // after it read their own sizes, never the view's viewport.
+                viewport: main_pass_viewport,
                 main_pass_viewport,
                 frustum,
                 lod_view_world_position,

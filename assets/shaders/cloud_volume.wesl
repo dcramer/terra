@@ -402,8 +402,14 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
     let direction = normalize((view.world_from_view * vec4<f32>(near.xyz / near.w, 0.0)).xyz);
 
     // The scene's nearest depth under this half-resolution pixel (reversed: 0 is infinitely far).
-    let full = textureDimensions(depth);
-    let corner = min(id.xy * 2u, full - 1u);
+    // A main pass drawn smaller than the view for temporal upscaling (D616) fills only the
+    // depth's top-left `view.viewport` pixels, which this picture spans.
+    let full = min(textureDimensions(depth), vec2<u32>(view.viewport.zw));
+    var corner = id.xy * 2u;
+    if any(full != textureDimensions(depth)) {
+        corner = vec2<u32>(vec2<f32>(id.xy) * vec2<f32>(full) / vec2<f32>(size));
+    }
+    corner = min(corner, full - 1u);
     var nearest = 0.0;
     for (var k = 0u; k < 4u; k++) {
         let at = min(corner + vec2<u32>(k & 1u, k >> 1u), full - 1u);
