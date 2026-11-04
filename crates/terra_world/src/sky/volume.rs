@@ -281,11 +281,11 @@ fn tell(
     camera: Option<Single<CloudCamera<'_>, With<MainCamera>>>,
     volume: Option<ResMut<CloudVolume>>,
     mut veil: Query<(&mut Visibility, &MeshMaterial3d<VeilMaterial>), With<Veil>>,
-    (mut images, mut meshes, mut veils, mut frame): (
+    (mut images, mut meshes, mut veils, frame): (
         ResMut<Assets<Image>>,
         ResMut<Assets<Mesh>>,
         ResMut<Assets<VeilMaterial>>,
-        Local<u32>,
+        Res<bevy::diagnostic::FrameCount>,
     ),
 ) {
     let (Some(noise), Some(camera)) = (noise, camera) else {
@@ -358,7 +358,6 @@ fn tell(
     let anchor = clouds.middle;
     let sun = tweaks.sun_direction.normalize_or(Vec3::Y);
     let (sunlight, dusk) = lights(&sky, &tweaks, sun);
-    *frame = frame.wrapping_add(1);
     // Low layers stand over the low ground the start is on, its height over the sea.
     let ground = start
         .as_ref()
@@ -382,7 +381,10 @@ fn tell(
         ),
         fallback: Vec4::new(sky.cloudiness, sky.deck.y, 1.0 - sky.deck.x, 0.0),
         sun: sun.extend((1.0 / clouds::FIELD_M[0]) as f32),
-        sunlight: sunlight.extend((*frame % 1024) as f32),
+        // The step noise turns by the game's frame count, a scripted run's script frame (D472):
+        // a count of its own took in the loading screen's frames, and two runs of one build
+        // differed at every heap's edge on one script frame.
+        sunlight: sunlight.extend((frame.0 % 1024) as f32),
         tuned: Vec4::new(HEAPED_COVER.get(), BODY_LOW.get(), 0.0, 0.0),
         layers,
         dusk,

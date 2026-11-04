@@ -8,6 +8,7 @@
 use super::{CloudVolume, CloudVolumeView, Params};
 use bevy::{
     core_pipeline::{Core3d, Core3dSystems, prepass::ViewPrepassTextures},
+    diagnostic::FrameCount,
     prelude::*,
     render::{
         Render, RenderApp, RenderStartup, RenderSystems,
@@ -208,12 +209,19 @@ fn picture(
     )
 }
 
-/// This frame's `Frame` for a view, and its history moved on a frame.
-fn next_frame(view: &ExtractedView, history: Option<&History>, size: UVec2) -> (Frame, History) {
+/// This frame's `Frame` for a view at the game's frame `count`, and its history moved on a frame.
+fn next_frame(
+    view: &ExtractedView,
+    history: Option<&History>,
+    size: UVec2,
+    count: u32,
+) -> (Frame, History) {
     let now = turned_clip_from_world(view.clip_from_view, &view.world_from_view);
     let kept = history.filter(|h| h.size == size);
     let frames = kept.map_or(0, |h| h.frames.wrapping_add(1));
-    let index = frames % OFFSETS + 1;
+    // The offset by the game's frame count, a scripted run's script frame, as TAA's jitter
+    // takes it (D472), so two runs of one build march one frame of one script alike.
+    let index = count % OFFSETS + 1;
     // Off, one ray through each pixel's middle of the view's own (TAA-jittered) projection and
     // nothing kept, as before D617. Under the temporal upscaler it is off whatever the tune says:
     // there the upscaler's own history over the cloud's was 15% further from the supersampled
@@ -247,6 +255,7 @@ fn prepare(
     fallback: Res<FallbackImage>,
     view_uniforms: Res<ViewUniforms>,
     mut cache: ResMut<TextureCache>,
+    count: Res<FrameCount>,
     views: Query<
         (
             Entity,
@@ -285,7 +294,7 @@ fn prepare(
             continue;
         };
         let size = target.size_2d();
-        let (now, history) = next_frame(view, history, size);
+        let (now, history) = next_frame(view, history, size, count.0);
         let mut frame = UniformBuffer::from(now);
         frame.write_buffer(&device, &queue);
         let marched = picture(&mut cache, &device, "cloud_march", size);
