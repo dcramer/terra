@@ -408,7 +408,14 @@ mod tests {
 
     #[test]
     fn a_way_reprojects_to_where_a_turned_view_sees_it_far_from_the_origin() {
-        let projection = Mat4::perspective_infinite_reverse_rh(1.0, 16.0 / 9.0, 0.1);
+        use bevy::camera::CameraProjection;
+        let projection = PerspectiveProjection {
+            fov: 1.0,
+            aspect_ratio: 16.0 / 9.0,
+            near: 0.1,
+            ..default()
+        }
+        .get_clip_from_view();
         // Some 30 km from the planet's middle, where f32 holds a position to 2 mm.
         let at = Vec3::new(1200.0, 30_000.0, -800.0);
         let eye = Transform::from_translation(at).looking_to(Vec3::X, Vec3::Y);
