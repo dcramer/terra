@@ -21,10 +21,14 @@ pub(super) struct Longest {
     pub systems: Vec<(String, u32)>,
 }
 
+/// A warning's system longest in most of its hitch frames, in how many, of how many the
+/// recorder explained.
+pub(super) type Named = (String, u32, u32);
+
 /// Reads `12 frames took over 27 ms since the last report, the worst 55.0 ms; the longest in
 /// 8 of 10: forest::stream.` (whatever the log put before it) as the frames counted and, where
 /// it says, the system longest in most, in how many, of how many explained.
-pub(super) fn parse(line: &str) -> Option<(u32, Option<(String, u32, u32)>)> {
+pub(super) fn parse(line: &str) -> Option<(u32, Option<Named>)> {
     let (before, rest) = line.split_once(" took over ")?;
     let before = before
         .strip_suffix(" frames")
