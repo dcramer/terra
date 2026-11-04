@@ -215,8 +215,10 @@ fn next_frame(view: &ExtractedView, history: Option<&History>, size: UVec2) -> (
     let frames = kept.map_or(0, |h| h.frames.wrapping_add(1));
     let index = frames % OFFSETS + 1;
     // Off, one ray through each pixel's middle of the view's own (TAA-jittered) projection and
-    // nothing kept, as before D617.
-    let on = super::HISTORY.get() >= 0.5;
+    // nothing kept, as before D617. Under the temporal upscaler it is off whatever the tune says:
+    // there the upscaler's own history over the cloud's was 15% further from the supersampled
+    // reference than the march alone (play-3080 j12).
+    let on = super::HISTORY.get() >= 0.5 && crate::upscale::TEMPORAL.get() < 0.5;
     let offset = Vec2::new(halton(index, 2), halton(index, 3)) - 0.5;
     let frame = Frame {
         world_from_clip: now.inverse(),

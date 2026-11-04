@@ -112,9 +112,9 @@ pub static VOLUME: Tunable = Tunable::new(
 
 pub static HISTORY: Tunable = Tunable::new(
     "sky.cloud.history",
-    0.0,
+    1.0,
     0.0..=1.0,
-    "1 marches the clouds at an offset inside the pixel a frame and averages them in a history of their own (D617, off until measured against a supersampled reference), 0 one ray through each pixel's middle, kept no frame",
+    "1 marches the clouds at an offset inside the pixel a frame and averages them in a history of their own, unless render.temporal_upscale is on (D617), 0 one ray through each pixel's middle, kept no frame",
 );
 
 /// Everything the march reads, handed to the render world when it changes.
