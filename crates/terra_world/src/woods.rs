@@ -175,6 +175,11 @@ impl MaterialExtension for FarExtension {
     fn prepass_fragment_shader() -> ShaderRef {
         "shaders/far_forest.wesl".into()
     }
+    // Last of the cut-outs in the depth prepass, so the near crowns' depth rejects the far
+    // cards they hide (D618).
+    fn prepass_draw_priority(&self) -> Option<i32> {
+        Some(1)
+    }
     fn specialize(
         _pipeline: &bevy::pbr::MaterialExtensionPipeline,
         descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,

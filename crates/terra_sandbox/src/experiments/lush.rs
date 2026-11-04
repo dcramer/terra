@@ -296,6 +296,13 @@ impl MaterialExtension for FoliageExtension {
         "shaders/foliage_prepass.wesl".into()
     }
 
+    // The tall crowns' cut-outs first in the depth prepass, ahead of the undergrowth
+    // (`terra_world::grown`, 0) and the far woods (1), so their depth rejects what they hide
+    // (D618).
+    fn prepass_draw_priority(&self) -> Option<i32> {
+        Some(-1)
+    }
+
     fn specialize(
         _pipeline: &bevy::pbr::MaterialExtensionPipeline,
         descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
