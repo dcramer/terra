@@ -42,12 +42,14 @@ struct Frame {
 }
 
 /// A view's cloud history, kept in the render world from frame to frame: last frame's turn and
-/// projection, how many frames it has resolved and at which picture size.
+/// projection, how many frames it has resolved, at which picture size and on which of the
+/// game's frames it last did.
 #[derive(Component)]
 struct History {
     clip_from_world: Mat4,
     frames: u32,
     size: UVec2,
+    count: u32,
 }
 
 /// The Halton sequence's `index`th number in `base`, in [0, 1).
@@ -214,14 +216,22 @@ fn picture(
 /// moved on a frame. On a camera `cut` (the view's TAA reset) the history is not taken, as TAA
 /// drops its own: a scripted run's script opens on one (D472), so what the loading screen's
 /// frames left in it, at offsets as many as the load took, never reaches a script frame.
+///
+/// None while the game's frame has not moved and the view has not turned: a scripted hold
+/// stands the count still (D472) while the wall clock draws on, and each drawn frame would
+/// march the same offset and blend it in once more, as many times as the hold lasted, so two
+/// runs' shots after a hold differed (frame-count j1). Then the last picture and history stay.
 fn next_frame(
     now: Mat4,
     history: Option<&History>,
     size: UVec2,
     count: u32,
     cut: bool,
-) -> (Frame, History) {
+) -> Option<(Frame, History)> {
     let kept = history.filter(|h| h.size == size && !cut);
+    if kept.is_some_and(|h| h.count == count && h.clip_from_world == now) {
+        return None;
+    }
     let frames = kept.map_or(0, |h| h.frames.wrapping_add(1));
     // The offset by the game's frame count, a scripted run's script frame, as TAA's jitter
     // takes it (D472), so two runs of one build march one frame of one script alike.
@@ -243,8 +253,9 @@ fn next_frame(
         clip_from_world: now,
         frames,
         size,
+        count,
     };
-    (frame, history)
+    Some((frame, history))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -301,12 +312,18 @@ fn prepare(
         let size = target.size_2d();
         let through = turned_clip_from_world(view.clip_from_view, &view.world_from_view);
         let cut = taa.is_some_and(|taa| taa.reset);
-        let (now, history) = next_frame(through, history, size, count.0, cut);
-        let mut frame = UniformBuffer::from(now);
-        frame.write_buffer(&device, &queue);
         let marched = picture(&mut cache, &device, "cloud_march", size);
         let a = picture(&mut cache, &device, "cloud_history_a", size);
         let b = picture(&mut cache, &device, "cloud_history_b", size);
+        // Held: neither marched nor resolved, the picture and the history as the last moved
+        // frame left them; the textures above are still taken, or the cache would drop the
+        // history after a hold of three frames.
+        let Some((now, history)) = next_frame(through, history, size, count.0, cut) else {
+            commands.entity(entity).remove::<Marching>();
+            continue;
+        };
+        let mut frame = UniformBuffer::from(now);
+        frame.write_buffer(&device, &queue);
         let (before, next) = if history.frames % 2 == 0 {
             (&a, &b)
         } else {
@@ -429,20 +446,47 @@ mod tests {
     fn a_camera_cut_drops_the_clouds_history_and_the_offset_follows_the_game_frame() {
         let size = UVec2::new(960, 540);
         let now = Mat4::from_scale(Vec3::splat(2.0));
-        let (first, kept) = next_frame(now, None, size, 7, false);
+        let (first, kept) = next_frame(now, None, size, 7, false).unwrap();
         // Nothing kept yet: the march's picture alone.
         assert_eq!(first.jitter.z, 1.0);
-        let (next, kept) = next_frame(now, Some(&kept), size, 8, false);
+        let (next, kept) = next_frame(now, Some(&kept), size, 8, false).unwrap();
         assert_eq!(next.jitter.z, 0.0, "a history of the same size is taken");
         // A cut, whatever the history held: the march's picture alone, as TAA drops its own.
-        let (cut, after) = next_frame(now, Some(&kept), size, 9, true);
+        let (cut, after) = next_frame(now, Some(&kept), size, 9, true).unwrap();
         assert_eq!(cut.jitter.z, 1.0, "the cut frame took the history");
         assert_eq!(after.frames, 0);
         // The offset is the game frame's, whatever the view's history: two runs whose loads
         // left different histories march one script frame at one offset.
-        let (again, _) = next_frame(now, None, size, 9, false);
+        let (again, _) = next_frame(now, None, size, 9, false).unwrap();
         assert_eq!(cut.jitter.xy(), again.jitter.xy());
         assert_ne!(cut.jitter.xy(), next.jitter.xy());
+    }
+
+    #[test]
+    fn a_held_frame_count_blends_nothing_more_into_the_clouds_history() {
+        let size = UVec2::new(960, 540);
+        let now = Mat4::from_scale(Vec3::splat(2.0));
+        let (_, kept) = next_frame(now, None, size, 410, false).unwrap();
+        // A scripted hold: the game's frame stands at 410 for as many drawn frames as the hold
+        // lasts on the wall clock. However many, the history comes out of the hold as it went in,
+        // so the next frame resolves exactly as in a run whose hold was shorter.
+        for _ in 0..5 {
+            assert!(
+                next_frame(now, Some(&kept), size, 410, false).is_none(),
+                "a held frame marched and blended again"
+            );
+        }
+        let (next, after) = next_frame(now, Some(&kept), size, 411, false).unwrap();
+        assert_eq!(
+            after.frames,
+            kept.frames + 1,
+            "one blend for one game frame"
+        );
+        assert_eq!(next.jitter.z, 0.0);
+        // The view turned or a cut while the count stands: marched again, never left stale.
+        let turned = Mat4::from_scale(Vec3::new(2.0, 2.1, 2.0));
+        assert!(next_frame(turned, Some(&kept), size, 410, false).is_some());
+        assert!(next_frame(now, Some(&kept), size, 410, true).is_some());
     }
 
     #[test]
