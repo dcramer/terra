@@ -71,6 +71,8 @@ struct Timing {
     /// phase, groups, schedules, render CPU and GPU passes (`phases`).
     ticks: ticks::Said,
     phases: phases::Said,
+    /// Which systems its log's hitch warnings found longest in its hitch frames.
+    longest: hitches::Longest,
 }
 
 impl Timing {
@@ -192,6 +194,7 @@ fn parse_timing(line: &str) -> Option<Timing> {
         preset: String::new(),
         ticks: ticks::Said::default(),
         phases: phases::Said::default(),
+        longest: hitches::Longest::default(),
     })
 }
 
@@ -260,6 +263,7 @@ fn combine(runs: &[Timing]) -> Option<Timing> {
         drift_pct: middle(|t| t.drift_pct),
         ticks: ticks::Said::middle(runs.iter().map(|t| &t.ticks)),
         phases: phases::Said::middle(runs.iter().map(|t| &t.phases)),
+        longest: hitches::Longest::sum(runs.iter().map(|t| &t.longest)),
         freezes: runs.iter().map(|t| t.freezes).max().unwrap_or(0),
         load_s: first
             .load_s
@@ -834,14 +838,18 @@ fn time_scene(
         .spawn()
         .ok()?;
     let stdout = child.stdout.take()?;
-    // The log, read only for what is worth saying beside the frames.
+    // The log, read only for what is worth saying beside the frames, and its hitch warnings'
+    // systems, summed.
     let stderr = child.stderr.take()?;
     let said = std::thread::spawn(move || {
-        BufReader::new(stderr)
+        let mut longest = hitches::Longest::default();
+        let said = BufReader::new(stderr)
             .lines()
             .map_while(Result::ok)
+            .filter(|line| !longest.read(line))
             .filter_map(|line| worth_saying(&line).map(str::to_string))
-            .collect::<Vec<String>>()
+            .collect::<Vec<String>>();
+        (said, longest)
     });
     // A run waiting its turn on the GPU (D319) is not stuck: its time starts once it has it.
     let turn = std::sync::Arc::new(std::sync::Mutex::new((false, std::time::Instant::now())));
@@ -903,11 +911,33 @@ fn time_scene(
             Err(_) => break,
         }
     }
-    // Each time sections were laid again as the camera moved, said as one line: how many
-    // times, and how long they took to be on screen.
+    let (said, longest) = said.join().unwrap_or_default();
+    if let Some(line) = longest.said() {
+        println!("  {line}");
+    }
+    let load_s = say_log(said);
+    let mut timing = reader.join().ok()??;
+    (timing.from_start, timing.load_s, timing.longest) = (from_start, load_s, longest);
+    timing.budget = budget.clone();
+    println!(
+        "  median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms; {:.2}% over budget, {} hitches, {:+.1}% by the end",
+        timing.median_ms,
+        timing.p99_ms,
+        timing.worst_ms,
+        timing.over_pct,
+        timing.hitches,
+        timing.drift_pct
+    );
+    Some(timing)
+}
+
+/// Says the log's lines worth saying beside the frames, each time sections were laid again
+/// as the camera moved as one line (how many times, and how long they took to be on
+/// screen); the load's seconds, where it said them.
+fn say_log(said: Vec<String>) -> Option<f32> {
     let mut streamed: Vec<f32> = Vec::new();
     let mut load_s = None;
-    for line in said.join().unwrap_or_default() {
+    for line in said {
         load_s = load_s.or(play::parse_load(&line));
         match line
             .strip_prefix("Builds streamed in: ")
@@ -926,23 +956,13 @@ fn time_scene(
             streamed[streamed.len() - 1]
         );
     }
-    let mut timing = reader.join().ok()??;
-    (timing.from_start, timing.load_s) = (from_start, load_s);
-    timing.budget = budget.clone();
-    println!(
-        "  median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms; {:.2}% over budget, {} hitches, {:+.1}% by the end",
-        timing.median_ms,
-        timing.p99_ms,
-        timing.worst_ms,
-        timing.over_pct,
-        timing.hitches,
-        timing.drift_pct
-    );
-    Some(timing)
+    load_s
 }
 
 #[path = "bench/budgets.rs"]
 mod budgets;
+#[path = "bench/hitches.rs"]
+mod hitches;
 #[path = "bench/judge.rs"]
 mod judge;
 #[path = "bench/phases.rs"]

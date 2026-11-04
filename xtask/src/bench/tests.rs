@@ -26,6 +26,7 @@ pub(crate) fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
         preset: "high".into(),
         ticks: ticks::Said::default(),
         phases: phases::Said::default(),
+        longest: hitches::Longest::default(),
     }
 }
 
@@ -79,6 +80,27 @@ fn a_scene_holds_to_the_budget_unless_it_misses_a_gate() {
         ..timing(5.0, 9.0, 40.0)
     };
     assert_eq!(stutters.misses().len(), 3);
+    // A scene that hitched too often names the system its runs' warnings found longest, or
+    // the command that will; never a log the bench did not keep.
+    let hitched = |timing: &Timing| {
+        timing
+            .misses()
+            .into_iter()
+            .find(|miss| miss.starts_with("1 hitches, past"))
+            .unwrap()
+    };
+    assert!(hitched(&stutters).contains("cargo xtask profile walk"));
+    let mut longest = hitches::Longest::default();
+    longest.read("WARN terra_world::debug: 9 frames took over 27 ms since the last report, the worst 55.0 ms; the longest in 6 of 9: forest::stream.");
+    let named = Timing {
+        longest,
+        ..stutters
+    };
+    let said = hitched(&named);
+    assert!(
+        said.ends_with("the longest system was forest::stream in 6 of the 9 hitch frames the recorder explained"),
+        "{said}"
+    );
 }
 
 #[test]

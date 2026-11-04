@@ -57,8 +57,9 @@ fn frames(timing: &Timing, limits: &Limits) -> Vec<String> {
         && timing.hitches > most
     {
         missed.push(format!(
-            "{} hitches, past the {most} the play phase allows ({FILE}): the log's hitch warnings name the system longest in most",
-            timing.hitches
+            "{} hitches, past the {most} the play phase allows ({FILE}): {}",
+            timing.hitches,
+            timing.longest.look()
         ));
     }
     missed.extend(freezes(timing.freezes, limits));
