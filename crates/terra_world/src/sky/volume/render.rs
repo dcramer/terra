@@ -7,6 +7,7 @@
 
 use super::{CloudVolume, CloudVolumeView, Params};
 use bevy::{
+    anti_alias::taa::TemporalAntiAliasing,
     core_pipeline::{Core3d, Core3dSystems, prepass::ViewPrepassTextures},
     diagnostic::FrameCount,
     prelude::*,
@@ -209,15 +210,18 @@ fn picture(
     )
 }
 
-/// This frame's `Frame` for a view at the game's frame `count`, and its history moved on a frame.
+/// This frame's `Frame` for a view seen through `now` at the game's frame `count`, and its history
+/// moved on a frame. On a camera `cut` (the view's TAA reset) the history is not taken, as TAA
+/// drops its own: a scripted run's script opens on one (D472), so what the loading screen's
+/// frames left in it, at offsets as many as the load took, never reaches a script frame.
 fn next_frame(
-    view: &ExtractedView,
+    now: Mat4,
     history: Option<&History>,
     size: UVec2,
     count: u32,
+    cut: bool,
 ) -> (Frame, History) {
-    let now = turned_clip_from_world(view.clip_from_view, &view.world_from_view);
-    let kept = history.filter(|h| h.size == size);
+    let kept = history.filter(|h| h.size == size && !cut);
     let frames = kept.map_or(0, |h| h.frames.wrapping_add(1));
     // The offset by the game's frame count, a scripted run's script frame, as TAA's jitter
     // takes it (D472), so two runs of one build march one frame of one script alike.
@@ -262,6 +266,7 @@ fn prepare(
             &ViewPrepassTextures,
             &ExtractedView,
             Option<&History>,
+            Option<&TemporalAntiAliasing>,
         ),
         With<CloudVolumeView>,
     >,
@@ -289,12 +294,14 @@ fn prepare(
         .unwrap_or(&fallback.cube);
     let mut params = UniformBuffer::from(volume.params);
     params.write_buffer(&device, &queue);
-    for (entity, prepass, view, history) in &views {
+    for (entity, prepass, view, history, taa) in &views {
         let Some(depth) = prepass.depth_only_view() else {
             continue;
         };
         let size = target.size_2d();
-        let (now, history) = next_frame(view, history, size, count.0);
+        let through = turned_clip_from_world(view.clip_from_view, &view.world_from_view);
+        let cut = taa.is_some_and(|taa| taa.reset);
+        let (now, history) = next_frame(through, history, size, count.0, cut);
         let mut frame = UniformBuffer::from(now);
         frame.write_buffer(&device, &queue);
         let marched = picture(&mut cache, &device, "cloud_march", size);
@@ -416,6 +423,26 @@ mod tests {
                 "quarter {quarter} has {n} of {OFFSETS}"
             );
         }
+    }
+
+    #[test]
+    fn a_camera_cut_drops_the_clouds_history_and_the_offset_follows_the_game_frame() {
+        let size = UVec2::new(960, 540);
+        let now = Mat4::from_scale(Vec3::splat(2.0));
+        let (first, kept) = next_frame(now, None, size, 7, false);
+        // Nothing kept yet: the march's picture alone.
+        assert_eq!(first.jitter.z, 1.0);
+        let (next, kept) = next_frame(now, Some(&kept), size, 8, false);
+        assert_eq!(next.jitter.z, 0.0, "a history of the same size is taken");
+        // A cut, whatever the history held: the march's picture alone, as TAA drops its own.
+        let (cut, after) = next_frame(now, Some(&kept), size, 9, true);
+        assert_eq!(cut.jitter.z, 1.0, "the cut frame took the history");
+        assert_eq!(after.frames, 0);
+        // The offset is the game frame's, whatever the view's history: two runs whose loads
+        // left different histories march one script frame at one offset.
+        let (again, _) = next_frame(now, None, size, 9, false);
+        assert_eq!(cut.jitter.xy(), again.jitter.xy());
+        assert_ne!(cut.jitter.xy(), next.jitter.xy());
     }
 
     #[test]
