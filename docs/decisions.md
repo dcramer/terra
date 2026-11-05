@@ -606,6 +606,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D620](decisions/D620.md) | Every world with mountains lays its first market town by the player's start | Tech | Agent | Decided | A world's land stands its market towns… |
 | [D621](decisions/D621.md) | With no world kept, the land behind the title screen is the new world it first offers | Tech | Agent | Decided | The title screen keeps the world itself behind it… |
 | [D622](decisions/D622.md) | The woods' grown trees stream round the player in blocks of their grid, the far cards laid at the start standing for every one | Tech | Agent | Decided | The woods' grid of tree cells (`terra_land::woods`, a… |
+| [D623](decisions/D623.md) | A world's land is generated off the main thread, behind the loading screen | Tech | Agent | Decided | Entering a world first passes through a state of its… |
 
 ## Tools and workflow
 

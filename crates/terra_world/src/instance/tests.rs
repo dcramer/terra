@@ -292,3 +292,64 @@ fn what_lives_is_counted_apart_by_name_with_what_hangs_from_it_and_watches_it() 
     );
     assert_eq!(census.neither, empty.neither + 1);
 }
+
+/// What a world makes off the main thread (D623), as its land is: frames run while it is
+/// made, a system reading the world's resource is skipped meanwhile rather than stopping the
+/// game, the world is entered in the frame the work is done, and a missing resource is the
+/// run's own error again once it is.
+#[test]
+fn a_world_generated_off_the_main_thread_is_entered_once_made() {
+    #[derive(Resource, Default)]
+    struct Frames(u32);
+    #[derive(Resource)]
+    struct Ready(bool);
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, AssetPlugin::default(), StatesPlugin))
+        .add_plugins(plugin)
+        .init_resource::<Frames>()
+        .insert_resource(Ready(false))
+        .world_resource::<Grove>()
+        .add_systems(Startup, |mut commands: Commands| {
+            commands.queue(Cross(spec(1, "forest")));
+        })
+        .add_systems(
+            OnEnter(Travel::Generating),
+            |mut generating: ResMut<Generating>| generating.begin("grove"),
+        )
+        .add_systems(
+            Crossing,
+            (|ready: Res<Ready>, mut generating: ResMut<Generating>| {
+                if ready.0 {
+                    generating.done("grove");
+                }
+            })
+            .before(carry_out),
+        )
+        .add_systems(
+            OnEnter(InWorld),
+            (|mut commands: Commands| commands.insert_resource(Grove(Vec::new())))
+                .in_set(Building::Land),
+        )
+        // Written for a world that is there, as the planet's readers are.
+        .add_systems(Update, |_: Res<Grove>, mut frames: ResMut<Frames>| {
+            frames.0 += 1;
+        });
+    for _ in 0..5 {
+        app.update();
+    }
+    assert_eq!(travel(&app), Travel::Generating);
+    assert_eq!(app.world().resource::<Frames>().0, 0);
+    assert!(app.world().contains_resource::<FallbackErrorHandler>());
+
+    app.world_mut().resource_mut::<Ready>().0 = true;
+    app.update();
+    assert_eq!(travel(&app), Travel::Entering);
+    assert_eq!(
+        app.world().resource::<Frames>().0,
+        1,
+        "entered in that frame"
+    );
+    assert!(!app.world().contains_resource::<FallbackErrorHandler>());
+    app.update();
+    assert_eq!(travel(&app), Travel::Playing);
+}

@@ -596,11 +596,18 @@ fn watch(
     (mut next, then): (ResMut<NextState<Screen>>, Option<Res<Then>>),
     (drawables, names): (Res<Drawables>, Query<(Option<&Name>, Option<&ChildOf>)>),
     recorder: Option<Res<crate::recorder::Recorder>>,
+    travel: Option<Res<State<crate::instance::Travel>>>,
 ) {
     let then = then.map_or(Screen::Playing, |then| then.0);
     // What was said this frame; next frame is said afresh.
     let progress = std::mem::take(&mut *progress);
-    loading.up_for += real.delta();
+    // The land made behind the screen always comes (D623), so its time is not held against
+    // what may never load (`give_up`); the wall clock's `Loaded in` counts it.
+    let generating =
+        travel.is_some_and(|travel| *travel.get() == crate::instance::Travel::Generating);
+    if !generating {
+        loading.up_for += real.delta();
+    }
     loading.quiet = if progress.coming() > 0 {
         0
     } else {

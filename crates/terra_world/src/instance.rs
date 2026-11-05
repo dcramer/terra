@@ -19,7 +19,9 @@
 //!
 //! Crossing is one path for every world, the first of a run included: queue [`Cross`] with
 //! the spec of the world to go to. From [`Travel::Away`] it enters; from a world it leaves
-//! first, and both happen in one frame, before its `Update` ([`Crossing`]). A world is built
+//! first, and both happen in one frame, before its `Update` ([`Crossing`]). Entering waits,
+//! frames drawn under the loading screen, while what a module makes off the main thread for
+//! the world is made ([`Travel::Generating`], D623): its land. A world is built
 //! in `OnEnter(InWorld)`, in the order of [`Building`]. Entering puts the loading screen up
 //! again (D135), with the game clock held, and [`Travel::Playing`] begins when it comes down.
 
@@ -27,7 +29,12 @@ use crate::loading::Screen;
 use bevy::{
     app::MainScheduleOrder,
     ecs::{
-        entity_disabling::Disabled, lifecycle::HookContext, query::Allow, schedule::ScheduleLabel,
+        entity_disabling::Disabled,
+        error::{ErrorContext, FallbackErrorHandler},
+        lifecycle::HookContext,
+        query::Allow,
+        schedule::ScheduleLabel,
+        system::SystemParamValidationError,
         world::DeferredWorld,
     },
     prelude::*,
@@ -69,6 +76,12 @@ pub enum Travel {
     /// In no world: before the first, or a run, such as the workbench's, that has none.
     #[default]
     Away,
+    /// What the world needs before anything of it can stand is made off the main thread, as
+    /// shipped games generate a world behind their loading screen (D623): its land, seconds on
+    /// a 30 km world. The loading screen is up and drawn meanwhile; nothing of the world exists
+    /// yet, and a system that reads what it has not made is skipped ([`Generating`]). Entered
+    /// once nothing is left to make, in the same frame.
+    Generating,
     /// Modules build the world's resources and spawn its content; the loading screen is up.
     Entering,
     Playing,
@@ -163,25 +176,96 @@ pub enum Building {
 /// first world is built once the camera and settings exist and before anything after
 /// start-up looks at it, and right after each frame's state transitions, so a world is left
 /// and the next entered in the one frame. No world's system ever runs a frame without its
-/// resources: `Res<Planet>` alone is read by 87 systems.
+/// resources (`Res<Planet>` alone is read by 87 systems): while its land is generated they
+/// are skipped ([`Generating`]).
 #[derive(ScheduleLabel, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Crossing;
 
 /// Carries the crossing through: leaving, entering and the loading screen put up are a
 /// state transition each.
-fn carry_out(world: &mut World) {
+pub(crate) fn carry_out(world: &mut World) {
     fn pending<S: FreelyMutableState>(world: &World) -> bool {
         world
             .get_resource::<NextState<S>>()
             .is_some_and(|next| !matches!(next, NextState::Unchanged))
     }
     let mut crossing = false;
-    for _ in 0..4 {
+    for _ in 0..5 {
+        generated(world);
         if !(pending::<Travel>(world) || crossing && pending::<Screen>(world)) {
             return;
         }
         crossing = true;
         world.run_schedule(StateTransition);
+    }
+}
+
+/// What is still being made, off the main thread, for the world being entered (D623): a
+/// module that makes something there says so in `OnEnter(Travel::Generating)` and that it
+/// is done once its work comes back, in [`Crossing`] before the crossing is carried on. With
+/// nothing begun, as in a run without a loading screen, the world is entered in the frame
+/// generating began.
+#[derive(Resource, Default, Debug)]
+pub struct Generating {
+    making: Vec<&'static str>,
+}
+
+impl Generating {
+    /// Something of the world is being made, by name.
+    pub fn begin(&mut self, what: &'static str) {
+        self.making.push(what);
+    }
+
+    /// It has been made.
+    pub fn done(&mut self, what: &'static str) {
+        self.making.retain(|each| *each != what);
+    }
+}
+
+/// The error handler the run had before generating began, put back once the world is
+/// entered.
+#[derive(Resource)]
+struct Before(Option<FallbackErrorHandler>);
+
+/// While a world is generated, a system that reads what the world has not made yet (its
+/// planet, its start) is skipped, as Bevy skips one whose `Single` matches nothing, rather than
+/// stopping the game: 87 systems read the planet alone, each written for a world that is
+/// there, and none is gated on it (D623). Any other error is handled as Bevy's default does.
+fn skip_the_unmade(error: BevyError, context: ErrorContext) {
+    if error.downcast_ref::<SystemParamValidationError>().is_none() {
+        bevy::ecs::error::match_severity(error, context);
+    }
+}
+
+/// Generating with nothing left to make: the world is entered, and what reads it is no
+/// longer skipped. Generating with work going: what reads the world is skipped meanwhile.
+fn generated(world: &mut World) {
+    let generating = world
+        .get_resource::<State<Travel>>()
+        .is_some_and(|travel| *travel.get() == Travel::Generating);
+    let making = world
+        .get_resource::<Generating>()
+        .is_some_and(|generating| !generating.making.is_empty());
+    if generating && making {
+        if !world.contains_resource::<Before>() {
+            let before = world.get_resource::<FallbackErrorHandler>().copied();
+            world.insert_resource(Before(before));
+            world.insert_resource(FallbackErrorHandler(skip_the_unmade));
+        }
+        return;
+    }
+    if let Some(Before(before)) = world.remove_resource::<Before>() {
+        match before {
+            Some(before) => world.insert_resource(before),
+            None => {
+                world.remove_resource::<FallbackErrorHandler>();
+            }
+        }
+    }
+    // Not over a crossing asked for meanwhile, to another world.
+    let mut next = world.resource_mut::<NextState<Travel>>();
+    if generating && matches!(*next, NextState::Unchanged) {
+        next.set(Travel::Entering);
     }
 }
 
@@ -215,7 +299,7 @@ impl Command for Cross {
         let next = match travel {
             None | Some(Travel::Away) => {
                 world.insert_resource(self.0);
-                Travel::Entering
+                Travel::Generating
             }
             Some(_) => {
                 world.insert_resource(Bound(self.0));
@@ -332,7 +416,9 @@ pub fn plugin(app: &mut App) {
         .add_computed_state::<InWorld>()
         .init_resource::<Owned>()
         .init_resource::<Entered>()
+        .init_resource::<Generating>()
         .add_systems(OnEnter(Travel::Leaving), leave)
+        .add_systems(OnEnter(Travel::Generating), screen_up)
         .add_systems(OnEnter(Travel::Entering), enter)
         .add_systems(OnExit(Screen::Loading), play)
         .add_systems(
@@ -367,13 +453,19 @@ pub fn start_by_hand(world: &mut World) {
     world.run_schedule(Crossing);
 }
 
-/// Entering: the loading screen goes up again for every world after the first (D135), the
-/// clock held under it; it is up already for the first.
-fn enter(mut entered: ResMut<Entered>, screen: Option<ResMut<NextState<Screen>>>) {
-    entered.0 += 1;
+/// Generating: the loading screen goes up again for every world after the first (D135), the
+/// clock held under it, so the land is made under it too (D623); it is up already for the
+/// first.
+fn screen_up(screen: Option<ResMut<NextState<Screen>>>) {
     if let Some(mut screen) = screen {
         screen.set_if_different(Screen::Loading);
     }
+}
+
+/// Entering: the loading screen is up (`screen_up`), for a run that went straight here too.
+fn enter(mut entered: ResMut<Entered>, screen: Option<ResMut<NextState<Screen>>>) {
+    entered.0 += 1;
+    screen_up(screen);
     info!("Entering world {}", entered.0);
 }
 
@@ -403,10 +495,11 @@ fn leave(world: &mut World) {
         }
     });
     world.remove_resource::<WorldSpec>();
+    world.resource_mut::<Generating>().making.clear();
     let next = match world.remove_resource::<Bound>() {
         Some(Bound(spec)) => {
             world.insert_resource(spec);
-            Travel::Entering
+            Travel::Generating
         }
         None => Travel::Away,
     };

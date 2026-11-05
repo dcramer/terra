@@ -6,7 +6,10 @@ use crate::instance::{Cross, InstanceKey, WorldSpec};
 use crate::shell::Options;
 use crate::start::{Found, Sited, Start, Towns};
 use bevy::{camera::ShadowLodOrigin, camera_controller::free_camera::FreeCamera, prelude::*};
+use std::sync::atomic::{AtomicU8, Ordering};
 use terra_core::{PlanetSpec, Seed};
+
+pub(super) mod generating;
 
 /// The seed of a run given none, and of every world kept from before worlds had their own.
 pub const FIRST_SEED: u64 = 1;
@@ -71,22 +74,64 @@ impl KnownTowns {
     }
 }
 
+/// A world's land: its planet, the start on it, the site it was asked to stand at and its
+/// towns.
+pub type Land = (Planet, Start, Option<Sited>, Towns);
+
+/// How far making a world's land has come, for the loading screen to say (D623): set by
+/// [`made_land`] as each of its parts begins, read on the main thread.
+#[derive(Default, Debug)]
+pub struct Stage(AtomicU8);
+
+impl Stage {
+    /// What each part is called on the loading screen, in the order they come.
+    const SAID: [&'static str; 4] = [
+        "Finding where the world starts",
+        "Working out the land round the start",
+        "Choosing where to stand",
+        "Finding the first town",
+    ];
+
+    fn set(&self, part: usize) {
+        self.0.store(part as u8, Ordering::Relaxed);
+    }
+
+    /// What the land is being made as now.
+    pub fn said(&self) -> &'static str {
+        Self::SAID[usize::from(self.0.load(Ordering::Relaxed)).min(Self::SAID.len() - 1)]
+    }
+}
+
+/// A world's land, made from its spec ([`made_land`]), saying to no one how far it has come.
+pub fn land_of(
+    world: &WorldSpec,
+    options: &Options,
+    known: Option<&KnownStart>,
+    known_towns: Option<&KnownTowns>,
+) -> Land {
+    made_land(world, options, known, known_towns, &Stage::default())
+}
+
 /// A world's land: its planet, the start on it and the site it was asked to stand at
 /// (`--site`). On a world with mountains the land round the start is worked out before
 /// anything stands on it (D322): its lakes, seasons and snow on the clock's date, and the
 /// start's plot chosen on dry ground once its lakes are known. A site the
 /// land's rules make is found first, and the start stood on its shore once its lakes are
 /// known. A start found before (`known`) is taken for a planet of its seed and radius, and so
-/// are the towns found before (`known_towns`).
-pub fn land_of(
+/// are the towns found before (`known_towns`). Seconds on a 30 km world: the game makes it on
+/// a thread of its own behind the loading screen (`generating`, D623), saying each part in
+/// `stage` as it begins.
+pub fn made_land(
     world: &WorldSpec,
     options: &Options,
     known: Option<&KnownStart>,
     known_towns: Option<&KnownTowns>,
-) -> (Planet, Start, Option<Sited>, Towns) {
+    stage: &Stage,
+) -> Land {
     let yard = options.yard();
     let spec = planet_spec(world, options.radius_m);
     crate::crash::note("seed", spec.seed.0);
+    stage.set(0);
     let mut planet = if yard && options.rolling {
         Planet::rolling(spec)
     } else if yard {
@@ -99,8 +144,10 @@ pub fn land_of(
     match options.site.clone() {
         Some(name) => {
             let found = crate::start::find_site(&planet, &name);
+            stage.set(1);
             planet.look_round(found.middle(), ROUND_M, day);
             planet.clear_woods(|land| found.clearings(land));
+            stage.set(2);
             let start = found.start(&planet);
             let towns = Towns(match found {
                 Found::Town(site) | Found::Settlement(site) => vec![site],
@@ -114,11 +161,14 @@ pub fn land_of(
             // within 600 m of the planet's start, well inside the land looked round.
             let looked = planet.has_mountains() && !yard;
             if looked {
+                stage.set(1);
                 planet.look_round(planet.start(), ROUND_M, day);
             }
+            stage.set(2);
             let start = Start::choose(&planet, yard);
             let mut towns = Towns::default();
             if looked {
+                stage.set(3);
                 towns.0 = match KnownTowns::of(known_towns, spec) {
                     Some(kept) => kept.to_vec(),
                     None => first_town(&planet, &start).into_iter().collect(),
@@ -188,18 +238,20 @@ pub fn tweaks(yard: bool) -> Tweaks {
     }
 }
 
-/// Puts a world's land in, the first's too, made from its spec. What sets the land's
-/// colours goes after it, in `Building::Land`.
+/// Puts a world's land in, the first's too: the land made behind the loading screen
+/// (`generating`, D623), or else, in a run with no loading screen, made from its spec now.
+/// What sets the land's colours goes after it, in `Building::Land`.
 pub(crate) fn land(world: &mut World) {
-    let spec = world.resource::<WorldSpec>().clone();
-    let options = world.resource::<Options>();
-    let yard = options.yard();
-    let (planet, start, sited, towns) = land_of(
-        &spec,
-        options,
-        world.get_resource::<KnownStart>(),
-        world.get_resource::<KnownTowns>(),
-    );
+    let yard = world.resource::<Options>().yard();
+    let (planet, start, sited, towns) = match world.remove_resource::<generating::Made>() {
+        Some(made) => made.0,
+        None => land_of(
+            world.resource::<WorldSpec>(),
+            world.resource::<Options>(),
+            world.get_resource::<KnownStart>(),
+            world.get_resource::<KnownTowns>(),
+        ),
+    };
     world.insert_resource(planet);
     world.insert_resource(start);
     world.insert_resource(towns);
