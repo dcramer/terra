@@ -4,8 +4,8 @@
 //! `assets/data/flora.ron` where it grows (`Site`), by the ground's wetness, slope, shade and
 //! biome; this measures the ground (`Ground`) and asks.
 use super::model::Model;
-use super::{MOUNTAIN_SHORE_M, Patch, scatter, wooded};
-use crate::flora_kinds::{Cuttable, Flora, Ground, Grows, Season};
+use super::{MOUNTAIN_SHORE_M, Patch, Placing, scatter, wooded};
+use crate::flora_kinds::{Flora, Ground, Grows, Season};
 use crate::planet::Planet;
 use bevy::prelude::{Transform, Vec2, Vec3};
 use terra_gen::{Noise, Rng, Seed, smoothstep};
@@ -19,87 +19,113 @@ const SHORE_SPACING_M: f32 = 1.1;
 const UNDERSTORY_M: f32 = 300.0;
 const UNDERSTORY_SPACING_M: f32 = 2.2;
 
-/// What a layer puts: a model, where, how much room it keeps, what cutting it gives, and
-/// what it stops (`flora::plant`'s `put`).
-pub(super) type Put<'a> =
-    dyn FnMut(&Model, Transform, f32, Option<Cuttable>, Option<(Vec3, f32)>) + 'a;
 /// Standing on the ground at a point, turned at random, leaning at most so much, so big and
 /// sunk so far (`flora::plant`'s `standing`).
-pub(super) type Standing<'a> = dyn Fn(&mut Rng, Vec3, f32, f32, f32) -> Transform + 'a;
+pub(super) type Standing<'a> = dyn Fn(&mut Rng, Vec3, f32, f32, f32) -> Transform + Sync + 'a;
+/// Whether something holds at a point (the woods' floor laid there, the open heath).
+pub(super) type At<'a> = dyn Fn(Vec3) -> bool + Sync + 'a;
 
-/// What the low layers grow with.
-pub(super) struct Sow<'a, 'p> {
+/// What the low layers grow with. Each layer says what it puts, in order, for
+/// `flora::plant`'s `put` to put.
+pub(super) struct Sow<'a> {
     pub planet: &'a Planet,
     pub flora: &'a Flora,
     pub models: &'a [Vec<Model>],
     pub season: &'a Season,
     /// The woods' noise, which says where trees stand on a world without mountains.
     pub woods: &'a Noise,
-    pub put: &'a mut Put<'p>,
     pub standing: &'a Standing<'a>,
     /// Whether the woods' floor lays its own undergrowth at a point (`flora::Undergrown`),
     /// where none of these bushes, plants and ferns is sown.
-    pub floored: &'a dyn Fn(Vec3) -> bool,
+    pub floored: &'a At<'a>,
 }
 
-impl Sow<'_, '_> {
+impl Sow<'_> {
     /// One of a kind, of its own size, leaning at most `lean`, sunk `sunk`, keeping `room`.
-    fn grow(&mut self, kind: usize, rng: &mut Rng, point: Vec3, lean: f32, sunk: f32, room: f32) {
+    fn grow(
+        &self,
+        kind: usize,
+        rng: &mut Rng,
+        point: Vec3,
+        lean: f32,
+        sunk: f32,
+        room: f32,
+    ) -> Placing {
         let models = &self.models[kind];
-        let model = &models[rng.below(models.len() as u32) as usize];
+        let index = rng.below(models.len() as u32) as usize;
+        let model = &models[index];
         let (least, most) = self.flora.kinds()[kind].size.unwrap_or((1.0, 1.0));
         let tall = rng.range(least, most);
         let scale = tall / model.height;
         let cut = self.flora.kinds()[kind].cuttable(tall);
-        let transform = (self.standing)(rng, point, lean, scale, sunk);
-        (self.put)(model, transform, room, cut, None);
+        Placing {
+            kind,
+            model: index,
+            transform: (self.standing)(rng, point, lean, scale, sunk),
+            room,
+            cut,
+            stops: None,
+        }
     }
 
     /// Bushes and leafy plants, in the grass, round a patch's middle so far.
     pub fn in_the_grass(
-        &mut self,
+        &self,
         patch: &Patch,
         seed: Seed,
         reach: f32,
-        on_heath: &dyn Fn(Vec3) -> bool,
-    ) {
+        on_heath: &At,
+    ) -> Vec<Placing> {
         let (planet, flora, season, floored) = (self.planet, self.flora, self.season, self.floored);
-        scatter(seed.derive("bushes"), 230.0 * reach, 5.5, |rng, x, z| {
-            let point = patch.ground(planet, x, z);
-            let cover = planet.cover(point, planet.normal(point));
-            if rng.unit() > 0.3 * cover.grass || floored(point) {
-                return;
-            }
-            // Some bear berries, the first food to be found.
-            if let Some(kind) = flora.choose(Grows::Bushes, 0.0, cover.grass, 0.0, season, rng) {
-                self.grow(kind, rng, point, 0.1, 0.05, 1.2);
-            }
-        });
-        scatter(seed.derive("plants"), 150.0 * reach, 3.2, |rng, x, z| {
-            let point = patch.ground(planet, x, z);
-            let cover = planet.cover(point, planet.normal(point));
-            if rng.unit() > 0.28 * cover.grass || on_heath(point) || floored(point) {
-                return;
-            }
-            if let Some(kind) = flora.choose(Grows::Plants, 0.0, cover.grass, 0.0, season, rng) {
-                self.grow(kind, rng, point, 0.15, 0.02, 0.6);
-            }
-        });
+        let mut put = scatter(
+            seed.derive("bushes"),
+            230.0 * reach,
+            5.5,
+            |rng, x, z, out| {
+                let point = patch.ground(planet, x, z);
+                let cover = planet.cover(point, planet.normal(point));
+                if rng.unit() > 0.3 * cover.grass || floored(point) {
+                    return;
+                }
+                // Some bear berries, the first food to be found.
+                if let Some(kind) = flora.choose(Grows::Bushes, 0.0, cover.grass, 0.0, season, rng)
+                {
+                    out.push(self.grow(kind, rng, point, 0.1, 0.05, 1.2));
+                }
+            },
+        );
+        put.extend(scatter(
+            seed.derive("plants"),
+            150.0 * reach,
+            3.2,
+            |rng, x, z, out| {
+                let point = patch.ground(planet, x, z);
+                let cover = planet.cover(point, planet.normal(point));
+                if rng.unit() > 0.28 * cover.grass || on_heath(point) || floored(point) {
+                    return;
+                }
+                if let Some(kind) = flora.choose(Grows::Plants, 0.0, cover.grass, 0.0, season, rng)
+                {
+                    out.push(self.grow(kind, rng, point, 0.15, 0.02, 0.6));
+                }
+            },
+        ));
+        put
     }
 
     /// Rushes and reeds along a lake's or pool's wet margin, in beds with gaps between, a
     /// few tufts to a clump, as its kinds' sites say.
-    pub fn shore(&mut self, patch: &Patch, seed: Seed) {
+    pub fn shore(&self, patch: &Patch, seed: Seed) -> Vec<Placing> {
         let (planet, flora, season, woods) = (self.planet, self.flora, self.season, self.woods);
         let Some(round) = planet.round() else {
-            return;
+            return Vec::new();
         };
         let beds = Noise::new(seed.derive("reed beds"));
         scatter(
             seed.derive("shore"),
             SHORE_M,
             SHORE_SPACING_M,
-            |rng, x, z| {
+            |rng, x, z, out| {
                 // Asked of the lakes' grid first, which is cheap, so only the shore is looked at.
                 let across = patch.middle + patch.east * x + patch.north * z;
                 if round.water_near(across.normalize(), 1).is_none() {
@@ -121,15 +147,15 @@ impl Sow<'_, '_> {
                     let off =
                         patch.east * rng.range(-0.35, 0.35) + patch.north * rng.range(-0.35, 0.35);
                     let at = planet.ground_at(point + off);
-                    self.grow(kind, rng, at, 0.12, 0.04, 0.4);
+                    out.push(self.grow(kind, rng, at, 0.12, 0.04, 0.4));
                 }
             },
-        );
+        )
     }
 
     /// Ferns and shrubs on the forest floor, thicker the closer the trees stand, in drifts,
     /// as its kinds' sites say; none on the open heath.
-    pub fn understory(&mut self, patch: &Patch, seed: Seed, on_heath: &dyn Fn(Vec3) -> bool) {
+    pub fn understory(&self, patch: &Patch, seed: Seed, on_heath: &At) -> Vec<Placing> {
         let (planet, flora, season, woods) = (self.planet, self.flora, self.season, self.woods);
         let floored = self.floored;
         let drifts = Noise::new(seed.derive("fern drifts"));
@@ -137,7 +163,7 @@ impl Sow<'_, '_> {
             seed.derive("understory"),
             UNDERSTORY_M,
             UNDERSTORY_SPACING_M,
-            |rng, x, z| {
+            |rng, x, z, out| {
                 let point = patch.ground(planet, x, z);
                 let drift = smoothstep(-0.1, 0.25, drifts.fbm(point / 16.0, 2, 2.0, 0.5));
                 if rng.unit() > 0.2 + 0.8 * drift || on_heath(point) || floored(point) {
@@ -149,10 +175,10 @@ impl Sow<'_, '_> {
                 }
                 if let Some(kind) = flora.choose_on(Grows::Understory, &ground, drift, season, rng)
                 {
-                    self.grow(kind, rng, point, 0.12, 0.03, 0.7);
+                    out.push(self.grow(kind, rng, point, 0.12, 0.03, 0.7));
                 }
             },
-        );
+        )
     }
 }
 

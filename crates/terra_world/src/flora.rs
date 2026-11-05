@@ -537,18 +537,45 @@ fn wooded(woods: &Noise, point: Vec3, from_start_m: f32) -> f32 {
     (0.12 + 0.8 * wooded) * smoothstep(16.0, 42.0, from_start_m)
 }
 
-/// Calls `place` once for each square of a grid laid over the map, with a random point
-/// in that square. The same seed always gives the same points.
-fn scatter(seed: Seed, reach_m: f32, spacing_m: f32, mut place: impl FnMut(&mut Rng, f32, f32)) {
+/// What a scatter's square puts: a kind's model by its place in the kind's models, where,
+/// how much room it keeps, what cutting it gives and what it stops (`plant`'s `put`).
+pub(super) struct Placing {
+    kind: usize,
+    model: usize,
+    transform: Transform,
+    room: f32,
+    cut: Option<Cuttable>,
+    stops: Option<(Vec3, f32)>,
+}
+
+/// Asks `decide` once for each square of a grid laid over the map, with a random point in
+/// that square, what it puts there. The same seed always gives the same points. Every square
+/// is decided at once over every core (`terra_gen::par::map`, a row of squares a task), as
+/// each has its own random numbers; what they put comes back row by row, square by square,
+/// so it is put, and what stops what is filed, as one square after the next had it. Decided
+/// one after the next, the mountain lake's shore stones, shore and forest floor held the
+/// frame the world is entered in for 2.5 s (crossing-freeze j3).
+fn scatter(
+    seed: Seed,
+    reach_m: f32,
+    spacing_m: f32,
+    decide: impl Fn(&mut Rng, f32, f32, &mut Vec<Placing>) + Sync,
+) -> Vec<Placing> {
     let cells = (reach_m / spacing_m).ceil() as i32;
-    for i in -cells..cells {
+    let rows: Vec<i32> = (-cells..cells).collect();
+    terra_gen::par::map(&rows, |&i| {
+        let mut row = Vec::new();
         for j in -cells..cells {
             let mut rng = seed.at(i, 0, j).rng();
             let east = (i as f32 + rng.unit()) * spacing_m;
             let north = (j as f32 + rng.unit()) * spacing_m;
-            place(&mut rng, east, north);
+            decide(&mut rng, east, north, &mut row);
         }
-    }
+        row
+    })
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 fn plant(
@@ -638,8 +665,10 @@ fn plant(
     let woods = Noise::new(seed.derive("woods"));
     let species = Noise::new(seed.derive("species"));
     let blooms = Noise::new(seed.derive("blooms"));
-    let pick =
-        |rng: &mut Rng, models: &[Model]| models[rng.below(models.len() as u32) as usize].clone();
+    let pick = |rng: &mut Rng, kind: usize| {
+        let model = rng.below(models[kind].len() as u32) as usize;
+        (model, &models[kind][model])
+    };
     // Standing on the ground at a point, turned at random, leaning at most a little.
     let standing = |rng: &mut Rng, point: Vec3, lean: f32, scale: f32, sunk: f32| {
         let up = point.normalize();
@@ -702,11 +731,22 @@ fn plant(
             }
         }
     };
+    let mut place = |placings: Vec<Placing>| {
+        for p in placings {
+            put(
+                &models[p.kind][p.model],
+                p.transform,
+                p.room,
+                p.cut,
+                p.stops,
+            );
+        }
+    };
 
     // Trees: woods with clearings, thinning to nothing around the base and at the shore. On a
     // world with mountains the woods grow them, by the land's rules (`woods`).
     let trees_m = if planet.has_mountains() { 0.0 } else { 340.0 };
-    scatter(seed.derive("trees"), trees_m, 6.5, |rng, x, z| {
+    let trees = scatter(seed.derive("trees"), trees_m, 6.5, |rng, x, z, out| {
         let point = ground.ground(&planet, x, z);
         let normal = planet.normal(point);
         let from_base = Vec2::new(x, z).length();
@@ -727,28 +767,32 @@ fn plant(
             return;
         };
         let tall = size(rng, kind);
-        let model = pick(rng, &models[kind]);
+        let (index, model) = pick(rng, kind);
         let scale = tall / model.height;
         let trunk = (point, (model.spread * scale).clamp(0.25, 0.6));
+        out.push(Placing {
+            kind,
+            model: index,
+            transform: standing(rng, point, 0.06, scale, 0.1),
+            room: 5.0,
+            // The tallest are great trees, which only an iron axe will fell (D96).
+            cut: flora.kinds()[kind].cuttable(tall),
+            stops: Some(trunk),
+        });
+    });
+    for tree in &trees {
+        let (foot, radius_m) = tree.stops.unwrap_or_default();
         trunks.add(Trunk {
-            foot: point,
-            radius_m: trunk.1,
-            height_m: tall,
+            foot,
+            radius_m,
+            height_m: models[tree.kind][tree.model].height * tree.transform.scale.y,
             solid: true,
         });
-        // The tallest are great trees, which only an iron axe will fell (D96).
-        let wood = flora.kinds()[kind].cuttable(tall);
-        put(
-            &model,
-            standing(rng, point, 0.06, scale, 0.1),
-            5.0,
-            wood,
-            Some(trunk),
-        );
-    });
+    }
+    place(trees);
 
     // Rocks: anywhere, more of them on bare and steep ground, mossy in the grass.
-    scatter(seed.derive("rocks"), 300.0, 7.0, |rng, x, z| {
+    let rocks = scatter(seed.derive("rocks"), 300.0, 7.0, |rng, x, z, out| {
         let point = ground.ground(&planet, x, z);
         let cover = planet.cover(point, planet.normal(point));
         // On the heath past the trees, boulders lie in fields on the scoured rises and the
@@ -773,18 +817,18 @@ fn plant(
         let Some(kind) = flora.choose(Grows::Rocks, 0.0, grown_over, size, &season, rng) else {
             return;
         };
-        let model = pick(rng, &models[kind]);
+        let (index, model) = pick(rng, kind);
         let scale = size / model.height;
-        let stops = (size > 0.9).then_some((point, model.spread * scale * 0.8));
-        let metal = flora.kinds()[kind].cuttable(size);
-        put(
-            &model,
-            standing(rng, point, 0.5, scale, size * 0.22),
-            1.0 + size,
-            metal,
-            stops,
-        );
+        out.push(Placing {
+            kind,
+            model: index,
+            stops: (size > 0.9).then_some((point, model.spread * scale * 0.8)),
+            transform: standing(rng, point, 0.5, scale, size * 0.22),
+            room: 1.0 + size,
+            cut: flora.kinds()[kind].cuttable(size),
+        });
     });
+    place(rocks);
 
     // A mountain lake's shore: the bare band its high water and ice keep scoured
     // (`terra_land::woods::SHORE_BARE_M`) strewn with its granite's stones and blocks, from
@@ -796,11 +840,11 @@ fn plant(
         flora.kinds().iter().position(|kind| kind.name == "Rock"),
     ) {
         let bare = terra_land::woods::SHORE_BARE_M;
-        scatter(
+        place(scatter(
             seed.derive("shore stones"),
             SHORE_STONES_M,
             2.6,
-            |rng, x, z| {
+            |rng, x, z, out| {
                 // Asked of the lakes' grid first, which is cheap, so only the shore is looked at.
                 let across = ground.middle + ground.east * x + ground.north * z;
                 if round.water_near(across.normalize(), 1).is_none() {
@@ -833,19 +877,18 @@ fn plant(
                 let Some(size) = clear_of_the_surface(over, size) else {
                     return;
                 };
-                let model = pick(rng, &models[stone]);
+                let (index, model) = pick(rng, stone);
                 let scale = size / model.height;
-                let stops = (size > 0.9).then_some((point, model.spread * scale * 0.8));
-                let metal = flora.kinds()[stone].cuttable(size);
-                put(
-                    &model,
-                    standing(rng, point, 0.5, scale, size * 0.3),
-                    1.0 + size,
-                    metal,
-                    stops,
-                );
+                out.push(Placing {
+                    kind: stone,
+                    model: index,
+                    stops: (size > 0.9).then_some((point, model.spread * scale * 0.8)),
+                    transform: standing(rng, point, 0.5, scale, size * 0.3),
+                    room: 1.0 + size,
+                    cut: flora.kinds()[stone].cuttable(size),
+                });
             },
-        );
+        ));
     }
 
     // Past the trees the heath's own cover grows (below), not the woods' ferns and herbs,
@@ -882,88 +925,98 @@ fn plant(
         patches.push((patch, seed.derive("settlement"), 1.5));
     }
     for &(ground, seed, reach) in &patches {
-        let mut sow = under::Sow {
+        let sow = under::Sow {
             planet: &planet,
             flora: &flora,
             models: &models,
             season: &season,
             woods: &woods,
-            put: &mut put,
             standing: &standing,
             floored: &floored,
         };
-        sow.in_the_grass(&ground, seed, reach, &on_heath);
+        place(sow.in_the_grass(&ground, seed, reach, &on_heath));
         // Flowers, in drifts.
-        scatter(seed.derive("flowers"), 130.0 * reach, 1.5, |rng, x, z| {
-            let point = ground.ground(&planet, x, z);
-            let drift = smoothstep(0.05, 0.22, blooms.fbm(point / 22.0, 2, 2.0, 0.5));
-            if rng.unit() > 0.75 * drift {
-                return;
-            }
-            let cover = planet.cover(point, planet.normal(point));
-            if cover.grass < 0.5 || on_heath(point) || floored(point) {
-                return;
-            }
-            let Some(kind) = flora.choose(Grows::Flowers, 0.0, cover.grass, 0.0, &season, rng)
-            else {
-                return;
-            };
-            let model = pick(rng, &models[kind]);
-            let tall = size(rng, kind);
-            let scale = tall / model.height;
-            put(
-                &model,
-                standing(rng, point, 0.15, scale, 0.02),
-                0.5,
-                flora.kinds()[kind].cuttable(tall),
-                None,
-            );
-        });
+        place(scatter(
+            seed.derive("flowers"),
+            130.0 * reach,
+            1.5,
+            |rng, x, z, out| {
+                let point = ground.ground(&planet, x, z);
+                let drift = smoothstep(0.05, 0.22, blooms.fbm(point / 22.0, 2, 2.0, 0.5));
+                if rng.unit() > 0.75 * drift {
+                    return;
+                }
+                let cover = planet.cover(point, planet.normal(point));
+                if cover.grass < 0.5 || on_heath(point) || floored(point) {
+                    return;
+                }
+                let Some(kind) = flora.choose(Grows::Flowers, 0.0, cover.grass, 0.0, &season, rng)
+                else {
+                    return;
+                };
+                let (index, model) = pick(rng, kind);
+                let tall = size(rng, kind);
+                let scale = tall / model.height;
+                out.push(Placing {
+                    kind,
+                    model: index,
+                    transform: standing(rng, point, 0.15, scale, 0.02),
+                    room: 0.5,
+                    cut: flora.kinds()[kind].cuttable(tall),
+                    stops: None,
+                });
+            },
+        ));
     }
 
     // Round the start, rushes and reeds on the lakes' wet margins and ferns and shrubs on the
     // shaded forest floor, as their kinds' sites say.
-    let mut sow = under::Sow {
+    let sow = under::Sow {
         planet: &planet,
         flora: &flora,
         models: &models,
         season: &season,
         woods: &woods,
-        put: &mut put,
         standing: &standing,
         floored: &floored,
     };
-    sow.shore(&ground, seed);
-    sow.understory(&ground, seed, &on_heath);
+    place(sow.shore(&ground, seed));
+    place(sow.understory(&ground, seed, &on_heath));
 
     // The heath's dwarf shrubs past the trees, where its dwarf-shrub community holds the ground
     // (`terra_land::heath`), in clumps, a few among the lichen and sedge.
     if let Some(round) = planet.round() {
-        scatter(seed.derive("heath shrubs"), 110.0, 1.7, |rng, x, z| {
-            let point = ground.ground(&planet, x, z);
-            let heath = round.heath.at(point);
-            let clumped = smoothstep(-0.1, 0.25, blooms.fbm(point / 9.0 + 41.0, 2, 2.0, 0.5));
-            // Scrub in the wet hollows among the sedge, as willow and birch stand there.
-            let hollow = heath.wet * (heath.sedge + heath.moss) / heath.open.max(1e-3);
-            let chance =
-                (1.3 * heath.shrub + 0.08 * heath.lichen + 0.3 * hollow) * (0.4 + 0.6 * clumped);
-            if rng.unit() > chance || point.length() < planet.water_near_m(point) + 0.1 {
-                return;
-            }
-            let Some(kind) = flora.choose(Grows::Heath, hollow, 0.0, 0.0, &season, rng) else {
-                return;
-            };
-            let model = pick(rng, &models[kind]);
-            let tall = size(rng, kind);
-            let scale = tall / model.height;
-            put(
-                &model,
-                standing(rng, point, 0.2, scale, 0.02),
-                0.5,
-                flora.kinds()[kind].cuttable(tall),
-                None,
-            );
-        });
+        place(scatter(
+            seed.derive("heath shrubs"),
+            110.0,
+            1.7,
+            |rng, x, z, out| {
+                let point = ground.ground(&planet, x, z);
+                let heath = round.heath.at(point);
+                let clumped = smoothstep(-0.1, 0.25, blooms.fbm(point / 9.0 + 41.0, 2, 2.0, 0.5));
+                // Scrub in the wet hollows among the sedge, as willow and birch stand there.
+                let hollow = heath.wet * (heath.sedge + heath.moss) / heath.open.max(1e-3);
+                let chance = (1.3 * heath.shrub + 0.08 * heath.lichen + 0.3 * hollow)
+                    * (0.4 + 0.6 * clumped);
+                if rng.unit() > chance || point.length() < planet.water_near_m(point) + 0.1 {
+                    return;
+                }
+                let Some(kind) = flora.choose(Grows::Heath, hollow, 0.0, 0.0, &season, rng) else {
+                    return;
+                };
+                let (index, model) = pick(rng, kind);
+                let tall = size(rng, kind);
+                let scale = tall / model.height;
+                out.push(Placing {
+                    kind,
+                    model: index,
+                    transform: standing(rng, point, 0.2, scale, 0.02),
+                    room: 0.5,
+                    cut: flora.kinds()[kind].cuttable(tall),
+                    stops: None,
+                });
+            },
+        ));
     }
     for (at, radius) in solid_things {
         obstacles.add(at, radius);
@@ -1146,6 +1199,49 @@ mod tests {
     use super::*;
     use terra_core::{Operation, PlanetSpec};
 
+    /// A placing of `kind` that says only where.
+    fn mark(at: Vec3, kind: usize) -> Placing {
+        Placing {
+            kind,
+            model: 0,
+            transform: Transform::from_translation(at),
+            room: 0.0,
+            cut: None,
+            stops: None,
+        }
+    }
+
+    /// Decided over every core, a scatter puts the same things in the same order as its grid
+    /// walked one square after the next, each square drawing on its own random numbers, some
+    /// putting none and some several.
+    #[test]
+    fn a_scatter_puts_what_one_square_after_the_next_would_in_its_order() {
+        let seed = Seed(7).derive("test scatter");
+        let decide = |rng: &mut Rng, east: f32, north: f32, out: &mut Vec<Placing>| {
+            for _ in 0..rng.below(3) {
+                let kind = rng.below(5) as usize;
+                out.push(mark(Vec3::new(east, rng.unit(), north), kind));
+            }
+        };
+        let mut one_by_one = Vec::new();
+        let cells = (40.0_f32 / 1.5).ceil() as i32;
+        for i in -cells..cells {
+            for j in -cells..cells {
+                let mut rng = seed.at(i, 0, j).rng();
+                let east = (i as f32 + rng.unit()) * 1.5;
+                let north = (j as f32 + rng.unit()) * 1.5;
+                decide(&mut rng, east, north, &mut one_by_one);
+            }
+        }
+        let at_once = scatter(seed, 40.0, 1.5, decide);
+        let key = |p: &Placing| (p.kind, p.transform.translation.to_array());
+        assert!(one_by_one.len() > 1000, "{}", one_by_one.len());
+        assert_eq!(
+            at_once.iter().map(key).collect::<Vec<_>>(),
+            one_by_one.iter().map(key).collect::<Vec<_>>()
+        );
+    }
+
     /// A solid trunk is found while what stops a walker stands at its foot, and not once that
     /// is taken away as it is felled; a long thing filed beside it, a fence line running past
     /// its foot, is not taken for it. One not solid is found whatever stands.
@@ -1202,10 +1298,17 @@ mod tests {
 
     #[test]
     fn scatter_puts_the_same_things_in_the_same_places_on_every_machine() {
-        let mut placed = Vec::new();
-        scatter(Seed(1).derive("trees"), 13.0, 6.5, |rng, east, north| {
-            placed.push((east, north, rng.unit()));
-        });
+        let placed: Vec<_> = scatter(
+            Seed(1).derive("trees"),
+            13.0,
+            6.5,
+            |rng, east, north, out| {
+                out.push(mark(Vec3::new(east, north, rng.unit()), 0));
+            },
+        )
+        .iter()
+        .map(|p| p.transform.translation.into())
+        .collect::<Vec<(f32, f32, f32)>>();
         // Two squares either way of the middle, so four by four.
         assert_eq!(placed.len(), 16);
         let pinned = [
