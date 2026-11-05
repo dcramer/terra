@@ -239,7 +239,7 @@ pub fn plugin(app: &mut App) {
                 animate,
                 tell_gait,
                 hold.run_if(resource_exists::<Market>),
-                seat,
+                seat.run_if(terra_world::instance::in_world),
                 shade,
             )
                 .chain(),

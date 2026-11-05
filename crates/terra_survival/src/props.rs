@@ -187,7 +187,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                keep_clear,
+                keep_clear.run_if(terra_world::instance::in_world),
                 settle,
                 (kindle, smoulder).chain(),
                 charred::char_parts,

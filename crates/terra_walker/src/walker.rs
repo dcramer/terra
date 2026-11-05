@@ -208,14 +208,23 @@ impl Plugin for WalkerPlugin {
             .world_resource::<ArriveAt>()
             .add_systems(
                 Update,
-                (options::toggle, camera::capture_mouse, warp, camera::zoom)
+                (
+                    options::toggle,
+                    camera::capture_mouse,
+                    warp.run_if(terra_world::instance::in_world),
+                    camera::zoom,
+                )
                     .chain()
                     .in_set(PlayerInput),
             )
             // What this machine's player means to do, read before the frame's ticks.
             .add_systems(
                 RunFixedMainLoop,
-                (camera::look, intent::read, follow_route)
+                (
+                    camera::look,
+                    intent::read,
+                    follow_route.run_if(terra_world::instance::in_world),
+                )
                     .chain()
                     .in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
             );

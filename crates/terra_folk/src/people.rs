@@ -184,7 +184,13 @@ pub struct Dyed(pub &'static str, pub Option<(&'static str, Color)>);
 pub fn plugin(app: &mut App) {
     app.add_message::<Arrive>()
         .add_systems(Startup, load)
-        .add_systems(Update, (prepare, arrive, animate, sit).chain())
+        // People are the world's: none while it is generated (D623).
+        .add_systems(
+            Update,
+            (prepare, arrive, animate, sit)
+                .chain()
+                .run_if(terra_world::instance::in_world),
+        )
         .add_systems(
             FixedUpdate,
             (free, follow, settle).chain().in_set(Sim::World),

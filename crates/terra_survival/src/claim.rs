@@ -102,7 +102,13 @@ impl Claim {
 
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Claim>()
-        .add_systems(Update, ((track, settle).chain(), show))
+        .add_systems(
+            Update,
+            (
+                (track, settle.run_if(terra_world::instance::in_world)).chain(),
+                show,
+            ),
+        )
         .add_systems(FixedUpdate, grow.in_set(Sim::World));
 }
 
