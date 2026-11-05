@@ -93,7 +93,8 @@ function render() {
   document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.f === filter)));
   const list = document.getElementById("list");
   list.replaceChildren();
-  const shown = items.filter(i => filter === "all" || (filter === "open" ? i.status !== "answered" : i.status === "answered"));
+  const answered = i => i.status === "answered" || i.status === "picked";
+  const shown = items.filter(i => filter === "all" || (filter === "open" ? !answered(i) : answered(i)));
   if (!db) { list.append(el("p", {class:"empty", text:"The desk could not reach its store in this view. Open it on claude.ai while signed in."})); return; }
   if (!shown.length) { list.append(el("p", {class:"empty", text: filter === "open" ? "Nothing waiting on you." : "Nothing here yet."})); return; }
   for (const it of shown) list.append(card(it));
@@ -101,7 +102,7 @@ function render() {
 
 function card(it) {
   const d = drafts[it.id] ||= {choice: null, note: ""};
-  const done = it.status === "answered";
+  const done = it.status === "answered" || it.status === "picked";
   const c = el("article", {class:"card"});
   c.append(el("div", {class:"meta"},
     el("span", {class:"chip " + (done ? "done" : it.kind), text: done ? "answered" : it.kind}),

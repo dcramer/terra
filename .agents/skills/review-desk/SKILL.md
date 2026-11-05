@@ -36,10 +36,10 @@ Use the ArtifactData tool on the desk's `url`: `set` one document in `items` (`b
 
 - Files that must outlive the session live in `~/.cache/terra-review`, never `/tmp` (tmpfs). Once uploaded, a file is on the desk and the local copy is disposable.
 
-## Read answers (every turn)
+## Read answers (when reminded)
 
-1. ArtifactData `query` on `items` for `status: "answered"` whose `note` does not contain "Picked up:". Answers do not notify the session, so look each turn you coordinate; a hook (`tools/hooks/desk-answers.ts`) reminds you on each of the developer's messages once the session has used the desk.
-2. Act on each answer, then `update` the item, appending `Picked up: <what you did, one line>` to its `note` after the developer's text, so the next turn skips it.
+1. ArtifactData `query` on `items` for `status: "answered"`: those are the new answers only. Answers do not notify the session; a hook (`tools/hooks/desk-answers.ts`) reminds you on the session's first prompt, at most once an hour after, and whenever the developer mentions the desk (D627). Query then, not every turn.
+2. Act on each answer, then `update` the item to `status: "picked"`, appending `Picked up: <what you did, one line>` to its `note` after the developer's text, so the next query skips it. The page shows picked items with the answered. An answered item without `picked` from before 2026-11-05 whose note already says "Picked up:": set it `picked` (or delete it, below).
 3. A review's note is the brief for the next job; a question's `answer` is the option label picked and its `note` the nuance.
 
 ## Remove stale items

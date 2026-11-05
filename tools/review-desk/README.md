@@ -10,11 +10,11 @@ A claude.ai artifact page where one developer answers the questions and reviews 
 An item is one document in `items`:
 
 ```json
-{"kind": "question|review", "area": "…", "status": "open|answered", "createdAt": "ISO time",
+{"kind": "question|review", "area": "…", "status": "open|answered|picked", "createdAt": "ISO time",
  "title": "…", "body": "…", "options": [{"label": "…", "detail": "…"}],
  "ask": "one sentence: what to decide or look at",
  "images": [{"url": "…", "caption": "…"}], "videos": [{"url": "…", "caption": "…"}],
  "answer": "", "note": "", "answeredAt": ""}
 ```
 
-The page sets `status`, `answer` (the option picked), `note`, `answeredAt` and `answeredBy` when the developer sends an answer. Answers do not notify the session: the coordinator reads them each turn.
+The page sets `status`, `answer` (the option picked), `note`, `answeredAt` and `answeredBy` when the developer sends an answer. Answers do not notify the session: the coordinator queries `status: "answered"` and, once it has acted on one, sets it to `picked` (shown with the answered), so the next query returns only new answers (D627).
