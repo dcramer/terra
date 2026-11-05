@@ -4,7 +4,10 @@
 // written into the catalogue's `pairings` (assets/models/character/wardrobe.json), never by hand.
 // The game composes no refused pairing (`terra_walker::wardrobe::compose`), nor may a look.
 //
-//   node tools/characters/pairings.ts [--frames N] [--dry]
+//   node tools/characters/pairings.ts [--frames N] [--dry] [--new]
+//
+// --new measures only the pairs of a piece no row names yet and of a piece whose outfit gained one
+// (their own pairings judge the mixed ones), keeping every other row (toMeasure).
 //
 // For each two pieces: **apart** when neither comes within 8 cm of the other at rest. Else the
 // outer is the one the other pokes through least at rest (as made, the tunic over the trousers,
@@ -96,14 +99,35 @@ function measured(w: Wardrobe, a: string, b: string, frames: number) {
   };
 }
 
-/** The matrix: each pair measured, mixed ones judged against their outfits' own. */
-export function matrix(w: Wardrobe, frames = 12, log: string[] = []): Pairing[] {
+/** The pairs `matrix` must measure again when `kept` holds the rest: those of a piece no kept row
+ *  names (new), and those of a piece whose outfit has a new piece, whose own pairings judge them. */
+export function toMeasure(w: Wardrobe, kept: Pairing[]): Set<string> {
+  const named = new Set(kept.flatMap((r) => r.pieces));
+  const fresh = Object.keys(w.pieces).filter((p) => shows(w, p) && !named.has(p));
+  const touched = new Set(fresh.flatMap((p) => outfits(w, p)));
+  const again = (p: string) => !named.has(p) || outfits(w, p).some((o) => touched.has(o));
+  return new Set(pairs(w).filter(([a, b]) => again(a) || again(b)).map(([a, b]) => `${a}|${b}`));
+}
+
+/** The matrix: each pair measured, mixed ones judged against their outfits' own. With `kept` (the
+ *  catalogue's rows), only `toMeasure`'s pairs are measured, with the pairings that judge them;
+ *  the rest keep their rows. */
+export function matrix(w: Wardrobe, frames = 12, log: string[] = [], kept?: Pairing[]): Pairing[] {
   const all = pairs(w);
-  const runs = new Map(all.map(([a, b]) => [`${a}|${b}`, measured(w, a, b, frames)]));
-  const run = (a: string, b: string) => runs.get(a < b ? `${a}|${b}` : `${b}|${a}`);
+  const runs = new Map<string, ReturnType<typeof measured>>();
+  const run = (a: string, b: string) => {
+    const [x, y] = a < b ? [a, b] : [b, a];
+    const key = `${x}|${y}`;
+    if (!runs.has(key)) runs.set(key, measured(w, x, y, frames));
+    return runs.get(key);
+  };
+  const again = kept ? toMeasure(w, kept) : null;
+  const old = new Map((kept ?? []).map((r) => [[...r.pieces].sort().join("|"), r]));
   const ofOutfit = (os: string[], body: string, slot: string | undefined) =>
     Object.keys(w.pieces).find((p) => w.pieces[p].body === body && w.pieces[p].slot === slot && w.pieces[p].item && outfits(w, p).some((o) => os.includes(o)));
   return all.map(([a, b]): Pairing => {
+    const had = old.get(`${a}|${b}`);
+    if (again && had && !again.has(`${a}|${b}`)) return had;
     const m = run(a, b);
     const [pa, pb] = [w.pieces[a], w.pieces[b]];
     const own = outfits(w, a).some((o) => outfits(w, b).includes(o));
@@ -186,12 +210,15 @@ if (import.meta.main) {
   const text = readFileSync(path, "utf8");
   const w: Wardrobe = JSON.parse(text);
   const log: string[] = [];
-  const rows = matrix(w, frames, log);
+  const kept = args.includes("--new") ? ((w as unknown as { pairings?: Pairing[] }).pairings ?? []) : undefined;
+  const again = kept ? toMeasure(w, kept).size : null;
+  const rows = matrix(w, frames, log, kept);
+  const n = (v: Pairing["verdict"]) => rows.filter((r) => r.verdict === v).length;
+  // Each refused pairing's numbers go in the log, never the terminal (D388).
+  log.push("", ...rows.filter((r) => r.verdict === "refused").map((r) => `refused ${r.over} over ${r.pieces.find((p) => p !== r.over)}: ${r.worse} clips worse than theirs, ${r.rest} poking at rest against their ${r.theirs_rest}, worst ${r.poke_mm} mm ${r.worst}`));
   mkdirSync(dirname(LOG), { recursive: true });
   writeFileSync(LOG, `${log.join("\n")}\n`);
-  const n = (v: Pairing["verdict"]) => rows.filter((r) => r.verdict === v).length;
-  console.log(`✓ measured: ${rows.length} pairings, ${n("apart")} apart, ${n("theirs")} theirs, ${n("pass")} pass, ${n("refused")} refused (${frames} moments a clip; details in ${LOG.slice(ROOT.length)})`);
-  for (const r of rows.filter((r) => r.verdict === "refused")) console.log(`  refused ${r.over} over ${r.pieces.find((p) => p !== r.over)}: ${r.worse} clips worse than theirs, ${r.rest} poking at rest against their ${r.theirs_rest}, worst ${r.poke_mm} mm ${r.worst}`);
+  console.log(`✓ measured: ${rows.length} pairings${again === null ? "" : ` (${again} measured again, the rest kept: --new)`}, ${n("apart")} apart, ${n("theirs")} theirs, ${n("pass")} pass, ${n("refused")} refused (${frames} moments a clip; each in ${LOG.slice(ROOT.length)})`);
   for (const body of Object.keys(w.bodies)) {
     const dressed = figures(w, rows, body);
     const any = figures(w, rows, body, true);

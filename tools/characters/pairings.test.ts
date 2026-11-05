@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Wardrobe } from "./build_steps.ts";
-import { figures, judge, type Measure, type Pairing, pairs, written } from "./pairings.ts";
+import { figures, judge, type Measure, type Pairing, pairs, toMeasure, written } from "./pairings.ts";
 
 const clips = (rows: Record<string, [number, number]>): Measure["each"] => new Map(Object.entries(rows).map(([n, [poke, open]]) => [n, { poke, open }]));
 
@@ -51,4 +51,17 @@ test("the pairings are written in place, a row a line, the rest of the catalogue
   const out = written(text, [{ pieces: ["a", "b"], verdict: "apart" }]);
   assert.equal(out, '{\n  "looks": { "x": [1, 2] },\n  "pairings": [\n    {"pieces":["a","b"],"verdict":"apart"}\n  ],\n  "populations": {}\n}\n');
   assert.deepEqual(JSON.parse(out).pairings, [{ pieces: ["a", "b"], verdict: "apart" }]);
+});
+
+test("--new measures a new piece's pairs and those its outfit's own pairings judge, keeping the rest", () => {
+  const p = structuredClone(w.pieces) as Record<string, Wardrobe["pieces"][string] & { outfit?: string }>;
+  Object.assign(p.coat, { outfit: "x" });
+  Object.assign(p.breeches, { outfit: "x" });
+  Object.assign(p.tunic, { outfit: "y" });
+  Object.assign(p.hose, { outfit: "y" });
+  const ww = { ...w, pieces: p } as Wardrobe;
+  // Hose is new: no kept row names it.
+  const kept: Pairing[] = [{ pieces: ["breeches", "coat"], verdict: "theirs" }, { pieces: ["breeches", "tunic"], verdict: "pass" }];
+  assert.deepEqual([...toMeasure(ww, kept)].sort(), ["breeches|tunic", "coat|hose", "hose|tunic"]);
+  assert.equal(toMeasure(ww, [...kept, { pieces: ["coat", "hose"], verdict: "apart" }, { pieces: ["hose", "tunic"], verdict: "theirs" }]).size, 0, "nothing new, nothing measured");
 });

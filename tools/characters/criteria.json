@@ -34,9 +34,9 @@
    "criterion": "looks.hair"
   },
   {
-   "what": "Adding an outfit in one or two commands: vendor.ts (their pieces copied byte for byte from terra-private, SHA256SUMS and licence rows) and wardrobe.ts --build (rows drafted, only the new pairings measured, the check)",
-   "files": ["tools/characters/wardrobe.ts", "tools/characters/pairings.ts#matrix", "art/characters/quaternius/README.md"],
-   "check": "node --test tools/characters/vendor.test.ts"
+   "what": "wardrobe.ts --build: the rows drafted for newly vendored pieces (a draft is in ~/.cache/terra-handoff/char-pipeline-tokens-j3-draft.ts, untested), the build step, pairings.ts --new, the check, a line each; vendor.ts and pairings.ts --new are on main",
+   "files": ["tools/characters/wardrobe.ts", "tools/characters/pairings.ts#toMeasure", "tools/characters/vendor.ts#plan"],
+   "check": "node --test tools/characters/pairings.test.ts tools/characters/vendor.test.ts"
   },
   {
    "what": "The sheet: each look in the workbench (--attach), stills through cargo xtask gpu still, on the desk: which outfits and colourways belong (FOR REVIEW)",
