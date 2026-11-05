@@ -85,6 +85,9 @@ pub struct MarketTown {
     /// How far from the planet's start to look, and the grid looked over, in metres.
     pub search_m: f32,
     pub step_m: f32,
+    /// How near the query's start its middle may be, at least, in metres: a world's first
+    /// town stands past the player's own ground (D620), a demo's anywhere.
+    pub beyond_m: f32,
     /// A lake wanted beside it, its nearest shore between so many metres from the middle and
     /// so many, and at least so big, in square metres, as the world draws its water (its
     /// lakes found on its own ten-metre grid, `round::Round`), not the search's coarse one;
@@ -118,8 +121,18 @@ impl MarketTown {
         start_clearing_m: 170.0,
         search_m: 9000.0,
         step_m: 50.0,
+        beyond_m: 0.0,
         water_m: None,
         pinned_km: None,
+    };
+
+    /// A world's first town (D620): the demo's valley town, looked for round the player's
+    /// start rather than the planet's, within a walk of it ([`FIRST_SEARCH_M`]) and past the
+    /// start's own ground, so its fields do not take the player's plot.
+    pub const FIRST: MarketTown = MarketTown {
+        search_m: FIRST_SEARCH_M[0],
+        beyond_m: 450.0,
+        ..MarketTown::DEMO
     };
 
     /// A settlement newly founded (D381): the same valley floor, but only its plots cleared
@@ -135,6 +148,13 @@ impl MarketTown {
         water_m: Some((230.0, 420.0, 40_000.0)),
         ..MarketTown::DEMO
     };
+
+    /// Whether a place that fits is not to be taken: too far from the pin, or too near the
+    /// query's start.
+    fn off(&self, site: &TownSite) -> bool {
+        crate::site::off_pin(self.pinned_km, site.at_km)
+            || site.at_km.length() * 1000.0 < self.beyond_m
+    }
 
     /// The forest a town found by this query has cleared: its fields round it, and round the
     /// world's start beside it.
@@ -250,7 +270,8 @@ pub struct Searched {
     pub too_rough: usize,
     pub no_forest: usize,
     pub no_peaks: usize,
-    /// Fit, but too far from the query's pin to be the pinned place.
+    /// Fit, but too far from the query's pin to be the pinned place, or nearer its start
+    /// than it may be (`MarketTown::beyond_m`).
     pub off_pin: usize,
     pub fit: usize,
     /// Whether the place found is by a lake, as asked.
@@ -275,10 +296,35 @@ const WAYS: usize = 32;
 /// The eye's height over the ground, in metres.
 const EYE_M: f32 = 1.7;
 
+/// How far from the player's start a world's first town is looked for, in metres: within
+/// the first, and failing that the second (seed 102's nearest is 7 km off, D620).
+pub const FIRST_SEARCH_M: [f32; 2] = [3_000.0, 9_000.0];
+
 impl Land {
     /// The best place for a market town near the planet's start, if the land has one.
     pub fn market_town(&self, start: Vec3, want: &MarketTown) -> Option<TownSite> {
         self.market_town_searched(start, want).0
+    }
+
+    /// A world's first town (D620): [`MarketTown::FIRST`] round the player's start, within
+    /// the first of [`FIRST_SEARCH_M`] and failing that the second; none on a world whose
+    /// land makes no such place so near (one without mountains has none), and what ruled the
+    /// last search's places out. Seconds on a 30 km world: 0.3 to 2.4 s the near search, to
+    /// 11 s the far one (seeds 1 to 9001).
+    pub fn first_town(&self, start: Vec3) -> (Option<TownSite>, Searched) {
+        let mut searched = Searched::default();
+        for search_m in FIRST_SEARCH_M {
+            let want = MarketTown {
+                search_m,
+                ..MarketTown::FIRST
+            };
+            let (site, tried) = self.market_town_searched(start, &want);
+            searched = tried;
+            if site.is_some() {
+                return (site, searched);
+            }
+        }
+        (None, searched)
     }
 
     /// [`Land::market_town`], and what each test ruled out, so a query that finds nothing
@@ -482,7 +528,7 @@ impl Land {
                 Verdict::Rough => searched.too_rough += 1,
                 Verdict::NoForest => searched.no_forest += 1,
                 Verdict::NoPeaks => searched.no_peaks += 1,
-                Verdict::Fit(_, site) if crate::site::off_pin(want.pinned_km, site.at_km) => {
+                Verdict::Fit(_, site) if want.off(&site) => {
                     searched.off_pin += 1;
                 }
                 Verdict::Fit(score, site) => {
@@ -612,23 +658,23 @@ mod tests {
     use terra_core::{PlanetSpec, Seed};
 
     fn land(radius_m: f32) -> Land {
+        seeded(1, radius_m)
+    }
+
+    fn seeded(seed: u64, radius_m: f32) -> Land {
         Land::new(
             ground::world(PlanetSpec {
-                seed: Seed(1),
+                seed: Seed(seed),
                 radius_m,
             }),
             start_climate().unwrap(),
         )
     }
 
-    #[test] // Slow: minutes.
-    fn the_town_found_is_level_warm_wooded_round_and_under_peaks() {
-        let land = land(30_000.0);
-        let want = MarketTown::DEMO;
-        let (site, searched) = land.market_town_searched(PLANET_START, &want);
-        let site = site.unwrap_or_else(|| panic!("no town site: {searched:?}"));
-        // Counted again from the ground and the climate at its own place, not from the
-        // query's grid and tables.
+    /// A town's place holds its rules, counted again from the ground and the climate at its
+    /// own place, not from the query's grid and tables: warm enough, level over the town's
+    /// reach, and under peaks over the tree line.
+    fn assert_fits(land: &Land, site: &TownSite, want: &MarketTown) {
         let ground = land.surface(site.toward);
         let season = land.fields.season(land.place(ground, ground.normalize()));
         assert!(
@@ -649,6 +695,36 @@ mod tests {
         let peak = land.surface(site.peak).length() - land.sea_radius_m();
         assert!(peak > site.height_m + want.peaks_above_m, "{peak}");
         assert!(peak > site.tree_line_m, "{peak}");
+    }
+
+    #[test] // Slow: a minute or two (three worlds' spawns and towns).
+    fn every_world_finds_its_first_town_within_a_walk_of_its_start() {
+        // A world's first town (D620) on worlds of other seeds than the demos', seed 102's
+        // only past the near search: found round the player's start, past its own ground and
+        // within the far search, and holding the town's rules.
+        for seed in [2, 7, 102] {
+            let land = seeded(seed, 30_000.0);
+            let start = crate::spawn::find(&land);
+            let (site, searched) = land.first_town(start);
+            let site = site.unwrap_or_else(|| panic!("seed {seed}: no town: {searched:?}"));
+            let off = (land.surface(site.toward) - land.surface(start)).length();
+            let far_m = FIRST_SEARCH_M[1] * core::f32::consts::SQRT_2;
+            assert!(
+                (MarketTown::FIRST.beyond_m - 10.0..far_m).contains(&off),
+                "seed {seed}: the town {off} m from the start"
+            );
+            assert_fits(&land, &site, &MarketTown::FIRST);
+        }
+    }
+
+    #[test] // Slow: minutes.
+    fn the_town_found_is_level_warm_wooded_round_and_under_peaks() {
+        let land = land(30_000.0);
+        let want = MarketTown::DEMO;
+        let (site, searched) = land.market_town_searched(PLANET_START, &want);
+        let site = site.unwrap_or_else(|| panic!("no town site: {searched:?}"));
+        assert_fits(&land, &site, &want);
+        let ground = land.surface(site.toward);
         // No tree stands in the town or the start's ground, near or far, and the forest stands
         // past its fields: the woods as the world grows them, round the town.
         let mut round = crate::round::Round::new(land.clone(), site.toward, 2400.0, 0);
