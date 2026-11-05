@@ -84,7 +84,9 @@ pub struct Params {
     /// in-scattering probability's share, detail in the light march, the density's scale, the
     /// octaves' gain (0 keeps the f/(1-f) multiple scattering).
     pub look: Vec4,
-    /// x: each octave's share of the optical depth (Hillaire 2016's a).
+    /// x: each octave's share of the optical depth (Hillaire 2016's a); y the diffusion floor's
+    /// gain; z how much a heap's coverage narrows toward its top; w how many times slower the
+    /// shape noise changes up a heap than across it.
     pub look2: Vec4,
 }
 
@@ -95,6 +97,42 @@ pub static LOOK_MS_A: Tunable = Tunable::new(
     0.5,
     0.05..=1.0,
     "experiment: each multiple-scattering octave's share of the depth toward the sun (Hillaire 2016's a)",
+);
+/// The look experiment's tunables as `Params::look` and `look2` take them.
+fn looks() -> [Vec4; 2] {
+    [
+        Vec4::new(
+            LOOK_INSCATTER.get(),
+            LOOK_LIGHT_DETAIL.get(),
+            LOOK_DENSITY.get(),
+            LOOK_OCTAVES.get(),
+        ),
+        Vec4::new(
+            LOOK_MS_A.get(),
+            LOOK_FLOOR.get(),
+            LOOK_TAPER.get(),
+            LOOK_STRETCH.get(),
+        ),
+    ]
+}
+
+pub static LOOK_FLOOR: Tunable = Tunable::new(
+    "sky.cloud.x_floor",
+    0.0,
+    0.0..=4.0,
+    "experiment: the gain of the diffusion's deep light under the octaves, 1 / (1 + 3/4 (1 - g) tau)",
+);
+pub static LOOK_TAPER: Tunable = Tunable::new(
+    "sky.cloud.x_taper",
+    0.0,
+    0.0..=1.0,
+    "experiment: how much a heap's coverage narrows toward its layer's top, so towers end in domes",
+);
+pub static LOOK_STRETCH: Tunable = Tunable::new(
+    "sky.cloud.x_stretch",
+    1.0,
+    1.0..=4.0,
+    "experiment: how many times slower the shape noise changes up a heap than across it",
 );
 pub static LOOK_INSCATTER: Tunable = Tunable::new(
     "sky.cloud.x_inscatter",
@@ -266,6 +304,9 @@ impl Plugin for VolumePlugin {
             &LOOK_EROSION,
             &LOOK_DETAIL_REPEATS,
             &LOOK_MS_A,
+            &LOOK_FLOOR,
+            &LOOK_TAPER,
+            &LOOK_STRETCH,
         ]);
         app.add_plugins((
             MaterialPlugin::<VeilMaterial>::default(),
@@ -436,6 +477,7 @@ fn tell(
         .map_or(0.0, |s| s.0.translation.length() - planet.sea_radius_m());
     let (layers, slab) = clouds::layers_over_sea(ground);
     let air_scale = air_scale.map_or(crate::air::AirScale(crate::air::HAZE_SCALE), |s| *s);
+    let [look, look2] = looks();
     let params = Params {
         to_map: clouds.to_map,
         shapes: [
@@ -479,13 +521,8 @@ fn tell(
                 0.0,
             )
         }),
-        look: Vec4::new(
-            LOOK_INSCATTER.get(),
-            LOOK_LIGHT_DETAIL.get(),
-            LOOK_DENSITY.get(),
-            LOOK_OCTAVES.get(),
-        ),
-        look2: Vec4::new(LOOK_MS_A.get(), 0.0, 0.0, 0.0),
+        look,
+        look2,
     };
     commands.insert_resource(CloudVolume {
         params,

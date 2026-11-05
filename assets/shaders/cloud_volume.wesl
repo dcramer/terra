@@ -261,7 +261,9 @@ fn shape(c: Column, m: vec2<f32>, h: f32, lod: f32) -> f32 {
     // Taken twice over the tile (3 km), so the body's billows are half the size and a 2D blob
     // breaks into heaps of several sizes: at the tile's 6 km a heap was one smooth 2 km pillow.
     // The offsets are shares of the tile, so doubled they still ride the wind exactly.
-    let uvw = vec3<f32>(m.x / SHAPE_TILE_M + params.volume.x, h / SHAPE_TILE_M, m.y / SHAPE_TILE_M + params.volume.y)
+    // Experiment: the noise stretched up, so a heap's billows run up it as towers (a 1.3 km heap
+    // spanned most of the 3 km tile's height, and the noise made overhangs and stalks of it).
+    let uvw = vec3<f32>(m.x / SHAPE_TILE_M + params.volume.x, h / (SHAPE_TILE_M * params.look2.w), m.y / SHAPE_TILE_M + params.volume.y)
         * SHAPE_REPEATS;
     let n = textureSampleLevel(noise, repeating, uvw, lod);
     let fbm = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
@@ -271,7 +273,11 @@ fn shape(c: Column, m: vec2<f32>, h: f32, lod: f32) -> f32 {
     // A heap's inside is as dense as its kind's water makes it, however much of the sky the
     // heaps cover (cut by the coverage it was a fifth of that, and from below and above a heap
     // was 5 to 10 times too thin toward the sun); a deck still thins with its cover.
-    return remap(body * profiled, 1.0 - c.coverage, 1.0) * mix(c.coverage, 1.0, c.kind);
+    // Experiment: a heap's coverage narrowing toward its top (Nubis 2017's anvil bias run the
+    // other way), so its towers end in domes rather than spreading into mushroom caps.
+    let up = clamp(lift_in(c, h) / c.top, 0.0, 1.0);
+    let narrowed = c.coverage * (1.0 - params.look2.z * c.kind * up * up);
+    return remap(body * profiled, 1.0 - narrowed, 1.0) * mix(c.coverage, 1.0, c.kind);
 }
 
 // The edges eroded by the finer Worley noise: wispy low down, billowing higher up (Nubis 2015).
@@ -419,6 +425,9 @@ fn scattered(l: Lights, c: Column, h: f32, tau_sun: f32, tau_view: f32, body: f3
     var multiple = exp(-k * tau_sun) * f / (1.0 - f) * (0.25 / PI);
     if params.look.w > 0.0 {
         multiple = octaves(l.cos_sun, tau_sun);
+        // Experiment: the diffusion's deep light, which exponential octaves lose (two-stream
+        // transmission falls as 1 / (1 + 3/4 (1 - g) tau), not exponentially).
+        multiple += params.look2.y * (0.25 / PI) / (1.0 + 0.75 * k * tau_sun);
     }
     multiple *= mix(1.0, in_scatter(body, lift), params.look.x);
     let sunward = l.sun * (exp(-tau_sun) * l.phase + multiple);
