@@ -11,8 +11,10 @@
 
 use super::felled::WoodsTree;
 use super::{COARSE_M, ConiferModels, Drawn, SPACING_M, planted};
+use crate::cover::forest::{GrownFloor, Stand};
 use crate::flora::{Obstacles, Trunk, Trunks};
 use crate::planet::{MainCamera, Planet};
+use crate::start::Start;
 use crate::streaming::{Class, Place, Streaming, Ticket};
 use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
@@ -128,12 +130,14 @@ pub(super) struct Standing {
 
 /// Where a block is in its streaming.
 enum State {
-    /// Its trees being worked out on the streaming's pool.
-    Laying(Ticket<Vec<Tree>>),
-    /// Its trees standing, and those still to stand, the last first.
+    /// Its trees being worked out on the streaming's pool, each with how its floor sees it.
+    Laying(Ticket<Vec<(Tree, Stand)>>),
+    /// Its trees standing, and those still to stand, the last first; and the feet of those
+    /// on the woods' floor, on the start's map (`GrownFloor`), whether standing yet or not.
     In {
         standing: Vec<Standing>,
         coming: Vec<Tree>,
+        canopy: Vec<Vec2>,
     },
 }
 
@@ -142,6 +146,8 @@ enum State {
 pub(super) struct NearWoods {
     map: Map,
     seed: terra_gen::Seed,
+    /// The start's map, which the floor under the trees is laid on.
+    start: Start,
     conifers: Arc<dyn ConiferModels>,
     blocks: HashMap<Block, State>,
     /// The grown trees felled, by their foot (`foot_key`): left out when their block comes in
@@ -150,20 +156,62 @@ pub(super) struct NearWoods {
 }
 
 impl NearWoods {
-    pub(super) fn new(map: Map, seed: terra_gen::Seed, conifers: Arc<dyn ConiferModels>) -> Self {
+    pub(super) fn new(
+        map: Map,
+        seed: terra_gen::Seed,
+        start: Start,
+        conifers: Arc<dyn ConiferModels>,
+    ) -> Self {
         Self {
             map,
             seed,
+            start,
             conifers,
             blocks: HashMap::default(),
             felled: HashSet::default(),
         }
     }
 
-    /// A block laid at the start, its trees standing.
-    pub(super) fn laid(&mut self, block: Block, standing: Vec<Standing>) {
+    /// A block laid at the start, its trees standing, and their feet on the floor laid with
+    /// them.
+    pub(super) fn laid(&mut self, block: Block, standing: Vec<Standing>, canopy: Vec<Vec2>) {
         let coming = Vec::new();
-        self.blocks.insert(block, State::In { standing, coming });
+        self.blocks.insert(
+            block,
+            State::In {
+                standing,
+                coming,
+                canopy,
+            },
+        );
+    }
+
+    /// A block's trees worked out, come in to stand, less the felled: their crowns go on the
+    /// woods' floor at once, so the cover under them is the forest's (D619) before the first
+    /// of them stands.
+    fn arrive(&mut self, block: Block, laid: Vec<(Tree, Stand)>, floor: Option<&mut GrownFloor>) {
+        let (mut coming, stands): (Vec<Tree>, Vec<Stand>) = laid
+            .into_iter()
+            .filter(|(tree, _)| !self.felled.contains(&super::foot_key(tree.at)))
+            .unzip();
+        coming.reverse();
+        let canopy: Vec<Vec2> = stands.iter().map(|stand| stand.at).collect();
+        if let Some(floor) = floor {
+            floor.change(canopy.iter().copied(), |floor| {
+                for stand in stands {
+                    floor.canopy.add(stand);
+                }
+            });
+        }
+        let standing = Vec::with_capacity(coming.len());
+        self.blocks.insert(
+            block,
+            State::In {
+                standing,
+                coming,
+                canopy,
+            },
+        );
     }
 
     /// How many grown trees stand.
@@ -220,6 +268,7 @@ pub(super) fn stream(
     mut trunks: ResMut<Trunks>,
     mut obstacles: Option<ResMut<Obstacles>>,
     placed: Query<&Transform, With<WoodsTree>>,
+    mut floor: Option<ResMut<GrownFloor>>,
 ) {
     terra_gen::stat_scope!("flora");
     let (Some(mut near), Some(camera)) = (near, camera) else {
@@ -230,7 +279,11 @@ pub(super) fn stream(
     let (ask, drop) = wanted(at, near.blocks.keys().copied());
     for block in drop {
         // A block still being laid is cancelled as its ticket goes.
-        if let Some(State::In { standing, .. }) = near.blocks.remove(&block) {
+        if let Some(State::In {
+            standing, canopy, ..
+        }) = near.blocks.remove(&block)
+        {
+            take_off_the_floor(floor.as_deref_mut(), canopy);
             for tree in standing {
                 trunks.remove(tree.foot);
                 if let Ok(placed) = placed.get(tree.entity) {
@@ -243,28 +296,35 @@ pub(super) fn stream(
         }
     }
     for block in ask {
-        let (map, seed, planet) = (near.map, near.seed, planet.clone());
+        let (map, seed, planet, start) = (near.map, near.seed, planet.clone(), near.start);
+        let conifers = near.conifers.clone();
         let (low, high) = span(block);
         let middle = planet.surface(map.toward((low + high) / 2.0));
         let half = Vec3::splat(low.distance(high) / 2.0);
         let place = Place::Bounds(middle - half, middle + half);
         let ticket = streaming.ask(Class::NearWoods, place, move || {
-            lay(&planet, &map, block, seed)
+            let trees = lay(&planet, &map, block, seed);
+            trees
+                .into_iter()
+                .map(|tree| {
+                    let drawn = conifers.drawn(&planted(&tree));
+                    (tree, super::stand(&start, tree.at, &drawn))
+                })
+                .collect()
         });
         near.blocks.insert(block, State::Laying(ticket));
     }
     // Laid blocks come in to stand.
-    for state in near.blocks.values_mut() {
-        if let State::Laying(ticket) = state
-            && let Some(mut trees) = ticket.take()
-        {
-            trees.retain(|tree| !near.felled.contains(&super::foot_key(tree.at)));
-            trees.reverse();
-            *state = State::In {
-                standing: Vec::with_capacity(trees.len()),
-                coming: trees,
-            };
-        }
+    let laid: Vec<(Block, Vec<(Tree, Stand)>)> = near
+        .blocks
+        .iter_mut()
+        .filter_map(|(&block, state)| match state {
+            State::Laying(ticket) => ticket.take().map(|laid| (block, laid)),
+            State::In { .. } => None,
+        })
+        .collect();
+    for (block, laid) in laid {
+        near.arrive(block, laid, floor.as_deref_mut());
     }
     let mut entering: Vec<(&Block, &mut State)> = near
         .blocks
@@ -274,7 +334,10 @@ pub(super) fn stream(
     entering.sort_by(|a, b| away(*a.0, at).total_cmp(&away(*b.0, at)));
     let mut stood = 0;
     for (_, state) in entering {
-        let State::In { standing, coming } = state else {
+        let State::In {
+            standing, coming, ..
+        } = state
+        else {
             continue;
         };
         while streaming.may_enter(Class::NearWoods)
@@ -304,9 +367,75 @@ pub(super) fn stream(
     }
 }
 
+/// Takes a block's trees off the woods' floor as it streams out, by their feet.
+fn take_off_the_floor(floor: Option<&mut GrownFloor>, canopy: Vec<Vec2>) {
+    if let Some(floor) = floor {
+        floor.change(canopy.iter().copied(), |floor| {
+            for at in &canopy {
+                floor.canopy.remove(*at);
+            }
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cover::forest::{Crowns, Floor, Wild};
+    use crate::woods::TreeKind;
+    use crate::woods::tests::{Bare, tree};
+
+    /// A block's trees go onto the woods' floor as the block comes in, before any of them
+    /// stands, so the cover under them grows by the forest's rules (D619) and is grown again
+    /// there; a felled one stays off; and they go off it with their block.
+    #[test]
+    fn a_blocks_trees_come_onto_the_floor_with_it_and_go_with_it() {
+        let ground = Vec3::new(0.0, 30_000.0, 0.0);
+        let map = Map::new(ground, Vec3::X, Vec3::NEG_Z, ground.length());
+        let start = Start(Transform::from_translation(ground));
+        let mut near = NearWoods::new(map, terra_gen::Seed(1), start, Arc::new(Bare));
+        let mut floor = GrownFloor::new(Floor::new(Wild, Crowns::default(), terra_gen::Seed(2)));
+        let (under, felled_under) = (Vec2::new(10.0, 10.0), Vec2::new(60.0, -30.0));
+        let on_ground = |at: Vec2| ground + Vec3::new(at.x, 0.0, at.y);
+        let trees = [under, under + Vec2::new(4.0, 0.0), felled_under]
+            .map(|at| tree(on_ground(at), TreeKind::Oak, 1.0));
+        near.felled.insert(super::super::foot_key(trees[2].at));
+        let laid: Vec<(Tree, Stand)> = trees
+            .iter()
+            .map(|tree| {
+                let drawn = near.conifers.drawn(&planted(tree));
+                (*tree, super::super::stand(&start, tree.at, &drawn))
+            })
+            .collect();
+        let open = floor.read().here(under).light;
+        assert!(!floor.read().canopy.among(under));
+
+        near.arrive((0, 0), laid, Some(&mut floor));
+        assert_eq!(floor.read().canopy.len(), 2, "the felled one stays off");
+        assert!(floor.read().canopy.among(under));
+        assert!(!floor.read().canopy.among(felled_under));
+        let shaded = floor.read().here(under).light;
+        assert!(
+            shaded < open * 0.8,
+            "under its crown: {shaded} against {open}"
+        );
+        let changes = floor.take_changes();
+        assert!(
+            changes.iter().any(
+                |(low, high)| under.cmpge(*low + 20.0).all() && under.cmple(*high - 20.0).all()
+            ),
+            "the cover round them is grown again: {changes:?}"
+        );
+        let Some(State::In { coming, canopy, .. }) = near.blocks.remove(&(0, 0)) else {
+            panic!("the block came in");
+        };
+        assert_eq!(coming.len(), 2);
+
+        take_off_the_floor(Some(&mut floor), canopy);
+        assert!(floor.read().canopy.is_empty());
+        assert_eq!(floor.read().here(under).light, open);
+        assert_eq!(floor.take_changes().len(), 1);
+    }
 
     /// The blocks within reach are asked for, the nearest first; one is not taken out until
     /// the camera is past the farther reach, so walking to and fro at an edge keeps it.

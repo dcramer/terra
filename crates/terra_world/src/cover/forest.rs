@@ -17,7 +17,7 @@ use crate::planet::Planet;
 use crate::trees::Species;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard};
 use terra_gen::{Noise, Rng, Seed, smoothstep};
 
 /// How much grass grows under a closed canopy, as a share of a lit lawn's, before its tufts
@@ -27,6 +27,9 @@ const SHADE_GRASS: f32 = 0.62;
 const FLOOR_SQUARE_M: f32 = 8.0;
 /// How far round a place the canopy over it is looked for: the widest crown.
 const CROWN_REACH: i32 = 2;
+/// How far from a tree its floor can change: the squares round a place's own that are looked
+/// in for the canopy over it, and that one.
+pub const STAND_REACH_M: f32 = (CROWN_REACH + 1) as f32 * FLOOR_SQUARE_M;
 /// How far a log's or rock's snow well reaches past its edge, metres.
 const LOG_WELL_M: f32 = 0.8;
 /// How far out from a shrub's or young tree's foot its well reaches: as snow lies round a
@@ -195,6 +198,27 @@ impl Crowns {
             .entry(square(stand.at, FLOOR_SQUARE_M))
             .or_default()
             .push(stand);
+    }
+
+    /// Takes out the trees whose foot is exactly at `at`, as a block of the woods' trees
+    /// streamed out takes its own (`woods::near`).
+    pub fn remove(&mut self, at: Vec2) {
+        let key = square(at, FLOOR_SQUARE_M);
+        if let Some(stands) = self.filed.get_mut(&key) {
+            stands.retain(|stand| stand.at != at);
+            if stands.is_empty() {
+                self.filed.remove(&key);
+            }
+        }
+    }
+
+    /// How many trees are filed.
+    pub fn len(&self) -> usize {
+        self.filed.values().map(Vec::len).sum()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.filed.is_empty()
     }
 
     /// Whether a place is among the trees, as the woods' floor is laid (D619): within
@@ -487,11 +511,68 @@ pub struct WoodsFloor(pub Option<Floor<Wild>>);
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LayingFloor;
 
+/// The woods' floor once the ground cover grows from it, which it goes on growing from as
+/// the woods' trees stream in and out round the player (D622): what changes it says where,
+/// so the cover over that ground is grown again (`cover::follow_floor`).
+#[derive(Resource)]
+pub struct GrownFloor {
+    floor: Arc<RwLock<Floor<Wild>>>,
+    /// Where the floor changed since the cover last looked, corners on the start's map.
+    changed: Vec<(Vec2, Vec2)>,
+}
+
+impl GrownFloor {
+    pub(crate) fn new(floor: Floor<Wild>) -> Self {
+        Self {
+            floor: Arc::new(RwLock::new(floor)),
+            changed: Vec::new(),
+        }
+    }
+
+    /// Changes the floor, `stands` the places on the start's map it changes round (each tree's
+    /// foot, or whatever was laid or taken): the cover within `STAND_REACH_M` of any of them is
+    /// grown again.
+    pub fn change(
+        &mut self,
+        stands: impl IntoIterator<Item = Vec2>,
+        how: impl FnOnce(&mut Floor<Wild>),
+    ) {
+        let (mut low, mut high) = (Vec2::INFINITY, Vec2::NEG_INFINITY);
+        for at in stands {
+            (low, high) = (low.min(at), high.max(at));
+        }
+        how(&mut self.floor.write().unwrap_or_else(PoisonError::into_inner));
+        if low.x <= high.x {
+            let reach = Vec2::splat(STAND_REACH_M);
+            self.changed.push((low - reach, high + reach));
+        }
+    }
+
+    /// Reads the floor as it is now.
+    pub fn read(&self) -> RwLockReadGuard<'_, Floor<Wild>> {
+        self.floor.read().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Where the floor changed since this was last asked.
+    pub(crate) fn take_changes(&mut self) -> Vec<(Vec2, Vec2)> {
+        std::mem::take(&mut self.changed)
+    }
+}
+
 /// The ground cover of a world whose woods have a floor: the forest floor's where trees
 /// stand, blended into the land's own cover (`land`) where they give out.
 pub(super) struct WoodsCover {
-    pub floor: Floor<Wild>,
+    pub floor: Arc<RwLock<Floor<Wild>>>,
     pub land: Arc<dyn CoverSource>,
+}
+
+impl WoodsCover {
+    pub(super) fn new(floor: &GrownFloor, land: Arc<dyn CoverSource>) -> Self {
+        Self {
+            floor: floor.floor.clone(),
+            land,
+        }
+    }
 }
 
 impl CoverSource for WoodsCover {
@@ -500,12 +581,13 @@ impl CoverSource for WoodsCover {
         if super::heath::drowned(planet, ground) || planet.dug(ground) {
             return land;
         }
-        let here = self.floor.here(at);
+        let floor = self.floor.read().unwrap_or_else(PoisonError::into_inner);
+        let here = floor.here(at);
         let wood = wooded(&here);
         if wood <= 0.0 {
             return land;
         }
-        let forest = self.floor.growing_here(at, &here);
+        let forest = floor.growing_here(at, &here);
         mix(&land, &forest, wood)
     }
 }

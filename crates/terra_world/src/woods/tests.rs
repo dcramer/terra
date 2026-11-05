@@ -55,7 +55,7 @@ fn a_squares_bounds_hold_its_cards_turned_any_way() {
     }
 }
 
-fn tree(at: Vec3, kind: TreeKind, stature: f32) -> Tree {
+pub(super) fn tree(at: Vec3, kind: TreeKind, stature: f32) -> Tree {
     Tree {
         at,
         kind,
@@ -269,7 +269,8 @@ impl FarWoods {
         index.by_square.insert(index.square_of(felled_at), square);
         app.insert_resource(index);
         let map = near::Map::new(ground, Vec3::X, Vec3::NEG_Z, ground.length());
-        let streamed = near::NearWoods::new(map, terra_gen::Seed(1), Arc::new(Bare));
+        let start = crate::start::Start(Transform::from_translation(ground));
+        let streamed = near::NearWoods::new(map, terra_gen::Seed(1), start, Arc::new(Bare));
         app.insert_resource(streamed);
         let standing = app
             .world_mut()
@@ -323,7 +324,7 @@ impl FarWoods {
 }
 
 /// Conifers drawn as nothing, for the woods' own systems alone.
-struct Bare;
+pub(super) struct Bare;
 
 impl ConiferModels for Bare {
     fn draw(&self, _: &mut EntityCommands, _: &Planted) -> Drawn {

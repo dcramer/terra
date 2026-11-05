@@ -111,6 +111,7 @@ fn paint(
     mut changed: Local<bool>,
     meadow: Option<Res<Meadow>>,
     mut built: Local<Option<Arc<Vec<Footprint>>>>,
+    (floor_changes, mut floor_seen): (Res<super::FloorChanges>, Local<u32>),
 ) {
     terra_gen::stat_scope!("flora");
     let Some(camera) = camera.iter().next() else {
@@ -186,6 +187,11 @@ fn paint(
             .is_none_or(|b| !Arc::ptr_eq(b, &meadow.clear))
     {
         *built = Some(meadow.clear.clone());
+        *changed = true;
+    }
+    // And when the woods' floor changes under it, as their trees stream in (D622).
+    if *floor_seen != floor_changes.0 {
+        *floor_seen = floor_changes.0;
         *changed = true;
     }
     let stale = *changed

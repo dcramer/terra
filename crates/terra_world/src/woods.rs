@@ -684,7 +684,7 @@ fn plant(
         .collect();
     blocks.sort_unstable();
     blocks.dedup();
-    let mut streamed = near::NearWoods::new(map, seed, conifers.clone());
+    let mut streamed = near::NearWoods::new(map, seed, *start, conifers.clone());
     let mut first: Vec<Tree> = Vec::new();
     let mut drawn_as = [[0usize; 3]; 3];
     // Their floor, by each tree as drawn (D619).
@@ -692,13 +692,16 @@ fn plant(
     for &block in &blocks {
         let trees = near::lay(&planet, &map, block, seed);
         let mut standing = Vec::with_capacity(trees.len());
+        let mut feet = Vec::with_capacity(trees.len());
         for tree in &trees {
             let (stood, drawn) = near::grow(&mut commands, &*conifers, &mut trunks, tree);
             standing.push(stood);
             drawn_as[kind_index(tree.kind)][kind_index(drawn.kind)] += 1;
-            canopy.add(stand(&start, tree.at, &drawn));
+            let stand = stand(&start, tree.at, &drawn);
+            feet.push(stand.at);
+            canopy.add(stand);
         }
-        streamed.laid(block, standing);
+        streamed.laid(block, standing, feet);
         first.extend(trees);
     }
     commands.insert_resource(streamed);
@@ -794,7 +797,7 @@ fn say_planted(
 
 /// A tree as its floor sees it, on the start's map (east and south of it, as the ground cover
 /// asks): its foot, and its crown and trunk as drawn.
-fn stand(start: &Start, foot: Vec3, drawn: &Drawn) -> Stand {
+pub(super) fn stand(start: &Start, foot: Vec3, drawn: &Drawn) -> Stand {
     let on_map = |point: Vec3| {
         let local = start.local(point);
         Vec2::new(local.x, local.z)

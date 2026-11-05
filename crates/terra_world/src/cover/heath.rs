@@ -5,7 +5,7 @@
 //! ground draws the communities themselves from the same map (`planet::LandMap`), so the
 //! blades and the ground under them agree.
 
-use super::forest::{WoodsCover, WoodsFloor};
+use super::forest::{GrownFloor, WoodsCover, WoodsFloor};
 use super::{CoverRules, CoverSource, Growing};
 use crate::planet::Planet;
 use bevy::prelude::*;
@@ -135,10 +135,16 @@ pub(super) fn grow_the_lands(
         round: round.clone(),
         mosaic: Noise::new(planet.seed().derive("heath patches")),
     });
-    // The floor is the cover's from here on; nothing lays more on it.
+    // The floor is the cover's from here on, changed only as the woods stream in and out
+    // (`GrownFloor`).
     commands.remove_resource::<WoodsFloor>();
     let source: Arc<dyn CoverSource> = match woods.and_then(|mut woods| woods.0.take()) {
-        Some(floor) => Arc::new(WoodsCover { floor, land }),
+        Some(floor) => {
+            let floor = GrownFloor::new(floor);
+            let cover = Arc::new(WoodsCover::new(&floor, land));
+            commands.insert_resource(floor);
+            cover
+        }
         None => land,
     };
     commands.insert_resource(CoverRules {

@@ -261,14 +261,21 @@ struct Meadow {
     seen: HashMap<Entity, Footprint>,
 }
 
+/// How many times the woods' floor has changed under the cover (`follow_floor`), so the
+/// ground's map is painted again.
+#[derive(Resource, Default)]
+struct FloorChanges(u32);
+
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<GrassMaterial>::default())
         .add_plugins(MaterialPlugin::<litter::LitterMaterial>::default())
         // The cover, its rules and its meadow are the world's (D469).
         .init_world_resource::<BareGround>()
+        .init_world_resource::<FloorChanges>()
         .world_resource::<CoverRules>()
         .world_resource::<Meadow>()
         .world_resource::<forest::WoodsFloor>()
+        .world_resource::<forest::GrownFloor>()
         // What stands on the woods' floor is laid before the cover is grown from it (D619).
         .configure_sets(OnEnter(InWorld), forest::LayingFloor.in_set(Building::View))
         .add_systems(
@@ -276,6 +283,7 @@ pub fn plugin(app: &mut App) {
             // `grow` is over the size limit (D396): timed where it is added (D607).
             (
                 follow_digs,
+                follow_floor,
                 crate::timed!("flora", grow),
                 measure,
                 follow_climate,
@@ -662,6 +670,34 @@ fn follow_digs(
         if let Some(square) = meadow.squares.get_mut(&key) {
             square.building = None;
             square.ring = usize::MAX;
+        }
+    }
+}
+
+/// Where the woods' floor changed, as their trees stream in and out round the player (D622),
+/// the squares over it are grown again by it, so the grass, litter and moss under a tree are
+/// the forest's however late its block came in; and the ground's map is painted again.
+fn follow_floor(
+    floor: Option<ResMut<forest::GrownFloor>>,
+    meadow: Option<ResMut<Meadow>>,
+    mut changes_seen: ResMut<FloorChanges>,
+) {
+    let (Some(mut floor), Some(mut meadow)) = (floor, meadow) else {
+        return;
+    };
+    let changes = floor.take_changes();
+    if changes.is_empty() {
+        return;
+    }
+    changes_seen.0 += 1;
+    for (low, high) in changes {
+        for (&key, square) in meadow.squares.iter_mut() {
+            let corner = Vec2::new(key.0 as f32, key.1 as f32) * SQUARE_M;
+            let apart = corner.cmpgt(high) | (corner + SQUARE_M).cmplt(low);
+            if !apart.any() {
+                square.building = None;
+                square.ring = usize::MAX;
+            }
         }
     }
 }
