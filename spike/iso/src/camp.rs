@@ -21,7 +21,7 @@ pub fn plugin(app: &mut App) {
 }
 
 /// A model whose meshes cast no shadow: the campfire's own logs and stones, which the
-/// fire's light sits among, low under the pot (so the pot shades its own inside), and
+/// fire's light sits among, beside the pot hung over them, and
 /// would throw across the camp as hard black spokes (a real fire is a broad flame that
 /// wraps round them).
 #[derive(Component)]
@@ -80,8 +80,9 @@ fn build(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>, mut n
         nav.block_rect(p, Vec2::new(1.5 * len, 0.16), yaw);
         put(&mut commands, &asset, &land, "trunk.glb", p, yaw, len, 0.06);
     }
-    // The cooking tripod over the fire, its pot over the coals.
-    put(
+    // The cooking tripod over the fire, its pot over the coals; it casts no shadow, as its
+    // legs and pot about the fire's one point of light threw black wedges across the camp.
+    let tripod = put(
         &mut commands,
         &asset,
         &land,
@@ -91,6 +92,7 @@ fn build(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>, mut n
         1.2,
         0.02,
     );
+    commands.entity(tripod).insert(NoShadow);
     // Bedrolls on the fire's far side, heads away from it, a pack by each.
     for (d, turn) in [
         (Vec2::new(2.35, -0.55), 0.1),

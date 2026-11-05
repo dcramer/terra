@@ -164,7 +164,7 @@ pub fn build(
     // The camp's fire (camp.rs dresses the camp about it).
     let on = |p: Vec2| Vec3::new(p.x, land.height(p), p.y);
     nav.block_circle(FIRE, 0.75);
-    model(
+    let fire = model(
         &mut commands,
         &asset,
         "models/props/Campfire.glb",
@@ -172,6 +172,7 @@ pub fn build(
         0.0,
         1.0,
     );
+    commands.entity(fire).insert(crate::camp::NoShadow);
     commands.spawn((
         PointLight {
             color: Color::srgb(1.0, 0.55, 0.22),
@@ -183,7 +184,8 @@ pub fn build(
             soft_shadows_enabled: true,
             ..default()
         },
-        // Among the flames and beside the pot hung over them (camp.rs), not inside it.
+        // Among the flames and beside the pot hung over them (camp.rs), not inside or under
+        // it (there the pot's inside glows white); the fire's own logs cast no shadow.
         Transform::from_translation(on(FIRE) + Vec3::new(0.2, 0.6, -0.2)),
         Flame {
             lumens: 60_000.0,
