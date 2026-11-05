@@ -686,6 +686,7 @@ Checks, developer tools, languages and the repository.
 | [D609](decisions/D609.md) | A performance probe is one tool on main that measures only a settled frame | Tech | Agent | Decided | A probe of what a change costs (a shader's variant, a… |
 | [D610](decisions/D610.md) | The play scenes are benched at each landing, a failure bisected unattended, and an A/B reads main's side from it | Tech | Agent | Decided | The perf row (tools/perf) benches lake-play… |
 | [D625](decisions/D625.md) | Character work starts from one status command over recorded results | Tech | Agent | Decided | What character work must hold and what is next is data… |
+| [D627](decisions/D627.md) | Token consumption is a constraint of how we work | Tech | Agent | Decided | Every agent knows its context and spend… |
 
 ## Superseded and rejected
 

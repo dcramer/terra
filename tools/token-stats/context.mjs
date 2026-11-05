@@ -24,12 +24,14 @@ const UNSENT = new Set(["prompt_snapshot", "deferred_tools_record", "credential_
 // How long a cache entry lives, by the kind the call wrote.
 const TTL_MS = { "5m": 5 * 60 * 1000, "1h": 60 * 60 * 1000 };
 
-// The nudge: first at 200k tokens of context, then every 100k more. Each turn reads the whole
-// context again, and an hour's idle writes it all again, at Opus 5.5's prices $0.04 and $1.60
-// a turn at 200k; below that a fresh session and a summary saves little, above it every turn
-// costs more than the summary would.
-export const NUDGE_FIRST = 200_000;
-export const NUDGE_STEP = 100_000;
+// The nudge holds each agent to its context bound (D627): a job to the bound its brief names
+// ("Bound: stop at 150k context"), any other session to DEFAULT_BOUND. It warns once at
+// WARN_AT of the bound (finish the step, start nothing new), then tells it to stop at the
+// bound and again at each STEP_PAST more. Each turn rereads the whole context, so a turn
+// past the bound costs more than the handoff that would end it.
+export const DEFAULT_BOUND = 150_000;
+export const WARN_AT = 0.8;
+export const STEP_PAST = 20_000;
 const NUDGE_STATE = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "terra-token-stats", "nudge");
 
 export function estimate(chars) {
@@ -476,25 +478,63 @@ export function lastContext(tail) {
   return null;
 }
 
-// Which nudge a context has reached: -1 below the first, then 0, 1, 2 for each step past it.
-export function level(context) {
-  return context < NUDGE_FIRST ? -1 : Math.floor((context - NUDGE_FIRST) / NUDGE_STEP);
+// The context bound a brief names, in tokens, or null: the first "<n>k context" (or
+// "context of about <n>k") in a sentence that says bound or stop.
+export function briefBound(prompt) {
+  if (typeof prompt !== "string") return null;
+  for (const sentence of prompt.split(/(?<=[.;])\s+|\n/)) {
+    if (!/\b(bound|stop)/i.test(sentence)) continue;
+    const m = sentence.match(/(\d{2,3})\s*k\s+(?:tokens\s+)?(?:of\s+)?context|context\s+(?:of\s+)?(?:about\s+)?(\d{2,3})\s*k\b/i);
+    if (m) return Number(m[1] ?? m[2]) * 1000;
+  }
+  return null;
 }
 
-export function nudgeText(context) {
-  return (
-    `Context is ${Math.round(context / 1000)}k tokens and every turn rereads all of it (D390): finish the unit of work you are on, ` +
-    `then hand off with a short summary (a subagent reports back, a lead starts a fresh session) rather than start more here, ` +
-    `and read files by grep or line range, never whole.`
-  );
+// The text of a transcript's first prompt, from its head, or null.
+export function firstPrompt(head) {
+  for (const line of head.split("\n")) {
+    if (!line.includes('"user"')) continue;
+    try {
+      const e = JSON.parse(line);
+      if (e.type !== "user") continue;
+      const c = e.message?.content;
+      if (typeof c === "string") return c;
+      if (Array.isArray(c)) return c.map((b) => (b?.type === "text" ? b.text : "")).join("\n");
+    } catch {
+      // A line cut by the head's end.
+    }
+  }
+  return null;
+}
+
+// Which nudge a context has reached: -1 below the warning, 0 the warning, 1 the bound, then
+// one more for each STEP_PAST past it.
+export function level(context, bound = DEFAULT_BOUND) {
+  if (context < bound * WARN_AT) return -1;
+  if (context < bound) return 0;
+  return 1 + Math.floor((context - bound) / STEP_PAST);
+}
+
+export function nudgeText(context, bound = DEFAULT_BOUND, { job = false } = {}) {
+  const at = `Context ${Math.round(context / 1000)}k of your ${Math.round(bound / 1000)}k bound (D627)`;
+  if (context < bound) {
+    return job
+      ? `${at}: finish and land the step you are on, start no new one, then write the handoff (with job.mjs's numbers) and report.`
+      : `${at}: hold no file dumps (finder and runner read, you take their reports), start no new line of work, and get the lead handoff ready.`;
+  }
+  return job
+    ? `STOP: ${at}, past it. Do not read another file or start another step: commit what is checked, write the handoff (what landed, ` +
+        `job.mjs's numbers, what is left in order), report and end now. Unchecked work stays in the worktree, named in the handoff.`
+    : `STOP: ${at}, past it. Start no new job: write the lead handoff (~/.cache/terra-handoff/<topic>-lead.md: what runs, what landed, ` +
+        `what is next), then ask the developer to /clear and continue from it.`;
 }
 
 // Decides whether to nudge, given the context now and the level last seen; returns the
 // level to keep and the text to send, if any. A crossing nudges once; a context that
 // shrinks (after compaction) is nudged again when it grows back past a threshold.
-export function decide(context, seen) {
-  const now = level(context);
-  return { keep: now, text: now > seen ? nudgeText(context) : null };
+export function decide(context, seen, bound = DEFAULT_BOUND, { job = false } = {}) {
+  const now = level(context, bound);
+  return { keep: now, text: now > seen ? nudgeText(context, bound, { job }) : null };
 }
 
 // The transcript a hook's call is about: a subagent's own when it runs inside one, since
@@ -526,6 +566,17 @@ function readTail(path) {
   }
 }
 
+function readHead(path) {
+  const fd = openSync(path, "r");
+  try {
+    const buf = Buffer.alloc(Math.min(fstatSync(fd).size, 256 * 1024));
+    readSync(fd, buf, 0, buf.length, 0);
+    return buf.toString("utf8");
+  } finally {
+    closeSync(fd);
+  }
+}
+
 // Run by Claude Code after every tool call, so it must be quick and never fail: it reads
 // only the transcript's tail and one small state file.
 function hook() {
@@ -537,17 +588,21 @@ function hook() {
     if (context === null) return;
     const key = `${input.session_id ?? basename(path)}-${input.agent_id ?? "main"}`.replace(/[^A-Za-z0-9_-]/g, "-");
     const state = join(NUDGE_STATE, key);
-    let seen = -1;
+    const job = typeof input.agent_id === "string";
+    let kept = null;
     try {
-      const kept = Number(readFileSync(state, "utf8"));
-      if (Number.isInteger(kept)) seen = kept;
+      kept = JSON.parse(readFileSync(state, "utf8"));
     } catch {
       // First call of this session.
     }
-    const { keep, text } = decide(context, seen);
-    if (keep !== seen) {
+    if (!kept || !Number.isInteger(kept.seen) || !(kept.bound > 0)) {
+      // A job's bound is in its brief, read once from the transcript's head and kept.
+      kept = { seen: Number.isInteger(kept) ? kept : -1, bound: (job && briefBound(firstPrompt(readHead(path)))) || DEFAULT_BOUND };
+    }
+    const { keep, text } = decide(context, kept.seen, kept.bound, { job });
+    if (keep !== kept.seen || !existsSync(state)) {
       mkdirSync(NUDGE_STATE, { recursive: true });
-      writeFileSync(state, String(keep));
+      writeFileSync(state, JSON.stringify({ seen: keep, bound: kept.bound }));
     }
     if (text) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: text } }));
   } catch {

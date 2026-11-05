@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { analyse, cause, commandKey, decide, format, imageTokens, lastContext, parseTranscript, shortPath, transcriptFor } from "./context.mjs";
+import { analyse, briefBound, cause, commandKey, decide, firstPrompt, format, imageTokens, lastContext, parseTranscript, shortPath, transcriptFor } from "./context.mjs";
 
 const T0 = Date.parse("2026-10-16T12:00:00.000Z");
 const at = (minutes) => new Date(T0 + minutes * 60e3).toISOString();
@@ -140,17 +140,30 @@ test("prices an image by its size", () => {
 test("nudges once per threshold crossed, and again when the context grows back after compaction", () => {
   let seen = -1;
   const step = (context) => {
-    const { keep, text } = decide(context, seen);
+    const { keep, text } = decide(context, seen, 150e3, { job: true });
     seen = keep;
-    return text !== null;
+    return text === null ? "" : text.startsWith("STOP") ? "stop" : "warn";
   };
   assert.deepEqual(
-    [150e3, 201e3, 260e3, 299e3, 301e3, 320e3, 60e3, 205e3, 520e3].map(step),
-    [false, true, false, false, true, false, false, true, true],
+    [100e3, 121e3, 140e3, 151e3, 160e3, 171e3, 60e3, 125e3, 400e3].map(step),
+    ["", "warn", "", "stop", "", "stop", "", "warn", "stop"],
   );
-  const { text } = decide(201e3, -1);
-  assert.match(text, /201k tokens/);
+  const { text } = decide(151e3, -1, 150e3, { job: true });
+  assert.match(text, /151k of your 150k bound/);
+  assert.match(text, /handoff/);
   assert.ok(!text.includes("\n"), "one line");
+  assert.match(decide(151e3, -1).text, /lead handoff/, "a session that is not a job is told to hand off as a lead");
+});
+
+test("reads a job's bound from its brief, and only from a sentence that sets one", () => {
+  assert.equal(briefBound("Task: x. Bound: stop at 150k context or once 1-4 land."), 150e3);
+  assert.equal(briefBound("Stop at the brief's bound, or at a context of about 200k, whichever first."), 200e3);
+  assert.equal(briefBound("Jobs ended at 215k context last time. Do the thing."), null, "a number of context in passing is no bound");
+  assert.equal(briefBound(undefined), null);
+  const head = [JSON.stringify({ type: "user", message: { content: "Task: y. Bound: 120k context." } }), '{"type":"assis'].join("\n");
+  assert.equal(briefBound(firstPrompt(head)), 120e3);
+  const blocks = JSON.stringify({ type: "user", message: { content: [{ type: "text", text: "Bound: stop at 90k context." }] } });
+  assert.equal(briefBound(firstPrompt(blocks)), 90e3);
 });
 
 test("reads the last call's context from a tail that starts mid-line", () => {
