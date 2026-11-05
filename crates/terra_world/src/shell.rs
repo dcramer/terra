@@ -50,9 +50,10 @@ usage: terra_sandbox [options]
                         pops shows between frames of a still view (tools/sandbox/lodcheck.ts)
   --shots <prefix>@<frames>
                         save a screenshot on each of those frames, counted as --press
-                        counts them, as <prefix>-<frame>.png, then exit: a list and
-                        ranges, like out/walk@300-320,600, so what pops in or out shows
-                        between one frame and the next; a range may step, 600-2400/2
+                        counts them, as <prefix>-<frame in five digits>.png, then exit:
+                        a list and ranges, like out/walk@300-320,600 (out/walk-00300.png
+                        on), so what pops in or out shows between one frame and the
+                        next; a range may step, 600-2400/2
   --water-mask          with each of --shots, a second picture WATER_MASK_FRAMES later
                         with the lakes drawn flat magenta, <prefix>-<frame>.water.png:
                         what the water covers, by what draws it (the looks check, D429)

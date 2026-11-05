@@ -5,8 +5,8 @@ use crate::{Task, node, run};
 pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "sandbox",
-        takes: "[args]",
-        does: "the sandbox, the test environment; --list for its experiments (crates/terra_sandbox)",
+        takes: "[--release] [args]",
+        does: "the sandbox, the test environment; --list for its experiments, --release optimised (crates/terra_sandbox)",
         group: "Look at things",
         run: sandbox,
     },
@@ -29,6 +29,9 @@ pub(crate) const TASKS: &[Task] = &[
 /// The sandbox with what it was given; with nothing, its experiments, since the planet alone has
 /// no sky, player or game and is only what the experiments build on.
 fn sandbox(args: &[String]) -> bool {
+    if let Some(rest) = released(args) {
+        return run("cargo", &release_run(&rest));
+    }
     if !args.is_empty() {
         return cargo_run("terra_sandbox", &[], args);
     }
@@ -60,4 +63,52 @@ pub(crate) fn cargo_run(package: &str, first: &[&str], args: &[String]) -> bool 
     all.extend(first);
     all.extend(args.iter().map(String::as_str));
     run("cargo", &all)
+}
+
+/// The sandbox's arguments without `--release`, when it was given: the sandbox has no such
+/// option of its own, so it asks for an optimised build, as `cargo run --release` does.
+fn released(args: &[String]) -> Option<Vec<String>> {
+    args.iter().any(|arg| arg == "--release").then(|| {
+        args.iter()
+            .filter(|arg| *arg != "--release")
+            .cloned()
+            .collect()
+    })
+}
+
+/// `cargo run --release` of the sandbox with these arguments: without the dev build's
+/// features, which a release, timed, never has (`dev_features`).
+fn release_run(args: &[String]) -> Vec<&str> {
+    let mut all = vec!["run", "--release", "-p", "terra_sandbox", "--"];
+    all.extend(args.iter().map(String::as_str));
+    all
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn strings(words: &[&str]) -> Vec<String> {
+        words.iter().map(|word| word.to_string()).collect()
+    }
+
+    #[test]
+    fn release_asks_for_an_optimised_build_and_is_not_passed_to_the_sandbox() {
+        let args = strings(&["--offscreen", "--release", "--experiment", "play"]);
+        let rest = released(&args).expect("--release was given");
+        assert_eq!(
+            release_run(&rest),
+            [
+                "run",
+                "--release",
+                "-p",
+                "terra_sandbox",
+                "--",
+                "--offscreen",
+                "--experiment",
+                "play"
+            ]
+        );
+        assert_eq!(released(&strings(&["--offscreen"])), None);
+    }
 }
