@@ -45,7 +45,7 @@ fn args() -> Args {
         demo: false,
         demo_at: 120,
         hour: scene::Hour::Dusk,
-        zoom: 11.0,
+        zoom: 14.0,
         focus: Vec2::new(-1.0, 1.0),
         size: (1920, 1080),
     };
