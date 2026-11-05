@@ -2,7 +2,7 @@
 // doc, note, spike and tool script is in its folder's index, every decision file
 // (docs/decisions/Dnnn.md) is well formed, with every decision a tracked file cites among them,
 // every test a contract page cites as its proof exists, a page's part rendered from data
-// matches it, and the guides name only real `cargo xtask` tasks and skills only real paths (D396).
+// matches it, and the guides name only real `cargo xtask` tasks and skills only real paths (D396), and the docs agents read whole keep to their size budgets (D627).
 // Prints each fault; exits 1 if there are any.
 //
 //   node tools/docs/docs.ts
@@ -407,6 +407,47 @@ export function unindexed(index: string, indexText: string, entries: string[]): 
   return entries.filter((e) => !indexText.includes(e)).map((e) => `${index}: does not list ${e}`);
 }
 
+/** Size budgets, in bytes, of the docs agents read whole, each turn or at a job's start (D627). */
+export const BUDGETS: { pattern: RegExp; bytes: number; what: string; fix: string }[] = [
+  { pattern: /^AGENTS\.md$/, bytes: 14_000, what: "in every turn of every agent", fix: "one line a rule with its decision; the explanation goes in the doc it cites" },
+  { pattern: /^\.claude\/agents\/[^/]+\.md$/, bytes: 6_000, what: "in every turn of its agent", fix: "the routine only; what a skill or AGENTS.md says, cite" },
+  { pattern: /^\.agents\/skills\/[^/]+\/SKILL\.md$/, bytes: 16_000, what: "read whole at a job's start", fix: "a short core: the loop, the rules, links to files beside it for the detail" },
+  { pattern: /^docs\/v0-[^/]+\.md$/, bytes: 16_000, what: "a status page every job of its line reads", fix: "where it stands and what is next; the history is git's and docs/decisions-log.md's" },
+  { pattern: /^tools\/[^/]+\/README\.md$/, bytes: 20_000, what: "a tool's guide, read by its jobs", fix: "what to run and what it says; the detail in a file beside it, linked" },
+];
+
+/**
+ * Docs over their budget when this was written, each held to the size it had (it may only shrink)
+ * until trimmed, then taken off this list (D627).
+ */
+export const OVER_BUDGET: Record<string, number> = {
+  ".agents/skills/character/SKILL.md": 40_189,
+  ".agents/skills/controller/SKILL.md": 22_512,
+  "docs/v0-goals.md": 22_621,
+  "tools/characters/README.md": 46_153,
+  "tools/sandbox/README.md": 48_432,
+};
+
+/** The faults of a doc's size against its budget. */
+export function overBudget(file: string, bytes: number, over: Record<string, number> = OVER_BUDGET): string[] {
+  const budget = BUDGETS.find((b) => b.pattern.test(file));
+  if (!budget) return [];
+  const held = over[file];
+  const kb = (n: number) => `${(n / 1000).toFixed(1)} KB`;
+  if (held !== undefined) {
+    if (bytes <= budget.bytes) return [`${file}: ${kb(bytes)}, within its budget of ${kb(budget.bytes)} now: take it off OVER_BUDGET in tools/docs/docs.ts (D627)`];
+    if (bytes > held) {
+      return [
+        `${file}: ${kb(bytes)}, grown past the ${kb(held)} it is held to while over its budget of ${kb(budget.bytes)} (${budget.what}, D627): ` +
+          `trim it (${budget.fix}); do not raise the number held`,
+      ];
+    }
+    return [];
+  }
+  if (bytes <= budget.bytes) return [];
+  return [`${file}: ${kb(bytes)}, over its budget of ${kb(budget.bytes)} (${budget.what}, D627): ${budget.fix}; do not raise the budget`];
+}
+
 function check(): string[] {
   const tracked = execFileSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" }).trim().split("\n");
   const read = (path: string) => {
@@ -417,6 +458,7 @@ function check(): string[] {
   const faults: string[] = [];
   const docs = tracked.filter((f) => f.endsWith(".md"));
   for (const file of docs) faults.push(...brokenLinks(file, read(file)!, read));
+  for (const file of docs) faults.push(...overBudget(file, Buffer.byteLength(read(file)!)));
 
   const sources = tracked
     .filter((f) => f.startsWith("crates/") && f.endsWith(".rs"))

@@ -11,6 +11,7 @@ import {
   missingPaths,
   missingTests,
   nextDecision,
+  overBudget,
   readDecisions,
   renderIndex,
   renderMatrix,
@@ -231,4 +232,15 @@ test("a skill naming a path that is not there is a fault; placeholders, patterns
     ".agents/skills/x/SKILL.md: names `tools/prop/x.glb`, which is not in the repository",
     ".agents/skills/x/SKILL.md: names `art/gone.png`, which is not in the repository",
   ]);
+});
+
+test("a doc agents read whole keeps to its size budget, and one held over it may only shrink", () => {
+  assert.deepEqual(overBudget("AGENTS.md", 13_000, {}), []);
+  assert.match(overBudget("AGENTS.md", 15_000, {})[0], /over its budget of 14\.0 KB .*D627.*do not raise/);
+  assert.match(overBudget(".agents/skills/x/SKILL.md", 17_000, {})[0], /short core/);
+  assert.deepEqual(overBudget("docs/fire.md", 90_000, {}), [], "a design doc read by its sections has no budget");
+  const held = { "docs/v0-x.md": 20_000 };
+  assert.deepEqual(overBudget("docs/v0-x.md", 19_000, held), [], "shrinking, still over");
+  assert.match(overBudget("docs/v0-x.md", 21_000, held)[0], /grown past the 20\.0 KB it is held to/);
+  assert.match(overBudget("docs/v0-x.md", 15_000, held)[0], /take it off OVER_BUDGET/);
 });
