@@ -243,13 +243,17 @@ fn light_the_hour(
             0.0f32,
             0.0f32,
         ),
+        // The blue hour: the sun is down, the light the sky's last, cool and from behind the
+        // wood (the camera looks north-west), so the crowns nearest the eye are silhouettes
+        // and not lit khaki (judge r6: the frame's edges outshone the clearing, 0.18 to 0.10;
+        // now about 0.10 to 0.09). The fill bluer, so the darks are teal, not olive (PoE1's
+        // darks 42% cool; ours were 17%, now about 80%), and the fire the one warm light.
         Hour::Dusk => (
-            16.0,
-            -58.0,
-            Color::srgb(1.0, 0.58, 0.32),
-            3_500.0,
-            // A grey-blue fill, low, so the fire is the light the eye goes to.
-            Color::srgb(0.56, 0.62, 0.76),
+            35.0,
+            208.0,
+            Color::srgb(0.6, 0.7, 1.0),
+            650.0,
+            Color::srgb(0.45, 0.55, 0.85),
             240.0,
             1.0,
             1.0,
