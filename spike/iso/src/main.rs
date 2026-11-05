@@ -3,6 +3,7 @@
 
 mod camera;
 mod command;
+mod foliage;
 mod forest;
 mod mipmaps;
 mod nav;
@@ -109,6 +110,7 @@ fn main() {
             terrain::plugin,
             scene::plugin,
             forest::plugin,
+            foliage::plugin,
             party::plugin,
             camera::plugin,
             command::plugin,

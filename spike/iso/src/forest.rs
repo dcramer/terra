@@ -1,24 +1,21 @@
 //! The wood about the clearing: veteran oaks (the game's modelled trunks, their crowns
 //! grown as leaf cards at the clumps `tools/blender/tips.py` found), mossy rocks along the
 //! ridge's foot and on the knoll, fallen logs, stumps and ferns under the trees, and dense
-//! grass and flowers in the open. A crown between the camera and one of the party is hidden
-//! from the camera, as modern isometric games do, but still shades the ground.
+//! grass and flowers in the open, all swaying in the wind (foliage.rs); the trees before the
+//! party open in a dithered hole about each of them, as modern isometric games do.
 
-use crate::camera::MainCamera;
+use crate::foliage::{self, FoliageMaterial, Mats as FoliageMats};
 use crate::nav::Nav;
-use crate::party::Member;
 use crate::scene::{self, FIRE};
 use crate::terrain::{self, CAMP, Land, POND, WATER};
-use bevy::camera::visibility::RenderLayers;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
-/// The render layer only the sun sees: a hidden crown still casts its shade.
+/// The render layer only the sun sees.
 pub const SUN_ONLY: usize = 1;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, plant.after(scene::build))
-        .add_systems(PostUpdate, canopy.before(TransformSystems::Propagate));
+    app.add_systems(Startup, plant.after(scene::build));
 }
 
 /// A little xorshift, so the wood is the same every run.
@@ -74,7 +71,10 @@ pub struct Cards {
     nor: Vec<[f32; 3]>,
     uv: Vec<[f32; 2]>,
     col: Vec<[f32; 4]>,
+    sway: Vec<[f32; 2]>,
     idx: Vec<u32>,
+    /// Leaf cards flutter; others (flowers, brambles) bend from their foot.
+    pub leaf: bool,
 }
 
 impl Cards {
@@ -91,6 +91,7 @@ impl Cards {
                 cell.y + inset + (0.25 - 2.0 * inset) * (1.0 - y),
             ]);
             self.col.push(tint);
+            self.sway.push([y, if self.leaf { 1.0 } else { 0.0 }]);
         }
         self.idx.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
@@ -101,6 +102,7 @@ impl Cards {
             .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nor)
             .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uv)
             .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.sway)
             .with_inserted_indices(Indices::U32(self.idx))
     }
 }
@@ -115,6 +117,7 @@ pub const BRAMBLE: Vec2 = Vec2::new(0.0, 0.75);
 
 /// A crown's shape: its middle and half-sizes, as the clumps lie.
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 struct Shell {
     middle: Vec3,
     half: Vec3,
@@ -130,7 +133,7 @@ fn crown(tips: &[Tip], rng: &mut Rng) -> (Mesh, Shell) {
     });
     let half = ((hi - lo) * 0.5 + 1.0).max(Vec3::splat(1.0));
     let shell = Shell { middle, half };
-    let mut cards = Cards::default();
+    let mut cards = Cards { leaf: true, ..default() };
     for t in tips {
         let count = (3.0 + t.mass * 0.35).min(7.0) as usize;
         for _ in 0..count {
@@ -166,14 +169,9 @@ fn crown(tips: &[Tip], rng: &mut Rng) -> (Mesh, Shell) {
     (cards.mesh(), shell)
 }
 
-/// A tree whose crown may hide.
+/// A tree's crown of leaf cards.
 #[derive(Component)]
-pub struct Crown {
-    middle: Vec3,
-    radius: f32,
-    hidden: bool,
-    trunk: Entity,
-}
+pub struct Crown;
 
 /// Grass blades, solid and tapered as Ghost of Tsushima's are, over a square of the land,
 /// as dense as the open ground is grassy; their normals lean up so they shade with the
@@ -182,6 +180,7 @@ fn grass(land: &Land, lo: Vec2, size: f32, rng: &mut Rng, nav: &Nav) -> Option<M
     let mut pos = Vec::new();
     let mut nor = Vec::new();
     let mut col = Vec::new();
+    let mut sway: Vec<[f32; 2]> = Vec::new();
     let mut idx: Vec<u32> = Vec::new();
     let tries = (size * size * 70.0) as usize;
     for _ in 0..tries {
@@ -225,6 +224,8 @@ fn grass(land: &Land, lo: Vec2, size: f32, rng: &mut Rng, nav: &Nav) -> Option<M
             ];
             col.push(c);
             col.push(c);
+            sway.push([t, 0.0]);
+            sway.push([t, 0.0]);
         }
         for k in 0..segs as u32 {
             let a = base + k * 2;
@@ -239,6 +240,9 @@ fn grass(land: &Land, lo: Vec2, size: f32, rng: &mut Rng, nav: &Nav) -> Option<M
             .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
             .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
             .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
+            // A first UV set as well: the standard material wants one beside the second.
+            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0f32, 0.0]; sway.len()])
+            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, sway)
             .with_inserted_indices(Indices::U32(idx)),
     )
 }
@@ -248,13 +252,14 @@ fn plant(
     mut commands: Commands,
     asset: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<FoliageMaterial>>,
+    mut mats: ResMut<FoliageMats>,
     land: Res<Land>,
     mut nav: ResMut<Nav>,
 ) {
     let mut rng = Rng::new(0x51ed_270b);
     let on = |p: Vec2| Vec3::new(p.x, land.height(p), p.y);
-    let leaves = materials.add(StandardMaterial {
+    let cards = StandardMaterial {
         base_color_texture: Some(asset.load("materials/foliage/cards.png")),
         alpha_mode: AlphaMode::Mask(0.45),
         cull_mode: None,
@@ -262,8 +267,11 @@ fn plant(
         reflectance: 0.25,
         diffuse_transmission: 0.35,
         ..default()
-    });
-    let bark = materials.add(scene::material(&asset, "oak_bark", Color::srgb(0.62, 0.58, 0.52)));
+    };
+    let leaves = foliage::material(&mut materials, &mut mats, cards.clone(), 0.0, 0.035, true);
+    let blooms = foliage::material(&mut materials, &mut mats, cards, 0.06, 0.0, false);
+    let bark = scene::material(&asset, "oak_bark", Color::srgb(0.62, 0.58, 0.52));
+    let bark = foliage::material(&mut materials, &mut mats, bark, 0.0, 0.0, true);
 
     // The oaks: two modelled trunks, each with its crown.
     let kinds = [
@@ -312,26 +320,9 @@ fn plant(
                 Visibility::default(),
             ))
             .id();
-        let wood = commands
-            .spawn((
-                Mesh3d(trunk.clone()),
-                MeshMaterial3d(bark.clone()),
-                RenderLayers::layer(0),
-                ChildOf(root),
-            ))
-            .id();
-        commands.spawn((
-            Mesh3d(crown.clone()),
-            MeshMaterial3d(leaves.clone()),
-            RenderLayers::layer(0),
-            ChildOf(root),
-            Crown {
-                middle: at + rot * (shell.middle * scale),
-                radius: shell.half.max_element() * scale * 0.9,
-                hidden: false,
-                trunk: wood,
-            },
-        ));
+        commands.spawn((Mesh3d(trunk.clone()), MeshMaterial3d(bark.clone()), ChildOf(root)));
+        commands.spawn((Mesh3d(crown.clone()), MeshMaterial3d(leaves.clone()), ChildOf(root), Crown));
+        let _ = shell;
     }
 
     // Rocks: a tumble along the ridge's foot, a few crowning the knoll, boulders in the wood.
@@ -427,12 +418,13 @@ fn plant(
     }
 
     // Grass, in 8 m squares; flowers among it in the open; brambles at the wood's edge.
-    let blades = materials.add(StandardMaterial {
+    let blades = StandardMaterial {
         cull_mode: None,
         perceptual_roughness: 0.7,
         reflectance: 0.3,
         ..default()
-    });
+    };
+    let blades = foliage::material(&mut materials, &mut mats, blades, 0.09, 0.0, false);
     let chunk = 8.0;
     let reach = 40.0;
     let mut z = -reach;
@@ -472,38 +464,5 @@ fn plant(
             flowers.quad(base + Vec3::Y * size * 0.48, across, Vec3::Y * size, cell, |_| Vec3::Y, [1.0; 4]);
         }
     }
-    commands.spawn((Mesh3d(meshes.add(flowers.mesh())), MeshMaterial3d(leaves.clone())));
-}
-
-/// Hides from the camera any crown that stands between it and one of the party.
-fn canopy(
-    camera: Query<&GlobalTransform, With<MainCamera>>,
-    party: Query<&GlobalTransform, With<Member>>,
-    mut crowns: Query<(Entity, &mut Crown)>,
-    mut layers: Query<&mut RenderLayers>,
-) {
-    let Ok(cam) = camera.single() else {
-        return;
-    };
-    let (right, up, forward) = (cam.right(), cam.up(), cam.forward());
-    let screen = |p: Vec3| Vec2::new(p.dot(*right), p.dot(*up));
-    let people: Vec<Vec3> = party
-        .iter()
-        .map(|t| t.translation() + Vec3::Y * 1.0)
-        .collect();
-    for (e, mut crown) in &mut crowns {
-        let c = screen(crown.middle);
-        let covers = people.iter().any(|p| {
-            screen(*p).distance(c) < crown.radius && (crown.middle - *p).dot(*forward) < 0.0
-        });
-        if covers != crown.hidden {
-            crown.hidden = covers;
-            let to = RenderLayers::layer(if covers { SUN_ONLY } else { 0 });
-            for part in [e, crown.trunk] {
-                if let Ok(mut l) = layers.get_mut(part) {
-                    *l = to.clone();
-                }
-            }
-        }
-    }
+    commands.spawn((Mesh3d(meshes.add(flowers.mesh())), MeshMaterial3d(blooms)));
 }
