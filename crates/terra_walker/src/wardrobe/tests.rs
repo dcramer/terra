@@ -25,6 +25,14 @@ fn faults(w: &Wardrobe, body: &str, shown: &[&str]) -> Vec<String> {
             faults.push(format!("slot {slot} has {n} pieces"));
         }
     }
+    for slot in &w.optional {
+        let n = (shown.iter())
+            .filter(|p| w.pieces[**p].slot.as_ref() == Some(slot))
+            .count();
+        if n > 1 {
+            faults.push(format!("optional slot {slot} has {n} pieces"));
+        }
+    }
     let mut drawn: HashMap<&str, usize> = HashMap::new();
     for p in shown {
         assert_eq!(w.pieces[*p].body, body, "{p} is made on another body");
@@ -32,10 +40,19 @@ fn faults(w: &Wardrobe, body: &str, shown: &[&str]) -> Vec<String> {
             *drawn.entry(r.as_str()).or_default() += 1;
         }
     }
+    // A region the head or a bare piece holds is always drawn; one only optional pieces stand
+    // for (the hair, a beard) may be empty.
+    let b = &w.bodies[body];
+    let always: BTreeSet<&str> = (b.bare.values().chain([&b.head]))
+        .flat_map(|p| w.pieces[p].regions.iter().map(String::as_str))
+        .collect();
     for r in &w.regions {
-        match drawn.get(r.as_str()).copied().unwrap_or(0) {
-            1 => {}
-            n => faults.push(format!("region {r} drawn {n} times")),
+        match (
+            drawn.get(r.as_str()).copied().unwrap_or(0),
+            always.contains(r.as_str()),
+        ) {
+            (1, _) | (0, false) => {}
+            (n, _) => faults.push(format!("region {r} drawn {n} times")),
         }
     }
     let unique: BTreeSet<&&str> = shown.iter().collect();
@@ -65,9 +82,25 @@ fn every_look_in_every_state_of_undress_fills_each_slot_and_draws_each_region_on
                 wrong.is_empty(),
                 "{name} wearing {worn:?}: {shown:?}: {wrong:?}"
             );
-            // Each slot shows the look's piece exactly when its item is worn.
+            // Each slot shows the look's piece exactly when its item is worn; hair, no item,
+            // whenever no shown piece holds its region.
             for (slot, piece) in &look.pieces {
-                let on = worn.contains(w.pieces[piece].item.as_ref().unwrap());
+                let held = (shown.iter()).filter(|s| **s != piece.as_str()).any(|s| {
+                    w.pieces[*s]
+                        .regions
+                        .iter()
+                        .any(|r| w.pieces[piece].regions.contains(r))
+                });
+                let on = match &w.pieces[piece].item {
+                    // Never beside a piece the matrix refuses it with (the horned helmet over
+                    // the Knight's plate, the surcoat off).
+                    Some(item) => {
+                        worn.contains(item)
+                            && !(w.optional.contains(slot) && held)
+                            && !shown.iter().any(|s| w.refused(s, piece))
+                    }
+                    None => !held,
+                };
                 assert_eq!(
                     shown.contains(&piece.as_str()),
                     on,
@@ -114,6 +147,57 @@ fn the_starting_kit_is_the_ranger_and_taking_its_coat_off_shows_his_bare_torso_a
             .contains(&"male_bare_legs")
     );
     assert_eq!(w.compose("male", "ranger", None), dressed);
+}
+
+#[test]
+fn an_optional_slot_is_empty_with_nothing_worn_and_a_hood_hides_the_hair() {
+    let w = Wardrobe::parse(
+        r#"{
+        "slots": ["body"], "optional": ["headwear", "hair"], "regions": ["head", "torso", "hair"],
+        "bodies": {"b": {"model": "m.glb", "pieces": "p", "head": "head", "bare": {"body": "skin"}, "look": "hooded"}},
+        "pieces": {
+            "head": {"body": "b", "regions": ["head"]},
+            "skin": {"body": "b", "slot": "body", "regions": ["torso"]},
+            "coat": {"body": "b", "slot": "body", "item": "coat", "regions": ["torso"]},
+            "hood": {"body": "b", "slot": "headwear", "item": "hood", "regions": ["hair"]},
+            "crown": {"body": "b", "slot": "headwear", "item": "crown", "regions": []},
+            "ponytail": {"body": "b", "slot": "hair", "regions": ["hair"]}
+        },
+        "looks": {
+            "hooded": {"body": "b", "pieces": {"body": "coat", "headwear": "hood", "hair": "ponytail"}},
+            "bald": {"body": "b", "pieces": {"body": "coat"}}
+        }
+    }"#,
+    )
+    .unwrap();
+    let wearing = |items: &[&str]| items.iter().map(|i| i.to_string()).collect::<Vec<_>>();
+    // Whole and hooded: the hood shows and the hair under it does not.
+    assert_eq!(w.compose("b", "hooded", None), ["coat", "hood", "head"]);
+    // The hood off: his own hair, with no item, shows.
+    assert_eq!(
+        w.compose("b", "hooded", Some(&wearing(&["coat"]))),
+        ["coat", "ponytail", "head"]
+    );
+    // A crown holds no region, so the hair shows under it.
+    assert_eq!(
+        w.compose("b", "hooded", Some(&wearing(&["crown"]))),
+        ["skin", "crown", "ponytail", "head"]
+    );
+    // No hair in the look and nothing on the head: both optional slots empty, nothing bare.
+    assert_eq!(w.compose("b", "bald", Some(&[])), ["skin", "head"]);
+    // An optional slot needs no bare piece; a slot that is neither kind is refused.
+    assert!(Wardrobe::parse(&w_text_with_slot("cape")).is_err());
+}
+
+/// A one-piece catalogue whose piece names `slot`.
+fn w_text_with_slot(slot: &str) -> String {
+    format!(
+        r#"{{"slots": ["body"], "regions": ["head", "torso"],
+        "bodies": {{"b": {{"model": "m.glb", "pieces": "p", "head": "head", "bare": {{"body": "skin"}}, "look": "l"}}}},
+        "pieces": {{"head": {{"body": "b", "regions": ["head"]}}, "skin": {{"body": "b", "slot": "body", "regions": ["torso"]}},
+            "cloak": {{"body": "b", "slot": "{slot}", "item": "cloak", "regions": []}}}},
+        "looks": {{"l": {{"body": "b", "pieces": {{}}}}}}}}"#
+    )
 }
 
 #[test]

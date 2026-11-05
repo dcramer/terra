@@ -10,7 +10,9 @@
 //! refuse with a piece already shown, else the body's bare piece (D600); the head
 //! shows unless a shown piece holds the head's region (their UpperBody, the bare arms, carries
 //! the head too). So every region of the body is drawn exactly once, which the tests hold for
-//! every look in every state of undress.
+//! every look in every state of undress. The optional slots (headwear, hair, a beard) come
+//! after, each the look's piece or another worn, or empty, never one whose region a shown piece
+//! holds: a hood hides the hair, so each of their regions is drawn once at most.
 
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -34,6 +36,11 @@ pub fn wardrobe() -> &'static Wardrobe {
 #[derive(Debug, Default, Deserialize)]
 pub struct Wardrobe {
     pub slots: Vec<String>,
+    /// Slots that may be empty, with no bare piece (headwear, hair, a beard), composed after
+    /// `slots` in this order: a piece in one shows unless a piece already shown holds one of
+    /// its regions (a hood holds the hair's), and an empty one draws nothing.
+    #[serde(default)]
+    pub optional: Vec<String>,
     pub regions: Vec<String>,
     pub bodies: BTreeMap<String, Body>,
     pub pieces: BTreeMap<String, Piece>,
@@ -133,7 +140,9 @@ impl Wardrobe {
             if let Some(region) = p.regions.iter().find(|r| !w.regions.contains(r)) {
                 return Err(format!("piece {name}'s region {region} is not a region"));
             }
-            if let Some(slot) = p.slot.as_ref().filter(|s| !w.slots.contains(s)) {
+            if let Some(slot) =
+                (p.slot.as_ref()).filter(|s| !w.slots.contains(s) && !w.optional.contains(s))
+            {
                 return Err(format!("piece {name}'s slot {slot} is not a slot"));
             }
         }
@@ -208,12 +217,40 @@ impl Wardrobe {
                 .or_else(|| b.bare.get(slot).map(String::as_str));
             shown.extend(chosen);
         }
+        let held = |shown: &[&str]| -> BTreeSet<String> {
+            (shown.iter())
+                .filter_map(|name| self.pieces.get(*name))
+                .flat_map(|p| p.regions.iter().cloned())
+                .collect()
+        };
+        // The optional slots: the look's piece when worn (hair, the person's own, always), else
+        // another worn for the slot; never one whose region a shown piece holds, nor a refused
+        // pairing; else empty.
+        for slot in &self.optional {
+            let free = |p: &Piece, shown: &[&str]| {
+                let held = held(shown);
+                !p.regions.iter().any(|r| held.contains(r))
+            };
+            let of_look = look
+                .and_then(|l| l.pieces.get(slot))
+                .and_then(|name| self.pieces.get_key_value(name.as_str()))
+                .filter(|(_, p)| p.item.is_none() || wears(p));
+            let others = self.pieces.iter().filter(|(_, p)| {
+                worn.is_some()
+                    && p.body == body
+                    && p.slot.as_ref() == Some(slot)
+                    && p.item.is_some()
+                    && wears(p)
+            });
+            let chosen = of_look
+                .into_iter()
+                .chain(others)
+                .find(|(name, p)| free(p, &shown) && !shown.iter().any(|s| self.refused(s, name)))
+                .map(|(name, _)| name.as_str());
+            shown.extend(chosen);
+        }
         let head = self.pieces.get(&b.head);
-        let held: BTreeSet<&str> = shown
-            .iter()
-            .filter_map(|name| self.pieces.get(*name))
-            .flat_map(|p| p.regions.iter().map(String::as_str))
-            .collect();
+        let held = held(&shown);
         if head.is_some_and(|h| !h.regions.iter().any(|r| held.contains(r.as_str()))) {
             shown.push(&b.head);
         }

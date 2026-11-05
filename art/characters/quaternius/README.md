@@ -12,7 +12,11 @@ Bought by the developers from quaternius.itch.io on 2026-11-02. CC0 asks for no 
 **What is here.** Only what v0 uses, each file copied byte for byte from the pack's glTF export folder (`Exports/Godot - UE` and `Exports/glTF (Godot-Unreal)/Modular Parts`), so the `.gltf` files find their `.bin` and textures beside them:
 - the Regular man and woman, full body and head only, with their eyes, brows, hair 1 and 2 and dark skin textures;
 - the Regular man's upper body (head, shoulders, bare arms and hands, cut by Quaternius from the full body), the one bare piece the packs ship besides the head, for trying a bare arm swapped in (D600);
-- the Ranger and Peasant outfits for both, piece by piece (arms, body, legs, feet, hood, pauldrons), and the outfit textures at their shipped 4096².
+- the Ranger and Peasant outfits for both, piece by piece (arms, body, legs, feet, hood, pauldrons), and the outfit textures at their shipped 4096²;
+- the man's Knight, Knight Cloth, Noble and Wizard, piece by piece with their accessories (pauldrons, scarf, gorget, armet, horned helmet, crown), their maps, and each one's two other colourways (`T_<Outfit>_2_BaseColor.png`, `_3_`, from the pack's `Textures/<Outfit>/`);
+- the men's hairstyles and beards (Balding, Buzzed, Dreads, Mohawk, Ponytail, SimpleParted, SlickBack; Beard, Moustache, MuttonChops), from `Hairstyles/Rigged to Head Bone/glTF (Godot -Unreal)/Male/`, on the full 65-joint skeleton.
+
+`node tools/characters/wardrobe.ts`'s first stages hold them: every file against `SHA256SUMS` and the private repository's own manifest, and no script that reshapes meshes may be given one (D599, `tools/characters/theirs.py`).
 
 The glTF exports, not the `.blend` sources: the exports are the pieces as Quaternius finished them (the mirror and geometry-node modifiers in the `.blend` applied), so they are the reference every output is checked against. The `.blend` files, the other bodies, outfits and hairstyles stay in the zips (`Universal Base Characters[Source].zip`, `Modular Character Outfits - Fantasy[Source].zip`).
 

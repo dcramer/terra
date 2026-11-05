@@ -31,7 +31,14 @@ const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const LOG = join(ROOT, "tools", "characters", "out", "pairings.log");
 const BAD_POKE_M = 0.005;
 
-type Piece = Wardrobe["pieces"][string] & { outfit?: string; colourways?: string[] };
+type Piece = Wardrobe["pieces"][string] & { outfit?: string | string[]; colourways?: string[] };
+
+/** The outfits a piece belongs to as made (one of theirs may be in two: the Knight's arms). */
+const outfits = (w: Wardrobe, p: string): string[] => [(w.pieces[p] as Piece).outfit ?? []].flat();
+
+/** A piece that may be worn or shown with others: one with an item, or one of an optional slot
+ *  (hair, a beard: the person's own); a bare piece is neither. */
+const shows = (w: Wardrobe, p: string) => !!w.pieces[p].slot && (!!w.pieces[p].item || (w.optional ?? []).includes(w.pieces[p].slot!));
 
 /** A row of the matrix, as the catalogue holds it. */
 export type Pairing = {
@@ -48,16 +55,18 @@ export type Pairing = {
   frames?: number;
 };
 
-/** Every two worn pieces of one body in different slots, in a fixed order. */
+/** Every two worn pieces (hair and beards among them) of one body in different slots, in a
+ *  fixed order; never two that hold one region, which the game never shows together (a hood
+ *  hides the hair). */
 export function pairs(w: Wardrobe): [string, string][] {
   const worn = Object.keys(w.pieces)
-    .filter((p) => w.pieces[p].item && w.pieces[p].slot)
+    .filter((p) => shows(w, p))
     .sort();
   const out: [string, string][] = [];
   for (let i = 0; i < worn.length; i++)
     for (let j = i + 1; j < worn.length; j++) {
       const [a, b] = [w.pieces[worn[i]], w.pieces[worn[j]]];
-      if (a.body === b.body && a.slot !== b.slot) out.push([worn[i], worn[j]]);
+      if (a.body === b.body && a.slot !== b.slot && !a.regions.some((r) => b.regions.includes(r))) out.push([worn[i], worn[j]]);
     }
   return out;
 }
@@ -92,22 +101,21 @@ export function matrix(w: Wardrobe, frames = 12, log: string[] = []): Pairing[] 
   const all = pairs(w);
   const runs = new Map(all.map(([a, b]) => [`${a}|${b}`, measured(w, a, b, frames)]));
   const run = (a: string, b: string) => runs.get(a < b ? `${a}|${b}` : `${b}|${a}`);
-  const outfit = (p: string) => (w.pieces[p] as Piece).outfit;
-  const ofOutfit = (o: string | undefined, body: string, slot: string | undefined) =>
-    Object.keys(w.pieces).find((p) => w.pieces[p].body === body && w.pieces[p].slot === slot && w.pieces[p].item && outfit(p) === o);
-  return all.map(([a, b]) => {
+  const ofOutfit = (os: string[], body: string, slot: string | undefined) =>
+    Object.keys(w.pieces).find((p) => w.pieces[p].body === body && w.pieces[p].slot === slot && w.pieces[p].item && outfits(w, p).some((o) => os.includes(o)));
+  return all.map(([a, b]): Pairing => {
     const m = run(a, b);
     const [pa, pb] = [w.pieces[a], w.pieces[b]];
-    const own = outfit(a) !== undefined && outfit(a) === outfit(b);
+    const own = outfits(w, a).some((o) => outfits(w, b).includes(o));
     if (m) log.push(`${m.over === a ? a : b} over ${m.over === a ? b : a}: ${m.clips} bad clips of ${m.frames / frames}, ${m.rest} poking at rest, worst ${m.poke_mm} mm ${m.worst}, open edge worst ${m.open}/${m.edge}; ${m.bad.join(", ") || "none bad"}`);
     if (!m) return { pieces: [a, b], verdict: "apart" };
     const row = { over: m.over, clips: m.clips, rest: m.rest, poke_mm: m.poke_mm, worst: m.worst, open: m.open, frames: m.frames };
     if (own) return { pieces: [a, b], verdict: "theirs", ...row };
     // The two outfits' own pairings of these slots: a's outfit in b's slot, b's in a's.
     const refs = [
-      [a, ofOutfit(outfit(a), pb.body, pb.slot)],
-      [ofOutfit(outfit(b), pa.body, pa.slot), b],
-    ].flatMap(([x, y]) => (x && y ? [run(x, y)] : []));
+      [a, ofOutfit(outfits(w, a), pb.body, pb.slot)],
+      [ofOutfit(outfits(w, b), pa.body, pa.slot), b],
+    ].flatMap(([x, y]) => (x && y && x !== y ? [run(x, y)] : []));
     const { worse, restTheirs, ok } = judge(m, refs);
     log.push(`  against theirs (${refs.length} measured): ${worse.length} clips worse${worse.length ? ` (${worse.join(", ")})` : ""}, ${m.rest} poking at rest against their ${restTheirs}: ${ok ? "pass" : "refused"}`);
     return { pieces: [a, b], verdict: ok ? "pass" : "refused", ...row, worse: worse.length, theirs_rest: restTheirs };
@@ -138,19 +146,24 @@ export function judge(m: Measure, refs: (Measure | undefined)[]) {
 export function figures(w: Wardrobe, rows: Pairing[], body: string, bare = false) {
   const refused = new Set(rows.filter((r) => r.verdict === "refused").map((r) => r.pieces.join("|")));
   const ok = (a: string, b: string) => !refused.has(a < b ? `${a}|${b}` : `${b}|${a}`);
-  const choices = w.slots.map((s) => [
-    ...Object.keys(w.pieces).filter((p) => w.pieces[p].body === body && w.pieces[p].slot === s && w.pieces[p].item),
-    ...(bare ? [w.bodies[body].bare[s]] : []),
+  // An optional slot may be empty (""), and a piece in one is not chosen over a region a piece
+  // chosen holds (the game hides the hair under a hood: that figure is the hood's alone).
+  const optional = w.optional ?? [];
+  const choices = [...w.slots, ...optional].map((s) => [
+    ...Object.keys(w.pieces).filter((p) => w.pieces[p].body === body && w.pieces[p].slot === s && shows(w, p)),
+    ...(bare && !optional.includes(s) ? [w.bodies[body].bare[s]] : []),
+    ...(optional.includes(s) ? [""] : []),
   ]);
+  const apart = (a: string, b: string) => !a || !b || !w.pieces[a].regions.some((r) => w.pieces[b].regions.includes(r));
   let count = 0;
   let coloured = 0;
   const walk = (k: number, chosen: string[]) => {
     if (k === choices.length) {
       count++;
-      coloured += chosen.reduce((n, p) => n * Math.max(1, (w.pieces[p] as Piece).colourways?.length ?? 1), 1);
+      coloured += chosen.filter((p) => p).reduce((n, p) => n * Math.max(1, (w.pieces[p] as Piece).colourways?.length ?? 1), 1);
       return;
     }
-    for (const p of choices[k]) if (chosen.every((c) => ok(c, p))) walk(k + 1, [...chosen, p]);
+    for (const p of choices[k]) if (chosen.every((c) => !p || !c || (ok(c, p) && apart(c, p)))) walk(k + 1, [...chosen, p]);
   };
   walk(0, []);
   const all = choices.reduce((n, c) => n * c.length, 1);
@@ -182,7 +195,7 @@ if (import.meta.main) {
   for (const body of Object.keys(w.bodies)) {
     const dressed = figures(w, rows, body);
     const any = figures(w, rows, body, true);
-    console.log(`✓ figures of ${body}: ${dressed.count} of ${dressed.all} dressed a piece a slot (${dressed.coloured} in their colourways), ${any.count} of ${any.all} with bare slots; hair not yet a slot`);
+    console.log(`✓ figures of ${body}: ${dressed.count} of ${dressed.all} dressed a piece a slot (${dressed.coloured} in their colourways), ${any.count} of ${any.all} with bare slots, hair and headwear among the slots`);
   }
   if (args.includes("--dry")) console.log("  --dry: the catalogue is unchanged");
   else {

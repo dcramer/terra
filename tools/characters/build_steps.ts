@@ -74,6 +74,8 @@ export type Bodies = {
 /** The wardrobe catalogue as the build reads it (D611; the whole schema is in its `about`). */
 export type Wardrobe = {
   slots: string[];
+  /** Slots that may be empty, with no bare piece (headwear, hair, a beard). */
+  optional?: string[];
   regions: string[];
   bodies: Record<string, { model: string; pieces: string; head: string; bare: Record<string, string>; look: string }>;
   pieces: Record<string, { body: string; source: string; cut?: string; slot?: string; item?: string | null; layer: number; regions: string[] }>;
