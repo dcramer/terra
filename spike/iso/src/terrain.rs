@@ -102,6 +102,11 @@ pub fn pond(p: Vec2) -> f32 {
     (r - e) / r
 }
 
+/// Where the ridge's foot runs, at `x`.
+pub fn ridge_z(x: f32) -> f32 {
+    -14.5 - 4.0 * (fbm(Vec2::new(x * 0.06, 3.0), 7) - 0.5) * 2.0
+}
+
 /// The ridge's line: metres north of it are negative.
 fn ridge_line(p: Vec2) -> f32 {
     p.y + 14.5 + 4.0 * (fbm(Vec2::new(p.x * 0.06, 3.0), 7) - 0.5) * 2.0

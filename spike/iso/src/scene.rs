@@ -97,7 +97,7 @@ fn cover(p: Vec2, n: Vec3, h: f32) -> ([f32; 4], [f32; 2]) {
     ([grass, leaves, moss, rock], [wet, roots])
 }
 
-fn build(
+pub fn build(
     mut commands: Commands,
     asset: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -179,6 +179,7 @@ fn build(
         .build(),
         Transform::default(),
         Sun,
+        bevy::camera::visibility::RenderLayers::from_layers(&[0, crate::forest::SUN_ONLY]),
     ));
 }
 

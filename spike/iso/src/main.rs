@@ -3,6 +3,7 @@
 
 mod camera;
 mod command;
+mod forest;
 mod mipmaps;
 mod nav;
 mod party;
@@ -104,6 +105,7 @@ fn main() {
             mipmaps::plugin,
             terrain::plugin,
             scene::plugin,
+            forest::plugin,
             party::plugin,
             camera::plugin,
             command::plugin,
@@ -112,7 +114,9 @@ fn main() {
         .add_systems(
             PostStartup,
             |mut gizmos: ResMut<GizmoConfigStore>, args: Res<Args>, mut commands: Commands| {
-                gizmos.config_mut::<DefaultGizmoConfigGroup>().0.line.width = 2.5;
+                let (config, _) = gizmos.config_mut::<DefaultGizmoConfigGroup>();
+                config.line.width = 2.5;
+                config.depth_bias = -1.0;
                 commands.insert_resource(args.hour);
             },
         )
