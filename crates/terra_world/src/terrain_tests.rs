@@ -145,11 +145,60 @@ fn a_frame_that_moves_the_camera_on_does_not_wait_for_the_new_ground() {
     );
 }
 
+/// The frames, under the loading screen, until the first view meshed on its thread is in.
+fn first_view_in(app: &mut App) {
+    let began = Instant::now();
+    while app.world().resource::<Terrain>().first.is_some() {
+        assert!(
+            began.elapsed() < Duration::from_secs(120),
+            "the first view came"
+        );
+        std::thread::sleep(Duration::from_millis(2));
+        app.update();
+    }
+}
+
+fn shown(app: &App) -> Vec<(ChunkId, bool)> {
+    let terrain = app.world().resource::<Terrain>();
+    let mut shown: Vec<(ChunkId, bool)> = (terrain.shown.iter())
+        .map(|(id, shown)| (*id, shown.entity.is_some()))
+        .collect();
+    shown.sort_by_key(|(id, _)| (id.level, id.coord.to_array()));
+    shown
+}
+
+#[test]
+fn behind_a_loading_screen_the_first_view_is_meshed_on_its_own_thread_and_waited_for() {
+    let mut alone = app();
+    alone.update();
+    let inline = shown(&alone);
+    let mut app = app();
+    app.init_state::<crate::loading::Screen>();
+    app.update();
+    let terrain = app.world().resource::<Terrain>();
+    if terrain.first.is_some() {
+        assert!(terrain.shown.is_empty(), "nothing is shown half meshed");
+        assert!(
+            terrain.coming_near() > 0,
+            "the loading screen waits for the first view"
+        );
+    }
+    first_view_in(&mut app);
+    assert_eq!(
+        shown(&app),
+        inline,
+        "the same chunks as meshed in the frame the world was entered"
+    );
+    assert_eq!(chunks(&mut app).len(), chunks(&mut alone).len());
+    assert_eq!(coming(&app), 0, "and nothing is meshed again");
+}
+
 #[test]
 fn the_far_levels_come_after_the_loading_screen_and_a_scripted_run_waits_for_them() {
     let mut app = app();
     app.init_state::<crate::loading::Screen>();
     app.update();
+    first_view_in(&mut app);
     // The small world has no chunk as coarse as `STREAM_FROM`: three of its first view's
     // stand for them, taken back to be meshed after the loading screen.
     let far: Vec<ChunkId> = {

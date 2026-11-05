@@ -2,8 +2,8 @@
 //! `terra_voxel` chooses, meshed on other threads, and drawn again where the ground is dug
 //! or filled.
 //!
-//! The first view is meshed before the first frame, across every core, so nothing is
-//! seen half built, all but its coarsest levels (`STREAM_FROM`), kilometres off, which are
+//! The first view is meshed behind the loading screen, across every core, on a thread of its
+//! own ([`first`]), so nothing is seen half built, all but its coarsest levels (`STREAM_FROM`), kilometres off, which are
 //! meshed after the loading screen lifts (`crate::streaming`). After that, as the camera moves on, the chunks it now wants are meshed
 //! in the background, and the ones it no longer wants stay until their replacements are
 //! ready, so the ground never shows holes. Which chunks are wanted is worked out on a
@@ -63,6 +63,8 @@ pub(crate) struct Terrain {
     later: HashMap<ChunkId, Sides>,
     /// When they began streaming and how many, until the last is in, for the log.
     streaming_since: Option<(std::time::Instant, usize)>,
+    /// The first view, while it is meshed behind the loading screen ([`first`]).
+    first: Option<first::Meshing>,
 }
 
 /// A chunk drawn: with which faces stitched to finer neighbours, and its entity, if its
@@ -107,12 +109,13 @@ pub struct FirstView;
 pub fn plugin(app: &mut App) {
     app.init_world_resource::<Terrain>()
         .configure_sets(OnEnter(InWorld), FirstView.in_set(Building::View))
-        .add_systems(OnEnter(InWorld), first_view.in_set(FirstView));
+        .add_systems(OnEnter(InWorld), first::first_view.in_set(FirstView));
     crate::streaming::plugin(app);
     app.add_systems(
         Update,
         (
             stream_far.run_if(crate::streaming::lifted),
+            first::come_back,
             choose,
             receive,
             track.in_set(loading::Track),
@@ -126,22 +129,29 @@ impl Terrain {
     /// How much of the ground is still coming: chunks being meshed or waiting to be, and a
     /// choice being made. A scripted run is held for all of it (`loading::hold`).
     pub(crate) fn coming(&self) -> usize {
-        self.pending.len() + self.later.len() + usize::from(self.choosing.is_some())
+        self.pending.len() + self.later.len() + usize::from(self.choosing.is_some()) + self.first()
     }
 
     /// What of it the loading screen waits for: all but the first view's far chunks.
     fn coming_near(&self) -> usize {
         let streamed = self.pending.values().filter(|p| p.streamed).count();
-        self.pending.len() - streamed + usize::from(self.choosing.is_some())
+        self.pending.len() - streamed + usize::from(self.choosing.is_some()) + self.first()
+    }
+
+    /// The first view's chunks still being meshed behind the loading screen, or, once they
+    /// are all meshed, one until they are put in.
+    fn first(&self) -> usize {
+        self.first.as_ref().map_or(0, |first| first.left().max(1))
     }
 }
 
 /// The loading screen waits for the ground in view to be meshed, but for its far levels.
 fn track(terrain: Res<Terrain>, mut progress: ResMut<Progress>) {
+    let meshed = terrain.first.as_ref().map_or(0, first::Meshing::done);
     progress.report(
         "Shaping the ground",
         terrain.coming_near(),
-        terrain.shown.len(),
+        terrain.shown.len() + meshed,
     );
 }
 
@@ -685,73 +695,6 @@ fn show(
     )
 }
 
-/// Meshes the first view before anything is drawn, on every core.
-fn first_view(
-    mut commands: Commands,
-    planet: Res<Planet>,
-    look: Res<GroundLook>,
-    camera: Single<&GlobalTransform, With<MainCamera>>,
-    asked: Option<Res<crate::quality::Asked>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut terrain: ResMut<Terrain>,
-) {
-    let started = std::time::Instant::now();
-    let viewer = camera.translation();
-    // The preset is chosen in the first frame; one asked for is known already.
-    let reach = asked
-        .and_then(|asked| asked.0)
-        .unwrap_or_default()
-        .ground_reach();
-    let wanted = wanted(&planet, viewer, reach);
-    let chosen = started.elapsed().as_secs_f32();
-    let (chunks, later): (Vec<(ChunkId, Sides)>, Vec<(ChunkId, Sides)>) = wanted
-        .iter()
-        .map(|(&id, &sides)| (id, sides))
-        .partition(|(id, _)| id.level < STREAM_FROM);
-    terrain.later = later.into_iter().collect();
-    let threads = terra_gen::par::width();
-    let planet_ref = &*planet;
-    let meshed = terra_gen::par::map(&chunks, |&(id, sides)| {
-        let at = std::time::Instant::now();
-        let chunk = mesh_chunk(&**planet_ref.voxels(), id, sides);
-        let shaped = at.elapsed().as_secs_f32();
-        let vertices = chunk.positions.len();
-        let mesh = to_mesh(planet_ref, id, chunk);
-        let coloured = at.elapsed().as_secs_f32() - shaped;
-        (id, sides, mesh, [shaped, coloured], vertices)
-    });
-    let count = meshed.len();
-    let mut levels: std::collections::BTreeMap<u8, (usize, f32, f32, usize)> = default();
-    for (id, sides, mesh, [shaped, coloured], vertices) in meshed {
-        let level = levels.entry(id.level).or_default();
-        *level = (
-            level.0 + 1,
-            level.1 + shaped,
-            level.2 + coloured,
-            level.3 + vertices,
-        );
-        let entity = show(&mut commands, &mut meshes, &look, id, mesh);
-        terrain.shown.insert(id, Shown { sides, entity });
-    }
-    // How long, on how many threads: what a change to a chunk's meshing or colouring costs.
-    let secs = started.elapsed().as_secs_f32();
-    let by_level: Vec<String> = levels
-        .iter()
-        .map(|(level, (n, shaped, coloured, vertices))| {
-            format!("level {level} {n} chunks, {vertices} vertices, {shaped:.1} s shaped and {coloured:.1} s coloured")
-        })
-        .collect();
-    info!(
-        "Meshed the first view of the ground: {count} chunks in {secs:.2} s on {threads} threads, {chosen:.2} s of it choosing them, {} far ones of level {STREAM_FROM} and up left for after the loading screen; {} (summed over threads).",
-        terrain.later.len(),
-        by_level.join("; ")
-    );
-    terrain.wanted = wanted;
-    terrain.chosen_from = Some(viewer);
-    terrain.chosen_reach = reach;
-    terrain.edits_seen = planet.voxels().edit_count();
-}
-
 /// Chooses the chunks again, on a worker, when the camera has moved on, the preset's reach
 /// or the ground has changed, and once they are chosen starts meshing those that are new or
 /// out of date. A choice started is never taken on the frame it starts, so a scripted run's
@@ -764,6 +707,11 @@ fn choose(
     mut terrain: ResMut<Terrain>,
 ) {
     terra_gen::stat_scope!("terrain");
+    // Nothing is chosen again until the first view is in: its chunks are not shown yet, and
+    // would be meshed a second time. A move or an edit meanwhile is caught up with after.
+    if terrain.first.is_some() {
+        return;
+    }
     let viewer = camera.translation();
     let edits = planet.voxels().edit_count();
     let reach = quality.ground_reach();
@@ -928,6 +876,8 @@ fn receive(
         }
     }
 }
+
+mod first;
 
 #[cfg(test)]
 #[path = "terrain_unit_tests.rs"]
