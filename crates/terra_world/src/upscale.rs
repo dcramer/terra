@@ -48,10 +48,11 @@ use terra_gen::tune::Tunable;
 const SHOWN_LAYER: usize = 31;
 
 /// The most pixels the world is drawn at, in millions, before it is scaled up to the screen
-/// (D616); 0 draws it at the preset's share of the screen whatever the screen's size.
+/// (D616): 1080p's by default, D25's frame; 0 draws it at the preset's share of the screen
+/// whatever the screen's size.
 pub static PIXEL_BUDGET: Tunable = Tunable::new(
     "render.pixel_budget",
-    0.0,
+    2.0736,
     0.0..=40.0,
     "the most pixels the world is drawn at, in millions, scaled up to a larger screen; 0 no limit",
 );
@@ -68,14 +69,22 @@ pub fn share(preset: f32, screen: UVec2, budget_mpx: f32) -> f32 {
     preset.min(libm::floorf(within * 100.0) / 100.0)
 }
 
-/// Whether a world drawn smaller than the screen is resolved to it by the temporal
-/// anti-aliasing (1) rather than stretched (0), D616.
+/// Whether a world drawn smaller than the screen by the pixel budget is resolved to it by the
+/// temporal anti-aliasing (1, the default) rather than stretched (0), D616. A world drawn small
+/// by the preset's share alone (low, D239) is stretched either way.
 pub static TEMPORAL: Tunable = Tunable::new(
     "render.temporal_upscale",
-    0.0,
+    1.0,
     0.0..=1.0,
-    "1 resolves a world drawn below the screen's size to it temporally, as FSR 2; 0 stretches it",
+    "1 resolves a world the pixel budget draws below the screen's size to it temporally, as FSR 2; 0 stretches it",
 );
+
+/// Whether a screen of `screen` pixels, its world drawn at `share` of it where the preset asks
+/// for `preset`, is resolved temporally when `temporal` is on: only where the pixel budget, not
+/// the preset, made the world smaller than the screen.
+fn resolved_temporally(temporal: bool, preset: f32, share: f32, screen: UVec2) -> bool {
+    temporal && share < 1.0 && share < preset && screen.x > 0 && screen.y > 0
+}
 
 /// The size, in pixels, a camera's main pass is drawn at when it is smaller than the camera's
 /// view and resolved to it by the temporal anti-aliasing (D616).
@@ -258,8 +267,9 @@ fn follow(
         RenderTarget::Image(image) => picture.as_ref().is_some_and(|p| p.0 == image.handle),
         _ => true,
     };
-    let temporal =
-        TEMPORAL.get() >= 0.5 && accumulates && share < 1.0 && size.x > 0 && size.y > 0 && ours;
+    let temporal = accumulates
+        && ours
+        && resolved_temporally(TEMPORAL.get() >= 0.5, quality.render_scale(), share, size);
     let wanted = (size.as_vec2() * share).round().as_uvec2().max(UVec2::ONE);
     if !temporal {
         draw_at(&mut commands, entity, drawn, None, size);
@@ -380,5 +390,27 @@ mod tests {
         // The low preset's share is a ceiling the budget only lowers.
         assert_eq!(share(0.6, UVec2::new(1920, 1080), 2.0736), 0.6);
         assert!(share(0.6, UVec2::new(7680, 4320), 2.0736) < 0.6);
+    }
+
+    /// By default a window over 1080p's pixels is drawn at them and resolved temporally; 1080p
+    /// itself is drawn at its size, and the low preset's share alone is stretched as before.
+    #[test]
+    fn only_a_screen_over_the_budget_is_resolved_temporally() {
+        let budget = PIXEL_BUDGET.default;
+        let on = TEMPORAL.default >= 0.5;
+        let at = |preset: f32, screen: UVec2| {
+            resolved_temporally(on, preset, share(preset, screen, budget), screen)
+        };
+        assert!(at(1.0, UVec2::new(1901, 1550)));
+        assert!(at(1.0, UVec2::new(3816, 1550)));
+        assert!(!at(1.0, UVec2::new(1920, 1080)));
+        assert!(!at(0.6, UVec2::new(1920, 1080)));
+        assert!(at(0.6, UVec2::new(7680, 4320)));
+        assert!(!resolved_temporally(
+            false,
+            1.0,
+            0.8,
+            UVec2::new(1901, 1550)
+        ));
     }
 }
