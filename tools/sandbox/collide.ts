@@ -21,7 +21,7 @@
 // that should stand in the forest and is missing. Pictures of the first few, and of every
 // failure, in shots/collide/.
 //
-//   node tools/sandbox/collide.ts [--count 20] [--here]
+//   node tools/sandbox/collide.ts [--count 20] [--here] [--world]
 //
 // About a minute on a built release. Node 22.18 or later; no dependencies.
 
@@ -44,8 +44,11 @@ const INTO = 0.1;
 const SHORT = 0.35;
 const LOW = 0.35;
 const TALL = STEP + 0.05;
+/// With `--world`, the round world's woods at the 30 km world's start (D619) rather than the
+/// forest walk: the same floor laid round the woods' own trees, which are not walked here.
+const world = process.argv.includes("--world");
 /// The kinds the forest must have.
-const KINDS = ["Rock", "Boulder", "Stump", "Log", "Snag", "Oak", "Pine", "Spruce"];
+const KINDS = world ? ["Rock", "Boulder", "Stump", "Log"] : ["Rock", "Boulder", "Stump", "Log", "Snag", "Oak", "Pine", "Spruce"];
 
 type Low = { at: [number, number]; across: [number, number]; top: number };
 type Solid = { entity: number; name: string; at: [number, number]; top: number | null; low: Low | null; fitted: boolean };
@@ -57,8 +60,13 @@ type Walk = { o: Solid; aim: [number, number]; top: number; across?: [number, nu
 const SPARES = 3;
 
 console.log(`Starting the game${windows ? " on Windows" : ""}…`);
-await game.start(["--experiment", "play", "--experiment", "lush", "--level", "yard", "--time", "13"], { windows, copy: "collide", release: true });
-await game.waitFor("the floor has", { since: 0, timeout: 120 });
+const scene = world ? ["--experiment", "play", "--radius", "30000", "--time", "13"] : ["--experiment", "play", "--experiment", "lush", "--level", "yard", "--time", "13"];
+await game.start(scene, { windows, copy: "collide", release: true });
+// The forest walk's floor says what it has. The woods' is laid on entering the world, before
+// the loading screen goes, which `start` waits for; its line is said in the load, which can
+// say more than the run's record keeps by the time the loading screen goes (a 30 km world's
+// record had dropped all before frame 10269), so it is not waited for.
+if (!world) await game.waitFor("the floor has", { since: 0, timeout: 120 });
 
 const failures: string[] = [];
 const fail = (line: string) => {
