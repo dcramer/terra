@@ -66,12 +66,22 @@ pub(super) fn square_of(middle: Vec3, east: Vec3, north: Vec3, at: Vec3) -> (i32
 /// takes the `Growth` (`terra_survival::harvest`), or despawned outright, as `world.fell` does.
 /// An observer, as the tree is still there to read while it goes; by the next frame a
 /// despawned one is not. A tree streamed out is taken out through [`take_out`], unfiled.
+///
+/// Its trunk goes from the [`Trunks`] at once: `Trunks::near` leaves a felled one out only
+/// while nothing stops a walker at its foot, and the stump a tree felled for its logs leaves
+/// stands just there, so its trunk was found again, and `world.fell` took the stump for it.
 pub(super) fn file_the_felled(
     gone: On<Remove<Growth>>,
     trees: Query<&WoodsTree>,
-    index: Option<ResMut<FarSquares>>,
+    (index, trunks): (Option<ResMut<FarSquares>>, Option<ResMut<Trunks>>),
 ) {
-    if let (Ok(tree), Some(mut index)) = (trees.get(gone.entity), index) {
+    let Ok(tree) = trees.get(gone.entity) else {
+        return;
+    };
+    if let Some(mut trunks) = trunks {
+        trunks.remove(tree.foot);
+    }
+    if let Some(mut index) = index {
         index.felled.push(tree.foot);
     }
 }
@@ -207,5 +217,40 @@ pub(super) fn fell_again(
     // Their far cards go as a felled tree's do.
     if let Some(mut index) = index {
         index.felled.extend(feet);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::flora::Trunk;
+
+    /// A grown tree of the woods felled for its logs, which takes its `Growth`, is found among
+    /// the trunks no more, though its stump stands at its foot and stops a walker there.
+    #[test]
+    fn a_tree_felled_for_its_logs_is_no_trunk_beside_its_stump() {
+        let foot = Vec3::new(0.0, 30_000.0, 0.0);
+        let mut world = World::new();
+        world.add_observer(file_the_felled);
+        let mut trunks = Trunks::default();
+        trunks.add(Trunk {
+            foot,
+            radius_m: 0.3,
+            height_m: 18.0,
+            solid: true,
+        });
+        world.insert_resource(trunks);
+        let tree = world
+            .spawn((WoodsTree { foot }, Growth::new(None, Some(foot), 1.4)))
+            .id();
+        world.entity_mut(tree).remove::<Growth>();
+        // The stump left, sunk a little as its tree was.
+        let mut obstacles = Obstacles::default();
+        obstacles.add(foot - foot.normalize() * 0.3, 0.3);
+        let found = world
+            .resource::<Trunks>()
+            .near(foot, 2.0, &obstacles)
+            .count();
+        assert_eq!(found, 0, "the felled tree's trunk is gone");
     }
 }
