@@ -23,6 +23,8 @@ Everything goes over ssh to the hosts in `TERRA_WORKERS` (`.env`). Nothing on th
 
 Jobs older than `TERRA_RENDER_KEEP_DAYS` (7) are deleted with their files and refs. `--no-wait` queues and prints the job, `--wait <job>` takes it up again, `--cancel <job>` drops a queued job or stops a running one, `--logs <job|daemon>` prints a log's end.
 
+`--logs <job>` shows only the job's last 60 lines; the full log is the fetched `job.log`, in `~/.cache/terra-review/remote/<job>/`.
+
 **Nothing of a job outlives it.** Every process of a job carries `TERRA_RENDER_JOB=<id>` in its environment, which survives `setsid`, `nohup` and a double fork where a process group does not, as Jenkins' ProcessTreeKiller finds a build's processes by a cookie (`reap.ts`). When a job ends, is cancelled or times out, every process carrying its id is sent TERM, then KILL after 10 s, and `job.log` ends with a `render-worker:` line saying nothing of the job is left, or naming what was stopped (the job's note says so too) or what survived KILL and what to do. A daemon stopped mid-job KILLs its jobs' processes as it exits, and each pass of its loop, its first after a restart included, stops any process of a job of its box it does not run, saying so in that job's log. A setsid'd clippy loop in a cancelled bench's script held slot 4's `gpu.lock` for 2 h 46 min on 2026-10-29 before this. A process that clears its environment (`env -i`) is not found.
 
 ## A patch of uncommitted changes
