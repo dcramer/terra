@@ -138,6 +138,19 @@ impl MeshBuilder<Voxel, f32> for Builder {
         let gradient = |point: &GridPoint<Voxel, f32>| {
             Vec3::new(point.gradient.0, point.gradient.1, point.gradient.2)
         };
+        // A transition cell chooses its case by its face's fine samples, but a vertex on its
+        // coarse side lies between the coarse samples, which see the ground at the chunk's
+        // own coarseness and can both be on one side of it: the crossing is then found
+        // outside the edge, as far as the two samples' densities are near each other. The
+        // lake's far ridge so had one 4 km up the sky, its triangle a thin black line
+        // across it (lakeplay-line j1). Kept on its edge, it goes to the end nearer the
+        // surface; Lengyel's own form (`t = d0 / (d0 - d1)`, its samples always of opposite
+        // sign) never leaves the edge either.
+        let toward_b = if toward_b.is_finite() {
+            toward_b.clamp(0.0, 1.0)
+        } else {
+            0.5
+        };
         let position = at(&a).lerp(at(&b), toward_b);
         // Density rises into the ground, so the surface faces down its gradient.
         let normal = -gradient(&a).lerp(gradient(&b), toward_b);
@@ -424,5 +437,78 @@ mod tests {
         for (at, normal) in &floor {
             assert!(normal.y > 0.5, "the floor at {at:?} faces {normal:?}");
         }
+    }
+
+    /// Flat ground that a coarse look sees higher than a fine one, as the land's heights
+    /// blended over a far chunk's coarseness can be: its memo is the spacing asked at.
+    struct SeenHigher {
+        fine_y: f32,
+        lift_m: f32,
+        coarse_from_m: f32,
+    }
+
+    impl Field for SeenHigher {
+        type Memo = f32;
+
+        fn memo_for(&self, spacing_m: f32) -> f32 {
+            spacing_m
+        }
+
+        fn distance_in(&self, point: Vec3, spacing: &mut f32) -> f32 {
+            let lift = if *spacing >= self.coarse_from_m {
+                self.lift_m
+            } else {
+                0.0
+            };
+            point.y - (self.fine_y + lift)
+        }
+
+        fn sample_in(&self, point: Vec3, memo: &mut f32) -> crate::Sample {
+            crate::Sample {
+                distance: self.distance_in(point, memo),
+                material: material::STONE,
+            }
+        }
+    }
+
+    #[test]
+    fn a_transition_face_whose_coarse_samples_miss_the_ground_makes_no_long_triangles() {
+        // The coarse chunk's own samples see the ground 6 m higher than its finer neighbour's
+        // face does, so on the transition cells' coarse side both ends of an edge the face
+        // says the ground crosses are under it.
+        let level = 1;
+        let spacing = VOXEL_M * (1u32 << level) as f32;
+        let field = SeenHigher {
+            fine_y: 16.3,
+            lift_m: 6.0,
+            coarse_from_m: spacing,
+        };
+        let id = ChunkId {
+            level,
+            coord: IVec3::ZERO,
+        };
+        let mesh = mesh_chunk(&field, id, Sides::HIGH_X);
+        assert!(!mesh.indices.is_empty(), "the chunk holds the ground");
+        // A cell's longest edge is its diagonal; a transition cell is thinner than a cell.
+        let most = spacing * 3f32.sqrt() * 1.01;
+        let longest = mesh
+            .indices
+            .chunks(3)
+            .map(|tri| {
+                let p = [0, 1, 2].map(|k| mesh.positions[tri[k] as usize]);
+                let longest = p[0]
+                    .distance(p[1])
+                    .max(p[1].distance(p[2]))
+                    .max(p[2].distance(p[0]));
+                (longest, p)
+            })
+            .max_by(|a, b| a.0.total_cmp(&b.0))
+            .unwrap();
+        assert!(
+            longest.0 <= most,
+            "a triangle {} m long, against a cell's {most} m: {:?}",
+            longest.0,
+            longest.1
+        );
     }
 }
