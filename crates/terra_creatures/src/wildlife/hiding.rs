@@ -84,6 +84,8 @@ impl Thickets {
 pub(super) struct Filed;
 
 /// Files each new bush and young tree, and each stone of the land's, once its box is known.
+/// One may be gone by the time it is marked filed, as a saved game's felled trees are taken
+/// out the frame they first stand (`woods::FellAgain`), so the mark is only tried.
 pub(super) fn file_thickets(
     mut commands: Commands,
     mut thickets: ResMut<Thickets>,
@@ -99,7 +101,7 @@ pub(super) fn file_thickets(
             if reach <= THICKET_REACH_M * 1.5 {
                 thickets.plants.insert(centre, plant);
             }
-            commands.entity(plant).insert(Filed);
+            commands.entity(plant).try_insert(Filed);
         }
     }
     for (stone, growth, bounds, at) in &stones {
@@ -110,7 +112,7 @@ pub(super) fn file_thickets(
         {
             thickets.add_stone(bounds, at);
         }
-        commands.entity(stone).insert(Filed);
+        commands.entity(stone).try_insert(Filed);
     }
 }
 
@@ -165,5 +167,31 @@ mod tests {
             [false, false, true, true, true],
             "a walker's obstacle; behind the stone; beside it; behind the plant; over the stone"
         );
+    }
+
+    /// A stone taken out the frame it is filed, its despawn applied before the filing's mark,
+    /// as a saved game's felled trees are taken out the frame they first stand, is filed
+    /// without the game stopping.
+    #[test]
+    fn a_stone_gone_the_frame_it_is_filed_stops_nothing() {
+        let (mut world, eye, _) = surroundings_world();
+        let cut = Cuttable {
+            what: Cut::Rock,
+            gives: (FloraKind(0), 1),
+            seconds: 1.0,
+        };
+        let bounds = Aabb::from_min_max(Vec3::splat(-0.5), Vec3::splat(0.5));
+        let place = GlobalTransform::from_translation(eye + Vec3::X * 5.0);
+        world.spawn((Growth::new(Some(cut), None, 0.3), bounds, place));
+        let take_out = |mut commands: Commands, stones: Query<Entity, With<Growth>>| {
+            for stone in &stones {
+                commands.entity(stone).despawn();
+            }
+        };
+        let mut schedule = Schedule::default();
+        schedule.set_executor(bevy::ecs::schedule::SingleThreadedExecutor::new());
+        schedule.add_systems((take_out, file_thickets).chain_ignore_deferred());
+        schedule.run(&mut world);
+        assert_eq!(world.query::<&Growth>().iter(&world).count(), 0);
     }
 }
