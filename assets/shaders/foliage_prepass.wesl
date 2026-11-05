@@ -19,6 +19,7 @@ import bevy_pbr::{
     prepass::io as prepass_io,
 };
 import bevy_render::{bindless::{bindless_samplers_filtering, bindless_textures_2d}, globals::Globals};
+import super::sight::sight_keep;
 
 @if(BINDLESS)
 import bevy_pbr::render::pbr_bindings::material_indices;
@@ -192,6 +193,7 @@ fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>, instance: u32, leaf: bool
     if leaf {
         let lens = min(LENS_M, distance(parting.subject.xyz, eye.xyz) * 0.6);
         keep = min(keep, smoothstep(lens - LENS_BAND_M, lens, distance(world, eye.xyz)));
+        keep = min(keep, sight_keep(world, eye.xyz, parting.subject.xyz));
     } else {
         // Bark the lens slides past, as it does round a trunk, dithers out within a stride
         // of it rather than sweeping across the screen as a smear TAA cannot resolve (D289).

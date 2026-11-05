@@ -480,6 +480,7 @@ The look, models, bodies and gear, textures and audio.
 | [D599](decisions/D599.md) | Characters are built on Quaternius's bodies and outfits, in our paint | Design | Developers | Decided | Terra's people are built on Quaternius's base bodies… |
 | [D600](decisions/D600.md) | What shows in an empty clothing slot on Quaternius's bodies | Design | Developers | Decided | **The swap.** Each clothing slot always holds one piece… |
 | [D611](decisions/D611.md) | Characters are composed per slot at run time from a wardrobe catalogue | Tech | Agent | Decided | A character on Quaternius's bodies… |
+| [D624](decisions/D624.md) | Leaves on the line from the third-person lens to the figure open over the figure alone | Tech | Agent | Decided | Every leaf card the foliage shaders draw… |
 
 ## Engine and code
 

@@ -18,6 +18,7 @@ import bevy_pbr::render::{
     clustered_forward::{view_fragment_cluster_index, unpack_clusterable_object_index_ranges},
 };
 import super::hue::hue_turned;
+import super::sight::sight_keep;
 @if(IRRADIANCE_VOLUME) import bevy_pbr::light_probe::irradiance_volume::irradiance_volume_light;
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) import bevy_pbr::render::mesh_view_bindings::{light_probes, environment_map_sampler};
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) import bevy_pbr::render::mesh_view_bindings::diffuse_environment_maps;
@@ -1023,6 +1024,9 @@ fn clear_view(frag_coord: vec4<f32>, world: vec3<f32>, instance: u32, leaf: bool
     if leaf {
         let lens = min(LENS_M, distance(parting.subject.xyz, eye.xyz) * 0.6);
         keep = min(keep, smoothstep(lens - LENS_BAND_M, lens, distance(world, eye.xyz)));
+        // And on the line to the figure, over it alone, as a grown tree's low bough is in
+        // the way and fading the whole tree would be wrong (sight.wesl, D624).
+        keep = min(keep, sight_keep(world, eye.xyz, parting.subject.xyz));
     } else {
         // Bark the lens slides past, as it does round a trunk, dithers out within a stride
         // of it rather than sweeping across the screen as a smear TAA cannot resolve (D289).
