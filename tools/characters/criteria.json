@@ -1,0 +1,67 @@
+{
+ "about": "What character work must hold and what is next, read by `cargo xtask characters` (tools/characters/status.ts). checks: the checks whose results are recorded when they run (record.ts), each with the command that refreshes it, how long it takes and the files it reads (`owns`, git pathspecs: a commit to one makes its record stale). criteria: a row each, a stage of a check's record (`check` and `stage`), the build's verdict (`check: build`, failures matching a `known` fault's `match` allowed, each with why), or `live`, worked out from the catalogue as the status runs; `bar` says what passes. tasks: the work still to do, in order, each with the files that own it (`path#symbol` resolves to the symbol's line), the command that checks it and the criterion it moves, if any. A job that finishes a task takes its row out; one that finds work adds a row.",
+ "checks": {
+  "wardrobe": {
+   "command": "node tools/characters/wardrobe.ts",
+   "takes": "80 s, every core",
+   "owns": ["assets/models/character/", "art/characters/quaternius/", "tools/characters/wardrobe.ts", "tools/characters/vendored.ts", "tools/characters/theirs.py", "tools/characters/intact.ts", "tools/characters/pairings.ts", "tools/characters/build_steps.ts", "tools/blender/run.sh", "crates/terra_walker/src/wardrobe.rs"]
+  },
+  "build": {
+   "command": "tools/characters/build_bodies.sh --step wardrobe:male",
+   "takes": "3 min, Blender; one build at a time; then git checkout -- assets/models/character/fight.glb",
+   "owns": ["art/characters/", "art/animation/", "art/gear/", "tools/characters/*.py", "tools/characters/build*.ts", "tools/characters/bodies.json", "tools/blender/"]
+  }
+ },
+ "criteria": [
+  { "id": "guard.vendored", "check": "wardrobe", "stage": "vendored", "bar": "every file of theirs byte for byte as SHA256SUMS lists, CC0 packs only (D599)" },
+  { "id": "guard.private", "check": "wardrobe", "stage": "private", "bar": "every vendored file the private repository's own bytes" },
+  { "id": "guard.reshape", "check": "wardrobe", "stage": "reshape", "bar": "no script that reshapes meshes can be given their files" },
+  { "id": "catalogue", "check": "wardrobe", "stage": "catalogue", "bar": "every piece's source there, made on its body for its slot" },
+  { "id": "pairings", "check": "wardrobe", "stage": "pairings", "bar": "every two pieces of a body measured, a row each" },
+  { "id": "files", "check": "wardrobe", "stage": "files", "bar": "every piece's game file built" },
+  { "id": "intact", "check": "wardrobe", "stage": "intact", "bar": "every mesh theirs as made (D599)" },
+  { "id": "bound", "check": "wardrobe", "stage": "bound", "bar": "every joint of every piece on its body's skeleton" },
+  { "id": "looks", "check": "wardrobe", "stage": "looks", "bar": "every look composed in every state of undress" },
+  { "id": "build", "check": "build", "bar": "no failure but the known ones (rig, clips, gear, morphs: build_verdict.ts)", "known": [{ "match": "Sprint_Loop", "why": "the man's sprint skates 2.7/7.8 cm, known since char-switch j8" }] },
+  { "id": "looks.hair", "live": "hair", "bar": "every look wears its person's hair (wardrobe.json looks' `hair`)" },
+  { "id": "variants", "live": "figures", "bar": "hundreds of dressed figures a body, not millions (D182)", "within": [100, 100000] }
+ ],
+ "tasks": [
+  {
+   "what": "A fair rule for hair and beards (held to an absolute 5 mm, they are refused against nearly everything): judge them against the bare head's own fit or the base pack's hair as theirs; then hair back in the looks (knight buzzed; knight_cloth buzzed, full beard; noble slick_back, moustache; wizard ponytail, full beard)",
+   "files": ["tools/characters/pairings.ts#judge", "tools/characters/pairings.ts#BAD_POKE_M", "assets/models/character/wardrobe.json"],
+   "check": "node tools/characters/pairings.ts, then node tools/characters/wardrobe.ts",
+   "criterion": "looks.hair"
+  },
+  {
+   "what": "Adding an outfit in one or two commands: vendor.ts (their pieces copied byte for byte from terra-private, SHA256SUMS and licence rows) and wardrobe.ts --build (rows drafted, only the new pairings measured, the check)",
+   "files": ["tools/characters/wardrobe.ts", "tools/characters/pairings.ts#matrix", "art/characters/quaternius/README.md"],
+   "check": "node --test tools/characters/vendor.test.ts"
+  },
+  {
+   "what": "The sheet: each look in the workbench (--attach), stills through cargo xtask gpu still, on the desk: which outfits and colourways belong (FOR REVIEW)",
+   "files": ["crates/terra_sandbox/src/experiments/workbench/mod.rs", "assets/models/character/wardrobe.json"],
+   "check": "cargo xtask gpu still -- cargo xtask workbench …"
+  },
+  {
+   "what": "The outfits' accessories (pauldrons, scarf, gorget) as optional slots",
+   "files": ["assets/models/character/wardrobe.json", "crates/terra_walker/src/wardrobe.rs#compose"],
+   "check": "node tools/characters/wardrobe.ts; cargo test -p terra_walker --lib wardrobe::"
+  },
+  {
+   "what": "Colourways as maps the game swaps (their _2 and _3 BaseColor maps)",
+   "files": ["crates/terra_walker/src/wardrobe.rs#parse", "assets/models/character/wardrobe.json"],
+   "check": "cargo test -p terra_walker --lib wardrobe::"
+  },
+  {
+   "what": "The looks' items are placeholders the item catalogue lacks (plate_armour, surcoat, robe, crown…): a design call, on the desk",
+   "files": ["assets/models/character/wardrobe.json"],
+   "check": "the review desk"
+  },
+  {
+   "what": "Cheaper jobs (research/2026-11-05-agent-pipeline-tokens.md): the character skill split to a 120-line core with references/, then a code map (tools/characters/map.ts)",
+   "files": [".agents/skills/character/SKILL.md"],
+   "check": "node tools/token-stats/job.mjs --job '<the job>'"
+  }
+ ]
+}

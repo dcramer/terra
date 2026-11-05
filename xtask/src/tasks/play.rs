@@ -109,6 +109,13 @@ pub(crate) const TASKS: &[Task] = &[
         run: |args| node("tools/controller/scorecard.ts", args),
     },
     Task {
+        name: "characters",
+        takes: "[--json]",
+        does: "where character work stands, in 40 lines from recorded results (no check run): each criterion of tools/characters/criteria.json against its bar, how stale each check's record is and its refresh command, the tasks in order with the files that own them, the next thing to run; a character job's first command (D625)",
+        group: "Play and check",
+        run: |args| node("tools/characters/status.ts", args),
+    },
+    Task {
         name: "duel",
         takes: "[--out <dir>] | --check <fight.jsonl>…",
         does: "the yard's scripted duel filmed from four cameras into a 2x2 film and a contact sheet, its fight record checked (start latency, chain gaps, feet sliding, overlap, misses, hit-stop), in ~/.cache/terra-review/duel/ (tools/sandbox)",

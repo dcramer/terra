@@ -1,9 +1,11 @@
 ---
 name: character
-description: Make a game character for Terra (a base body, an NPC, a body template or morph) from a design sheet to a rigged, animated, checked model in the game: concept image, Tripo model and auto-rig on the Studio subscription, conversion onto our skeleton, the rig checker, export, and a look in the sandbox's workbench. Use when asked to make, generate, rig or fix a character or humanoid model.
+description: Make a game character for Terra (a base body, an NPC, a body template or morph) from a design sheet to a rigged, animated, checked model in the game: concept image, Tripo model and auto-rig on the Studio subscription, conversion onto our skeleton, the rig checker, export, and a look in the sandbox's workbench. Starts from the status, cargo xtask characters (D625). Use when asked to make, generate, rig or fix a character or humanoid model.
 ---
 
 # Making a character
+
+**Start every job with `cargo xtask characters`** (D625, a second): each criterion against its bar, how stale each check's record is and its refresh command, the tasks in order with the files (and lines) that own them, and the next thing to run. Read that before the log, handoffs, decisions or code, and only the parts it points to. Refresh a stale record with the command it names; a job that finishes a task takes its row out of `tools/characters/criteria.json`, one that finds work adds a row. Measure a job's cost with `node tools/token-stats/job.mjs --job '<its name>'`.
 
 From a design to a model that plays every animation in the game, with Tripo doing the hard parts and scripts doing the rest. Worked out on 2026-10-11 ([research](../../../research/ai-models-for-art.md#characters-made-and-rigged), D115). The male base body was made this way.
 

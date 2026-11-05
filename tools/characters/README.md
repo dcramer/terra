@@ -6,6 +6,8 @@ Run everything from the repository root. Blender scripts run headless through [t
 
 | Script | What it does |
 |---|---|
+| `status.ts` (`cargo xtask characters`) | Where character work stands, in 40 lines from recorded results, running no check (D625): each criterion of `criteria.json` against its bar, how stale each check's record is and the command that refreshes it, the tasks in order with the files that own them (`path#symbol` resolved to its line), the next thing to run; `--json`. Tested in `status.test.ts` |
+| `record.ts` | A check's result recorded for the status: what it said a stage, its commit and the files uncommitted then, in `~/.cache/terra-characters/<check>.jsonl`, the last 20 runs; `wardrobe.ts` and `build.ts` record theirs |
 | `make_character.sh NAME SHEET HEIGHT` | The whole body pipeline on Studio credits: keeps the sheet, its front view, Tripo's model and rig in `art/characters/NAME/`, then runs `finish_character.sh` |
 | `finish_character.sh NAME HEIGHT [RIGGED]` | The free part, rerun for every body when it improves: convert, check, render, export. Given one of Quaternius's bodies (`art/characters/quaternius/`), it skips the conversion and proves the export theirs with `intact.ts` (D599). Given a dressed figure of theirs, `HEAD.gltf+PIECE.gltf+...` (their head-only body and outfit pieces), it renders and exports it joined on the head's skeleton and proves every piece theirs; the rig check and proportions judge their full body instead |
 | `convert_rig.py` | Tripo's V3 rig (Unreal skeleton) onto ours, keeping its twist bones and weights |

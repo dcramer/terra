@@ -31,6 +31,7 @@ import { isAbsolute, join } from "node:path";
 import { FAILED, itemVerdict, stepVerdict, verdict } from "./build_verdict.ts";
 import { glbDiff } from "./glb_diff.ts";
 import { bodiesData, buildSteps, builtLine, closure, gearData, morphNames, SECTIONS, type Step } from "./build_steps.ts";
+import { record } from "./record.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
@@ -531,7 +532,11 @@ async function main() {
   const rig = join(out, `rig-check-${base}.json`);
   const text = readFileSync(log, "utf8");
   const failed = only ? stepVerdict(text, ok ? 0 : 1) : verdict(text, existsSync(rig) ? readFileSync(rig, "utf8") : undefined, ok ? 0 : 1);
-  console.log(failed.length ? `BUILD fail\n${failed.join("\n")}` : "BUILD pass");
+  const rel = log.slice(ROOT.length + 1);
+  record("build", { pass: !failed.length, stages: [], failures: failed, log: rel, args: only ? `--step ${only.join(",")}` : undefined });
+  // The verdict first, with its count and log (D388); the first ten failures under it.
+  const more = failed.length > 10 ? [`… and ${failed.length - 10} more in ${rel}`] : [];
+  console.log(failed.length ? `BUILD fail: ${failed.length} failure${failed.length > 1 ? "s" : ""}, all in ${rel}\n${[...failed.slice(0, 10), ...more].join("\n")}` : `BUILD pass (${rel})`);
   process.exit(failed.length ? 1 : 0);
 }
 

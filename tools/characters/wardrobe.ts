@@ -33,6 +33,7 @@ import { Glb, matrix, mmul, posed } from "./glb.ts";
 import { check, sources } from "./intact.ts";
 import { figures, type Pairing, pairs } from "./pairings.ts";
 import { privately, reshape, vendored } from "./vendored.ts";
+import { record, type StageResult } from "./record.ts";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const LOG = join(ROOT, "target", "check", "wardrobe.log");
@@ -151,15 +152,23 @@ if (import.meta.main) {
   writeFileSync(LOG, "");
   const w = wardrobeData(ROOT);
   let failed = false;
+  const said: StageResult[] = [];
+  const failures: string[] = [];
   const guard = [() => vendored(), () => privately(), () => reshape(buildSteps(bodiesData(ROOT), gearData()), Object.values(w.bodies).map((b) => b.pieces))];
   for (const stage of [...guard, catalogue, pairings, files, intact, bound, looks]) {
     const s = stage(w);
-    console.log(s.faults.length ? `✗ ${s.name}\n  ${s.faults.join("\n  ")}` : `✓ ${s.name}: ${s.said}`);
+    // A line a stage (D388); a failing one's first five faults under it, all of them in the log.
+    const more = s.faults.length > 5 ? [`… and ${s.faults.length - 5} more in ${LOG.slice(ROOT.length)}`] : [];
+    if (s.faults.length) writeFileSync(LOG, `✗ ${s.name}\n  ${s.faults.join("\n  ")}\n`, { flag: "a" });
+    console.log(s.faults.length ? `✗ ${s.name}: ${s.faults.length} fault${s.faults.length > 1 ? "s" : ""}\n  ${[...s.faults.slice(0, 5), ...more].join("\n  ")}` : `✓ ${s.name}: ${s.said}`);
+    said.push({ name: s.name, ok: !s.faults.length, said: s.faults.length ? `${s.faults.length} faults: ${s.faults[0]}` : s.said });
+    failures.push(...s.faults.map((f) => `${s.name}: ${f}`));
     if (s.faults.length) {
       failed = true;
       if (s.name === "files") break;
     }
   }
-  console.log(failed ? "WARDROBE fail" : "WARDROBE pass");
+  record("wardrobe", { pass: !failed, stages: said, failures, log: LOG.slice(ROOT.length) });
+  console.log(failed ? `WARDROBE fail; the faults are in ${LOG.slice(ROOT.length)}` : "WARDROBE pass");
   process.exit(failed ? 1 : 0);
 }

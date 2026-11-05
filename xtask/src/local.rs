@@ -21,6 +21,7 @@ const LIGHT: &[&str] = &[
     "tripo",
     "play",
     "yard",
+    "characters",
 ];
 
 /// Whether this machine builds and runs the game itself.
