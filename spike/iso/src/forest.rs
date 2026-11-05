@@ -529,11 +529,10 @@ fn plant(
     }
 
     // Grass, in 8 m squares; flowers among it in the open; brambles at the wood's edge.
-    // Rough and dull: shinier, the low sun glinted off every blade's tip like rain.
     let blades = StandardMaterial {
         cull_mode: None,
-        perceptual_roughness: 0.88,
-        reflectance: 0.15,
+        perceptual_roughness: 0.7,
+        reflectance: 0.3,
         ..default()
     };
     let blades = foliage::material(&mut materials, &mut mats, blades, 0.09, 0.0, false);

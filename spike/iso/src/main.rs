@@ -12,7 +12,6 @@ mod nav;
 mod party;
 mod rim;
 mod scene;
-mod smoke;
 mod terrain;
 mod ui;
 mod water;
@@ -122,7 +121,6 @@ fn main() {
             water::plugin,
             wildlife::plugin,
             motes::plugin,
-            smoke::plugin,
             camp::plugin,
         ))
         .add_systems(

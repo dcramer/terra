@@ -1,7 +1,7 @@
 //! Small lights that make the clearing breathe: fireflies along the wood's edge and over the
 //! pond's reeds at dusk and by night, each wandering and glowing on and off in its own
 //! rhythm, and embers rising off the camp fire on the wind, at every hour. Unlit emissive
-//! specks and soft cards, the bloom making their glow.
+//! specks, the bloom making their glow.
 
 use crate::forest::Rng;
 use crate::scene::{FIRE, Hour};
@@ -52,17 +52,11 @@ fn spawn(
         alpha_mode: AlphaMode::Add,
         ..default()
     };
-    // A firefly is a soft yellow-green glow on a card facing the camera, not a hard speck.
-    let soft = images.add(soft_image());
-    let glow = materials.add(StandardMaterial {
-        base_color_texture: Some(soft),
-        ..lit(LinearRgba::rgb(1.5, 2.3, 0.35))
-    });
+    let glow = materials.add(lit(LinearRgba::rgb(5.0, 8.0, 1.0)));
     let ember = materials.add(lit(LinearRgba::rgb(3.0, 0.45, 0.03)));
     let flame = materials.add(StandardMaterial {
         base_color_texture: Some(images.add(tongue_image())),
-        // Below white, so the tongues read gold and orange, not a white blob.
-        ..lit(LinearRgba::rgb(2.1, 1.6, 1.2))
+        ..lit(LinearRgba::rgb(2.8, 2.6, 2.4))
     });
     let card = meshes.add(Rectangle::new(1.0, 1.0));
     // The fire's flames: tongues over the logs, licking up and falling back.
@@ -85,7 +79,7 @@ fn spawn(
     // Fireflies: where the clearing meets the wood, and over the reeds.
     let mut placed = 0;
     let mut tries = 0;
-    while placed < 40 && tries < 5000 {
+    while placed < 70 && tries < 5000 {
         tries += 1;
         let near_pond = placed % 4 == 0;
         let p = if near_pond {
@@ -101,7 +95,7 @@ fn spawn(
         let ground = land.height(p).max(WATER);
         let home = Vec3::new(p.x, ground + rng.range(0.35, 1.6), p.y);
         commands.spawn((
-            Mesh3d(card.clone()),
+            Mesh3d(speck.clone()),
             MeshMaterial3d(glow.clone()),
             Transform::from_translation(home).with_scale(Vec3::splat(0.0)),
             bevy::light::NotShadowCaster,
@@ -130,13 +124,8 @@ fn spawn(
 }
 
 /// A firefly drifts about its home on slow loops and glows for a moment each period.
-fn wander(
-    time: Res<Time>,
-    camera: Query<&GlobalTransform, With<crate::camera::MainCamera>>,
-    mut flies: Query<(&Firefly, &mut Transform)>,
-) {
+fn wander(time: Res<Time>, mut flies: Query<(&Firefly, &mut Transform)>) {
     let t = time.elapsed_secs();
-    let face = camera.single().map_or(Quat::IDENTITY, |c| c.rotation());
     for (f, mut tr) in &mut flies {
         let s = f.seed;
         let off = Vec3::new(
@@ -148,8 +137,7 @@ fn wander(
         // On for a third of its period, swelling and fading.
         let phase = ((t + s) / f.period).fract();
         let on = (1.0 - (phase / 0.35 - 0.5).abs() * 2.0).clamp(0.0, 1.0);
-        tr.rotation = face;
-        tr.scale = Vec3::splat(0.15 * on.powf(0.7));
+        tr.scale = Vec3::splat(0.035 * on.powf(0.7));
     }
 }
 
@@ -202,33 +190,6 @@ fn lick(
         tr.rotation = face * Quat::from_rotation_z((t * 3.0 + s).sin() * 0.12);
         tr.scale = Vec3::new(wide, tall, 1.0);
     }
-}
-
-/// A round soft glow: white, its alpha falling smoothly from the middle to nothing at the rim.
-pub fn soft_image() -> Image {
-    use bevy::asset::RenderAssetUsages;
-    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-    let n = 32u32;
-    let mut data = Vec::with_capacity((n * n * 4) as usize);
-    for y in 0..n {
-        for x in 0..n {
-            let p = (Vec2::new(x as f32, y as f32) + 0.5) / n as f32 * 2.0 - 1.0;
-            let a = (1.0 - p.length()).clamp(0.0, 1.0);
-            let a = a * a * (3.0 - 2.0 * a);
-            data.extend([255, 255, 255, (a * 255.0) as u8]);
-        }
-    }
-    Image::new(
-        Extent3d {
-            width: n,
-            height: n,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::RENDER_WORLD,
-    )
 }
 
 /// A flame's tongue: a teardrop, white-gold at its root, orange, then red at its edge and
