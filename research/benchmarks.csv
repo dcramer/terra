@@ -79,3 +79,4 @@ date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches
 2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,crypt-hall,8.13,13.04,22.28,2,0.50,0,13.3,,0
 2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,forest-run,8.63,12.21,23.95,2,0.42,0,7.0,,0
 2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,play-walk,5.68,9.83,23.90,2,0.11,0,-1.1,8.8,0
+2026-11-05,d92dfd09,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,lake-woods-walk,7.32,10.68,20.24,3,0.03,0,-1.7,39.3,0,0
