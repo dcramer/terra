@@ -75,6 +75,27 @@ impl Kit {
             undergrowth,
         }
     }
+
+    /// A kit of empty handles, one of each thing and one variant of each kind of undergrowth,
+    /// for laying in a test with no assets to load.
+    #[cfg(test)]
+    pub(in crate::experiments::lush) fn bare() -> Kit {
+        let scan = || vec![(Handle::default(), Handle::default())];
+        Kit {
+            rocks: scan(),
+            boulders: scan(),
+            end_grain: Handle::default(),
+            logs: vec![(Handle::default(), Some(Handle::default()), 4.0, 0.25); LOG_KINDS as usize],
+            stumps: vec![(Handle::default(), Some(Handle::default()), 0.3); STUMP_KINDS as usize],
+            undergrowth: PLACEMENTS
+                .iter()
+                .map(|placement| {
+                    let drawn = Drawn::one(Handle::default(), Look::Foliage(Handle::default()));
+                    (vec![drawn], Noise::new(Seed(7).derive(placement.name)))
+                })
+                .collect(),
+        }
+    }
 }
 
 /// What a laying put: its things, the circles it filed as lying and as feet, and its stumps'
@@ -87,7 +108,8 @@ pub(in crate::experiments::lush) struct Put {
     pub things: Vec<Entity>,
     pub lying: Vec<(Vec2, f32)>,
     pub feet: Vec<(Vec2, f32)>,
-    pub stumps: Vec<Vec2>,
+    /// Each stump's foot and its trunk's width as the canopy files it (`Stand::stump`).
+    pub stumps: Vec<(Vec2, f32)>,
     pub cuttable: Vec<(u32, Entity)>,
     /// Rocks, boulders, logs and stumps laid, and the nearest of each to the start.
     pub(super) wood: [u32; 4],
@@ -328,7 +350,7 @@ fn stumps<W: Ways>(
         }
         put.things.push(stump.id());
         map.canopy.add(Stand::stump(at, radius * scale * 1.3));
-        put.stumps.push(at);
+        put.stumps.push((at, radius * scale * 1.3));
         put.note(3, at);
     }
 }

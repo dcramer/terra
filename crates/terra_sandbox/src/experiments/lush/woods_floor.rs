@@ -3,8 +3,11 @@
 //! woods laid round their trees (`terra_world::cover::forest::WoodsFloor`): rocks and
 //! boulders, fallen logs and stumps, and the undergrowth in drifts, ferns, bracken, herbs,
 //! hazel, bilberry, holly, saplings and the rest, only among the trees and off the water,
-//! as thickly as the forest walk's, within `REACH_M` of the woods' middle. The ground cover
-//! is then grown from that floor, where the woods' grass, leaves, needles and moss lie.
+//! as thickly as the forest walk's, within `REACH_M` of the woods' middle, and past it round
+//! the camera as the woods' trees stream in (`stream`, D622). The ground cover is then grown
+//! from that floor, where the woods' grass, leaves, needles and moss lie.
+
+mod stream;
 
 use super::FloorLooks;
 use super::floor::{self, Area, Lay, MossyScans, Variants};
@@ -19,8 +22,8 @@ use terra_world::instance::InWorld;
 use terra_world::planet::Planet;
 use terra_world::start::{Sited, Start};
 
-/// The floor is laid this far round the woods' middle, the forest walk's own reach: past it
-/// the grown trees stand on the woods' ground cover alone.
+/// The floor is laid this far round the woods' middle on loading, the forest walk's own
+/// reach: past it, it streams in round the camera (`stream`).
 const REACH_M: f32 = 220.0;
 /// None nearer the start than the woods' own clearing round it.
 const CLEAR_M: f32 = 14.0;
@@ -31,6 +34,7 @@ const LOG_AT: Vec2 = Vec2::new(-2.5, 12.5);
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(InWorld), lay_woods_floor.in_set(LayingFloor));
+    stream::plugin(app);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -65,6 +69,7 @@ fn lay_woods_floor(
         return;
     };
     let began = std::time::Instant::now();
+    let seed = planet.seed().derive("woods floor");
     let east = start.rotation * Vec3::X;
     let south = start.rotation * Vec3::Z;
     let middle = sited
@@ -74,10 +79,12 @@ fn lay_woods_floor(
             Vec2::new(local.x, local.z)
         })
         .unwrap_or(Vec2::ZERO);
-    // The world's flora sows none of its old undergrowth where this lays its own.
+    // The world's flora sows none of its old undergrowth where this lays its own: among the
+    // trees everywhere, as the stream lays it past `REACH_M` round the camera, past where the
+    // flora's understory reaches.
     commands.insert_resource(Undergrown {
         middle,
-        reach_m: REACH_M,
+        reach_m: f32::INFINITY,
     });
     let area = Area {
         middle,
@@ -108,15 +115,17 @@ fn lay_woods_floor(
         spruce_bark: looks.spruce_bark.clone(),
         atlas: looks.floor_cards.clone(),
         thicket: looks.thicket_cards.clone(),
-        seed: planet.seed().derive("woods floor"),
+        seed,
         foliage: &mut foliage,
         shrinking: HashMap::default(),
         shade: NearShadows::new(start.translation, east, south),
         sun: None,
     };
-    floor::lay(&mut lay, map, &area);
+    let kit = floor::lay(&mut lay, map, &area);
     // A stump and a log of the floor's own wood by the door, in the start's clearing.
     floor::by_the_door(&mut lay, map, STUMP_AT, LOG_AT);
+    let frame = (start.translation, east, south);
+    commands.insert_resource(stream::FloorStream::new(kit, seed, middle, frame));
     info!(
         "Woods: their floor laid within {REACH_M:.0} m of {:.0},{:.0} in {:.1} s",
         middle.x,

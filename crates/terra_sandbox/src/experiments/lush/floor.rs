@@ -40,7 +40,7 @@ use bevy::{
     shader::ShaderRef,
 };
 use builds::*;
-use kit::*;
+pub(super) use kit::{Kit, Put, lay_with};
 use placements::{PLACEMENTS, Placement};
 use std::f32::consts::{PI, TAU};
 use terra_gen::{Noise, Rng, Seed};
