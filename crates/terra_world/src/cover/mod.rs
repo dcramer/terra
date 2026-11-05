@@ -274,7 +274,12 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             // `grow` is over the size limit (D396): timed where it is added (D607).
-            (crate::timed!("flora", grow), measure, follow_climate)
+            (
+                follow_digs,
+                crate::timed!("flora", grow),
+                measure,
+                follow_climate,
+            )
                 .chain()
                 .run_if(resource_exists::<CoverRules>),
         )
@@ -633,6 +638,50 @@ fn grow(
     }
 }
 
+/// Where the ground has been dug or filled, the squares over it are built again on the
+/// ground as it now is, so no blade stands in the air over a hole or under a heap; a
+/// world's source grows nothing on ground so changed (`Planet::dug`). The digs of a loaded
+/// game are followed the same way, once the squares are first built.
+fn follow_digs(
+    planet: Res<Planet>,
+    start: Res<Start>,
+    meadow: Option<ResMut<Meadow>>,
+    mut seen: Local<usize>,
+) {
+    terra_gen::stat_scope!("flora");
+    let Some(mut meadow) = meadow else { return };
+    let count = planet.voxels().edit_count();
+    if count == *seen {
+        return;
+    }
+    let edits: Vec<(Vec3, f32)> = planet.voxels().edits_since(*seen).collect();
+    *seen = count;
+    for key in dug_squares(&start, &edits) {
+        if let Some(square) = meadow.squares.get_mut(&key) {
+            square.building = None;
+            square.ring = usize::MAX;
+        }
+    }
+}
+
+/// The squares that edits, as spheres on the planet, come within a blade's clearance of.
+fn dug_squares(start: &Start, edits: &[(Vec3, f32)]) -> Vec<(i32, i32)> {
+    let mut touched = Vec::new();
+    for &(centre, reach) in edits {
+        let middle = start.local(centre);
+        let reach = reach + blades::CLEAR_M + CELL_M;
+        let key = |m: f32| (m / SQUARE_M).floor() as i32;
+        for i in key(middle.x - reach)..=key(middle.x + reach) {
+            for j in key(middle.z - reach)..=key(middle.z + reach) {
+                if !touched.contains(&(i, j)) {
+                    touched.push((i, j));
+                }
+            }
+        }
+    }
+    touched
+}
+
 /// The grass reads the climate's maps again each time they are painted.
 fn follow_climate(
     maps: Option<Res<crate::climate::ClimateMaps>>,
@@ -761,6 +810,35 @@ mod tests {
                 "{detail}: {thinning}"
             );
         }
+    }
+
+    #[test]
+    fn a_dig_builds_again_the_squares_it_reaches_and_no_others() {
+        let start = Start(Transform::from_translation(Vec3::Y * 2000.0));
+        // A hole a metre and a half round, 20 m east and 1 m south of the start.
+        let (east, south) = (20.0, 1.0);
+        let touched = dug_squares(&start, &[(start.at(east, south), 1.5)]);
+        let square = |east: f32, south: f32| {
+            (
+                (east / SQUARE_M).floor() as i32,
+                (south / SQUARE_M).floor() as i32,
+            )
+        };
+        assert!(touched.contains(&square(east, south)), "{touched:?}");
+        // Its edge and a blade's clearance reach into the square to its north, and only
+        // squares it comes that near are built again.
+        assert!(touched.contains(&square(east, -1.0)), "{touched:?}");
+        for &(i, j) in &touched {
+            let nearest = Vec2::new(east, south)
+                .clamp(
+                    Vec2::new(i as f32, j as f32) * SQUARE_M,
+                    Vec2::new(i as f32 + 1.0, j as f32 + 1.0) * SQUARE_M,
+                )
+                .distance(Vec2::new(east, south));
+            assert!(nearest <= 1.5 + blades::CLEAR_M + CELL_M, "{i},{j}");
+        }
+        assert!(!touched.contains(&square(0.0, 0.0)));
+        assert!(!touched.contains(&square(40.0, south)));
     }
 
     #[test]

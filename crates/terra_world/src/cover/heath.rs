@@ -49,12 +49,15 @@ const PATCH_M: f32 = 4.0;
 
 impl CoverSource for HeathCover {
     fn growing(&self, planet: &Planet, ground: Vec3, _at: Vec2) -> Growing {
-        // Nothing grows up through a pool's or a lake's water.
+        // Nothing grows up through a pool's or a lake's water, nor on dug ground.
         if drowned(planet, ground) {
             return Growing {
                 heath: 1.0,
                 ..default()
             };
+        }
+        if planet.dug(ground) {
+            return Growing::default();
         }
         let mut heath = self.round.heath.at(ground);
         [heath.lichen, heath.shrub, heath.sedge, heath.moss] = patches(
