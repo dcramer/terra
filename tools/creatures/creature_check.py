@@ -1,10 +1,12 @@
 """The creature check (D437): six measures a rigged, animated creature must pass, from its
 exported model alone, so any rig is judged the same, ours or bought. Calibrated on Quaternius's
-hand-rigged Deer.glb, which passes; a measure the deer fails is the measure's fault.
+hand-rigged Deer.glb (art/creatures/deer/, no longer in the game), which passes; a measure the
+deer fails is the measure's fault.
 
     tools/blender/run.sh tools/creatures/creature_check.py OUT.json MODEL.glb[@SCALE] ...
 
-SCALE is the size the game draws the model at (assets/data/creatures.ron; the deer 0.36).
+SCALE is the size the game draws the model at (assets/data/creatures.ron; the deer, as it was
+drawn, 0.36).
 Prints a line a model and its failures, writes every number to OUT.json and a table to OUT.md.
 `--table OUT.json PART.json ...` makes one table of several runs' models, so models can be
 checked side by side, one run each (the deer among them sets the skin-lag bar).
