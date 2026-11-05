@@ -604,6 +604,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D618](decisions/D618.md) | The alpha-mask prepass draws its materials in their draw priorities, tall crowns first and the far woods last | Tech | Agent | Decided | Bevy 0.20 draws a binned phase's batch sets in key… |
 | [D619](decisions/D619.md) | The lush forest's trees, floor and wind move into the world, and forest-run stays on the yard reading the same rules | Tech | Agent | Decided | The lush forest's look becomes the world's… |
 | [D620](decisions/D620.md) | Every world with mountains lays its first market town by the player's start | Tech | Agent | Decided | A world's land stands its market towns… |
+| [D621](decisions/D621.md) | With no world kept, the land behind the title screen is the new world it first offers | Tech | Agent | Decided | The title screen keeps the world itself behind it… |
 
 ## Tools and workflow
 

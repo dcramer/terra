@@ -130,6 +130,46 @@ fn the_name_is_typed_and_follows_the_mode_until_typed() {
     assert_eq!((menu.name.as_str(), menu.creative), ("Hill fort", false));
 }
 
+/// What `worlds::choose` puts behind the title screen with the worlds in `root`: the land's
+/// seed, and the dice New world rolls from.
+fn behind(root: &Path) -> (Option<u64>, worlds::Dice) {
+    use bevy::ecs::system::RunSystemOnce;
+    let mut app = bevy::ecs::world::World::new();
+    app.insert_resource(crate::shell::Options::from_args(std::iter::empty()).unwrap());
+    app.insert_resource(Choice {
+        title: true,
+        worlds: Some(root.to_path_buf()),
+        ..Choice::default()
+    });
+    app.run_system_once(worlds::choose).unwrap();
+    let seed = app.resource::<crate::shell::Options>().seed;
+    (seed, *app.resource::<worlds::Dice>())
+}
+
+/// A first launch loads its world once (D621): with no world kept, the land behind the title
+/// screen is the world New world first offers, so Create plays on it, as `act` plays a world
+/// of the land's seed and size without crossing; with a world kept, it is Continue's.
+#[test]
+fn with_no_world_kept_new_world_first_offers_the_land_behind_the_title() {
+    let root = folder_for("first-launch");
+    let (seed, dice) = behind(&root);
+    let mut menu = Menu::new(worlds::list(&root));
+    menu.dice = dice.0;
+    choose(&mut menu, Item::NewWorld);
+    assert_eq!(menu.seed(), seed);
+    let Some(Act::Make { seed: made, .. }) = choose(&mut menu, Item::Create) else {
+        panic!("Create makes a world");
+    };
+    assert_eq!(Some(made), seed);
+    // Another roll offers another world, which crosses to its own land.
+    choose(&mut menu, Item::Seed);
+    assert_ne!(menu.seed(), seed);
+    // A world kept: Continue's land behind, whatever the dice.
+    worlds::make(&root, "Kept", false, 5, 30_000.0, 1).unwrap();
+    assert_eq!(behind(&root).0, Some(5));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn new_world_rolls_a_seed_kept_in_its_world_and_takes_one_typed() {
     let root = folder_for("seeds");

@@ -289,6 +289,29 @@ pub fn play(commands: &mut Commands, options: &mut Options, world: World) {
     commands.insert_resource(Playing(world));
 }
 
+/// Where New world's rolled seeds start (`title::menu::Menu::dice`): the clock's nanoseconds
+/// read once at the start, the one place the game reads chance from outside it (D596). With
+/// no world kept, the land behind the title screen is the world New world first offers, the
+/// dice's first roll, so a first launch loads its 30 km land once, behind the menu, and
+/// Create plays on it; a seed of one's own, or another roll, crosses to its land (D620).
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct Dice(pub u64);
+
+impl Dice {
+    pub fn from_clock() -> Self {
+        Self(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |since| since.as_nanos() as u64),
+        )
+    }
+
+    /// The first seed New world rolls from these dice (`Menu::roll`).
+    pub fn first(self) -> u64 {
+        terra_gen::hash::splitmix64(self.0)
+    }
+}
+
 /// The radius a world made now is made at: `--radius`'s, else the game's world's (D13).
 pub fn new_radius_m(options: &Options) -> f32 {
     options.radius_asked.unwrap_or(WORLD_RADIUS_M)
@@ -355,14 +378,19 @@ pub fn choose(mut commands: Commands, mut options: ResMut<Options>, choice: Res<
     commands.insert_resource(Root(root.clone()));
     if choice.title {
         // The title screen opens over the world Continue plays, so it is loaded already; with
-        // none, over a world as New world makes them.
+        // none, over the world New world first offers (`Dice`), so it is loaded already too.
+        let dice = Dice::from_clock();
+        commands.insert_resource(dice);
         match list(&root).first() {
             Some(world) if options.seed.is_none() => {
                 options.seed = Some(world.meta.seed);
                 options.radius_m = world.meta.radius_m;
                 know_the_start(&mut commands, &world.meta);
             }
-            _ => options.radius_m = new_radius_m(&options),
+            _ => {
+                options.radius_m = new_radius_m(&options);
+                options.seed.get_or_insert(dice.first());
+            }
         }
         return;
     }

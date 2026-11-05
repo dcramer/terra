@@ -69,20 +69,14 @@ pub fn up(screen: &State<Screen>) -> bool {
 }
 
 /// Asked for: the first load ends on the title screen, with the worlds there are.
-fn open(mut commands: Commands, root: Option<Res<Root>>) {
+/// New world's seeds are rolled from the dice the land behind was chosen with
+/// (`worlds::Dice`), so with no world kept the first it offers is the land already loaded.
+fn open(mut commands: Commands, root: Option<Res<Root>>, dice: Option<Res<worlds::Dice>>) {
     let worlds = root.map_or_else(Vec::new, |root| worlds::list(&root.0));
     commands.insert_resource(Then(Screen::Title));
     let mut menu = Menu::new(worlds);
-    menu.dice = dice();
+    menu.dice = dice.map_or_else(worlds::Dice::from_clock, |dice| *dice).0;
     commands.insert_resource(Title(menu));
-}
-
-/// Where New world's rolled seeds start: the clock's nanoseconds, the one place the game
-/// reads chance from outside it; every world is then its seed's alone (D596).
-fn dice() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| since.as_nanos() as u64)
 }
 
 /// Where the title screen's camera stands and what it looks at, in metres east, up and
