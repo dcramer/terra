@@ -164,7 +164,8 @@ fn spawn(mut commands: Commands, asset: Res<AssetServer>, nav: Res<Nav>, land: R
             &mut commands,
             duck,
             at,
-            1.0,
+            // Larger than life, as the birds are.
+            1.5,
             Beast::new(Habit::Duck, POND, 3.5, 4.0, 3.0, s),
         );
     }

@@ -624,7 +624,8 @@ fn stand(land: Res<Land>, mut actors: Query<(&mut Transform, &Actor)>) {
     for (mut tr, actor) in &mut actors {
         let ground = land.height(tr.translation.xz());
         let y = if actor.swims {
-            crate::terrain::WATER - 0.05
+            // A swimmer's body rides at the waterline, its legs under it.
+            crate::terrain::WATER - 0.11 * tr.scale.y
         } else {
             ground + actor.lift
         };
