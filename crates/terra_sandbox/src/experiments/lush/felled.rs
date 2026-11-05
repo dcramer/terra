@@ -3,7 +3,8 @@
 //! or "Leafy tree" kind says at its height, stops a walker at its trunk as drawn
 //! (`footing::Trunk`), filed at its foot, which felling takes away, and leaves where it stood
 //! a stump of the floor's own wood, sawn, its end grain showing, cut in turn for wood as the
-//! "Stump" kind says.
+//! "Stump" kind says. What the stump is, a `woods::Stump`, is what a saved game keeps of it;
+//! a game loaded spawns it alone, and it is drawn again here.
 
 use super::floor::{self, laid_wood};
 use super::footing::{self, Trunk};
@@ -15,6 +16,7 @@ use terra_survival::harvest::Felled;
 use terra_world::flora::Growth;
 use terra_world::flora_kinds::{Cuttable, Flora};
 use terra_world::planet::Planet;
+use terra_world::woods::Stump;
 
 /// A stump is never thinner or thicker than its tree's trunk by more than this.
 const STUMP_SCALE: (f32, f32) = (0.4, 2.5);
@@ -22,7 +24,9 @@ const STUMP_SCALE: (f32, f32) = (0.4, 2.5);
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        stump_the_felled.run_if(terra_world::instance::in_world),
+        (stump_the_felled, draw_stumps)
+            .chain()
+            .run_if(terra_world::instance::in_world),
     );
 }
 
@@ -51,24 +55,19 @@ pub(super) fn standing(
             skirt_m: model.skirt_m,
         },
         Growth::new(cut, Some(place.translation), 1.4),
-        LeavesStump {
+        LeavesStump(Stump {
             at: place.translation,
             turn: place.rotation,
             trunk_m: model.trunk_m * place.scale.x,
             conifer: model.species != Species::Oak,
-        },
+        }),
     )
 }
 
 /// A tree that leaves a stump when it is felled: where it stood and how it was turned, how
 /// thick its trunk is at the foot, and whether it is a conifer, whose stump is of pine bark.
 #[derive(Component, Clone, Copy, Debug)]
-pub(super) struct LeavesStump {
-    at: Vec3,
-    turn: Quat,
-    trunk_m: f32,
-    conifer: bool,
-}
+pub(super) struct LeavesStump(Stump);
 
 /// What a felled tree's stump is drawn in: the floor's oak and pine bark and its end grain.
 #[derive(Resource, Clone)]
@@ -88,18 +87,26 @@ impl StumpLooks {
     }
 }
 
-/// Lays a stump where each tree felled since last time stood, on the ground there, as thick
-/// as its trunk, turned as it was.
-fn stump_the_felled(
+/// Leaves a stump, still to be drawn, where each tree felled since last time stood.
+fn stump_the_felled(mut commands: Commands, felled: Query<&LeavesStump, Added<Felled>>) {
+    for stood in &felled {
+        commands.spawn(stood.0);
+    }
+}
+
+/// Draws each stump still to be drawn, a tree's felled or a saved game's, on the ground there,
+/// as thick as its trunk, turned as it was.
+fn draw_stumps(
     mut commands: Commands,
-    felled: Query<&LeavesStump, Added<Felled>>,
+    stumps: Query<(Entity, &Stump), Without<Mesh3d>>,
     looks: Option<Res<StumpLooks>>,
     flora: Res<Flora>,
     planet: Res<Planet>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let Some(looks) = looks else { return };
-    for stood in &felled {
+    for (entity, &stood) in &stumps {
+        commands.entity(entity).despawn();
         let ground = planet.ground_at(stood.at);
         let at = ground.to_array().map(f32::to_bits);
         let mut dice = Seed(u64::from(at[0]) << 32 | u64::from(at[2]))
@@ -112,7 +119,7 @@ fn stump_the_felled(
         } else {
             looks.bark.clone()
         };
-        laid_wood(
+        let drawn = laid_wood(
             &mut commands,
             &mut meshes,
             "Stump",
@@ -125,6 +132,7 @@ fn stump_the_felled(
             (bark, looks.end_grain.clone()),
             flora.cut_rule("Stump").map(|rule| rule.at(1.0)),
         );
+        commands.entity(drawn).insert(stood);
     }
 }
 
@@ -214,12 +222,12 @@ mod tests {
                 place,
                 Visibility::default(),
                 Growth::new(cut, Some(foot), 1.4),
-                LeavesStump {
+                LeavesStump(Stump {
                     at: foot,
                     turn: place.rotation,
                     trunk_m: 0.3,
                     conifer: true,
-                },
+                }),
             ))
             .id();
         world.resource_mut::<Obstacles>().add(foot, 0.3);
@@ -263,5 +271,58 @@ mod tests {
             "the stump stands where the tree did"
         );
         assert_eq!(world.resource::<FloraGives>().item(stump_cut.gives.0), wood);
+        // What a saved game keeps of it is the tree's stump, and only the one.
+        let kept: Vec<Stump> = world.query::<&Stump>().iter(world).copied().collect();
+        assert_eq!(kept.len(), 1, "one stump kept: {kept:?}");
+        assert!(kept[0].at.distance(foot) < 1e-3 && kept[0].conifer);
+    }
+
+    /// A stump as a saved game gives it back, alone, is drawn where its tree stood, on the
+    /// ground, cut in turn for wood, and is the one stump kept, so a game saved again keeps it
+    /// once.
+    #[test]
+    fn a_stump_a_saved_game_gives_back_is_drawn_where_its_tree_stood() {
+        let planet = Planet::smooth(PlanetSpec {
+            seed: Seed(3),
+            radius_m: 2000.0,
+        });
+        let foot = planet.ground_at(planet.start()) - planet.start().normalize() * 0.2;
+        let mut app = App::new();
+        plugin(&mut app);
+        let world = app.world_mut();
+        world.insert_resource(Flora::read());
+        world.insert_resource(planet);
+        world.init_resource::<Assets<Mesh>>();
+        world.insert_resource(StumpLooks {
+            bark: Handle::default(),
+            pine_bark: Handle::default(),
+            end_grain: Handle::default(),
+        });
+        let saved = Stump {
+            at: foot,
+            turn: Quat::IDENTITY,
+            trunk_m: 0.35,
+            conifer: false,
+        };
+        world.spawn(saved);
+        for _ in 0..2 {
+            world.run_schedule(Update);
+        }
+        let drawn: Vec<(&Name, &Transform, &Growth, &Stump)> = world
+            .query::<(&Name, &Transform, &Growth, &Stump)>()
+            .iter(world)
+            .collect();
+        let [(name, at, growth, kept)] = drawn[..] else {
+            panic!("one stump drawn, not {}", drawn.len());
+        };
+        assert_eq!(name.as_str(), "Stump");
+        let ground = world.resource::<Planet>().ground_at(foot);
+        assert!(
+            at.translation.distance(ground) < 1e-3,
+            "on the ground where the tree stood"
+        );
+        assert!(growth.cut.is_some(), "cut for its wood");
+        assert_eq!(*kept, saved);
+        assert_eq!(world.query::<&Stump>().iter(world).count(), 1, "kept once");
     }
 }

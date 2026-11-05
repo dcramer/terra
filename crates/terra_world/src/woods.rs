@@ -36,7 +36,7 @@ mod felled;
 mod near;
 mod outline;
 
-pub use felled::{FellAgain, FelledWoods};
+pub use felled::{FellAgain, FelledWoods, Stump};
 pub use near::NearWoods;
 pub use terra_land::woods::TreeKind;
 use terra_land::woods::{Tree, Woods};
@@ -244,6 +244,7 @@ pub fn plugin(app: &mut App) {
         .world_resource::<felled::FarSquares>()
         .world_resource::<near::NearWoods>()
         .add_observer(felled::file_the_felled)
+        .add_observer(felled::forget_the_cut_stump)
         .configure_sets(
             OnEnter(InWorld),
             Planting.in_set(Building::View).before(LayingFloor),

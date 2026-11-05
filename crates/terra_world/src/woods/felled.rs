@@ -155,15 +155,49 @@ pub(super) fn unfar_the_felled(
     }
 }
 
-/// The grown trees of the woods felled or cleared away for good, by where their feet stood,
-/// as a saved game keeps them: they stay felled however often their block streams in again
-/// (D622), and a game loaded gives them back with [`FellAgain`].
-#[derive(SystemParam)]
-pub struct FelledWoods<'w> {
-    near: Option<Res<'w, NearWoods>>,
+/// The stump a tree felled for its logs left where it stood: its foot, how it was turned, how
+/// thick its trunk was there and whether it was a conifer, whose stump is of pine bark. Put
+/// on the stump that is drawn (the forest's `felled`), it is what a saved game keeps of it;
+/// an entity with only a `Stump`, as a game loaded spawns, is a stump still to be drawn. A
+/// stump cut in turn for its wood is kept no longer ([`forget_the_cut_stump`]).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct Stump {
+    pub at: Vec3,
+    pub turn: Quat,
+    pub trunk_m: f32,
+    pub conifer: bool,
 }
 
-impl FelledWoods<'_> {
+/// A stump cut for its wood, which takes its `Growth` as it goes (`terra_survival::harvest`),
+/// is no longer a stump to keep.
+pub(super) fn forget_the_cut_stump(
+    cut: On<Remove<Growth>>,
+    stumps: Query<(), With<Stump>>,
+    mut commands: Commands,
+) {
+    if stumps.contains(cut.entity) {
+        commands.entity(cut.entity).try_remove::<Stump>();
+    }
+}
+
+/// The grown trees of the woods felled or cleared away for good, by where their feet stood,
+/// as a saved game keeps them: they stay felled however often their block streams in again
+/// (D622), and a game loaded gives them back with [`FellAgain`]; and the stumps those felled
+/// for their logs left.
+#[derive(SystemParam)]
+pub struct FelledWoods<'w, 's> {
+    near: Option<Res<'w, NearWoods>>,
+    stumps: Query<'w, 's, &'static Stump>,
+}
+
+impl FelledWoods<'_, '_> {
+    /// The stumps standing, in a fixed order, so the same felling is saved the same.
+    pub fn stumps(&self) -> Vec<Stump> {
+        let mut stumps: Vec<Stump> = self.stumps.iter().copied().collect();
+        stumps.sort_unstable_by_key(|stump| foot_key(stump.at));
+        stumps
+    }
+
     /// Where each felled tree's foot stood, in a fixed order, so the same felling is saved
     /// the same.
     pub fn feet(&self) -> Vec<Vec3> {

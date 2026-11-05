@@ -66,6 +66,9 @@ struct SaveFile {
     /// Where the woods' grown trees felled stood (D622).
     #[serde(default)]
     felled: Vec<[f32; 3]>,
+    /// The stumps those felled for their logs left.
+    #[serde(default)]
+    stumps: Vec<ground::SavedStump>,
     /// The hour of the day.
     #[serde(default)]
     hour: Option<f32>,
@@ -250,6 +253,7 @@ fn load(
     // The ground as it was dug and filled (D21), and the trees felled (D622).
     ground::replay(&mut planet, &save.ground);
     ground::fell_again(&save.felled, &mut fell);
+    ground::stumps_again(&mut commands, &save.stumps);
 
     // The base and what stands in and around it, where it was begun.
     if let Some((at, turn)) = save.frame {
@@ -639,6 +643,7 @@ fn gather(
         day: Some(clock.day),
         ground: ground::kept(planet),
         felled: felled.feet().iter().map(Vec3::to_array).collect(),
+        stumps: ground::stumps_kept(&felled.stumps()),
         people: people
             .iter()
             .filter_map(|(person, at)| {
