@@ -62,6 +62,30 @@ fn put(
     e
 }
 
+/// The trunks to sit on: where each lies from the fire, how far it is turned off square to
+/// it, and its length as a share of the scan's 3 m.
+const LOGS: [(Vec2, f32, f32); 2] = [
+    (Vec2::new(-1.75, -1.05), 0.08, 0.75),
+    (Vec2::new(0.35, 2.05), -0.1, 0.8),
+];
+
+/// How much thicker the trunks are made than their length's share of the scan (0.29 m
+/// across): a seat about 0.4 m high, as a sitter's clip wants (its hips 0.57 m up).
+const GIRTH: f32 = 1.85;
+
+/// Where a sitter's feet go to sit on trunk `log`, `along` metres from its middle: in front
+/// of it on the fire's side, as the sitting clip puts the hips 0.32 m behind the feet.
+pub fn seat(log: usize, along: f32) -> Vec2 {
+    let (d, twist, _) = LOGS[log];
+    let yaw = across(d) + twist;
+    let length = Vec2::new(yaw.cos(), -yaw.sin());
+    let mut front = length.perp();
+    if front.dot(-d) < 0.0 {
+        front = -front;
+    }
+    FIRE + d + length * along + front * 0.32
+}
+
 /// The yaw that lays a model's length (its X) across the line from the fire, so it faces it.
 fn across(offset: Vec2) -> f32 {
     let t = Vec2::new(-offset.y, offset.x);
@@ -70,15 +94,16 @@ fn across(offset: Vec2) -> f32 {
 
 fn build(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>, mut nav: ResMut<Nav>) {
     let mut rng = Rng::new(0xca3b_f1e5);
-    // Two fallen trunks hauled up to sit on, a third of a ring apart, and a stump.
-    for (d, len) in [
-        (Vec2::new(-1.75, -1.05), 0.75),
-        (Vec2::new(0.35, 2.05), 0.8),
-    ] {
-        let yaw = across(d) + rng.range(-0.15, 0.15);
+    // Two fallen trunks hauled up to sit on, a third of a ring apart (rest.rs seats the party
+    // on them), and a stump.
+    for (d, twist, len) in LOGS {
+        let yaw = across(d) + twist;
         let p = FIRE + d;
-        nav.block_rect(p, Vec2::new(1.5 * len, 0.16), yaw);
-        put(&mut commands, &asset, &land, "trunk.glb", p, yaw, len, 0.06);
+        nav.block_rect(p, Vec2::new(1.5 * len, 0.05 + 0.145 * len * GIRTH), yaw);
+        let e = put(&mut commands, &asset, &land, "trunk.glb", p, yaw, len, 0.03);
+        commands.entity(e).entry::<Transform>().and_modify(move |mut t| {
+            t.scale = Vec3::new(len, len * GIRTH, len * GIRTH);
+        });
     }
     // The cooking tripod over the fire, its pot over the coals; it casts no shadow, as its
     // legs and pot about the fire's one point of light threw black wedges across the camp.

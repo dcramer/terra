@@ -51,7 +51,8 @@ const KNIGHT_SCALE: f32 = 1.84;
 const KINDS: &[(&str, [&str; 4])] = &[
     (
         BODY,
-        ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Idle_Loop"],
+        // Busy is sitting: a member at rest by the fire (rest.rs).
+        ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Sitting_Idle_Loop"],
     ),
     (KNIGHT, ["idle", "walk", "run", "idle"]),
     (crate::wildlife::STAG, ["Idle", "Walk", "Run", "Eat"]),
@@ -184,7 +185,7 @@ pub struct Wander {
 
 /// Their model, inside the actor, turned to face where they walk.
 #[derive(Component)]
-struct Model;
+pub struct Model;
 
 struct Dress {
     pieces: &'static [&'static str],
@@ -223,7 +224,7 @@ fn spawn(
                 pieces: &[],
                 held: &[],
             },
-            FIRE + Vec2::new(-1.5, 1.6),
+            FIRE + Vec2::new(1.9, 0.8),
             ["Aye?", "Lead on.", "My blade is yours."],
         ),
         (
@@ -233,7 +234,7 @@ fn spawn(
                 pieces: RANGER,
                 held: &[("models/held/bow.glb", "socket.hand.L")],
             },
-            FIRE + Vec2::new(1.5, 1.4),
+            FIRE + Vec2::new(-2.3, 0.9),
             ["Yes?", "I'll scout ahead.", "Quietly, now."],
         ),
         (
@@ -253,7 +254,7 @@ fn spawn(
                 pieces: PEASANT,
                 held: &[("models/held/hammer.glb", "socket.hand.R")],
             },
-            FIRE + Vec2::new(1.9, 0.8),
+            FIRE + Vec2::new(1.5, 1.4),
             ["Peace.", "The light guides us.", "I am ready."],
         ),
     ];
@@ -275,6 +276,27 @@ fn spawn(
         // The camera is the body's child, so it is in the body's scale.
         let s = if knight { KNIGHT_SCALE } else { 1.0 };
         let face = if knight { 1.6 } else { 1.66 };
+        // Their place when the party makes camp (rest.rs): Aldric keeps watch on the camp's
+        // edge, the others sit on the two trunks facing the fire.
+        let rest = match slot {
+            0 => crate::rest::Rest {
+                at: FIRE + Vec2::new(2.9, 1.3),
+                sits: false,
+            },
+            1 => crate::rest::Rest {
+                at: crate::camp::seat(0, -0.55),
+                sits: true,
+            },
+            2 => crate::rest::Rest {
+                at: crate::camp::seat(0, 0.55),
+                sits: true,
+            },
+            _ => crate::rest::Rest {
+                at: crate::camp::seat(1, 0.2),
+                sits: true,
+            },
+        };
+        commands.entity(actor).insert(rest);
         commands.entity(actor).insert(Member {
             slot,
             name,
@@ -304,7 +326,7 @@ fn spawn(
 }
 
 #[derive(Component)]
-pub struct PortraitOf(#[allow(dead_code)] pub Entity);
+pub struct PortraitOf(pub Entity);
 
 fn person(
     commands: &mut Commands,

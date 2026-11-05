@@ -10,6 +10,7 @@ mod mipmaps;
 mod motes;
 mod nav;
 mod party;
+mod rest;
 mod rim;
 mod scene;
 mod terrain;
@@ -122,6 +123,7 @@ fn main() {
             wildlife::plugin,
             motes::plugin,
             camp::plugin,
+            rest::plugin,
         ))
         .add_systems(
             PostStartup,

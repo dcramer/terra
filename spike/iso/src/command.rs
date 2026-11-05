@@ -272,33 +272,30 @@ fn keys(
     }
 }
 
-/// A scripted run (`--demo`): the whole party chosen and sent across the square.
+/// A scripted run (`--demo`): the whole party chosen and told to make camp, each walking to
+/// their place by the fire (rest.rs), where they sit or keep watch.
 fn script(
     args: Res<Args>,
     frame: Res<FrameCount>,
     mut commands: Commands,
-    members: Query<(Entity, &GlobalTransform), With<Member>>,
+    members: Query<(Entity, &GlobalTransform, &crate::rest::Rest), With<Member>>,
     nav: Res<Nav>,
     mut actors: Query<&mut Actor>,
-    mut markers: ResMut<Markers>,
 ) {
     if !args.demo || frame.0 != args.demo_at {
         return;
     }
-    let chosen: Vec<(Entity, Vec2)> = members
-        .iter()
-        .map(|(e, tr)| (e, tr.translation().xz()))
-        .collect();
-    for (e, _) in &chosen {
-        commands.entity(*e).insert(Selected);
+    for (e, tr, rest) in &members {
+        commands.entity(e).insert(Selected);
+        if let (Ok(mut actor), Some(path)) =
+            (actors.get_mut(e), nav.path(tr.translation().xz(), rest.at))
+        {
+            actor.path = path.into();
+            // The search ends on the open half-metre cell nearest the place; the last step,
+            // to the trunk's side, is the member's own.
+            actor.path.push_back(rest.at);
+        }
     }
-    order(
-        &chosen,
-        Vec2::new(-4.5, -1.5),
-        &nav,
-        &mut actors,
-        &mut markers,
-    );
 }
 
 /// The circles at their feet, BG-style: green for the chosen, a fainter ring for whoever
