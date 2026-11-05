@@ -9,12 +9,14 @@
 //! the forest carries up the far slopes to its line; each card stands for its grown tree and
 //! comes in where that tree's last level goes.
 
+use crate::cover::forest::{Crowns, Floor, LayingFloor, Stand, Wild, WoodsFloor};
 use crate::flora_kinds::Flora;
 use crate::grown::{self, Cards};
 use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::Planet;
 use crate::start::Start;
 use crate::streaming::{Class, Place, Streaming, Ticket};
+use crate::trees::Species;
 use bevy::platform::time::Instant;
 use bevy::{
     asset::RenderAssetUsages,
@@ -98,11 +100,20 @@ pub struct Planted {
 }
 
 /// How a conifer was drawn: out to how far from the eye its last level reaches, where its far
-/// card takes over, and as which kind, which its card is drawn as.
+/// card takes over, and as which kind, which its card is drawn as; and its crown and trunk as
+/// drawn, which the floor under it is laid by (`cover::forest`, D619).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Drawn {
     pub to_m: f32,
     pub kind: TreeKind,
+    /// Where its crown's middle is from its foot, in the world's directions.
+    pub crown_off: Vec3,
+    /// How far its leaves reach round that middle, and how thick its trunk is at the foot,
+    /// from its middle.
+    pub crown_m: f32,
+    pub trunk_m: f32,
+    /// A young tree's crown lets more light through.
+    pub young: bool,
 }
 
 pub type FarWoods = ExtendedMaterial<StandardMaterial, FarExtension>;
@@ -216,7 +227,10 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<FarWoods>::default())
         .world_resource::<Conifers>()
         .init_world_resource::<FarCards>()
-        .configure_sets(OnEnter(InWorld), Planting.in_set(Building::View))
+        .configure_sets(
+            OnEnter(InWorld),
+            Planting.in_set(Building::View).before(LayingFloor),
+        )
         .add_systems(OnEnter(InWorld), plant.in_set(Planting))
         .add_systems(
             Update,
@@ -249,6 +263,11 @@ impl ConiferModels for FloraPines {
         Drawn {
             to_m: grown::detail(3, 3, size).end_margin.end,
             kind: tree.kind,
+            // Its crown as wide for its height as its kind's, round its stem.
+            crown_off: Vec3::ZERO,
+            crown_m: 0.5 * CROWN[kind_index(tree.kind)] * tree.height_m * tree.squat,
+            trunk_m: (tree.height_m * 0.012).max(0.08),
+            young: false,
         }
     }
 
@@ -632,6 +651,8 @@ fn plant(
         .collect();
     let mut grown: HashMap<[u32; 3], Drawn> = HashMap::default();
     let mut drawn_as = [[0usize; 3]; 3];
+    // Their floor, by each tree as drawn (D619).
+    let mut canopy = Crowns::default();
     for tree in &near {
         let planted = planted(tree);
         trunks.add(crate::flora::Trunk {
@@ -644,7 +665,13 @@ fn plant(
         let drawn = conifers.draw(&mut entity, &planted);
         drawn_as[kind_index(tree.kind)][kind_index(drawn.kind)] += 1;
         grown.insert(foot_key(tree.at), drawn);
+        canopy.add(stand(&start, tree.at, &drawn));
     }
+    commands.insert_resource(WoodsFloor(Some(Floor::new(
+        Wild,
+        canopy,
+        seed.derive("floor"),
+    ))));
 
     // Far: billboards, the near crowns' colours, merged a square at a time.
     let [oak, pine, spruce] = conifers.far_crowns().map(|c| c.extend(1.0));
@@ -702,6 +729,28 @@ fn say_planted(
         mine(2),
         began.elapsed().as_secs_f32()
     );
+}
+
+/// A tree as its floor sees it, on the start's map (east and south of it, as the ground cover
+/// asks): its foot, and its crown and trunk as drawn.
+fn stand(start: &Start, foot: Vec3, drawn: &Drawn) -> Stand {
+    let on_map = |point: Vec3| {
+        let local = start.local(point);
+        Vec2::new(local.x, local.z)
+    };
+    let species = match drawn.kind {
+        TreeKind::Oak => Species::Oak,
+        TreeKind::Pine => Species::Pine,
+        TreeKind::Spruce => Species::Spruce,
+    };
+    Stand::of(
+        on_map(foot),
+        on_map(foot + drawn.crown_off),
+        drawn.crown_m,
+        species,
+        drawn.young,
+        drawn.trunk_m,
+    )
 }
 
 fn kind_index(kind: TreeKind) -> usize {
@@ -834,133 +883,4 @@ fn outward([across, up]: [i32; 2]) -> f32 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    use bevy::mesh::VertexAttributeValues;
-
-    /// The lush experiment's far forest draws by `far_mesh` too: a square's bounds hold its
-    /// cards whole, turned any way, though each is cut to its outline.
-    #[test]
-    fn a_squares_bounds_hold_its_cards_turned_any_way() {
-        let up = Vec3::Y * 2000.0;
-        let card = |foot, width, height, kind, luck| FarCard {
-            foot: up + foot,
-            width,
-            height,
-            kind,
-            luck,
-            comes_in: 0.0,
-        };
-        let cards = [
-            card(Vec3::new(3.0, 0.0, -4.0), 10.0, 25.0, 0, 0.3),
-            card(Vec3::new(-50.0, 0.4, 20.0), 6.0, 30.0, 1, 0.9),
-        ];
-        let (mesh, middle, aabb) = far_mesh(&cards);
-        assert!(mesh.count_vertices() >= 8);
-        let (low, high) = (Vec3::from(aabb.min()), Vec3::from(aabb.max()));
-        for card in &cards {
-            for turn in 0..16 {
-                let angle = turn as f32 / 16.0 * std::f32::consts::TAU;
-                let across = Vec3::new(libm::cosf(angle), 0.0, libm::sinf(angle));
-                for corner in [-0.5f32, 0.5] {
-                    for rise in [0.0, 1.0] {
-                        let p = card.foot - middle
-                            + across * corner * card.width
-                            + Vec3::Y * rise * card.height;
-                        assert!(
-                            p.cmpge(low - 1e-3).all() && p.cmple(high + 1e-3).all(),
-                            "{p} outside {low} to {high}"
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    fn tree(at: Vec3, kind: TreeKind, stature: f32) -> Tree {
-        Tree {
-            at,
-            kind,
-            stature,
-            luck: 0.5,
-            footing: terra_land::woods::Footing::Soil,
-            age: 1.0,
-        }
-    }
-
-    #[test]
-    fn a_card_standing_for_a_grown_tree_comes_in_where_it_goes_and_looks_as_it_was_drawn() {
-        let ground = Vec3::new(0.0, 30_000.0, 0.0);
-        let cards = [
-            // A tall pine grown near, drawn as a pine out to 588 m.
-            Card {
-                tree: tree(ground, TreeKind::Pine, 1.0),
-                widen: 1.0,
-                grown: Some(Drawn {
-                    to_m: 588.0,
-                    kind: TreeKind::Pine,
-                }),
-            },
-            // A stunted pine grown near, drawn as a young spruce out to 189 m.
-            Card {
-                tree: tree(ground + Vec3::X * 20.0, TreeKind::Pine, 0.25),
-                widen: 1.0,
-                grown: Some(Drawn {
-                    to_m: 189.0,
-                    kind: TreeKind::Spruce,
-                }),
-            },
-            // A pine past the grown trees.
-            Card {
-                tree: tree(ground + Vec3::X * 900.0, TreeKind::Pine, 1.0),
-                widen: 1.0,
-                grown: None,
-            },
-        ];
-        let (mesh, _, _) = merged(&cards);
-        let Some(VertexAttributeValues::Float32x4(colours)) = mesh.attribute(Mesh::ATTRIBUTE_COLOR)
-        else {
-            panic!("no colours");
-        };
-        let Some(VertexAttributeValues::Float32x2(sizes)) = mesh.attribute(Mesh::ATTRIBUTE_UV_1)
-        else {
-            panic!("no sizes");
-        };
-        let Some(VertexAttributeValues::Float32x3(feet)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
-        else {
-            panic!("no feet");
-        };
-        // A card's corners (four a band of its outline) all at its foot, each telling the
-        // shader the same but for which way it is widened.
-        let firsts: Vec<usize> = (0..feet.len())
-            .filter(|&i| i == 0 || feet[i] != feet[i - 1])
-            .collect();
-        assert_eq!(firsts.len(), cards.len());
-        let card = |k: usize| (colours[firsts[k]], sizes[firsts[k]]);
-        let (tall, tall_size) = card(0);
-        assert_eq!(tall[0], 0.5, "a pine's card");
-        assert!((tall[2] * HANDOVER_SCALE_M - 588.0).abs() < 1e-3);
-        let (stunted, stunted_size) = card(1);
-        assert_eq!(stunted[0], 1.0, "drawn as a spruce, its card a spruce's");
-        assert!((stunted[2] * HANDOVER_SCALE_M - 189.0).abs() < 1e-3);
-        // Krummholz's card is squat as its tree: wider for its height than a tall one's.
-        assert!(stunted_size[0] / stunted_size[1] > tall_size[0] / tall_size[1]);
-        let (beyond, _) = card(2);
-        assert_eq!(beyond[2], 0.0, "no grown tree to come in after");
-    }
-
-    #[test]
-    fn a_tree_toward_its_limit_is_shorter_and_squatter() {
-        let ground = Vec3::new(0.0, 30_000.0, 0.0);
-        let (tall, low) = (
-            planted(&tree(ground, TreeKind::Spruce, 1.0)),
-            planted(&tree(ground, TreeKind::Spruce, 0.3)),
-        );
-        assert!(low.height_m < tall.height_m * 0.4);
-        assert_eq!(tall.squat, 1.0);
-        assert!(low.squat > 1.5);
-        // Standing up off the ground, whatever its turn.
-        assert!((tall.rotation * Vec3::Y).dot(ground.normalize()) > 0.999);
-    }
-}
+mod tests;

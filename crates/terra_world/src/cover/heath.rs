@@ -5,6 +5,7 @@
 //! ground draws the communities themselves from the same map (`planet::LandMap`), so the
 //! blades and the ground under them agree.
 
+use super::forest::{WoodsCover, WoodsFloor};
 use super::{CoverRules, CoverSource, Growing};
 use crate::planet::Planet;
 use bevy::prelude::*;
@@ -49,7 +50,7 @@ const PATCH_M: f32 = 4.0;
 impl CoverSource for HeathCover {
     fn growing(&self, planet: &Planet, ground: Vec3, _at: Vec2) -> Growing {
         // Nothing grows up through a pool's or a lake's water.
-        if ground.length() < planet.water_near_m(ground) + 0.03 {
+        if drowned(planet, ground) {
             return Growing {
                 heath: 1.0,
                 ..default()
@@ -82,11 +83,18 @@ impl CoverSource for HeathCover {
     }
 }
 
-/// Grows the land's cover, unless the layer above grows its own.
+/// Whether the ground is under a pool's or a lake's water.
+pub(super) fn drowned(planet: &Planet, ground: Vec3) -> bool {
+    ground.length() < planet.water_near_m(ground) + 0.03
+}
+
+/// Grows the land's cover, unless the layer above grows its own; where the woods have laid
+/// their floor (`forest::WoodsFloor`), the forest's under their trees (D619).
 pub(super) fn grow_the_lands(
     mut commands: Commands,
     planet: Res<Planet>,
     rules: Option<Res<CoverRules>>,
+    woods: Option<ResMut<WoodsFloor>>,
 ) {
     let Some(round) = planet.round() else {
         return;
@@ -94,11 +102,18 @@ pub(super) fn grow_the_lands(
     if rules.is_some() {
         return;
     }
+    let land: Arc<dyn CoverSource> = Arc::new(HeathCover {
+        round: round.clone(),
+        mosaic: Noise::new(planet.seed().derive("heath patches")),
+    });
+    // The floor is the cover's from here on; nothing lays more on it.
+    commands.remove_resource::<WoodsFloor>();
+    let source: Arc<dyn CoverSource> = match woods.and_then(|mut woods| woods.0.take()) {
+        Some(floor) => Arc::new(WoodsCover { floor, land }),
+        None => land,
+    };
     commands.insert_resource(CoverRules {
-        source: Arc::new(HeathCover {
-            round: round.clone(),
-            mosaic: Noise::new(planet.seed().derive("heath patches")),
-        }),
+        source,
         seed: planet.seed().derive("land cover"),
     });
 }

@@ -16,6 +16,7 @@
 
 pub mod blades;
 mod floor;
+pub mod forest;
 mod heath;
 pub mod litter;
 
@@ -267,6 +268,9 @@ pub fn plugin(app: &mut App) {
         .init_world_resource::<BareGround>()
         .world_resource::<CoverRules>()
         .world_resource::<Meadow>()
+        .world_resource::<forest::WoodsFloor>()
+        // What stands on the woods' floor is laid before the cover is grown from it (D619).
+        .configure_sets(OnEnter(InWorld), forest::LayingFloor.in_set(Building::View))
         .add_systems(
             Update,
             // `grow` is over the size limit (D396): timed where it is added (D607).
@@ -276,7 +280,9 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             OnEnter(InWorld),
-            heath::grow_the_lands.in_set(Building::View),
+            heath::grow_the_lands
+                .in_set(Building::View)
+                .after(forest::LayingFloor),
         )
         .add_plugins(floor::plugin);
 }

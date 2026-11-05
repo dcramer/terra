@@ -65,6 +65,7 @@ mod species;
 mod sun_tests;
 mod tally;
 mod thicket;
+mod woods_floor;
 
 use floor::{Crowns, Stand};
 use footing::{Footing, Shapes, SolidShape, Trunk};
@@ -228,7 +229,7 @@ const LEAF_MEANS: [Vec3; 3] = [
 const PATH_SQUARE_M: f32 = 12.0;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins((floor::plugin, footing::plugin, seasons::plugin))
+    app.add_plugins((floor::plugin, seasons::plugin))
         .init_resource::<Unmipped>()
         // Its kinds of tree are the app's, grown once (`kinds`).
         .init_resource::<kinds::Grown>()
@@ -433,8 +434,62 @@ struct Forest {
     lumps: Handle<Foliage>,
 }
 
+/// The floor's own materials, the forest walk's and the woods' alike (D619).
+#[derive(Resource, Clone)]
+pub(super) struct FloorLooks {
+    /// Oak bark, which logs, stumps, sticks and saplings are of.
+    bark: Handle<Foliage>,
+    /// The floor's cards and the middle layer's.
+    floor_cards: Handle<Foliage>,
+    thicket_cards: Handle<Foliage>,
+    /// Pine bark, for logs and stumps among the conifers, and a young spruce's.
+    pine_bark: Handle<Foliage>,
+    spruce_bark: Handle<Foliage>,
+}
+
+impl FloorLooks {
+    fn new(
+        assets: &AssetServer,
+        materials: &mut Assets<Foliage>,
+        wind: &FoliageExtension,
+        looks: &Looks,
+    ) -> Self {
+        // Scanned furrowed bark, as an old oak's is, its colour in the range real bark has
+        // (D214), taken to the grey-brown of an old oak, about sRGB 88 (D221, D264).
+        let bark = bark_material(
+            assets,
+            materials,
+            wind,
+            "oak_bark",
+            Color::srgb(0.68, 0.66, 0.63),
+            0.03,
+            1.0,
+        );
+        // The floor's and the middle layer's: greyed and darkened a little, so the ferns' and
+        // herbs' pictures' spring green reads as leaves in a wood's shade, not lime, and lit
+        // through less, as backlit they glowed lime too (D268). Their reflection a third of a
+        // leaf's (D359): a fern's frond drawn as one flat card, seen at a grazing angle toward
+        // a low sun, mirrored the bright haze round the sun whole.
+        let floor_cards = materials.add({
+            let mut floor = looks.crown(Vec3::ZERO, Vec4::new(0.12, 0.1, 0.0, 0.0), BEVY_THROUGH);
+            floor.base.reflectance = FLOOR_CARD_REFLECTANCE;
+            floor
+        });
+        // The middle layer's, shaded as a crown is: its inside dark, its leaves lit through
+        // where the sun is behind them (`THICKET`, D269).
+        let thicket_cards = materials.add(looks.crown(Vec3::ZERO, THICKET, BEVY_THROUGH));
+        Self {
+            bark,
+            floor_cards,
+            thicket_cards,
+            pine_bark: looks.barks[3].0.clone(),
+            spruce_bark: looks.barks[5].0.clone(),
+        }
+    }
+}
+
 /// The forest's grass, as terra_world's ground cover asks it, from the floor's map (D246).
-struct LushCover(Arc<floor::Map>);
+struct LushCover(Arc<floor::Floor<Path>>);
 
 impl CoverSource for LushCover {
     /// None on dug ground (a dungeon's digs).
@@ -1147,33 +1202,17 @@ fn plant(
     // with the relief and roughness that let it catch the sky's light in the shade. The scan
     // is at the top of bark's range; this takes it to the grey-brown of an old oak, about
     // sRGB 88, as the first of `BARKS` (D221, D264). Fallen logs are of it too.
-    let bark = bark_material(
-        &assets,
-        &mut materials,
-        &wind,
-        "oak_bark",
-        Color::srgb(0.68, 0.66, 0.63),
-        0.03,
-        1.0,
-    );
     // The crowns' leaves, oak and conifer alike, are cards of the atlas grown plants use, so
     // all of them are drawn in one material (D222); the trees' materials are `Looks`.
     let cards = Cards::read();
     let looks = Looks::new(&assets, &mut materials, &mut plain, &cards, &wind);
-    // The floor's and the middle layer's: greyed and darkened a little, so the ferns' and
-    // herbs' pictures' spring green reads as leaves in a wood's shade, not lime, and lit through
-    // less, as backlit they glowed lime too (D268).
-    // Their reflection a third of a leaf's (D359): a fern's frond drawn as one flat card,
-    // seen at a grazing angle toward a low sun, mirrored the bright haze round the sun whole
-    // and stood pale grey-white, where a real frond's ruffled pinnae shade one another.
-    let floor_cards = materials.add({
-        let mut floor = looks.crown(Vec3::ZERO, Vec4::new(0.12, 0.1, 0.0, 0.0), BEVY_THROUGH);
-        floor.base.reflectance = FLOOR_CARD_REFLECTANCE;
-        floor
-    });
-    // The middle layer's, greyed and darkened as the floor's, but shaded as a crown is: its
-    // inside dark, its leaves lit through where the sun is behind them (`THICKET`, D269).
-    let thicket_cards = materials.add(looks.crown(Vec3::ZERO, THICKET, BEVY_THROUGH));
+    let FloorLooks {
+        bark,
+        floor_cards,
+        thicket_cards,
+        pine_bark,
+        spruce_bark,
+    } = FloorLooks::new(&assets, &mut materials, &wind, &looks);
     // Ivy on the trunks (D309): the forest floor's ivy cards (litter.ron, D275), its own
     // material, shaded as the middle layer's leaves are but lit through less, as ivy's leaves
     // are thick, and less dark inside, as it lies on the outside of its trunk.
@@ -1530,7 +1569,8 @@ fn plant(
         (Some(path), Some(clock)) => Some(path.sun(clock.hour)),
         _ => None,
     };
-    let map = floor::lay(
+    let mut map = floor::Floor::new(path, canopy, seed.derive("patches"));
+    floor::lay(
         &mut floor::Lay {
             commands: &mut commands,
             planet: &planet,
@@ -1546,8 +1586,8 @@ fn plant(
             cards: &cards,
             variants: &mut variants,
             bark: bark.clone(),
-            pine_bark: looks.barks[3].0.clone(),
-            spruce_bark: looks.barks[5].0.clone(),
+            pine_bark,
+            spruce_bark,
             atlas: floor_cards,
             thicket: thicket_cards,
             seed,
@@ -1556,8 +1596,8 @@ fn plant(
             shade: shade::NearShadows::new(start, east, south),
             sun: sun_way.map(|way| (&occluders, way)),
         },
-        path,
-        canopy,
+        &mut map,
+        &floor::Area::YARD,
     );
     commands.insert_resource(occluders);
     let map = Arc::new(map);
@@ -1632,7 +1672,19 @@ impl Path {
         }
         Self { lines, near }
     }
+}
 
+impl floor::Ways for Path {
+    fn edge_distance(&self, at: Vec2) -> f32 {
+        Path::edge_distance(self, at)
+    }
+
+    fn beside(&self, dice: &mut Rng, out_m: f32) -> Option<Vec2> {
+        Some(Path::beside(self, dice, out_m))
+    }
+}
+
+impl Path {
     /// How far a place is outside the nearest path's edge, negative on it; a large number
     /// far from every path.
     fn edge_distance(&self, at: Vec2) -> f32 {

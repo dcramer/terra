@@ -13,8 +13,8 @@
 use super::overgrowth::{self, Overgrowth};
 use super::species::Species;
 use super::{
-    CROWN_TINTS, DETAIL_FOR_M, Foliage, KINDS, LEAF, LEAF_MEANS, Looks, TreeModel, draw,
-    forest_seed, grow, scale_detail, wind,
+    CROWN_TINTS, DETAIL_FOR_M, FloorLooks, Foliage, KINDS, LEAF, LEAF_MEANS, Looks, TreeModel,
+    draw, forest_seed, grow, scale_detail, wind,
 };
 use bevy::prelude::*;
 use std::sync::Arc;
@@ -37,6 +37,13 @@ pub fn plugin(app: &mut App) {
         grow_conifers.in_set(Building::View).before(Planting),
     )
     .add_systems(Update, follow_detail);
+    // Their floor, laid by the forest walk's rules, and what stops a walker on it (D619): on
+    // always, the forest walk's too.
+    app.add_plugins((
+        super::floor::shared,
+        super::footing::plugin,
+        super::woods_floor::plugin,
+    ));
 }
 
 /// The lush forest's conifers, grown, and which of them each kind of tree is drawn from.
@@ -140,7 +147,15 @@ impl ConiferModels for LushConifers {
         entity.with_children(|children| {
             to_m = draw(children, model, &self.looks, size, false, moss_tag, None);
         });
-        Drawn { to_m, kind }
+        // Its crown and trunk as drawn, for the floor under it (D619).
+        Drawn {
+            to_m,
+            kind,
+            crown_off: tree.rotation * (model.crown.0 * Vec3::new(wide, scale, wide)),
+            crown_m: model.crown.1 * wide,
+            trunk_m: model.trunk_m * wide,
+            young: model.young,
+        }
     }
 
     /// As the lush forest's far forest colours its oaks, pines and spruces.
@@ -203,6 +218,7 @@ fn grow_conifers(
         stand_in: looks.stand_in_leaves.clone(),
         lumps: looks.shadow_lumps.clone(),
     });
+    commands.insert_resource(FloorLooks::new(&assets, &mut materials, &wind, &looks));
     commands.insert_resource(Conifers(Arc::new(LushConifers {
         models,
         pools,
