@@ -59,7 +59,7 @@
    "check": "the review desk"
   },
   {
-   "what": "Cheaper jobs (research/2026-11-05-agent-pipeline-tokens.md): the character skill split to a 120-line core with references/, then a code map (tools/characters/map.ts)",
+   "what": "Cheaper jobs (research/2026-11-05-agent-pipeline-tokens.md): a code map (tools/characters/map.ts); the skill is split (D627) and tools/characters/README.md is held over its 20 KB budget",
    "files": [".agents/skills/character/SKILL.md"],
    "check": "node tools/token-stats/job.mjs --job '<the job>'"
   }
