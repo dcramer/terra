@@ -300,6 +300,10 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         .single(world)
         .map_err(|_| refused("no player yet"))?;
     let items = world.resource::<Items>();
+    // The world's clock, which a saved game keeps (`save`).
+    let clock = world
+        .get_resource::<super::daylight::Clock>()
+        .map(|clock| json!({ "hour": number(clock.hour), "day": clock.day }));
     let feet = transform.translation;
     // How high the feet stand over the ground's true field and over the ground as drawn
     // (coarser far off): on the ground both near nothing, on a floor or a rock the field more.
@@ -381,6 +385,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         "health": number(body.health),
         "stamina": number(stamina.left),
         "fed": number(body.fed),
+        "clock": clock,
         "holding": inventory::holding(items, &backpack.0, &bar.0).map(|tool| items.name(tool)),
         // What is in hand whether or not it works, and how much use it has left (D99).
         "in_hand": bar.0.in_hand(&backpack.0).map(|item| json!({
