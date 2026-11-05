@@ -439,6 +439,27 @@ The town is bound by the CPU (the crowd measured so) as much as the GPU, so both
 - **Sound:** the cap on voices, and the well's bucket, the hens and a dog's bark.
 - **The game's half of the life check** (counts in view and what is heard, read over the remote protocol), and the one table of places (`places.ts`).
 
+## Into the game: what the demos replace
+
+The developers, 2026-11-04: "make sure that we use the lessons learned from this demos and put the assets/systems in the main game and pluck the old uggo assets away". The game from the title screen plays the 30 km world (D13), where `Planet::round()` and `has_mountains()` hold, so most old paths already run only on the 2 km test planet. What it still draws or runs from before the demos, and what replaces each:
+
+| Old | Where | Replaced by | State |
+|---|---|---|---|
+| Grass of single-triangle tufts, 10 m squares to 95 m round the start, under the cover's blades (714,045 at the 30 km start) | `flora.rs` | The cover's blades on every world (`cover`), the planet's own grass on the 2 km planet (`cover::heath::WildCover`) | Gone, 2026-11-05 |
+| Rocks to 300 m: `Rock_*`, `Rock_Moss_*`, ore rocks | `flora.rs` rocks | The forest floor's scans (`mossy_rock_*`, `boulder_1`) within 220 m of the woods (D619) | Next; the floor's rocks need ore first |
+| Bushes, ferns, herbs and flowers in the grass; understory hazel and woodland fern to 300 m | `flora/under.rs` | The forest floor's hazel, bracken, ferns, herbs and bilberry | Next, under the woods' floor first |
+| Stump and mossy log by the door (Ultimate Nature Pack) | `flora.ron` `ByTheDoor` | The floor's stumps and logs | Next |
+| Seven Tripo trees and three grass models | `assets/models/nature/` | Nothing loads them | To delete |
+| Deer herd of five (`Deer.glb`) by the start | `terra_creatures` `Lives::Herd` | Wildlife's red deer stag, hind and calf (`creatures.ron`) | Next; `tools/sandbox/loop.ts` hunts "Deer", the creature check measures against `Deer.glb` |
+| Spider lair, magic pool, Bren | `creatures.rs` `lair_site`, `terra_folk/pooling.rs` | Nothing; every demo runs `--no-lair` | The developers' call |
+| The lair's village (D108) beside the market town (D620) | `terra_folk/settlement.rs` | The market town, townsfolk and town animals | After the lair's call |
+| Pine, birch and leafy tree to 340 m; soil and stone ground tint | `flora.rs`, `terrain.rs`, without mountains | `woods` and `trees`, the mountain ground | 2 km planet only |
+| The pine grower `grown::tree`, `grown::build` | `grown/` | `trees/` | Still grows the 2 km trees, the woods' fallback and the lush floor's thicket |
+
+Kept, being the demos' own: the lake's shore stones, reeds and rushes, the heath's shrubs, the woods and their floor, the town.
+
+The 2 km test planet still serves runs with no world on disk: the `world` and `play-walk` benches, and any scene without `--radius`. Its grass is the cover's now. Its trees, rocks and bushes go with the old flora, and those benches then move to the 30 km world or retire for `lake-play` and `forest-run`.
+
 ## Open questions for the developers
 
 Each has a recommendation. The tools and the engine's parts (field maps, mountain ground, lakes, water, the climate bent by the ground) can go ahead; what each place holds waits on these answers (D49).

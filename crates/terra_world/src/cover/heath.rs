@@ -86,25 +86,51 @@ impl CoverSource for HeathCover {
     }
 }
 
+/// What grows on a world whose land round the start was not worked out, the 2 km test
+/// planet's: the planet's own grass where it says (`Planet::cover`), drawn by the cover's
+/// blades as every world's grass is.
+struct WildCover;
+
+impl CoverSource for WildCover {
+    fn growing(&self, planet: &Planet, ground: Vec3, _at: Vec2) -> Growing {
+        if drowned(planet, ground) || planet.dug(ground) {
+            return Growing::default();
+        }
+        let wild = planet.cover(ground, ground.normalize());
+        Growing {
+            grass: wild.grass,
+            lush: wild.lush,
+            ..default()
+        }
+    }
+}
+
 /// Whether the ground is under a pool's or a lake's water.
 pub(super) fn drowned(planet: &Planet, ground: Vec3) -> bool {
     ground.length() < planet.water_near_m(ground) + 0.03
 }
 
 /// Grows the land's cover, unless the layer above grows its own; where the woods have laid
-/// their floor (`forest::WoodsFloor`), the forest's under their trees (D619).
+/// their floor (`forest::WoodsFloor`), the forest's under their trees (D619). On a world
+/// whose land was not worked out, the planet's own grass; on the yard, the flat test level,
+/// nothing.
 pub(super) fn grow_the_lands(
     mut commands: Commands,
     planet: Res<Planet>,
     rules: Option<Res<CoverRules>>,
     woods: Option<ResMut<WoodsFloor>>,
+    options: Res<crate::shell::Options>,
 ) {
-    let Some(round) = planet.round() else {
-        return;
-    };
-    if rules.is_some() {
+    if rules.is_some() || options.yard() {
         return;
     }
+    let Some(round) = planet.round() else {
+        commands.insert_resource(CoverRules {
+            source: Arc::new(WildCover),
+            seed: planet.seed().derive("land cover"),
+        });
+        return;
+    };
     let land: Arc<dyn CoverSource> = Arc::new(HeathCover {
         round: round.clone(),
         mosaic: Noise::new(planet.seed().derive("heath patches")),
@@ -124,7 +150,41 @@ pub(super) fn grow_the_lands(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use terra_core::{Operation, PlanetSpec};
     use terra_gen::Seed;
+
+    #[test]
+    fn a_world_with_no_land_worked_out_grows_its_own_grass_and_none_where_dug() {
+        let mut planet = Planet::new(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        assert!(planet.round().is_none());
+        let start = planet.start();
+        let up = start.normalize();
+        let (east, north) = (
+            up.any_orthonormal_vector(),
+            up.any_orthonormal_vector().cross(up),
+        );
+        // A grassy place near the start, as the planet says.
+        let grassy = (0..64)
+            .map(|k| {
+                let turn = k as f32 * 0.7;
+                let off = (east * libm::cosf(turn) + north * libm::sinf(turn)) * (4.0 + k as f32);
+                planet.surface((start + off).normalize())
+            })
+            .find(|&at| !drowned(&planet, at) && planet.cover(at, at.normalize()).grass > 0.5)
+            .expect("grass grows somewhere near the test planet's start");
+        let grows = WildCover.growing(&planet, grassy, Vec2::ZERO);
+        assert_eq!(grows.grass, planet.cover(grassy, grassy.normalize()).grass);
+        planet.apply(&Operation::Dig {
+            centre: grassy,
+            radius: 2.0,
+        });
+        let dug = planet.ground_at(grassy);
+        assert!(planet.dug(dug));
+        assert_eq!(WildCover.growing(&planet, dug, Vec2::ZERO).grass, 0.0);
+    }
 
     #[test]
     fn an_even_mix_lies_in_patches_of_one_community_each_in_its_share() {
