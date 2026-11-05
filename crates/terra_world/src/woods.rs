@@ -114,6 +114,10 @@ pub struct Drawn {
     pub trunk_m: f32,
     /// A young tree's crown lets more light through.
     pub young: bool,
+    /// Whether it stops a walker, filed among the `flora::Obstacles` at its transform's
+    /// place, where felling it takes it away (the layer above's trees are felled as the
+    /// flora's are, D619); the flora's generic pine stops nobody.
+    pub solid: bool,
 }
 
 pub type FarWoods = ExtendedMaterial<StandardMaterial, FarExtension>;
@@ -268,6 +272,7 @@ impl ConiferModels for FloraPines {
             crown_m: 0.5 * CROWN[kind_index(tree.kind)] * tree.height_m * tree.squat,
             trunk_m: (tree.height_m * 0.012).max(0.08),
             young: false,
+            solid: false,
         }
     }
 
@@ -655,17 +660,32 @@ fn plant(
     let mut canopy = Crowns::default();
     for tree in &near {
         let planted = planted(tree);
+        let mut entity = commands.spawn((Name::new("Woods tree"), Visibility::default()));
+        let drawn = conifers.draw(&mut entity, &planted);
+        // A solid one felled is no longer found among the trunks (`Trunks::near`).
         trunks.add(crate::flora::Trunk {
             foot: tree.at,
             radius_m: (planted.height_m * 0.012).max(0.08),
             height_m: planted.height_m,
-            solid: false,
+            solid: drawn.solid,
         });
-        let mut entity = commands.spawn((Name::new("Woods tree"), Visibility::default()));
-        let drawn = conifers.draw(&mut entity, &planted);
         drawn_as[kind_index(tree.kind)][kind_index(drawn.kind)] += 1;
         grown.insert(foot_key(tree.at), drawn);
         canopy.add(stand(&start, tree.at, &drawn));
+    }
+    // For a scripted run to walk up to (as the forest walk says its nearest, D309).
+    let from_start = |tree: &&Tree| tree.at.distance(start.translation);
+    if let Some(tree) = near
+        .iter()
+        .min_by(|a, b| from_start(a).total_cmp(&from_start(b)))
+    {
+        let local = start.local(tree.at);
+        info!(
+            "Woods: the nearest grown tree to the start stands {:.1} m east and {:.1} m south, {:.1} m tall",
+            local.x,
+            local.z,
+            planted(tree).height_m
+        );
     }
     commands.insert_resource(WoodsFloor(Some(Floor::new(
         Wild,

@@ -352,6 +352,63 @@ pub(super) struct Lay<'a, 'w, 's> {
     pub sun: Option<(&'a SkyOccluders, Vec3)>,
 }
 
+/// The cut end of a log or a stump: the rings of a section of wood, weathered grey.
+pub(super) fn end_grain(
+    assets: &AssetServer,
+    plain: &mut Assets<StandardMaterial>,
+) -> Handle<StandardMaterial> {
+    let map = |file: &str, colour: bool| -> Handle<Image> {
+        assets
+            .load_builder()
+            .with_settings(move |settings: &mut ImageLoaderSettings| settings.is_srgb = colour)
+            .load(format!("materials/log_end/{file}"))
+    };
+    let arm = map("arm.jpg", false);
+    plain.add(StandardMaterial {
+        // Weathered: cut wood greys and darkens in a season.
+        base_color: Color::srgb(0.62, 0.56, 0.48),
+        base_color_texture: Some(map("color.jpg", true)),
+        normal_map_texture: Some(map("normal.jpg", false)),
+        occlusion_texture: Some(arm.clone()),
+        metallic_roughness_texture: Some(arm),
+        perceptual_roughness: 1.0,
+        reflectance: 0.25,
+        ..default()
+    })
+}
+
+/// A stump or log of the floor's wood, standing on its own as `place` says and cut as `cut`
+/// says: its bark, and its end grain where it is sawn, its footing to be fitted to it (D267).
+pub(super) fn laid_wood(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    name: &'static str,
+    (bark, end): (Build, Option<Build>),
+    place: Transform,
+    (material, end_grain): (Handle<Foliage>, Handle<StandardMaterial>),
+    cut: Option<Cuttable>,
+) -> Entity {
+    let mut mesh = bark.mesh();
+    // Kept on the CPU too, for its footing to be fitted to (D267).
+    mesh.asset_usage = bevy::asset::RenderAssetUsages::all();
+    mesh.generate_tangents()
+        .expect("a stump or log has normals and texture places");
+    let end = end.map(|end| meshes.add(end.mesh()));
+    let mut entity = commands.spawn((
+        Name::new(name),
+        Mesh3d(meshes.add(mesh)),
+        MeshMaterial3d(material),
+        place,
+        within(110.0),
+        Footing,
+        Growth::new(cut, None, 0.4),
+    ));
+    if let Some(end) = end {
+        entity.with_child((Mesh3d(end), MeshMaterial3d(end_grain), within(110.0)));
+    }
+    entity.id()
+}
+
 /// From one distance to another, crossfading at the far end.
 fn within(m: f32) -> VisibilityRange {
     VisibilityRange {
@@ -715,11 +772,7 @@ impl Lay<'_, '_, '_> {
     }
 
     fn cut_as(&self, name: &str, size: f32) -> Option<Cuttable> {
-        self.flora
-            .kinds()
-            .iter()
-            .find(|kind| kind.name == name)
-            .and_then(|kind| kind.cuttable(size))
+        self.flora.cut_rule(name).map(|rule| rule.at(size))
     }
 
     /// A rock's scan, its material under moss, `moss` of it.
@@ -778,27 +831,8 @@ impl Lay<'_, '_, '_> {
         )
     }
 
-    /// The cut end of a log or a stump: the rings of a section of wood, weathered grey.
     fn end_grain(&mut self) -> Handle<StandardMaterial> {
-        let map = |file: &str, colour: bool| -> Handle<Image> {
-            self.assets
-                .load_builder()
-                .with_settings(move |settings: &mut ImageLoaderSettings| settings.is_srgb = colour)
-                .load(format!("materials/log_end/{file}"))
-        };
-        let arm = map("arm.jpg", false);
-        let material = StandardMaterial {
-            // Weathered: cut wood greys and darkens in a season.
-            base_color: Color::srgb(0.62, 0.56, 0.48),
-            base_color_texture: Some(map("color.jpg", true)),
-            normal_map_texture: Some(map("normal.jpg", false)),
-            occlusion_texture: Some(arm.clone()),
-            metallic_roughness_texture: Some(arm),
-            perceptual_roughness: 1.0,
-            reflectance: 0.25,
-            ..default()
-        };
-        self.plain.add(material)
+        end_grain(self.assets, self.plain)
     }
 
     /// The material a shadow stand-in is drawn in, cast in full to `SHADOW_SHRINK` of `end`
@@ -1212,11 +1246,6 @@ pub(super) fn by_the_door<W: Ways>(
         ("Log", log_at, log.bark, log.end, log.radius, 0.12),
     ];
     for (name, at, bark, end, radius, sink) in wood {
-        let mut mesh = bark.mesh();
-        // Kept on the CPU too, for its footing to be fitted to (D267).
-        mesh.asset_usage = bevy::asset::RenderAssetUsages::all();
-        mesh.generate_tangents()
-            .expect("a stump or log has normals and texture places");
         let place = lay.on(at, &mut dice, sink, 1.0);
         let material = if map.here(at).needles > 0.5 {
             lay.pine_bark.clone()
@@ -1224,26 +1253,15 @@ pub(super) fn by_the_door<W: Ways>(
             lay.bark.clone()
         };
         let cut = lay.cut_as(name, 1.0);
-        let (mesh, end) = (
-            lay.meshes.add(mesh),
-            end.map(|end| lay.meshes.add(end.mesh())),
-        );
-        let mut entity = lay.commands.spawn((
-            Name::new(name),
-            Mesh3d(mesh),
-            MeshMaterial3d(material),
+        laid_wood(
+            lay.commands,
+            lay.meshes,
+            name,
+            (bark, end),
             place,
-            within(110.0),
-            Footing,
-            Growth::new(cut, None, 0.4),
-        ));
-        if let Some(end) = end {
-            entity.with_child((
-                Mesh3d(end),
-                MeshMaterial3d(end_grain.clone()),
-                within(110.0),
-            ));
-        }
+            (material, end_grain.clone()),
+            cut,
+        );
         if name == "Stump" {
             map.canopy.add(Stand::stump(at, radius * 1.3));
         } else {
@@ -1278,11 +1296,11 @@ pub(super) struct Sink(pub f32);
 const LOG_KINDS: u64 = 6;
 const STUMP_KINDS: u64 = 6;
 
-/// A log or stump: its bark, and its cut end, of end grain.
-struct Wood {
-    bark: Build,
-    end: Option<Build>,
-    radius: f32,
+/// A log or stump: its bark, and its cut end, of end grain, and how thick it is.
+pub(super) struct Wood {
+    pub bark: Build,
+    pub end: Option<Build>,
+    pub radius: f32,
 }
 
 /// A fallen log, lying along its x: its bark and cut end, how long and how thick at its
@@ -1563,7 +1581,7 @@ fn fix_winding(build: &mut Build) {
 
 /// A stump: a trunk's foot with its roots spreading into the ground, sawn flat with its end
 /// grain showing, or broken off in splinters; mossy where it sees the sky.
-fn stump(dice: &mut Rng, sawn: bool) -> Wood {
+pub(super) fn stump(dice: &mut Rng, sawn: bool) -> Wood {
     let radius = dice.range(0.3, 0.55);
     let height = if sawn {
         dice.range(0.3, 0.65)

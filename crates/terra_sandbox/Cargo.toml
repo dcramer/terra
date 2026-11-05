@@ -31,6 +31,11 @@ terra_voxel.workspace = true
 terra_walker.workspace = true
 terra_world.workspace = true
 
+[dev-dependencies]
+# A player with the starting kit, for gathering's tests (lush::felled).
+terra_survival = { workspace = true, features = ["testing"] }
+terra_walker = { workspace = true, features = ["testing"] }
+
 [features]
 # The frame recorder's freeze lines (terra_world's `hitch-log`, D576).
 hitch-log = ["terra_world/hitch-log"]

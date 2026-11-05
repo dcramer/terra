@@ -44,7 +44,6 @@ use terra_gen::smoothstep;
 use terra_gen::{Noise, Rng, Seed};
 use terra_world::cover::{CoverRules, CoverSource, Growing};
 use terra_world::detail::DetailScale;
-use terra_world::flora::Growth;
 use terra_world::flora_kinds::Flora;
 use terra_world::grown::Cards;
 use terra_world::instance::InstanceApp;
@@ -53,6 +52,7 @@ use terra_world::sky_occlusion::{self, SkyOccluders};
 
 pub mod conifers;
 mod far;
+mod felled;
 mod floor;
 mod footing;
 mod kinds;
@@ -68,7 +68,7 @@ mod thicket;
 mod woods_floor;
 
 use floor::{Crowns, Stand};
-use footing::{Footing, Shapes, SolidShape, Trunk};
+use footing::{Footing, Shapes, SolidShape};
 use species::{Form, Species};
 // The trees' shapes and meshes are the world's (`terra_world::trees`).
 use terra_world::trees::build::Build;
@@ -1213,6 +1213,11 @@ fn plant(
         pine_bark,
         spruce_bark,
     } = FloorLooks::new(&assets, &mut materials, &wind, &looks);
+    commands.insert_resource(felled::StumpLooks {
+        bark: bark.clone(),
+        pine_bark: pine_bark.clone(),
+        end_grain: floor::end_grain(&assets, &mut plain),
+    });
     // Ivy on the trunks (D309): the forest floor's ivy cards (litter.ron, D275), its own
     // material, shaded as the middle layer's leaves are but lit through less, as ivy's leaves
     // are thick, and less dark inside, as it lies on the outside of its trunk.
@@ -1265,13 +1270,7 @@ fn plant(
         way.x, way.y
     );
 
-    let cut_as = |name: &str, size: f32| {
-        flora
-            .kinds()
-            .iter()
-            .find(|kind| kind.name == name)
-            .and_then(|kind| kind.cuttable(size))
-    };
+    let cut_as = |name: &str, size: f32| flora.cut_rule(name).map(|rule| rule.at(size));
     let place_on = |at: Vec2, dice: &mut Rng, sink: f32, scale: f32| {
         let ground = planet.ground_at(start + east * at.x + south * at.y);
         let up_here = ground.normalize();
@@ -1461,26 +1460,10 @@ fn plant(
                     Name::new(format!("{:?}", model.species)),
                     place,
                     Visibility::default(),
-                    // It stops a walker at its trunk and roots as drawn, or at its skirt where
-                    // its branches reach the ground, so the camera is not walked in among a
-                    // spruce's boughs (D248, D267). Filed at its foot, where it is felled from.
-                    Trunk {
-                        wood: model.wood[0].clone(),
-                        crown: model.crown_near.clone(),
-                        reach_m: footing::trunk_reach(model.trunk_m),
-                        skirt_m: model.skirt_m,
-                    },
-                    Growth::new(
-                        cut_as(
-                            if model.species == Species::Oak {
-                                "Leafy tree"
-                            } else {
-                                "Pine"
-                            },
-                            model.height * scale,
-                        ),
-                        Some(foot),
-                        1.4,
+                    felled::standing(
+                        model,
+                        cut_as(felled::cut_kind(model.species), model.height * scale),
+                        &place,
                     ),
                 ))
                 // A young tree is a bush to the camera: it fades as a whole while it is

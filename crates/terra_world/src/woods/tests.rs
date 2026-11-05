@@ -9,6 +9,7 @@ fn drawn() -> Drawn {
         crown_m: 4.0,
         trunk_m: 0.3,
         young: false,
+        solid: false,
     }
 }
 

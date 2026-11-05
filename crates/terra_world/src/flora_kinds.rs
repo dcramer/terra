@@ -316,6 +316,11 @@ impl Flora {
         &self.0
     }
 
+    /// How the kind of this name is cut, if there is such a kind and it can be cut.
+    pub fn cut_rule(&self, name: &str) -> Option<CutRule> {
+        self.0.iter().find(|kind| kind.name == name)?.cut_rule()
+    }
+
     /// The kind a model at an asset path (`models/nature/<name>.glb`) is drawn as where it
     /// grows, and its name: the first kind naming it, one without ore's rust before one with
     /// (a fallen stone in a dungeon is a plain rock).
@@ -429,17 +434,47 @@ impl FloraDef {
 
     /// What cutting one of a size takes and gives, if it can be cut.
     pub fn cuttable(&self, size: f32) -> Option<Cuttable> {
+        self.cut_rule().map(|rule| rule.at(size))
+    }
+
+    /// How one of any size is cut, if it can be: kept by whatever draws things of this kind
+    /// later, as the woods' trees are drawn by the layer above (D619).
+    pub fn cut_rule(&self) -> Option<CutRule> {
         let cut = self.cut.as_ref()?;
-        let what = match cut.greater {
-            Some((from, greater)) if size >= from => greater,
-            _ => cut.what,
-        };
         let (_, base, per_m) = cut.gives;
-        Some(Cuttable {
-            what,
-            gives: (self.kind?, (base + per_m * size).round() as u32),
-            seconds: cut.seconds.0 + cut.seconds.1 * size,
+        Some(CutRule {
+            what: cut.what,
+            greater: cut.greater,
+            kind: self.kind?,
+            gives: (base, per_m),
+            seconds: cut.seconds,
         })
+    }
+}
+
+/// How a kind is cut at any size, as its `cut` in the file says.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CutRule {
+    what: Cut,
+    greater: Option<(f32, Cut)>,
+    kind: FloraKind,
+    gives: (f32, f32),
+    seconds: (f32, f32),
+}
+
+impl CutRule {
+    /// What cutting one of a size takes and gives.
+    pub fn at(&self, size: f32) -> Cuttable {
+        let what = match self.greater {
+            Some((from, greater)) if size >= from => greater,
+            _ => self.what,
+        };
+        let (base, per_m) = self.gives;
+        Cuttable {
+            what,
+            gives: (self.kind, (base + per_m * size).round() as u32),
+            seconds: self.seconds.0 + self.seconds.1 * size,
+        }
     }
 }
 

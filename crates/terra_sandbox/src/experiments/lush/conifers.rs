@@ -10,17 +10,20 @@
 //! kind nearest its height, scaled to it. They wear no ivy, which does not climb at the tree
 //! line; a band of moss round the foot, as their kind's do.
 
+use super::felled::{self, StumpLooks};
 use super::overgrowth::{self, Overgrowth};
 use super::species::Species;
 use super::{
     CROWN_TINTS, DETAIL_FOR_M, FloorLooks, Foliage, KINDS, LEAF, LEAF_MEANS, Looks, TreeModel,
-    draw, forest_seed, grow, scale_detail, wind,
+    draw, floor, forest_seed, grow, scale_detail, wind,
 };
 use bevy::prelude::*;
 use std::sync::Arc;
 use terra_world::detail::DetailScale;
+use terra_world::flora_kinds::{CutRule, Flora};
 use terra_world::grown::Cards;
 use terra_world::instance::{Building, InWorld};
+use terra_world::parting::ObstructionFade;
 use terra_world::planet::Planet;
 use terra_world::start::Start;
 use terra_world::woods::{ConiferModels, Conifers, Drawn, Planted, Planting, TreeKind};
@@ -49,14 +52,17 @@ pub fn plugin(app: &mut App) {
         super::floor::shared,
         super::footing::plugin,
         super::woods_floor::plugin,
+        felled::plugin,
     ));
 }
 
-/// The lush forest's conifers, grown, and which of them each kind of tree is drawn from.
+/// The lush forest's conifers, grown, and which of them each kind of tree is drawn from;
+/// and how an oak and a conifer are cut, as the flora's kinds say (`felled::cut_kind`).
 struct LushConifers {
     models: Vec<TreeModel>,
     pools: Pools,
     looks: Looks,
+    cuts: [Option<CutRule>; 2],
 }
 
 /// The models a tall oak, pine and spruce, and a young oak and spruce, are drawn from, each
@@ -127,12 +133,22 @@ impl ConiferModels for LushConifers {
         // where it stands; and squat toward its limit, as the woods say.
         let by_foot = Vec2::new(tree.foot.x + tree.foot.y, tree.foot.z);
         let wide = scale * (0.85 + 0.33 * overgrowth::chance(by_foot, 5.0)) * tree.squat;
-        entity.insert(Transform {
+        let place = Transform {
             // Sunk a little, so the root flare meets uneven ground.
             translation: tree.foot - up * 0.3,
             rotation: tree.rotation,
             scale: Vec3::new(wide, scale, wide),
-        });
+        };
+        // Felled as the forest walk's trees are, stopping a walker at its trunk till then.
+        let cut = self.cuts[usize::from(model.species != Species::Oak)];
+        entity.insert((
+            place,
+            felled::standing(model, cut.map(|rule| rule.at(tree.height_m)), &place),
+        ));
+        // A young tree is a bush to the camera, as the forest walk's are (D274).
+        if model.young {
+            entity.insert(ObstructionFade::default());
+        }
         // In steps of a twentieth, so trees share their distances (D230).
         let size = ((tree.height_m / DETAIL_FOR_M).clamp(0.45, 1.4) * 20.0).round() / 20.0;
         let grows = Overgrowth::of(model.species);
@@ -161,6 +177,7 @@ impl ConiferModels for LushConifers {
             crown_m: model.crown.1 * wide,
             trunk_m: model.trunk_m * wide,
             young: model.young,
+            solid: true,
         }
     }
 
@@ -191,6 +208,7 @@ fn grow_conifers(
     mut materials: ResMut<Assets<Foliage>>,
     mut plain: ResMut<Assets<StandardMaterial>>,
     parting: Option<Res<terra_world::parting::Parting>>,
+    flora: Option<Res<Flora>>,
 ) {
     let Some(cards) = cards else {
         return;
@@ -224,11 +242,22 @@ fn grow_conifers(
         stand_in: looks.stand_in_leaves.clone(),
         lumps: looks.shadow_lumps.clone(),
     });
-    commands.insert_resource(FloorLooks::new(&assets, &mut materials, &wind, &looks));
+    let floor_looks = FloorLooks::new(&assets, &mut materials, &wind, &looks);
+    commands.insert_resource(StumpLooks::of(
+        &floor_looks,
+        floor::end_grain(&assets, &mut plain),
+    ));
+    commands.insert_resource(floor_looks);
+    let cuts = [Species::Oak, Species::Pine].map(|species| {
+        flora
+            .as_ref()
+            .and_then(|flora| flora.cut_rule(felled::cut_kind(species)))
+    });
     commands.insert_resource(Conifers(Arc::new(LushConifers {
         models,
         pools,
         looks,
+        cuts,
     })));
 }
 
