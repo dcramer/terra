@@ -20,6 +20,12 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (make_clips, start_animators, dress, hold, walk, stand, gait, wander).chain(),
+        )
+        .add_systems(
+            PostUpdate,
+            in_place
+                .after(bevy::app::AnimationSystems)
+                .before(bevy::transform::TransformSystems::Propagate),
         );
 }
 
@@ -328,6 +334,10 @@ fn knight(commands: &mut Commands, asset: &AssetServer, at: Vec2, yaw: f32) -> (
             Transform::from_rotation(Quat::from_rotation_y(yaw))
                 .with_scale(Vec3::splat(KNIGHT_SCALE)),
             Model,
+            InPlace {
+                bone: "pelvis",
+                found: None,
+            },
             ChildOf(actor),
         ))
         .id();
@@ -524,6 +534,36 @@ fn hold(
             h.at,
             ChildOf(socket),
         ));
+    }
+}
+
+/// A model whose clips carry root motion (Tripo's walk and run move the pelvis forward up
+/// to 1.5 and 3.5 m along its local x): the walker moves the actor itself, so the bone is
+/// held over the actor's feet, or the body walks away from its ring, its shadow and its
+/// portrait camera and snaps back at each loop.
+#[derive(Component)]
+struct InPlace {
+    bone: &'static str,
+    found: Option<Entity>,
+}
+
+fn in_place(
+    mut bodies: Query<(Entity, &mut InPlace)>,
+    children: Query<&Children>,
+    names: Query<&Name>,
+    mut bones: Query<&mut Transform>,
+) {
+    for (body, mut pin) in &mut bodies {
+        if pin.found.is_none() {
+            pin.found = children
+                .iter_descendants(body)
+                .find(|e| names.get(*e).is_ok_and(|n| n.as_str() == pin.bone));
+        }
+        if let Some(bone) = pin.found
+            && let Ok(mut tr) = bones.get_mut(bone)
+        {
+            tr.translation.x = 0.0;
+        }
     }
 }
 

@@ -17,7 +17,13 @@ pub fn plugin(app: &mut App) {
     app.init_resource::<Drag>()
         .init_resource::<Hovered>()
         .init_resource::<Markers>()
-        .add_systems(Update, (hover, click, keys, script, circles).chain());
+        .add_systems(Update, (hover, click, keys, script).chain())
+        // After the transforms are propagated, so a ring is drawn where its walker is this
+        // frame, not where it stood the frame before.
+        .add_systems(
+            PostUpdate,
+            circles.after(bevy::transform::TransformSystems::Propagate),
+        );
 }
 
 #[derive(Resource, Default)]
