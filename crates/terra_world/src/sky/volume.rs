@@ -114,7 +114,7 @@ pub static HISTORY: Tunable = Tunable::new(
     "sky.cloud.history",
     1.0,
     0.0..=1.0,
-    "1 marches the clouds at an offset inside the pixel a frame and averages them in a history of their own, unless render.temporal_upscale is on (D617), 0 one ray through each pixel's middle, kept no frame",
+    "1 marches the clouds at an offset inside the pixel a frame and averages them in a history of their own at half the shown size (D617), 0 one ray through each pixel's middle, kept no frame",
 );
 
 /// Everything the march reads, handed to the render world when it changes.
@@ -128,6 +128,23 @@ pub struct CloudVolume {
     /// The half-resolution picture: rgb the light the clouds send the eye (exposed and
     /// premultiplied), a their opacity; zero where there is no cloud.
     pub target: Handle<Image>,
+    /// The size the march draws at, half the world's drawn size; under the temporal upscaler
+    /// smaller than `target`, which the resolve fills from it (`marched_and_shown`).
+    pub marched: UVec2,
+}
+
+/// The sizes of the march's picture and of the picture the veil lays over the scene, for a view
+/// whose world is drawn at `drawn` and shown at `shown` (D617). The march draws at half the drawn
+/// size; with a history of their own the clouds are resolved at half the shown size, the march's
+/// offsets inside its pixel filling the finer picture over the frames, as Unreal's volumetric
+/// render target traces at a quarter of the view and reconstructs at a half
+/// (`r.VolumetricRenderTarget.Mode` 0) and Horizon's Nubis marches a sixteenth of the pixels a
+/// frame. So under the temporal upscaler (D616) the clouds keep native's grid at the march's
+/// cost; without a history the picture is the march's own.
+pub fn marched_and_shown(drawn: UVec2, shown: UVec2, history: bool) -> (UVec2, UVec2) {
+    let half = |size: UVec2| (size / 2).max(UVec2::ONE);
+    let marched = half(drawn.min(shown));
+    (marched, if history { half(shown) } else { marched })
 }
 
 /// The camera the clouds are marched for.
@@ -141,6 +158,11 @@ pub struct VeilMaterial {
     #[texture(0)]
     #[sampler(1)]
     picture: Handle<Image>,
+    /// 1 (each lane) when the picture was marched through the view's unjittered projection, the
+    /// clouds keeping a history of their own (D617), so the veil reads it where each fragment's
+    /// jittered ray points; 0 when the march followed the main pass's jitter itself.
+    #[uniform(2)]
+    unjittered: Vec4,
 }
 
 impl Material for VeilMaterial {
@@ -312,43 +334,28 @@ fn tell(
         commands.entity(entity).insert(CloudVolumeView);
         sky.set_changed();
     }
-    // Half the size the world is drawn at, the main pass's when upscaled temporally (D616).
-    let drawn = drawn.map(|d| d.0).or(view.physical_viewport_size());
-    let size = (drawn.unwrap_or(UVec2::ONE) / 2).max(UVec2::ONE);
+    // Marched at half the size the world is drawn at, the main pass's when upscaled temporally
+    // (D616), and resolved at half the shown size (`marched_and_shown`).
+    let shown = view.physical_viewport_size().unwrap_or(UVec2::ONE);
+    let drawn = drawn.map_or(shown, |d| d.0);
+    let history = HISTORY.get() >= 0.5;
+    let (marched, size) = marched_and_shown(drawn, shown, history);
     // A new picture when the view's size changes, so the veil's material is prepared again.
     let target = match volume.as_ref().map(|v| v.target.clone()) {
         Some(handle) if images.get(&handle).is_some_and(|i| i.size() == size) => handle,
         _ => images.add(target(size)),
     };
-    match veil.single_mut() {
-        Ok((mut shown, material)) => {
-            shown.set_if_neq(Visibility::Inherited);
-            if let Some(m) = veils.get(&material.0)
-                && m.picture != target
-            {
-                veils.get_mut(&material.0).unwrap().picture = target.clone();
-            }
-        }
-        Err(_) => {
-            let sphere = Sphere::new(1.0)
-                .mesh()
-                .ico(3)
-                .unwrap()
-                .with_inverted_winding()
-                .unwrap();
-            commands.spawn((
-                Name::new("Cloud veil"),
-                Veil,
-                Mesh3d(meshes.add(sphere)),
-                MeshMaterial3d(veils.add(VeilMaterial {
-                    picture: target.clone(),
-                })),
-                Transform::from_scale(Vec3::splat(planet.radius_m() * 10.0)),
-                NotShadowCaster,
-                NoFrustumCulling,
-            ));
-        }
-    }
+    let wanted = VeilMaterial {
+        picture: target.clone(),
+        unjittered: Vec4::splat(if history { 1.0 } else { 0.0 }),
+    };
+    show_veil(
+        &mut commands,
+        &mut veil,
+        (&mut *veils, &mut *meshes),
+        planet.radius_m(),
+        wanted,
+    );
     let time = clock.map_or(WorldTime(0.0), |clock| clock.time());
     let winds = match (&fields, &start) {
         (Some(fields), Some(start)) => CloudWinds::of_world(fields, start),
@@ -409,7 +416,45 @@ fn tell(
         maps: clouds.maps.clone(),
         air: air.map(|a| a.0.clone()),
         target,
+        marched,
     });
+}
+
+/// The veil shown with the `wanted` picture, spawned the first time round a planet of `radius`.
+fn show_veil(
+    commands: &mut Commands,
+    veil: &mut Query<(&mut Visibility, &MeshMaterial3d<VeilMaterial>), With<Veil>>,
+    (veils, meshes): (&mut Assets<VeilMaterial>, &mut Assets<Mesh>),
+    radius: f32,
+    wanted: VeilMaterial,
+) {
+    match veil.single_mut() {
+        Ok((mut shown, material)) => {
+            shown.set_if_neq(Visibility::Inherited);
+            if let Some(m) = veils.get(&material.0)
+                && (m.picture != wanted.picture || m.unjittered != wanted.unjittered)
+            {
+                *veils.get_mut(&material.0).unwrap() = wanted;
+            }
+        }
+        Err(_) => {
+            let sphere = Sphere::new(1.0)
+                .mesh()
+                .ico(3)
+                .unwrap()
+                .with_inverted_winding()
+                .unwrap();
+            commands.spawn((
+                Name::new("Cloud veil"),
+                Veil,
+                Mesh3d(meshes.add(sphere)),
+                MeshMaterial3d(veils.add(wanted)),
+                Transform::from_scale(Vec3::splat(radius * 10.0)),
+                NotShadowCaster,
+                NoFrustumCulling,
+            ));
+        }
+    }
 }
 
 /// The lights the march gives the clouds, for the sun toward `sun`: the sun's and the dusk's.
@@ -460,5 +505,30 @@ mod tests {
         let levels: usize = (0..noise3d::LEVELS).map(|l| (side >> l).pow(3) * 4).sum();
         assert_eq!(image.data.as_ref().map(Vec::len), Some(levels));
         assert_eq!(image.texture_descriptor.mip_level_count, noise3d::LEVELS);
+    }
+
+    /// Under the temporal upscaler the clouds are marched at half the drawn size and resolved at
+    /// half the shown, native's grid; at native both are half the shown; with no history the
+    /// picture is the march's.
+    #[test]
+    fn the_clouds_resolve_at_half_the_shown_size_whatever_the_drawn() {
+        let shown = UVec2::new(1901, 1550);
+        let drawn = UVec2::new(1593, 1299);
+        assert_eq!(
+            marched_and_shown(drawn, shown, true),
+            (UVec2::new(796, 649), UVec2::new(950, 775))
+        );
+        assert_eq!(
+            marched_and_shown(shown, shown, true),
+            (UVec2::new(950, 775), UVec2::new(950, 775))
+        );
+        assert_eq!(
+            marched_and_shown(drawn, shown, false),
+            (UVec2::new(796, 649), UVec2::new(796, 649))
+        );
+        assert_eq!(
+            marched_and_shown(UVec2::ONE, UVec2::ONE, true).0,
+            UVec2::ONE
+        );
     }
 }

@@ -178,11 +178,13 @@ fn init_pipeline(
     });
 }
 
-/// The march's and the resolve's bind groups for a view, and the picture's size.
+/// The march's and the resolve's bind groups for a view, the march's picture's size and the
+/// resolved one's.
 #[derive(Component)]
 struct Marching {
     bind_group: BindGroup,
     resolve: BindGroup,
+    marched: UVec2,
     size: UVec2,
 }
 
@@ -237,10 +239,9 @@ fn next_frame(
     // takes it (D472), so two runs of one build march one frame of one script alike.
     let index = count % OFFSETS + 1;
     // Off, one ray through each pixel's middle of the view's own (TAA-jittered) projection and
-    // nothing kept, as before D617. Under the temporal upscaler it is off whatever the tune says:
-    // there the upscaler's own history over the cloud's was 15% further from the supersampled
-    // reference than the march alone (play-3080 j12).
-    let on = super::HISTORY.get() >= 0.5 && crate::upscale::TEMPORAL.get() < 0.5;
+    // nothing kept, as before D617. Under the temporal upscaler too, now the history is resolved
+    // at half the shown size rather than the march's (`marched_and_shown`).
+    let on = super::HISTORY.get() >= 0.5;
     let offset = Vec2::new(halton(index, 2), halton(index, 3)) - 0.5;
     let frame = Frame {
         world_from_clip: now.inverse(),
@@ -309,10 +310,11 @@ fn prepare(
         let Some(depth) = prepass.depth_only_view() else {
             continue;
         };
+        // The history is the veil's picture's size, the march's its own (`marched_and_shown`).
         let size = target.size_2d();
         let through = turned_clip_from_world(view.clip_from_view, &view.world_from_view);
         let cut = taa.is_some_and(|taa| taa.reset);
-        let marched = picture(&mut cache, &device, "cloud_march", size);
+        let marched = picture(&mut cache, &device, "cloud_march", volume.marched);
         let a = picture(&mut cache, &device, "cloud_history_a", size);
         let b = picture(&mut cache, &device, "cloud_history_b", size);
         // Held: neither marched nor resolved, the picture and the history as the last moved
@@ -362,6 +364,7 @@ fn prepare(
             Marching {
                 bind_group,
                 resolve,
+                marched: volume.marched,
                 size,
             },
             history,
@@ -387,20 +390,24 @@ fn march(
     };
     let diagnostics = ctx.diagnostic_recorder();
     let diagnostics = diagnostics.as_deref();
-    let groups = (
-        marching.size.x.div_ceil(GROUP),
-        marching.size.y.div_ceil(GROUP),
-    );
+    let groups = |size: UVec2| (size.x.div_ceil(GROUP), size.y.div_ceil(GROUP));
     // Marched, then resolved into the history in a pass of its own, so the march's writes are
     // done before the resolve reads them; each its own span.
-    for (label, compute, bind_group, offsets) in [
+    for (label, compute, bind_group, offsets, groups) in [
         (
             "clouds",
             compute,
             &marching.bind_group,
             &[offset.offset][..],
+            groups(marching.marched),
         ),
-        ("clouds_resolve", resolve, &marching.resolve, &[][..]),
+        (
+            "clouds_resolve",
+            resolve,
+            &marching.resolve,
+            &[][..],
+            groups(marching.size),
+        ),
     ] {
         let span = diagnostics.time_span(ctx.command_encoder(), label);
         {
