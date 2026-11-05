@@ -144,3 +144,42 @@ fn a_woods_floor_lies_among_its_trees_and_gives_way_to_the_land_past_them() {
     assert_eq!(mix(&heath, &floor, 0.0), heath);
     assert_eq!(mix(&heath, &floor, 1.0), floor);
 }
+
+#[test]
+fn what_lies_is_taken_off_exactly_one_circle_at_a_time() {
+    let (mut floor, at) = map_with(&[]);
+    let open = floor.here(at).lying;
+    floor.lying.add(at, 0.5);
+    floor.lying.add(at, 0.5);
+    floor.lying.add(at + Vec2::X, 0.3);
+    floor.lying.remove(at, 0.5);
+    assert!(
+        floor.here(at).lying < 0.0,
+        "one of the two still lies there"
+    );
+    floor.lying.remove(at, 0.4);
+    floor.lying.remove(at, 0.5);
+    floor.lying.remove(at + Vec2::X, 0.3);
+    assert_eq!(
+        floor.here(at).lying,
+        open,
+        "all three gone, none other taken"
+    );
+}
+
+#[test]
+fn a_stump_is_taken_off_and_a_tree_on_the_same_foot_stays() {
+    let foot = Vec2::new(31.0, -17.0);
+    let tree = Stand::of(foot, foot, 7.0, Species::Oak, false, 0.5);
+    let (mut floor, _) = map_with(&[tree]);
+    floor.canopy.add(Stand::stump(foot, 0.4));
+    floor.canopy.add(Stand::stump(foot + Vec2::X * 3.0, 0.4));
+    assert_eq!(floor.canopy.len(), 3);
+    floor.canopy.remove_stump(foot);
+    assert_eq!(floor.canopy.len(), 2);
+    floor.canopy.remove_stump(foot);
+    assert_eq!(floor.canopy.len(), 2, "the tree is no stump");
+    floor.canopy.remove_stump(foot + Vec2::X * 3.0);
+    assert_eq!(floor.canopy.len(), 1);
+    assert!(floor.canopy.among(foot), "the tree still stands");
+}

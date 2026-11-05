@@ -143,7 +143,7 @@ enum State {
 
 /// The woods' grown trees round the player, block by block, and the felled.
 #[derive(Resource)]
-pub(super) struct NearWoods {
+pub struct NearWoods {
     map: Map,
     seed: terra_gen::Seed,
     /// The start's map, which the floor under the trees is laid on.
@@ -234,6 +234,13 @@ impl NearWoods {
             taken.extend(gone);
         }
         taken
+    }
+
+    /// Whether the trees of every block within `reach_m` of a point have arrived, their
+    /// crowns on the woods' floor (`arrive`): what is laid among them there finds them.
+    pub fn trees_in(&self, point: Vec3, reach_m: f32) -> bool {
+        within(self.map.at(point), reach_m)
+            .all(|block| matches!(self.blocks.get(&block), Some(State::In { .. })))
     }
 
     /// How many grown trees stand.
@@ -473,6 +480,29 @@ mod tests {
         assert!(floor.read().canopy.is_empty());
         assert_eq!(floor.read().here(under).light, open);
         assert_eq!(floor.take_changes().len(), 1);
+    }
+
+    /// The trees round a place have arrived only when every block within reach of it is in:
+    /// a block still laying, or not asked yet, has not put its crowns on the floor.
+    #[test]
+    fn trees_are_in_round_a_place_only_once_every_block_near_it_is() {
+        let ground = Vec3::new(0.0, 30_000.0, 0.0);
+        let map = Map::new(ground, Vec3::X, Vec3::NEG_Z, ground.length());
+        let start = Start(Transform::from_translation(ground));
+        let mut near = NearWoods::new(map, terra_gen::Seed(1), start, Arc::new(Bare));
+        let side = BLOCK_CELLS as f32 * SPACING_M;
+        // Map east and north: north is the world's -z.
+        let point = |at: Vec2| ground + Vec3::new(at.x, 0.0, -at.y);
+        let middle = point(Vec2::splat(side / 2.0));
+        assert!(!near.trees_in(middle, 5.0), "no block is in yet");
+        near.arrive((0, 0), Vec::new(), None);
+        assert!(near.trees_in(middle, 5.0));
+        assert!(
+            !near.trees_in(middle, side),
+            "the blocks round it are not in"
+        );
+        let edge = point(Vec2::new(side - 1.0, side / 2.0));
+        assert!(!near.trees_in(edge, 5.0), "the block east of it is not in");
     }
 
     /// The blocks within reach are asked for, the nearest first; one is not taken out until

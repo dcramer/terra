@@ -212,6 +212,24 @@ impl Crowns {
         }
     }
 
+    /// Takes out one stump whose foot is exactly at `at`, a stand with no crown
+    /// (`Stand::stump`), and never a tree standing there: as a piece of the woods' floor
+    /// streamed out takes its own.
+    pub fn remove_stump(&mut self, at: Vec2) {
+        let key = square(at, FLOOR_SQUARE_M);
+        if let Some(stands) = self.filed.get_mut(&key) {
+            if let Some(k) = stands
+                .iter()
+                .position(|stand| stand.at == at && stand.crown_m == 0.0)
+            {
+                stands.swap_remove(k);
+            }
+            if stands.is_empty() {
+                self.filed.remove(&key);
+            }
+        }
+    }
+
     /// How many trees are filed.
     pub fn len(&self) -> usize {
         self.filed.values().map(Vec::len).sum()
@@ -290,6 +308,20 @@ impl Lying {
             .entry(square(at, FLOOR_SQUARE_M))
             .or_default()
             .push((at, radius));
+    }
+
+    /// Takes out one circle exactly as it was added, as a piece of the woods' floor streamed
+    /// out takes its own.
+    pub fn remove(&mut self, at: Vec2, radius: f32) {
+        let key = square(at, FLOOR_SQUARE_M);
+        if let Some(circles) = self.filed.get_mut(&key) {
+            if let Some(k) = circles.iter().position(|circle| *circle == (at, radius)) {
+                circles.swap_remove(k);
+            }
+            if circles.is_empty() {
+                self.filed.remove(&key);
+            }
+        }
     }
 
     /// How far a place is from the nearest edge of what lies there, up to 8 m; negative

@@ -17,7 +17,7 @@ use bevy::math::Vec3;
 
 /// What is streamed after the load, the most wanted first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum Class {
+pub enum Class {
     /// The ground round the player.
     NearGround,
     /// The woods' grown trees round the player (D622), before they come within their last

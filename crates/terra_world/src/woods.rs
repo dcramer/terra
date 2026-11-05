@@ -37,6 +37,7 @@ mod near;
 mod outline;
 
 pub use felled::{FellAgain, FelledWoods};
+pub use near::NearWoods;
 pub use terra_land::woods::TreeKind;
 use terra_land::woods::{Tree, Woods};
 

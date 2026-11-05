@@ -19,8 +19,9 @@ use bevy::{
     prelude::*,
     tasks::{Task, TaskPool},
 };
+pub use order::Class;
+pub(crate) use order::Place;
 use order::{Budget, Costs, Meter};
-pub(crate) use order::{Class, Place};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -36,8 +37,10 @@ use terra_gen::par::Work;
 /// the lake's main thread took 15 to 22 ms a frame for the 30 s the far ground streamed, not
 /// 6.5 ms; nice 19 did not help (load-time j5), as the threads shared the game's cores' caches
 /// and hyperthreads, not only their time (perf-regress j1, D603).
+/// Other layers stream their own under its budget through `may_enter`, `commands` and
+/// `entered` (the woods' floor, D622).
 #[derive(Resource)]
-pub(crate) struct Streaming {
+pub struct Streaming {
     pool: TaskPool,
     waiting: Vec<Waiting>,
     running: Vec<(Class, Task<()>)>,
@@ -169,7 +172,7 @@ impl Streaming {
 
     /// Whether one more result of `class` may enter the world this frame, at what one has
     /// been measured to cost.
-    pub(crate) fn may_enter(&self, class: Class) -> bool {
+    pub fn may_enter(&self, class: Class) -> bool {
         let budget = self.frame_budget();
         let cost = self.costs.of(class, budget.0);
         self.meter.may_enter(class, budget, cost)
@@ -178,17 +181,13 @@ impl Streaming {
     /// Where a result of `class` is put in the world: commands applied by `admit` this frame,
     /// timed, so what spawning it costs is measured and charged to its class. Anything that
     /// enters the world under the budget is spawned through these.
-    pub(crate) fn commands<'w>(
-        &mut self,
-        class: Class,
-        commands: &Commands<'w, '_>,
-    ) -> Commands<'w, '_> {
+    pub fn commands<'w>(&mut self, class: Class, commands: &Commands<'w, '_>) -> Commands<'w, '_> {
         commands.rebound_to(&mut self.queues[class.index()])
     }
 
     /// Counts a result of `class` in, put in the world since `began` and bringing `bytes`:
     /// the time since `began` and what one of its class costs once in.
-    pub(crate) fn entered(&mut self, class: Class, began: Instant, bytes: usize) {
+    pub fn entered(&mut self, class: Class, began: Instant, bytes: usize) {
         let budget = self.frame_budget().0;
         let ms = began.elapsed().as_secs_f32() * 1000.0 + self.costs.of(class, budget);
         self.meter.entered(class, ms, bytes);
