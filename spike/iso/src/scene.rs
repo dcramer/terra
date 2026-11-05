@@ -246,11 +246,12 @@ fn light_the_hour(
         Hour::Dusk => (
             16.0,
             -58.0,
-            Color::srgb(1.0, 0.58, 0.32),
-            3_500.0,
-            // A grey-blue fill, low, so the fire is the light the eye goes to.
-            Color::srgb(0.56, 0.62, 0.76),
-            240.0,
+            Color::srgb(1.0, 0.64, 0.4),
+            2_400.0,
+            // A cool blue fill, low, so the fire is the light the eye goes to and the shade
+            // against it is blue, not olive.
+            Color::srgb(0.4, 0.55, 0.85),
+            260.0,
             1.0,
             1.0,
         ),
@@ -294,7 +295,7 @@ fn light_the_hour(
     ambient.brightness = nits;
     clear.0 = sky.darker(0.4);
     if let Some(mut m) = materials.get_mut(&glow.flames) {
-        m.emissive = LinearRgba::rgb(30.0, 12.0, 3.0) * lit.max(0.15);
+        m.emissive = LinearRgba::rgb(16.0, 5.5, 1.0) * lit.max(0.15);
     }
     for (mut flame, mut vis) in &mut flames {
         let base = if flame.fire { 170_000.0 } else { 9_000.0 };

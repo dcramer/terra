@@ -171,8 +171,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     colour *= mix(0.72, 1.0, canopy);
 
     pbr_input.material.base_color = vec4<f32>(colour, 1.0);
-    pbr_input.diffuse_occlusion = vec3<f32>(canopy * canopy);
-    pbr_input.specular_occlusion = canopy;
+    // Times the screen-space AO already in it (assigning it dropped the AO, so nothing sat
+    // on the ground), and never black: a wood's floor still sees some sky between crowns.
+    pbr_input.diffuse_occlusion *= vec3<f32>(0.2 + 0.8 * canopy * canopy);
+    pbr_input.specular_occlusion *= canopy;
     pbr_input.material.perceptual_roughness = mix(0.92, 0.45, wet);
     // The relief, in a frame laid on the slope: x east, y north (OpenGL's green up).
     let tx = normalize(vec3<f32>(1.0, 0.0, 0.0) - n * n.x);

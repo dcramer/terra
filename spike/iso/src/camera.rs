@@ -64,7 +64,7 @@ fn spawn(mut commands: Commands, args: Res<Args>, mut images: ResMut<Assets<Imag
         ScreenSpaceAmbientOcclusion::default(),
         ShadowFilteringMethod::Temporal,
         Bloom::NATURAL,
-        Tonemapping::AgX,
+        Tonemapping::TonyMcMapface,
         Exposure { ev100: 9.0 },
         // A little haze: the land farther off (up the screen) a shade paler and bluer than
         // the crowns near, its colour the hour's (scene.rs).

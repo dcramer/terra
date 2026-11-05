@@ -26,7 +26,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // Under the oaks the crowns hide the sky: its fill dimmed as the ground's is there
     // (ground.wesl), and the rim with it (rim.rs's canopy map, 128 m about the middle).
     let open = textureSample(canopy_map, canopy_sampler, in.world_position.xz / 128.0 + 0.5).r;
-    pbr_input.diffuse_occlusion *= vec3<f32>(open * open);
+    pbr_input.diffuse_occlusion *= vec3<f32>(0.2 + 0.8 * open * open);
     pbr_input.specular_occlusion *= open;
     pbr_input.material.emissive = vec4<f32>(pbr_input.material.emissive.rgb * open, pbr_input.material.emissive.a);
     var out: FragmentOutput;
