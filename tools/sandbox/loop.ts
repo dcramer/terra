@@ -49,7 +49,56 @@ const nearest = async (test: (near: game.Near) => boolean) => {
   if (!found) throw new Error("nothing like that is near");
   return found;
 };
-const alive = (what: string) => (near: game.Near) => near.what === what && !near.doing?.startsWith("Dead");
+const aliveDeer = (near: game.Near) => !!near.what?.startsWith("Red deer") && !near.doing?.startsWith("Dead");
+
+/// How far off the hunt shoots from: past the 18 m a red deer bolts within (creatures.ron).
+const SHOT_M = 21;
+/// How high over a deer's feet to aim from so far off, metres: the arrow's drop on the way at
+/// full draw (42 m/s, `terra_survival::kinds::BOW_SPEED`) over a mark that, from the camera
+/// behind the shoulder and the bow below it, puts the arrow through the body's middle 0.4 m up
+/// (worked out by stepping the shot, 1.9 m from 21 m; 0.45 m over the drop passed 0.2 m up).
+const over = (distance: number) => 0.65 + 0.5 * 9.8 * (distance / 42) ** 2;
+
+/// The nearest red deer once it stands still (grazing or idle, not fleeing or walking), with the
+/// player put `SHOT_M` east of it, facing it: a deer an arrow missed bolts for a few seconds,
+/// and one shot at on the move is gone from where the arrow lands.
+async function standing(): Promise<game.Near> {
+  for (let look = 0; look < 30; look++) {
+    const near = (await game.state()).near.find(aliveDeer);
+    if (!near) {
+      const [east, south] = await findDeer();
+      await game.warp([east + SHOT_M, south], [east, south]);
+      continue;
+    }
+    const still = near.doing?.startsWith("Graze") || near.doing?.startsWith("Idle");
+    if (still && Math.abs(near.distance - SHOT_M) <= 1.5) return near;
+    if (still) await game.warp([near.at[0] + SHOT_M, near.at[1]], near.at);
+    await game.waitSeconds(1);
+  }
+  throw new Error("no red deer stood still within 30 s");
+}
+
+/// Red deer live about the land (`terra_creatures::wildlife`), put out round a player as they
+/// come near: goes out from the start on rings 80 m apart until one is, and says where the
+/// nearest stands, east and south.
+async function findDeer(): Promise<[number, number]> {
+  const spots: [number, number][] = [[0, 0]];
+  for (let ring = 1; ring <= 4; ring++) {
+    for (let bearing = 0; bearing < 8 * ring; bearing++) {
+      const angle = (bearing / (8 * ring)) * 2 * Math.PI;
+      spots.push([ring * 80 * Math.sin(angle), ring * 80 * Math.cos(angle)]);
+    }
+  }
+  for (const spot of spots) {
+    await game.warp(spot);
+    await game.waitSeconds(2);
+    const found = (await game.call("sandbox.find", { name: "Red deer" })) as { from_start?: number[] }[];
+    const deer = found.flatMap((each) => (each.from_start ? [[each.from_start[0], each.from_start[2]] as [number, number]] : []));
+    const off = ([east, south]: [number, number]) => Math.hypot(east - spot[0], south - spot[1]);
+    if (deer.length) return deer.reduce((best, each) => (off(each) < off(best) ? each : best));
+  }
+  throw new Error("no red deer out within 320 m of the start");
+}
 
 /// Where a step said something stood, east and south, from a line like
 /// "It fell -33.6 m east and 28.1 m south" or "Placed a Forge at [12.3, 0.5, 18.1], 0 up."
@@ -95,25 +144,20 @@ async function play() {
     "Notice: Ate berries",
   );
 
-  // A deer from beyond its hearing with a bow, then butchered with the knife where it fell.
+  // A red deer from beyond where it would bolt with a bow, then butchered with the knife where
+  // it fell.
   let fell: [number, number] = [0, 0];
   await step(
     "hunt",
     async () => {
-      await game.give("bow", "quiver", "arrow:6");
-      // The herd grazes where the world has dry ground for it, said as the game starts.
-      const [east, south] = where(await game.waitFor("Deer graze", { since: 0 }));
-      await game.warp([east + 15, south], [east, south]);
+      await game.give("bow", "quiver", "arrow:8");
+      const [east, south] = await findDeer();
+      await game.warp([east + SHOT_M, south], [east, south]);
       await game.hold("Bow");
       const since = await game.markNow();
-      for (let arrow = 0; arrow < 6; arrow++) {
-        // Within a sure shot of the nearest deer, but beyond where it would bolt.
-        let target = await nearest(alive("Deer"));
-        if (target.distance > 14) {
-          await game.warp([target.at[0] + 12, target.at[1]], target.at);
-          target = await nearest(alive("Deer"));
-        }
-        await game.aim(target.at, 0.8);
+      for (let arrow = 0; arrow < 8; arrow++) {
+        const target = await standing();
+        await game.aim(target.at, over(target.distance));
         await game.press("e:60");
         await game.waitFor("Loosed an arrow", { timeout: 20 });
         await game.waitSeconds(1);
@@ -128,8 +172,8 @@ async function play() {
       await game.aim(fell, 0.2);
       await game.press("f");
     },
-    "An arrow hit a Deer",
-    "Killed a Deer.",
+    "An arrow hit a Red deer",
+    "Killed a Red deer",
     "Notice: Butchered it",
   );
 

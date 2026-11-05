@@ -22,7 +22,8 @@
 //                       within bite_reach_m
 //   refuge   where a shy one goes when it flees: Runs away (the default), Climbs the nearest
 //            trunk until nobody is near, or Flies(near, far) off to somewhere it keeps to
-//   lives    where it is put in a world: in a herd of so many, or so many at a lair, or
+//   lives    where it is put in a world: Lair(so many) at a lair, or Young, only beside a
+//            mother whose young it is, or
 //            About(per_ha, group): about the land wherever its niche is, so many to a hectare
 //            of it, in groups of so many (terra_creatures::wildlife)
 //   niche    for one About: the growing season's mean warmth it takes, in °C, and the places
@@ -49,37 +50,6 @@
 // The small animals' models are made by tools/creatures/animal.py from art/creatures/, which
 // prints each clip's pace.
 [
-    (
-        name: "Deer",
-        model: ("models/creatures/Deer.glb", 0.36),
-        clips: (
-            idle: "AnimalArmature|Idle",
-            walk: "AnimalArmature|Walk",
-            run: "AnimalArmature|Gallop",
-            eat: "AnimalArmature|Eating",
-            attack: "AnimalArmature|Attack_Kick",
-            death: "AnimalArmature|Death",
-        ),
-        health: 16.0,
-        walk_mps: 1.4,
-        run_mps: 7.5,
-        body: (radius: 0.45, weight: 2.0),
-        temper: Shy(flees_within_m: 9.0, flees_s: 4.0, keeps_m: 35.0),
-        lives: Herd(5),
-        stride: (0.5, 0.2),
-        feet: Hoof,
-        voice: Snort,
-        blood: Red,
-        carcass: (needs: Flesh, gives: [("Meat", 3), ("Hide", 2)]),
-        lies_s: 300.0,
-        zones: [
-            (joint: "Head", part: Head, radius_m: 0.13),
-            (joint: "Neck", part: Body, radius_m: 0.12),
-            (joint: "Torso", part: Body, radius_m: 0.26),
-            (joint: "UpperLeg", part: Legs, radius_m: 0.08),
-            (joint: "LowerLeg", part: Legs, radius_m: 0.06),
-        ],
-    ),
     (
         name: "Spider",
         model: ("models/creatures/Spider.glb", 0.42),

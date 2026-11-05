@@ -208,7 +208,6 @@ pub enum Temper {
 /// Where a kind of creature is put in a world, and how many.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum Lives {
-    Herd(u32),
     Lair(u32),
     /// About the land wherever its niche is, so many to a hectare of it, in groups of so many:
     /// wildlife found as it is walked into, as games' ambient populations are (`wildlife`).

@@ -35,7 +35,6 @@ use terra_survival::skills::{Did, ONCE};
 use terra_survival::told::Told;
 use terra_walker::Player;
 use terra_walker::bodies::Body;
-use terra_world::flora::ClearAround;
 use terra_world::flora::{Obstacles, Trunk, Trunks};
 use terra_world::instance::{InstanceApp, Living};
 use terra_world::loading::Loading;
@@ -304,7 +303,7 @@ pub struct Form(pub Species, pub Vec3);
 pub fn plugin(app: &mut App) {
     // The kinds of creature, read with the other registries (D136).
     terra_survival::registries::read_with_the_rest::<Bestiary>(app);
-    // Whether the world's herds are out, and its lair, are the world's: the next world puts
+    // Whether the world's lair and those in it are out is the world's: the next world puts
     // out its own (D469).
     app.world_resource::<Populated>()
         .world_resource::<Lair>()
@@ -372,15 +371,12 @@ fn prepare(
     gltfs: Res<Assets<Gltf>>,
     start: Res<Start>,
     planet: Res<Planet>,
-    mut clear: MessageWriter<ClearAround>,
     mut kinds: ResMut<Kinds>,
     bestiary: Res<Bestiary>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     options: Res<terra_world::shell::Options>,
 ) {
     terra_gen::stat_scope!("creatures");
-    // Where each of a herd stands round its home, drawn once in the bestiary's order.
-    let mut dice = planet.seed().derive("herds").rng();
     if kinds
         .models
         .iter()
@@ -392,87 +388,42 @@ fn prepare(
         return;
     };
     kinds.ready = ready;
-    // The yard, the flat test level, has no herds, and so no lair and no village beside it;
+    // The yard, the flat test level, has no lair and no village beside it;
     // a forest grown on it has its wildlife all the same (`wildlife`).
     if options.yard() {
         commands.insert_resource(Populated);
         return;
     }
 
-    // Herds in the meadow, and those that keep a lair in a hollow further off, each as
-    // many as its kind says.
-    let on_ground = |east: f32, south: f32| planet.ground_at(start.at(east, south));
-    // A demo's or film's place has none (D421): play keeps it.
-    let lair = lair_site(&planet, &start).filter(|_| !options.no_lair);
-    // Where they like it first, then the nearest dry ground on rings further out, so a
-    // world with water at all four still has a herd, away from the lair.
-    let rings = (3..=9).flat_map(|ring| {
-        (0..16).map(move |bearing| {
-            let (radius, angle) = (
-                10.0 * ring as f32,
-                bearing as f32 * std::f32::consts::TAU / 16.0,
-            );
-            (radius * libm::sinf(angle), radius * libm::cosf(angle))
-        })
-    });
-    let herd = [(-45.0, 30.0), (-55.0, -20.0), (40.0, 45.0), (-30.0, 60.0)]
-        .into_iter()
-        .chain(rings)
-        .map(|(east, south)| on_ground(east, south))
-        .find(|&point| dry(&planet, point) && lair.is_none_or(|lair| point.distance(lair) > 40.0));
-    let local = |point: Vec3| start.local(point);
-    if let Some(home) = herd {
-        // They graze in the open, as the village says.
-        clear.write(ClearAround(home, 16.0));
-    }
-    if let Some(lair) = lair {
+    // Those that keep a lair in a hollow off the meadow, each as many as its kind says; the
+    // rest live about the land, put out round the players (`wildlife`), the deer among them.
+    // A demo's or film's place has no lair (D421): play keeps it.
+    if let Some(lair) = lair_site(&planet, &start).filter(|_| !options.no_lair) {
         commands.insert_resource(Lair(lair));
-    }
-    for species in bestiary.all() {
-        let name = bestiary.name(species);
-        match (bestiary.get(species).lives, herd, lair) {
-            (Lives::Herd(count), Some(home), _) => {
-                let at = local(home);
-                info!(
-                    "{name} graze {:.0} m east and {:.0} m south of the start.",
-                    at.x, at.z
+        for species in bestiary.all() {
+            let Lives::Lair(count) = bestiary.get(species).lives else {
+                continue;
+            };
+            let at = start.local(lair);
+            info!(
+                "{} nest {:.0} m east and {:.0} m south of the start.",
+                bestiary.name(species),
+                at.x,
+                at.z
+            );
+            // One at the middle, the rest three metres out, a quarter turn apart.
+            let ways = [Vec3::ZERO, Vec3::X, Vec3::Z, Vec3::NEG_X, Vec3::NEG_Z];
+            for index in 0..count as usize {
+                let out = ways[index % ways.len()] * 3.0 * (1 + index / ways.len()) as f32;
+                let up = lair.normalize();
+                spawn(
+                    &mut commands,
+                    (&kinds, &bestiary),
+                    &planet,
+                    species,
+                    lair + out.reject_from(up),
                 );
-                for _ in 0..count {
-                    let up = home.normalize();
-                    let side = up.any_orthonormal_vector();
-                    let offset = Quat::from_axis_angle(up, dice.range(0.0, std::f32::consts::TAU))
-                        * side
-                        * dice.range(1.0, 7.0);
-                    spawn(
-                        &mut commands,
-                        (&kinds, &bestiary),
-                        &planet,
-                        species,
-                        home + offset,
-                    );
-                }
             }
-            (Lives::Lair(count), _, Some(lair)) => {
-                let at = local(lair);
-                info!(
-                    "{name} nest {:.0} m east and {:.0} m south of the start.",
-                    at.x, at.z
-                );
-                // One at the middle, the rest three metres out, a quarter turn apart.
-                let ways = [Vec3::ZERO, Vec3::X, Vec3::Z, Vec3::NEG_X, Vec3::NEG_Z];
-                for index in 0..count as usize {
-                    let out = ways[index % ways.len()] * 3.0 * (1 + index / ways.len()) as f32;
-                    let up = lair.normalize();
-                    spawn(
-                        &mut commands,
-                        (&kinds, &bestiary),
-                        &planet,
-                        species,
-                        lair + out.reject_from(up),
-                    );
-                }
-            }
-            _ => {}
         }
     }
     commands.insert_resource(Populated);

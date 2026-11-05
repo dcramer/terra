@@ -877,9 +877,9 @@ mod tests {
     #[test]
     fn a_wary_one_is_staged_no_nearer_the_camera_than_its_flight_distance_and_still_seen() {
         // The forest film's stag, asked 29 m ahead and 18 degrees right, crossed the path and
-        // stood 10 m from the runner (10-23). Its flight distance is its kind's data (a deer's
-        // here: in the forest's stand no spot 30-40 m off showed the stag, r7); a fox, with
-        // none, is met where it is asked.
+        // stood 10 m from the runner (10-23). Its flight distance is its kind's data (a wild
+        // boar's here: in the forest's stand no spot 30-40 m off showed the stag, r7); a fox,
+        // with none, is met where it is asked.
         use bevy::ecs::system::RunSystemOnce;
         let mut world = World::new();
         let planet = Planet::smooth(terra_core::PlanetSpec {
@@ -916,7 +916,7 @@ mod tests {
         let bestiary = Bestiary::read(&Default::default());
         let then_eye = feet + up * EYE_UP_M - ahead * EYE_BEHIND_M;
         let lift = up * 0.4;
-        for (name, keeps) in [("Deer", true), ("Red fox", false)] {
+        for (name, keeps) in [("Wild boar", true), ("Red fox", false)] {
             let kind = bestiary.named(name).unwrap();
             let about = bestiary.get(kind);
             let flight = keeps_m(about);

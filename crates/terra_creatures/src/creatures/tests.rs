@@ -13,7 +13,9 @@ use terra_world::tick::Ticks;
 #[test]
 fn a_creature_about_its_day_is_unaware_and_one_that_has_noticed_is_not() {
     let mut creature = Creature {
-        species: Bestiary::read(&Default::default()).named("Deer").unwrap(),
+        species: Bestiary::read(&Default::default())
+            .named("Red deer hind")
+            .unwrap(),
         health: 10.0,
         state: State::Graze(1.0),
         home: Vec3::ZERO,
@@ -809,7 +811,7 @@ fn a_creature_rolls_its_own_dice_and_takes_its_own_turn_whatever_formed_before_i
         for i in 0..formed_first {
             fox(&mut world, i, 1.0);
         }
-        let deer = kind(&mut world, "Deer", ground);
+        let deer = kind(&mut world, "Red deer hind", ground);
         world.entity_mut(deer).insert(detail);
         // And some after it, thinking after it in a tick.
         for i in 0..3 {
