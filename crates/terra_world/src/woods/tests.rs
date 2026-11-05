@@ -179,6 +179,9 @@ fn a_felled_grown_tree_leaves_its_far_square_and_the_rest_stay() {
         .id();
     index.by_square.insert(index.square_of(felled_at), square);
     app.insert_resource(index);
+    let map = near::Map::new(ground, Vec3::X, Vec3::NEG_Z, ground.length());
+    let streamed = near::NearWoods::new(map, terra_gen::Seed(1), Arc::new(Bare));
+    app.insert_resource(streamed);
     let standing = app
         .world_mut()
         .spawn((
@@ -200,4 +203,23 @@ fn a_felled_grown_tree_leaves_its_far_square_and_the_rest_stay() {
     assert_eq!(far.cards.len(), 1);
     assert_eq!(far.cards[0].tree.at, kept_at);
     assert_eq!(vertices(&app), one, "felled, only the other card is drawn");
+    // And it stays felled: its block, streamed in again, leaves it out (D622).
+    let streamed = app.world().resource::<near::NearWoods>();
+    assert!(streamed.felled.contains(&foot_key(felled_at)));
+    assert!(!streamed.felled.contains(&foot_key(kept_at)));
+}
+
+/// Conifers drawn as nothing, for the woods' own systems alone.
+struct Bare;
+
+impl ConiferModels for Bare {
+    fn draw(&self, _: &mut EntityCommands, _: &Planted) -> Drawn {
+        drawn()
+    }
+    fn drawn(&self, _: &Planted) -> Drawn {
+        drawn()
+    }
+    fn far_crowns(&self) -> [Vec3; 3] {
+        [Vec3::ONE; 3]
+    }
 }

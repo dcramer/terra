@@ -2,7 +2,8 @@
 //! trees round the start stand where `terra_land::woods` says, closer and taller where the
 //! growing season is warm, thinning and shrinking toward the tree line, krummholz past it,
 //! none on cliffs, rock, scree or water. Near the camera each is a grown conifer with its
-//! levels of detail, drawn by what `Conifers` holds (D366): the lush forest's Scots pines and
+//! levels of detail, streamed in round the player a block at a time (`near`, D622), drawn by
+//! what `Conifers` holds (D366): the lush forest's Scots pines and
 //! Norway spruces where the layer above gives them, the flora's generic pine where nothing
 //! does. Past where its levels end, a billboard drawn by the far forest's shader
 //! (`far_forest.wesl`, D273), merged a square at a time, the same trees on the same feet, so
@@ -32,14 +33,15 @@ use bevy::{
 use std::sync::Arc;
 
 mod felled;
+mod near;
 mod outline;
 
 pub use terra_land::woods::TreeKind;
 use terra_land::woods::{Tree, Woods};
 
-/// Grown trees out to here from the start, and billboards for every tree out to
-/// the far one; the far trees on a grid twice as coarse, each card wider, past `COARSE_M`.
-const NEAR_M: f32 = 600.0;
+/// Billboards for every tree out to the far reach, each standing for its grown tree, which is
+/// streamed in round the player (`near`, D622); the far trees on a grid twice as coarse, each
+/// card wider, past `COARSE_M`, with no grown tree, so none is grown past it.
 const FAR_M: f32 = 4_500.0;
 const COARSE_M: f32 = 1_600.0;
 /// No tree stands this near the start.
@@ -71,6 +73,11 @@ pub trait ConiferModels: Send + Sync + 'static {
     /// Draws a conifer on its entity: its transform, standing it at its foot, and its levels
     /// of detail as its children.
     fn draw(&self, entity: &mut EntityCommands, tree: &Planted) -> Drawn;
+
+    /// How it draws a conifer, without drawing it: what `draw` gives. Every far card is laid
+    /// at the start, its grown tree streamed in round the player later (D622), so a card comes
+    /// in where its grown tree's last level will end, drawn or not yet.
+    fn drawn(&self, tree: &Planted) -> Drawn;
 
     /// The far cards' crown colours, oak, pine and spruce, linear: what the near crowns'
     /// leaves average to, as the far forest's are coloured (D273).
@@ -233,6 +240,7 @@ pub fn plugin(app: &mut App) {
         .world_resource::<Conifers>()
         .init_world_resource::<FarCards>()
         .world_resource::<felled::FarSquares>()
+        .world_resource::<near::NearWoods>()
         .configure_sets(
             OnEnter(InWorld),
             Planting.in_set(Building::View).before(LayingFloor),
@@ -243,6 +251,7 @@ pub fn plugin(app: &mut App) {
             (
                 see_horizon.run_if(resource_exists_and_changed::<crate::horizon::HorizonPicture>),
                 (stream_cards.run_if(resource_exists::<FarCards>)).run_if(crate::streaming::lifted),
+                near::stream.run_if(crate::streaming::lifted),
                 felled::unfar_the_felled,
             ),
         );
@@ -266,6 +275,10 @@ impl ConiferModels for FloraPines {
             scale: Vec3::new(scale * tree.squat, scale, scale * tree.squat),
         });
         grown::draw(entity, variant, tree.height_m, &self.looks);
+        self.drawn(tree)
+    }
+
+    fn drawn(&self, tree: &Planted) -> Drawn {
         let size = (tree.height_m / grown::DETAIL_FOR_M).clamp(0.45, 1.4);
         Drawn {
             to_m: grown::detail(3, 3, size).end_margin.end,
@@ -344,33 +357,39 @@ fn planted(tree: &Tree) -> Planted {
     }
 }
 
-/// The trees the woods stand round `middle` before the loading screen lifts: the grown ones
-/// near and every tree as a card out to `COARSE_M` but the start's clearing, none in a
-/// snowbed. The coarser cards past it come after ([`coarse_squares`]).
+/// The trees the woods' cards stand for round `middle`, laid before the loading screen lifts:
+/// every tree out to `COARSE_M` but the start's clearing, none in a snowbed. The coarser
+/// cards past it come after ([`coarse_squares`]).
 fn stood(
     planet: &Planet,
     round: &terra_land::round::Round,
     middle: Vec3,
     seed: terra_gen::Seed,
-) -> (Vec<Tree>, Vec<Tree>) {
-    let woods = Woods::of(round);
+) -> Vec<Tree> {
     let began = std::time::Instant::now();
     // The cards stand for every tree, the grown ones too, as an impostor stands for its
-    // model: seen from away from the start, past the grown trees' last level of detail, they
-    // are the trees. Near the camera they give way to the grown ones (`near`), the same trees
-    // from the same pass.
-    let (mid, near) = woods.trees_and_nearest(middle, 0.0, COARSE_M, NEAR_M, SPACING_M, seed);
-    let mid: Vec<Tree> = mid
-        .into_iter()
-        .filter(|tree| tree.at.distance(middle) > CLEAR_M)
-        .collect();
+    // model: past the grown trees' last level of detail they are the trees. Near the camera
+    // they give way to the grown ones, the same trees from the same grid (`near::lay`).
+    let mid = cleared(
+        middle,
+        Woods::of(round).trees(middle, 0.0, COARSE_M, SPACING_M, seed),
+    );
     let laid = began.elapsed().as_secs_f32();
-    let (near, mid) = (off_snowbeds(planet, near), off_snowbeds(planet, mid));
+    let mid = off_snowbeds(planet, mid);
     info!(
         "Woods: laid out in {laid:.1} s, {:.1} s more off the walls' snowbeds",
         began.elapsed().as_secs_f32() - laid
     );
-    (near, mid)
+    mid
+}
+
+/// The trees but those in the start's clearing, kept clear as the game's own start is, so
+/// one stands there in the open.
+fn cleared(middle: Vec3, trees: Vec<Tree>) -> Vec<Tree> {
+    trees
+        .into_iter()
+        .filter(|tree| tree.at.distance(middle) > CLEAR_M)
+        .collect()
 }
 
 /// The coarser cards' trees from `inner_m` to `outer_m` of `middle`, none in a snowbed: one
@@ -626,7 +645,7 @@ fn plant(
         .and_then(|sited| sited.woods_middle(&planet))
         .unwrap_or(start.translation);
     let seed = planet.seed().derive("woods");
-    let (near, mid) = stood(&planet, round, middle, seed);
+    let mid = stood(&planet, round, middle, seed);
 
     // Near: grown conifers, each its kind's at its stature, drawn by what the layer above
     // gave, or the flora's pine.
@@ -650,37 +669,36 @@ fn plant(
             Arc::new(pines)
         }
     };
-    // The start is kept clear, as the game's own start is, so one stands there in the open.
-    let near: Vec<Tree> = near
-        .into_iter()
-        .filter(|tree| tree.at.distance(middle) > CLEAR_M)
+    // Near: the first ring of the grown trees' blocks, round the start and the woods' middle
+    // both, before the loading screen lifts; the rest stream in round the player (D622).
+    let (east, north) = (land.frame.east(middle), land.frame.north(middle));
+    let map = near::Map::new(middle, east, north, land.radius_m());
+    let mut blocks: Vec<near::Block> = near::within(map.at(start.translation), near::IN_M)
+        .chain(near::within(Vec2::ZERO, near::IN_M))
         .collect();
-    let mut grown: HashMap<[u32; 3], Drawn> = HashMap::default();
+    blocks.sort_unstable();
+    blocks.dedup();
+    let mut streamed = near::NearWoods::new(map, seed, conifers.clone());
+    let mut first: Vec<Tree> = Vec::new();
     let mut drawn_as = [[0usize; 3]; 3];
     // Their floor, by each tree as drawn (D619).
     let mut canopy = Crowns::default();
-    for tree in &near {
-        let planted = planted(tree);
-        let mut entity = commands.spawn((
-            Name::new("Woods tree"),
-            Visibility::default(),
-            felled::WoodsTree { foot: tree.at },
-        ));
-        let drawn = conifers.draw(&mut entity, &planted);
-        // A solid one felled is no longer found among the trunks (`Trunks::near`).
-        trunks.add(crate::flora::Trunk {
-            foot: tree.at,
-            radius_m: (planted.height_m * 0.012).max(0.08),
-            height_m: planted.height_m,
-            solid: drawn.solid,
-        });
-        drawn_as[kind_index(tree.kind)][kind_index(drawn.kind)] += 1;
-        grown.insert(foot_key(tree.at), drawn);
-        canopy.add(stand(&start, tree.at, &drawn));
+    for &block in &blocks {
+        let trees = near::lay(&planet, &map, block, seed);
+        let mut standing = Vec::with_capacity(trees.len());
+        for tree in &trees {
+            let (stood, drawn) = near::grow(&mut commands, &*conifers, &mut trunks, tree);
+            standing.push(stood);
+            drawn_as[kind_index(tree.kind)][kind_index(drawn.kind)] += 1;
+            canopy.add(stand(&start, tree.at, &drawn));
+        }
+        streamed.laid(block, standing);
+        first.extend(trees);
     }
+    commands.insert_resource(streamed);
     // For a scripted run to walk up to (as the forest walk says its nearest, D309).
     let from_start = |tree: &&Tree| tree.at.distance(start.translation);
-    if let Some(tree) = near
+    if let Some(tree) = first
         .iter()
         .min_by(|a, b| from_start(a).total_cmp(&from_start(b)))
     {
@@ -719,11 +737,12 @@ fn plant(
             parting.map(|parting| parting.0.clone()).unwrap_or_default(),
         ),
     });
-    let (east, north) = (land.frame.east(middle), land.frame.north(middle));
+    // Every card here stands for a grown tree, streamed in or still to be (D622), and comes
+    // in where that tree's last level ends.
     let cards = mid.iter().map(|tree| Card {
         tree: *tree,
         widen: 1.0,
-        grown: grown.get(&foot_key(tree.at)).copied(),
+        grown: Some(conifers.drawn(&planted(tree))),
     });
     let squares = squares(middle, east, north, cards);
     let square_count = squares.len();
@@ -741,12 +760,13 @@ fn plant(
     }
     commands.insert_resource(holding_grown);
     far_cards.asked = Some((middle, seed, material));
-    say_planted(near.len(), mid.len(), square_count, &drawn_as, began);
+    let first = (first.len(), blocks.len());
+    say_planted(first, mid.len(), square_count, &drawn_as, began);
 }
 
 /// What the woods planted, and how each kind's grown trees were drawn.
 fn say_planted(
-    near: usize,
+    (near, blocks): (usize, usize),
     far: usize,
     squares: usize,
     drawn_as: &[[usize; 3]; 3],
@@ -757,7 +777,8 @@ fn say_planted(
         .map(|k| drawn_as[k].iter().sum::<usize>() - drawn_as[k][k])
         .sum();
     info!(
-        "Woods: {near} grown trees within {NEAR_M:.0} m ({} oaks, {} pines and {} spruces drawn as their kind, {other} as another), {far} far ones to {COARSE_M:.0} m in {squares} squares, in {:.1} s; the coarser to {FAR_M:.0} m after the loading screen",
+        "Woods: {near} grown trees in the {blocks} blocks within {:.0} m of the start ({} oaks, {} pines and {} spruces drawn as their kind, {other} as another), {far} far ones to {COARSE_M:.0} m in {squares} squares, in {:.1} s; the coarser to {FAR_M:.0} m after the loading screen",
+        near::IN_M,
         mine(0),
         mine(1),
         mine(2),

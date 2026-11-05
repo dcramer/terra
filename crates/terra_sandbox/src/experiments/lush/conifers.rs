@@ -15,7 +15,7 @@ use super::overgrowth::{self, Overgrowth};
 use super::species::Species;
 use super::{
     CROWN_TINTS, DETAIL_FOR_M, FloorLooks, Foliage, KINDS, LEAF, LEAF_MEANS, Looks, TreeModel,
-    draw, floor, forest_seed, grow, scale_detail, wind,
+    draw, far_from, floor, forest_seed, grow, scale_detail, wind,
 };
 use bevy::prelude::*;
 use std::sync::Arc;
@@ -123,16 +123,78 @@ impl Pools {
     }
 }
 
-impl ConiferModels for LushConifers {
-    fn draw(&self, entity: &mut EntityCommands, tree: &Planted) -> Drawn {
+/// How a conifer is drawn from its model: which model, as which kind, how much it is scaled up
+/// and across, and the height its levels' distances are for.
+struct Shape {
+    index: usize,
+    kind: TreeKind,
+    scale: f32,
+    wide: f32,
+    size: f32,
+}
+
+impl LushConifers {
+    fn shape(&self, tree: &Planted) -> Shape {
         let (index, kind) = self.pools.choose(tree);
         let model = &self.models[index];
         let scale = tree.height_m / model.height;
-        let up = tree.foot.normalize();
         // Each a little stouter or more slender than the next, its crown with it (D276), by
         // where it stands; and squat toward its limit, as the woods say.
-        let by_foot = Vec2::new(tree.foot.x + tree.foot.y, tree.foot.z);
-        let wide = scale * (0.85 + 0.33 * overgrowth::chance(by_foot, 5.0)) * tree.squat;
+        let wide = scale * (0.85 + 0.33 * overgrowth::chance(by_foot(tree), 5.0)) * tree.squat;
+        // In steps of a twentieth, so trees share their distances (D230).
+        let size = ((tree.height_m / DETAIL_FOR_M).clamp(0.45, 1.4) * 20.0).round() / 20.0;
+        Shape {
+            index,
+            kind,
+            scale,
+            wide,
+            size,
+        }
+    }
+}
+
+/// Where a tree stands, as its own variations are drawn by.
+fn by_foot(tree: &Planted) -> Vec2 {
+    Vec2::new(tree.foot.x + tree.foot.y, tree.foot.z)
+}
+
+impl ConiferModels for LushConifers {
+    /// Out to where its crown's cards end, the lush forest's own trees' distances; past them
+    /// its far card stands for it, as a game's last level of a tree is its billboard. Its
+    /// crown's lumps beyond, as the lush forest draws them to 420 m for a 20 m tree, made the
+    /// woods' 17,000 trees some 60 million triangles a frame.
+    fn drawn(&self, tree: &Planted) -> Drawn {
+        let Shape {
+            index,
+            kind,
+            scale,
+            wide,
+            size,
+        } = self.shape(tree);
+        let model = &self.models[index];
+        // Its crown and trunk as drawn, for the floor under it (D619).
+        Drawn {
+            to_m: far_from(size),
+            kind,
+            crown_off: tree.rotation * (model.crown.0 * Vec3::new(wide, scale, wide)),
+            crown_m: model.crown.1 * wide,
+            trunk_m: model.trunk_m * wide,
+            young: model.young,
+            solid: true,
+        }
+    }
+
+    fn draw(&self, entity: &mut EntityCommands, tree: &Planted) -> Drawn {
+        let Shape {
+            index,
+            scale,
+            wide,
+            size,
+            ..
+        } = self.shape(tree);
+        let model = &self.models[index];
+        let up = tree.foot.normalize();
+        let by_foot = by_foot(tree);
         let place = Transform {
             // Sunk a little, so the root flare meets uneven ground.
             translation: tree.foot - up * 0.3,
@@ -149,8 +211,6 @@ impl ConiferModels for LushConifers {
         if model.young {
             entity.insert(ObstructionFade::default());
         }
-        // In steps of a twentieth, so trees share their distances (D230).
-        let size = ((tree.height_m / DETAIL_FOR_M).clamp(0.45, 1.4) * 20.0).round() / 20.0;
         let grows = Overgrowth::of(model.species);
         let moss_tag = if !model.young && overgrowth::chance(by_foot, 3.0) < grows.moss {
             let (low, high) = grows.moss_m;
@@ -161,24 +221,11 @@ impl ConiferModels for LushConifers {
         } else {
             0
         };
-        // Out to where its crown's cards end, the lush forest's own trees' distances; past
-        // them its far card stands for it, as a game's last level of a tree is its billboard.
-        // Its crown's lumps beyond, as the lush forest draws them to 420 m for a 20 m tree,
-        // made the woods' 17,000 trees some 60 million triangles a frame.
-        let mut to_m = 0.0;
+        // Without its lumps (`drawn`).
         entity.with_children(|children| {
-            to_m = draw(children, model, &self.looks, size, false, moss_tag, None);
+            draw(children, model, &self.looks, size, false, moss_tag, None);
         });
-        // Its crown and trunk as drawn, for the floor under it (D619).
-        Drawn {
-            to_m,
-            kind,
-            crown_off: tree.rotation * (model.crown.0 * Vec3::new(wide, scale, wide)),
-            crown_m: model.crown.1 * wide,
-            trunk_m: model.trunk_m * wide,
-            young: model.young,
-            solid: true,
-        }
+        self.drawn(tree)
     }
 
     /// As the lush forest's far forest colours its oaks, pines and spruces.

@@ -302,6 +302,12 @@ impl Trunks {
         self.0.insert(trunk.foot, trunk);
     }
 
+    /// Takes away the tree whose foot is exactly here, as when the woods' block it stands in
+    /// streams out (D622).
+    pub fn remove(&mut self, foot: Vec3) {
+        self.0.remove(foot, |_| true);
+    }
+
     /// The trees standing within `reach` of a point, across the ground, the felled left out.
     pub fn near<'a>(
         &'a self,

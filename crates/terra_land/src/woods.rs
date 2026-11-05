@@ -373,8 +373,8 @@ impl<'a> Woods<'a> {
     }
 
     /// The trees standing within `radius_m` of a direction, between `inner_m` and it, on a
-    /// grid of cells `spacing_m` wide, each holding a tree by its stand's density, jittered
-    /// within it; the same every time for a seed.
+    /// grid of cells `spacing_m` wide about it, each holding a tree by its stand's density,
+    /// jittered within it; the same every time for a seed.
     pub fn trees(
         &self,
         middle: glam::Vec3,
@@ -383,115 +383,147 @@ impl<'a> Woods<'a> {
         spacing_m: f32,
         seed: terra_gen::Seed,
     ) -> Vec<Tree> {
-        self.trees_and_nearest(
-            middle,
-            inner_m,
-            radius_m,
-            f32::NEG_INFINITY,
-            spacing_m,
-            seed,
-        )
-        .0
+        let cells = (radius_m / spacing_m).ceil() as i32;
+        let grid = Grid::new(self, middle, spacing_m, seed);
+        grid.lay(-cells..cells, -cells..cells, inner_m, radius_m)
     }
 
-    /// The trees as [`Woods::trees`] has them, and of them those within `nearest_m` of the
-    /// direction, as `trees` within it would have them, in the same order: the grown trees
-    /// near the start and the cards round them from one pass over the ground, not two.
-    pub fn trees_and_nearest(
+    /// The trees of the cells `columns` east and `rows` north of the grid [`Woods::trees`]
+    /// lays about `middle`, those of them within `radius_m` of it: the same trees it lays in
+    /// those cells, in the same order, so a world streams its woods a block of cells at a
+    /// time round the player (D622) and a block asked again is the block it was.
+    pub fn trees_in_cells(
         &self,
         middle: glam::Vec3,
-        inner_m: f32,
+        (columns, rows): (std::ops::Range<i32>, std::ops::Range<i32>),
         radius_m: f32,
-        nearest_m: f32,
         spacing_m: f32,
         seed: terra_gen::Seed,
-    ) -> (Vec<Tree>, Vec<Tree>) {
-        let land = &self.round.land;
+    ) -> Vec<Tree> {
+        Grid::new(self, middle, spacing_m, seed).lay(columns, rows, 0.0, radius_m)
+    }
+}
+
+/// The grid a world's trees stand on about a middle: a cell `spacing_m` wide holds at most
+/// one, its place in the cell and whether it stands there by the cell's own dice.
+struct Grid<'w, 'a> {
+    woods: &'w Woods<'a>,
+    middle: glam::Vec3,
+    east: glam::Vec3,
+    north: glam::Vec3,
+    spacing_m: f32,
+    seed: terra_gen::Seed,
+    cohorts: terra_gen::Noise,
+    glades: terra_gen::Noise,
+}
+
+impl<'w, 'a> Grid<'w, 'a> {
+    fn new(
+        woods: &'w Woods<'a>,
+        middle: glam::Vec3,
+        spacing_m: f32,
+        seed: terra_gen::Seed,
+    ) -> Self {
+        let land = &woods.round.land;
         let middle = middle.normalize();
         // A stand is not one age (D381): it is a mosaic of cohorts tens of metres across, each
         // grown up together after a storm or a felling took the trees before, with glades
         // where it stands thin, saplings and poles coming up among the rest; so its canopy
         // is ragged and its edge uneven, not a wall of trees of one height. Laid on the
         // world, so the same tree is the same wherever it is asked from.
-        let cohorts = terra_gen::Noise::new(seed.derive("cohorts"));
-        let glades = terra_gen::Noise::new(seed.derive("glades"));
-        let (east, north) = (land.frame.east(middle), land.frame.north(middle));
-        let cells = (radius_m / spacing_m).ceil() as i32;
-        let rows: Vec<i32> = (-cells..cells).collect();
+        Self {
+            woods,
+            middle,
+            east: land.frame.east(middle),
+            north: land.frame.north(middle),
+            spacing_m,
+            seed,
+            cohorts: terra_gen::Noise::new(seed.derive("cohorts")),
+            glades: terra_gen::Noise::new(seed.derive("glades")),
+        }
+    }
+
+    /// The trees of these cells between `inner_m` and `radius_m` of the middle, a row a task.
+    fn lay(
+        &self,
+        columns: std::ops::Range<i32>,
+        rows: std::ops::Range<i32>,
+        inner_m: f32,
+        radius_m: f32,
+    ) -> Vec<Tree> {
+        let rows: Vec<i32> = rows.collect();
         let found = crate::maps::par_map(&rows, |&row| {
-            let (mut out, mut nearest) = (Vec::new(), Vec::new());
-            for column in -cells..cells {
-                let mut rng = seed
-                    .index(((row as i64) << 32 | (column as u32 as i64)) as u64)
-                    .rng();
-                let at = glam::Vec2::new(
-                    (column as f32 + rng.unit()) * spacing_m,
-                    (row as f32 + rng.unit()) * spacing_m,
-                );
-                let distance = at.length();
-                if distance > radius_m || distance < inner_m {
-                    continue;
-                }
-                let toward = (middle * land.radius_m() + east * at.x + north * at.y).normalize();
-                let point = land.surface(toward);
-                let normal = ground_normal(land, point);
-                let (stand, footing) = self.stand_on(point, normal);
-                // Patches the width given and three times it, 0 to 1 over a standard deviation
-                // either side (the noise's spread is about 0.27 a sample).
-                let spread = |noise: &terra_gen::Noise, wide: f32| {
-                    (noise.fbm(point / (wide * 3.0), 3, 2.1, 0.6) / 0.27).clamp(-1.0, 1.0) / 2.0
-                        + 0.5
-                };
-                let glade = GLADE_DENSITY
-                    + (1.0 - GLADE_DENSITY) * smoothstep(0.2, 0.45, spread(&glades, GLADES_M));
-                if stand.density <= 0.0 || rng.unit() > stand.density * glade {
-                    continue;
-                }
-                let place = land.place(point, normal);
-                // Spruce in the shade and the cool, pine where the sun bakes the slope, the
-                // two mixing over a band of facing.
-                let sunny = smoothstep(0.05, 0.3, place.sunward) + (rng.unit() - 0.5) * 0.5;
-                let kind = if sunny > 0.5 {
-                    TreeKind::Pine
-                } else {
-                    TreeKind::Spruce
-                };
-                let stature = (stand.stature * (0.85 + 0.3 * rng.unit())).min(1.0);
-                let luck = rng.unit();
-                // Oak only where the stand grows tall, never toward the tree line.
-                let kind = if stand.stature >= 0.8
-                    && rng.unit() < oak_chance(place.height_m, place.sunward)
-                {
-                    TreeKind::Oak
-                } else {
-                    kind
-                };
-                let cohort = spread(&cohorts, COHORT_M);
-                let age = if rng.unit() < SAPLINGS {
-                    0.18 + 0.3 * rng.unit()
-                } else {
-                    (AGES.0 + (AGES.1 - AGES.0) * cohort + (rng.unit() - 0.5) * 0.18).min(AGES.1)
-                };
-                let tree = Tree {
-                    at: point,
-                    kind,
-                    stature,
-                    luck,
-                    footing,
-                    age,
-                };
-                if distance <= nearest_m {
-                    nearest.push(tree);
-                }
-                out.push(tree);
-            }
-            (out, nearest)
+            columns
+                .clone()
+                .filter_map(|column| self.tree(row, column, inner_m, radius_m))
+                .collect::<Vec<_>>()
         });
-        let (out, nearest): (Vec<_>, Vec<_>) = found.into_iter().unzip();
-        (
-            out.into_iter().flatten().collect(),
-            nearest.into_iter().flatten().collect(),
-        )
+        found.into_iter().flatten().collect()
+    }
+
+    /// The tree a cell holds between `inner_m` and `radius_m` of the middle, if any.
+    fn tree(&self, row: i32, column: i32, inner_m: f32, radius_m: f32) -> Option<Tree> {
+        let land = &self.woods.round.land;
+        let spacing_m = self.spacing_m;
+        let mut rng = self
+            .seed
+            .index(((row as i64) << 32 | (column as u32 as i64)) as u64)
+            .rng();
+        let at = glam::Vec2::new(
+            (column as f32 + rng.unit()) * spacing_m,
+            (row as f32 + rng.unit()) * spacing_m,
+        );
+        let distance = at.length();
+        if distance > radius_m || distance < inner_m {
+            return None;
+        }
+        let toward =
+            (self.middle * land.radius_m() + self.east * at.x + self.north * at.y).normalize();
+        let point = land.surface(toward);
+        let normal = ground_normal(land, point);
+        let (stand, footing) = self.woods.stand_on(point, normal);
+        // Patches the width given and three times it, 0 to 1 over a standard deviation
+        // either side (the noise's spread is about 0.27 a sample).
+        let spread = |noise: &terra_gen::Noise, wide: f32| {
+            (noise.fbm(point / (wide * 3.0), 3, 2.1, 0.6) / 0.27).clamp(-1.0, 1.0) / 2.0 + 0.5
+        };
+        let glade = GLADE_DENSITY
+            + (1.0 - GLADE_DENSITY) * smoothstep(0.2, 0.45, spread(&self.glades, GLADES_M));
+        if stand.density <= 0.0 || rng.unit() > stand.density * glade {
+            return None;
+        }
+        let place = land.place(point, normal);
+        // Spruce in the shade and the cool, pine where the sun bakes the slope, the
+        // two mixing over a band of facing.
+        let sunny = smoothstep(0.05, 0.3, place.sunward) + (rng.unit() - 0.5) * 0.5;
+        let kind = if sunny > 0.5 {
+            TreeKind::Pine
+        } else {
+            TreeKind::Spruce
+        };
+        let stature = (stand.stature * (0.85 + 0.3 * rng.unit())).min(1.0);
+        let luck = rng.unit();
+        // Oak only where the stand grows tall, never toward the tree line.
+        let kind = if stand.stature >= 0.8 && rng.unit() < oak_chance(place.height_m, place.sunward)
+        {
+            TreeKind::Oak
+        } else {
+            kind
+        };
+        let cohort = spread(&self.cohorts, COHORT_M);
+        let age = if rng.unit() < SAPLINGS {
+            0.18 + 0.3 * rng.unit()
+        } else {
+            (AGES.0 + (AGES.1 - AGES.0) * cohort + (rng.unit() - 0.5) * 0.18).min(AGES.1)
+        };
+        Some(Tree {
+            at: point,
+            kind,
+            stature,
+            luck,
+            footing,
+            age,
+        })
     }
 }
 
@@ -727,19 +759,30 @@ mod tests {
             .unwrap();
         let round = crate::round::Round::new(land, site.toward, 1_400.0, day);
         let trees = Woods::of(&round).trees(site.toward, 0.0, 600.0, 6.5, terra_gen::Seed(5));
-        // The nearest from the same pass are the trees a pass of their own lays out, as the
-        // grown ones and the cards are laid at the start (`trees_and_nearest`), on the round
-        // this test builds anyway.
-        let (all, nearest) = Woods::of(&round).trees_and_nearest(
-            site.toward,
-            0.0,
-            600.0,
-            250.0,
-            6.5,
+        // Blocks of cells asked one at a time, as the world streams its grown trees round the
+        // player (D622), lay the same trees as the one pass its cards are laid from, each
+        // once, on the round this test builds anyway.
+        let (key, seed) = (
+            |tree: &Tree| tree.at.to_array().map(f32::to_bits),
             terra_gen::Seed(5),
         );
-        let alone = Woods::of(&round).trees(site.toward, 0.0, 250.0, 6.5, terra_gen::Seed(5));
-        assert!(all == trees && nearest == alone && !alone.is_empty());
+        let mut blocks: Vec<Tree> = Vec::new();
+        for row in (-96..96).step_by(16) {
+            for column in (-96..96).step_by(16) {
+                let cells = (column..column + 16, row..row + 16);
+                let block = Woods::of(&round).trees_in_cells(site.toward, cells, 600.0, 6.5, seed);
+                blocks.extend(block);
+            }
+        }
+        let (mut one, mut many) = (trees.clone(), blocks);
+        one.sort_by_key(key);
+        many.sort_by_key(key);
+        assert!(
+            one == many && !one.is_empty(),
+            "{} against {}",
+            one.len(),
+            many.len()
+        );
         // How sunward the ground each kind stands on faces, on average.
         let facing = |kind: TreeKind| {
             let sunward: Vec<f32> = trees

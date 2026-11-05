@@ -20,6 +20,9 @@ use bevy::math::Vec3;
 pub(crate) enum Class {
     /// The ground round the player.
     NearGround,
+    /// The woods' grown trees round the player (D622), before they come within their last
+    /// level's reach.
+    NearWoods,
     /// The woods' far cards, kilometres off: the skyline's trees.
     FarWoods,
     /// The ground's far levels.
@@ -31,8 +34,9 @@ pub(crate) enum Class {
 }
 
 impl Class {
-    pub(crate) const ALL: [Class; 5] = [
+    pub(crate) const ALL: [Class; 6] = [
         Class::NearGround,
+        Class::NearWoods,
         Class::FarWoods,
         Class::FarGround,
         Class::Flora,
@@ -202,7 +206,9 @@ mod tests {
             .map(|i| (Class::FarGround, at(i as f32)))
             .collect();
         waiting.push((Class::Other, at(0.0)));
-        let order = next(&waiting, [0, 0, 1, 0, 0], Vec3::ZERO, 2);
+        let mut underway = [0; Class::COUNT];
+        underway[Class::FarGround.index()] = 1;
+        let order = next(&waiting, underway, Vec3::ZERO, 2);
         assert_eq!(order, [1000, 0], "the other class starts beside the ground");
         // With no room for more nothing starts, and with one the more wanted class has it.
         assert!(next(&waiting, [0; Class::COUNT], Vec3::ZERO, 0).is_empty());

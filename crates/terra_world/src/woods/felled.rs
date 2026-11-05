@@ -4,6 +4,7 @@
 //! instances goes (SpeedTree's and Unreal's HLOD clusters are rebuilt for what changed), the
 //! square holding the felled tree's card is merged again without it, the rest as they were.
 
+use super::near::NearWoods;
 use super::{Card, SQUARE_M, foot_key, merged};
 use crate::flora::Growth;
 use bevy::{camera::primitives::Aabb, platform::collections::HashMap, prelude::*};
@@ -61,7 +62,7 @@ pub(super) fn unfar_the_felled(
     mut commands: Commands,
     mut felled: RemovedComponents<Growth>,
     trees: Query<&WoodsTree>,
-    index: Option<Res<FarSquares>>,
+    (index, mut near): (Option<Res<FarSquares>>, Option<ResMut<NearWoods>>),
     mut squares: Query<(&mut FarSquare, &mut Mesh3d, &mut Transform, &mut Aabb)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -72,16 +73,21 @@ pub(super) fn unfar_the_felled(
     };
     let mut changed: Vec<Entity> = Vec::new();
     for entity in felled.read() {
+        // A tree streamed out goes whole, its entity with it, so is not found here.
         let Ok(tree) = trees.get(entity) else {
             continue;
         };
+        let key = foot_key(tree.foot);
+        // Felled for good: its block streamed in again leaves it out (D622).
+        if let Some(near) = near.as_mut() {
+            near.felled.insert(key);
+        }
         let Some(&square) = index.by_square.get(&index.square_of(tree.foot)) else {
             continue;
         };
         let Ok((mut far, ..)) = squares.get_mut(square) else {
             continue;
         };
-        let key = foot_key(tree.foot);
         let before = far.cards.len();
         far.cards.retain(|card| foot_key(card.tree.at) != key);
         if far.cards.len() < before && !changed.contains(&square) {
