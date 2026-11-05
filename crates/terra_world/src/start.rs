@@ -136,31 +136,23 @@ impl Found {
         }
     }
 
-    /// The start there, once the land round it is known.
+    /// The start there, once the land round it is known. Out on the tundra or by a town it
+    /// is kept out of the lakes and pools found round it, as a new world's is (`dry`): the
+    /// site was found before its water was known, and seed 7's tundra start stood knee-deep
+    /// in a pool.
     pub fn start(&self, planet: &Planet) -> Start {
-        match self {
-            Found::Lake(site) => Start::by_lake(planet, site),
-            Found::Tundra(site) => {
-                let at = planet.surface(site.toward);
-                let up = at.normalize();
-                let facing = (planet.surface(site.forest) - at)
-                    .reject_from(up)
-                    .normalize_or(up.any_orthonormal_vector());
-                Start(
-                    Transform::from_translation(at + up * FLOOR_CLEARANCE_M).looking_to(facing, up),
-                )
-            }
-            Found::Town(site) | Found::Settlement(site) => {
-                let at = planet.surface(site.start);
-                let up = at.normalize();
-                let facing = (planet.surface(site.toward) - at)
-                    .reject_from(up)
-                    .normalize_or(up.any_orthonormal_vector());
-                Start(
-                    Transform::from_translation(at + up * FLOOR_CLEARANCE_M).looking_to(facing, up),
-                )
-            }
-        }
+        let (at, toward) = match self {
+            Found::Lake(site) => return Start::by_lake(planet, site),
+            Found::Tundra(site) => (site.toward, site.forest),
+            Found::Town(site) | Found::Settlement(site) => (site.start, site.toward),
+        };
+        let at = planet.surface(at);
+        let up = at.normalize();
+        let facing = (planet.surface(toward) - at)
+            .reject_from(up)
+            .normalize_or(up.any_orthonormal_vector());
+        let frame = Transform::from_translation(at + up * FLOOR_CLEARANCE_M).looking_to(facing, up);
+        Start(kept_dry(planet, frame))
     }
 }
 
@@ -401,6 +393,55 @@ fn dry(planet: &Planet, frame: &Transform, low: Vec3, high: Vec3, middle: Vec3) 
         // Under water over ground above the sea: a lake's or a pool's.
         ground <= sea || ground >= planet.water_radius_m(point)
     })
+}
+
+/// How far out a start found by a site's rules is moved to keep it dry (`kept_dry`).
+const DRY_WITHIN_M: f32 = 300.0;
+
+/// A start as `frame` stands it, kept out of the lakes and pools known round it: the nearest
+/// frame, turned as it is, whose start plot and door path are dry (`dry`) and stand over the
+/// sea as a new world's do, in rings 6 m apart out to [`DRY_WITHIN_M`]; `frame` itself if it
+/// is dry already, if no water is known, or if none is found.
+fn kept_dry(planet: &Planet, frame: Transform) -> Transform {
+    if planet.waters().is_none() {
+        return frame;
+    }
+    let plot = Plot::START;
+    let (low, high) = plot_bounds(&plot);
+    let middle = (low + high) * 0.5;
+    let sea = planet.sea_radius_m();
+    let fits = |frame: &Transform| {
+        let (lowest, _) = ground_under(planet, frame, low, high);
+        frame.translation.length() + lowest - sea >= 1.6 && dry(planet, frame, low, high, middle)
+    };
+    if fits(&frame) {
+        return frame;
+    }
+    let up = frame.translation.normalize();
+    let east = (frame.rotation * Vec3::X).reject_from(up).normalize();
+    let south = up.cross(east);
+    let facing = frame.forward().as_vec3();
+    let rings = (DRY_WITHIN_M / 6.0) as u32;
+    for ring in 1..=rings {
+        for spoke in 0..24 {
+            let angle = spoke as f32 / 24.0 * std::f32::consts::TAU;
+            let offset =
+                (east * libm::cosf(angle) + south * libm::sinf(angle)) * (ring as f32 * 6.0);
+            let anchor = planet.ground_at(frame.translation + offset);
+            let anchor_up = anchor.normalize();
+            let moved = Transform::from_translation(anchor + anchor_up * FLOOR_CLEARANCE_M)
+                .looking_to(facing.reject_from(anchor_up), anchor_up);
+            if fits(&moved) {
+                info!(
+                    "Start: {:.0} m out of the water its site stood in, onto dry ground",
+                    ring as f32 * 6.0
+                );
+                return moved;
+            }
+        }
+    }
+    warn!("Start: no dry ground within {DRY_WITHIN_M:.0} m of its site; it stands in water");
+    frame
 }
 
 /// The points a floor over these squares of the grid rests on, in metres east and south:

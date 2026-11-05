@@ -317,9 +317,11 @@ mod tests {
     /// A new world's start is never under a lake's water: neither its base's plot nor where
     /// the player arrives by the door, about 7 m east and 12 m south of its corner
     /// (`terra_bases::Site::approach`). Seed 9697367627075512559 stood knee-deep in a lake, its
-    /// start chosen before its lakes were known; the rest are random seeds of the sweep's. Slow,
-    /// a 30 km world a seed, on the CPU: `cargo xtask remote-render --cpu -- cargo test
-    /// --release -p terra_world --lib a_new_worlds_start -- --ignored --nocapture`.
+    /// start chosen before its lakes were known; the rest are random seeds of the sweep's. So is
+    /// a start a site's rules found (`--site`): seed 7's tundra start stood knee-deep in a pool,
+    /// the site found before its water was known. Slow, a 30 km world a case, on the CPU:
+    /// `cargo xtask remote-render --cpu -- cargo test --release -p terra_world --lib
+    /// a_new_worlds_start -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn a_new_worlds_start_is_never_under_a_lakes_water() {
@@ -333,11 +335,21 @@ mod tests {
             14695981039346656053,
             14695981039346656061,
         ];
+        let sited = [("tundra", 7), ("settlement", 7), ("town", 2)];
+        let cases = seeds
+            .iter()
+            .map(|&seed| (None, seed))
+            .chain(sited.iter().map(|&(site, seed)| (Some(site), seed)));
         let mut wet = Vec::new();
-        for seed in seeds {
+        for (site, seed) in cases {
             let args = ["--experiment", "play", "--radius", "30000", "--seed"];
-            let args = args.iter().map(|a| a.to_string()).chain([seed.to_string()]);
-            let options = Options::from_args(args).unwrap();
+            let mut args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
+            args.push(seed.to_string());
+            if let Some(site) = site {
+                args.extend(["--site".to_string(), site.to_string()]);
+            }
+            let options = Options::from_args(args.into_iter()).unwrap();
+            let seed = format!("{} {seed}", site.unwrap_or("seed"));
             let at = std::time::Instant::now();
             let (planet, start, _, _) = land_of(&first_world(&options), &options, None, None);
             let lakes = planet.waters().expect("a 30 km world's lakes are found");
@@ -360,14 +372,14 @@ mod tests {
                 })
                 .collect();
             eprintln!(
-                "seed {seed}: worked out in {:.1} s, {} lakes, {} points under water",
+                "{seed}: worked out in {:.1} s, {} lakes, {} points under water",
                 at.elapsed().as_secs_f32(),
                 lakes.lakes().iter().filter(|lake| lake.cells > 0).count(),
                 under.len()
             );
             if let Some((east, south)) = under.first() {
                 wet.push(format!(
-                    "seed {seed}: {} points under a lake, the first {east} m east and {south} m south",
+                    "{seed}: {} points under a lake, the first {east} m east and {south} m south",
                     under.len()
                 ));
             }
