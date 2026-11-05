@@ -25,7 +25,7 @@ const LAND: &str = "land";
 /// The land being made on its thread, and how far it has come.
 #[derive(Resource)]
 struct Making {
-    thread: Option<JoinHandle<Land>>,
+    thread: Option<JoinHandle<(Land, Vec<PutIn>)>>,
     stage: Arc<Stage>,
     /// When it began, by the wall clock, and the frames drawn since, for the log.
     began: Instant,
@@ -36,9 +36,29 @@ struct Making {
 #[derive(Resource)]
 pub(in crate::planet) struct Made(pub Land);
 
+/// What a module puts in the world of what it made with the land.
+pub type PutIn = Box<dyn FnOnce(&mut World) + Send>;
+
+/// What modules make from the land on its own thread once it is made, before the world is
+/// entered (D623), each by name: work of seconds that needs nothing but the land (the woods'
+/// trees laid out), which in `OnEnter(InWorld)` held the frame the world is entered in, the
+/// loading screen frozen 12 s at the lake (crossing-freeze j1). What each gives back is put
+/// in the world as the land comes back; a run with no loading screen makes none of it, and
+/// the module makes it as it enters.
+#[derive(Resource, Default, Clone)]
+pub struct WithTheLand(Vec<(&'static str, fn(&Land) -> PutIn)>);
+
+impl WithTheLand {
+    /// `make` is made from the land on its thread, after it, as `what`.
+    pub fn add(&mut self, what: &'static str, make: fn(&Land) -> PutIn) {
+        self.0.push((what, make));
+    }
+}
+
 pub(in crate::planet) fn plugin(app: &mut App) {
     app.world_resource::<Making>()
         .world_resource::<Made>()
+        .init_resource::<WithTheLand>()
         .add_systems(OnEnter(Travel::Generating), begin)
         .add_systems(Crossing, come_back.before(crate::instance::carry_out))
         .add_systems(Update, said.in_set(Track));
@@ -54,18 +74,33 @@ fn begin(world: &mut World) {
     let options = world.resource::<Options>().clone();
     let known = world.get_resource::<KnownStart>().copied();
     let known_towns = world.get_resource::<KnownTowns>().cloned();
+    let with = world.resource::<WithTheLand>().clone();
     let stage = Arc::new(Stage::default());
     let saying = Arc::clone(&stage);
     let thread = std::thread::Builder::new()
         .name("terra-land".into())
         .spawn(move || {
-            made_land(
+            let land = made_land(
                 &spec,
                 &options,
                 known.as_ref(),
                 known_towns.as_ref(),
                 &saying,
-            )
+            );
+            let put_in = with
+                .0
+                .iter()
+                .map(|(what, make)| {
+                    let began = Instant::now();
+                    let put_in = make(&land);
+                    info!(
+                        "Land: {what} made with it in {:.1} s",
+                        began.elapsed().as_secs_f32()
+                    );
+                    put_in
+                })
+                .collect();
+            (land, put_in)
         })
         .unwrap_or_else(|why| {
             panic!("the land's thread could not be started ({why}); the machine is out of threads or memory")
@@ -91,7 +126,7 @@ fn come_back(world: &mut World) {
     let Some(thread) = making.thread.take() else {
         return;
     };
-    let land = thread
+    let (land, put_in) = thread
         .join()
         .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
     info!(
@@ -100,6 +135,9 @@ fn come_back(world: &mut World) {
         making.frames
     );
     world.remove_resource::<Making>();
+    for put_in in put_in {
+        put_in(world);
+    }
     world.insert_resource(Made(land));
     world.resource_mut::<Generating>().done(LAND);
 }

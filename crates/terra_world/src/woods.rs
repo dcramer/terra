@@ -15,6 +15,7 @@ use crate::flora_kinds::Flora;
 use crate::grown::{self, Cards};
 use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::Planet;
+use crate::planet::entering::generating::WithTheLand;
 use crate::start::Start;
 use crate::streaming::{Class, Place, Streaming, Ticket};
 use crate::trees::Species;
@@ -30,9 +31,11 @@ use bevy::{
     render::{render_resource::AsBindGroup, storage::ShaderBuffer},
     shader::ShaderRef,
 };
+use laid_out::LaidOut;
 use std::sync::Arc;
 
 mod felled;
+mod laid_out;
 mod near;
 mod outline;
 
@@ -250,6 +253,7 @@ pub fn plugin(app: &mut App) {
             Planting.in_set(Building::View).before(LayingFloor),
         )
         .add_systems(OnEnter(InWorld), plant.in_set(Planting))
+        .init_resource::<WithTheLand>()
         .add_systems(
             Update,
             (
@@ -264,6 +268,8 @@ pub fn plugin(app: &mut App) {
             ),
         )
         .add_message::<FellAgain>();
+    let mut with = app.world_mut().resource_mut::<WithTheLand>();
+    with.add("the woods' trees", laid_out::with_the_land);
 }
 
 /// The flora's generic grown pine (`flora.ron`'s Pine), in its variants, for both kinds.
@@ -647,7 +653,7 @@ fn plant(
     mut far: ResMut<Assets<FarWoods>>,
     mut trunks: ResMut<crate::flora::Trunks>,
     parting: Option<Res<crate::parting::Parting>>,
-    sited: Option<Res<crate::start::Sited>>,
+    (sited, laid_out): (Option<Res<crate::start::Sited>>, Option<ResMut<LaidOut>>),
     mut far_cards: ResMut<FarCards>,
 ) {
     let Some(round) = planet.round() else {
@@ -655,11 +661,12 @@ fn plant(
     };
     let began = std::time::Instant::now();
     let land = &round.land;
-    let middle = sited
-        .and_then(|sited| sited.woods_middle(&planet))
-        .unwrap_or(start.translation);
+    let middle = laid_out::middle(&planet, &start, sited.as_deref());
     let seed = planet.seed().derive("woods");
-    let mid = stood(&planet, round, middle, seed);
+    // Laid out with the land, on its thread (D623), or else now.
+    let mid =
+        LaidOut::take(laid_out, middle).unwrap_or_else(|| stood(&planet, round, middle, seed));
+    commands.remove_resource::<LaidOut>();
 
     // Near: grown conifers, each its kind's at its stature, drawn by what the layer above
     // gave, or the flora's pine.

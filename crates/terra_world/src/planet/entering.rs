@@ -9,7 +9,7 @@ use bevy::{camera::ShadowLodOrigin, camera_controller::free_camera::FreeCamera, 
 use std::sync::atomic::{AtomicU8, Ordering};
 use terra_core::{PlanetSpec, Seed};
 
-pub(super) mod generating;
+pub mod generating;
 
 /// The seed of a run given none, and of every world kept from before worlds had their own.
 pub const FIRST_SEED: u64 = 1;
