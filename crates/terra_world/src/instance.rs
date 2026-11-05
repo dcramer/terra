@@ -228,6 +228,26 @@ pub fn in_world(travel: Option<Res<State<Travel>>>) -> bool {
     travel.is_none_or(|travel| matches!(travel.get(), Travel::Entering | Travel::Playing))
 }
 
+/// A run condition: `R` was put in since this last ran true, and the world is made
+/// ([`in_world`]): what is done once for each resource put in, as `resource_added` says,
+/// but asked only in the world. Not `resource_added` gated on `in_world`: every condition is
+/// evaluated each frame, so one put in while the land was generated (a save's path, at
+/// start-up) was no longer new once the world was entered, and its world never loaded it.
+pub fn added_in_world<R: Resource>(
+    travel: Option<Res<State<Travel>>>,
+    resource: Option<Res<R>>,
+    mut seen: Local<Option<bevy::ecs::change_detection::Tick>>,
+) -> bool {
+    let Some(resource) = resource else {
+        return false;
+    };
+    if !in_world(travel) || *seen == Some(resource.added()) {
+        return false;
+    }
+    *seen = Some(resource.added());
+    true
+}
+
 /// Generating with nothing left to make: the world is entered.
 fn generated(world: &mut World) {
     let generating = world

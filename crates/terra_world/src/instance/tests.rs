@@ -360,3 +360,41 @@ fn a_world_generated_off_the_main_thread_is_entered_once_made() {
     app.update();
     assert_eq!(travel(&app), Travel::Playing);
 }
+
+/// What is put in while the land is generated is still new once the world is entered:
+/// `added_in_world` runs once for it then, and again only when it is put in again (D623).
+#[test]
+fn a_resource_put_in_while_generating_is_taken_once_in_the_world() {
+    #[derive(Resource)]
+    struct Put;
+    #[derive(Resource, Default)]
+    struct Taken(u32);
+    let mut app = App::new();
+    app.init_resource::<Taken>()
+        .insert_resource(State::new(Travel::Generating))
+        .add_systems(
+            Update,
+            (|mut taken: ResMut<Taken>| taken.0 += 1).run_if(added_in_world::<Put>),
+        );
+    app.update();
+    app.world_mut().insert_resource(Put);
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!(app.world().resource::<Taken>().0, 0, "not while generating");
+    app.world_mut()
+        .insert_resource(State::new(Travel::Entering));
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!(app.world().resource::<Taken>().0, 1, "once, in the world");
+    app.world_mut().remove_resource::<Put>();
+    app.update();
+    app.world_mut().insert_resource(Put);
+    app.update();
+    assert_eq!(
+        app.world().resource::<Taken>().0,
+        2,
+        "again when put in again"
+    );
+}
