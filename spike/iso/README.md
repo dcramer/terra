@@ -2,6 +2,8 @@
 
 **Question:** what would a realistic 2.5D party game in the manner of Baldur's Gate II look like on our engine and assets?
 
+Findings: [research/2026-11-05-isometric-party-spike.md](../../research/2026-11-05-isometric-party-spike.md).
+
 Not part of the game: its own Cargo workspace, reading the repository's `assets/` and carrying the same Bevy patches.
 
 ## Run

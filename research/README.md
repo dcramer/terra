@@ -14,6 +14,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 |---|---|
 | [What it costs an agent to drive the character pipeline, and how to make it cheap](2026-11-05-agent-pipeline-tokens.md) | 2026-11-05 |
 | [Why the lake's clouds look unrealistic, measured against photographs](2026-11-05-cloud-look.md) | 2026-11-05 |
+| [What a realistic isometric party game in the manner of Baldur's Gate II looks like on our engine](2026-11-05-isometric-party-spike.md) | 2026-11-05 |
 | [Performance systems: what would have caught 2 November's failures at once](2026-11-03-performance-systems.md) | 2026-11-03 |
 | [A character base where body, clothes and animations are made together](2026-11-02-character-base.md) | 2026-11-02 |
 | [A character pipeline where bodies, outfits, gear, variety and clips are easy to add](2026-11-02-character-pipeline.md) | 2026-11-02 |
