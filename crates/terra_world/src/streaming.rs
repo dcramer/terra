@@ -4,7 +4,9 @@
 //! World Partition and HLODs, Skyrim's distant LOD). One scheduler starts the work in priority
 //! classes, nearest the camera first, a few tasks at a time (`order::next`), and lets the
 //! results into the world under a budget a frame of the main thread's time and the bytes to
-//! upload (`order::Meter`, `assets/data/perf/budgets.ron`). The loading screen waits for what
+//! upload (`order::Meter`, `assets/data/perf/budgets.ron`), each result charged what it
+//! really costs the main thread once in: its spawn, applied and timed by `admit`, and what
+//! other systems then do with it (`Aftermath`), measured (`order::Costs`). The loading screen waits for what
 //! is near; a scripted run is still held for the rest (`loading::hold`), so it sees the same
 //! world on any machine.
 
@@ -12,11 +14,12 @@ pub(crate) mod order;
 
 use crate::loading::Screen;
 use crate::planet::MainCamera;
+use bevy::ecs::world::CommandQueue;
 use bevy::{
     prelude::*,
     tasks::{Task, TaskPool},
 };
-use order::{Budget, Meter};
+use order::{Budget, Costs, Meter};
 pub(crate) use order::{Class, Place};
 use std::sync::{
     Arc, Mutex,
@@ -40,6 +43,14 @@ pub(crate) struct Streaming {
     running: Vec<(Class, Task<()>)>,
     budget: Budget,
     meter: Meter,
+    /// What each class's results cost the main thread once in, measured.
+    costs: Costs,
+    /// Each class's results' commands this frame (`commands`), applied together and timed by
+    /// `admit`.
+    queues: [CommandQueue; Class::COUNT],
+    /// How many of each class entered the frame before this one: what the other systems'
+    /// work this frame (`Aftermath`) was over.
+    before: [usize; Class::COUNT],
     /// Whether the loading screen shows this frame, so the larger budget holds.
     loading: bool,
     /// Each class's tasks since it last drained: when the first was asked, how many, and the
@@ -91,6 +102,9 @@ impl Default for Streaming {
             running: Vec::new(),
             budget: budgets.streaming,
             meter: Meter::default(),
+            costs: Costs::default(),
+            queues: Default::default(),
+            before: [0; Class::COUNT],
             loading: false,
             classes: Default::default(),
         }
@@ -137,8 +151,8 @@ impl Streaming {
         Ticket { slot, cancelled }
     }
 
-    /// Whether one more result of `class` may enter the world this frame.
-    pub(crate) fn may_enter(&self, class: Class) -> bool {
+    /// This frame's budget: the main thread's ms and the bytes.
+    fn frame_budget(&self) -> (f32, usize) {
         let Budget {
             frame_ms,
             upload_mib,
@@ -150,13 +164,33 @@ impl Streaming {
         } else {
             (frame_ms, upload_mib)
         };
-        self.meter
-            .may_enter(class, (ms, (mib * 1024.0 * 1024.0) as usize))
+        (ms, (mib * 1024.0 * 1024.0) as usize)
     }
 
-    /// Counts a result of `class` in, put in the world since `began` and bringing `bytes`.
+    /// Whether one more result of `class` may enter the world this frame, at what one has
+    /// been measured to cost.
+    pub(crate) fn may_enter(&self, class: Class) -> bool {
+        let budget = self.frame_budget();
+        let cost = self.costs.of(class, budget.0);
+        self.meter.may_enter(class, budget, cost)
+    }
+
+    /// Where a result of `class` is put in the world: commands applied by `admit` this frame,
+    /// timed, so what spawning it costs is measured and charged to its class. Anything that
+    /// enters the world under the budget is spawned through these.
+    pub(crate) fn commands<'w>(
+        &mut self,
+        class: Class,
+        commands: &Commands<'w, '_>,
+    ) -> Commands<'w, '_> {
+        commands.rebound_to(&mut self.queues[class.index()])
+    }
+
+    /// Counts a result of `class` in, put in the world since `began` and bringing `bytes`:
+    /// the time since `began` and what one of its class costs once in.
     pub(crate) fn entered(&mut self, class: Class, began: Instant, bytes: usize) {
-        let ms = began.elapsed().as_secs_f32() * 1000.0;
+        let budget = self.frame_budget().0;
+        let ms = began.elapsed().as_secs_f32() * 1000.0 + self.costs.of(class, budget);
         self.meter.entered(class, ms, bytes);
     }
 
@@ -229,14 +263,64 @@ pub(crate) fn plugin(app: &mut App) {
         return;
     }
     app.init_resource::<Streaming>()
+        .init_resource::<Aftermath>()
         .add_systems(First, new_frame)
-        .add_systems(Update, feed.run_if(lifted));
+        .add_systems(Update, feed.run_if(lifted))
+        .add_systems(
+            PostUpdate,
+            admit.before(bevy::transform::TransformSystems::Propagate),
+        );
 }
 
-/// A new frame: nothing has entered it yet.
-fn new_frame(screen: Option<Res<State<Screen>>>, mut streaming: ResMut<Streaming>) {
-    streaming.meter = Meter::default();
+/// The main thread's time other systems spend on what the streaming let in (D608): a system
+/// that does work for what has just entered the world (fitting a streamed tree's trunk to
+/// the ground) files how long it took, and the streaming charges it to what entered, so the
+/// budget holds what its results cost after they are in too, as well as their spawn.
+#[derive(Resource, Default)]
+pub struct Aftermath {
+    ms: f32,
+}
+
+impl Aftermath {
+    /// Files the time since `began` as work done for what streamed in.
+    pub fn spent(&mut self, began: Instant) {
+        self.ms += began.elapsed().as_secs_f32() * 1000.0;
+    }
+}
+
+/// A new frame: nothing has entered it yet. What other systems did last frame was for what
+/// entered the frame before (`admit` puts it in the world at the end of its frame), and is
+/// charged to it.
+fn new_frame(
+    screen: Option<Res<State<Screen>>>,
+    mut streaming: ResMut<Streaming>,
+    mut aftermath: ResMut<Aftermath>,
+) {
+    let streaming = &mut *streaming;
+    let ms = std::mem::take(&mut aftermath.ms);
+    streaming.costs.after(ms, streaming.before);
+    streaming.before = std::mem::take(&mut streaming.meter).entered;
     streaming.loading = !lifted(screen);
+}
+
+/// Puts this frame's results in the world, a class at a time, timing each: the spawn and
+/// insertion of everything they brought, with the hooks and observers it sets off, which
+/// Bevy defers past the systems that asked for it, so no system's own clock sees it.
+fn admit(world: &mut World) {
+    let mut queues: [CommandQueue; Class::COUNT] =
+        std::mem::take(&mut world.resource_mut::<Streaming>().queues);
+    for class in Class::ALL {
+        let queue = &mut queues[class.index()];
+        if queue.is_empty() {
+            continue;
+        }
+        let began = Instant::now();
+        queue.apply(world);
+        let ms = began.elapsed().as_secs_f32() * 1000.0;
+        let mut streaming = world.resource_mut::<Streaming>();
+        let count = streaming.meter.entered[class.index()];
+        streaming.costs.applied(class, ms, count);
+    }
 }
 
 /// Starts what may run, nearest the camera first, and says each class drained.
@@ -292,6 +376,99 @@ pub(crate) fn time_far_view(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::lifecycle::HookContext;
+    use bevy::ecs::world::DeferredWorld;
+    use std::time::Duration;
+
+    /// Something whose spawn takes 2 ms of the main thread, in its hook.
+    #[derive(Component)]
+    #[component(on_add = slow_to_add)]
+    struct SlowToAdd;
+
+    fn slow_to_add(_: DeferredWorld, _: HookContext) {
+        std::thread::sleep(Duration::from_millis(2));
+    }
+
+    /// Something another system takes 1 ms over once it is in.
+    #[derive(Component)]
+    struct SlowAfter;
+
+    /// An app streaming in up to 20 of `class` a frame, each spawned as `bundle` gives.
+    fn streaming_app<B: Bundle>(class: Class, bundle: fn() -> B) -> App {
+        let mut app = App::new();
+        plugin(&mut app);
+        app.add_systems(
+            Update,
+            move |commands: Commands, mut streaming: ResMut<Streaming>| {
+                for _ in 0..20 {
+                    if !streaming.may_enter(class) {
+                        break;
+                    }
+                    let began = Instant::now();
+                    streaming.commands(class, &commands).spawn(bundle());
+                    streaming.entered(class, began, 0);
+                }
+            },
+        );
+        app
+    }
+
+    /// The entered of `class` the frame before last, as the meter counted them.
+    fn entered_before(app: &App, class: Class) -> usize {
+        app.world().resource::<Streaming>().before[class.index()]
+    }
+
+    /// A result's spawn, which Bevy defers past the system that asked for it, is what it costs
+    /// the frame: something whose spawn takes 2 ms comes in one a frame under the 2 ms budget,
+    /// however little its queueing takes, and is in the world by the frame's end.
+    #[test]
+    fn a_results_spawn_is_charged_to_its_class() {
+        let mut app = streaming_app(Class::Other, || SlowToAdd);
+        for _ in 0..4 {
+            app.update();
+        }
+        let streaming = app.world().resource::<Streaming>();
+        assert!(streaming.costs.of(Class::Other, 0.0) >= 2.0);
+        assert_eq!(entered_before(&app, Class::Other), 1);
+        let world = app.world_mut();
+        assert_eq!(world.query::<&SlowToAdd>().iter(world).count(), 4);
+        // Something cheap to spawn comes in many a frame.
+        let mut app = streaming_app(Class::Other, || Name::new("cheap"));
+        for _ in 0..12 {
+            app.update();
+        }
+        assert!(entered_before(&app, Class::Other) > 5);
+    }
+
+    /// What another system does with a result once it is in, filed as the streaming's
+    /// aftermath, is charged to its class too: 1 ms a result after holds them to about two a
+    /// frame under the 2 ms budget, where their spawn alone would let twenty in.
+    #[test]
+    fn what_comes_after_a_result_is_charged_to_its_class() {
+        let mut app = streaming_app(Class::Flora, || SlowAfter);
+        app.add_systems(
+            Update,
+            |added: Query<(), Added<SlowAfter>>, mut aftermath: ResMut<Aftermath>| {
+                let began = Instant::now();
+                for () in &added {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                if !added.is_empty() {
+                    aftermath.spent(began);
+                }
+            },
+        );
+        for _ in 0..30 {
+            app.update();
+        }
+        let cost = app
+            .world()
+            .resource::<Streaming>()
+            .costs
+            .of(Class::Flora, 0.0);
+        assert!(cost >= 0.9, "{cost} ms");
+        assert!(entered_before(&app, Class::Flora) <= 3);
+    }
 
     #[test]
     fn the_streaming_pool_has_its_share_of_the_background_and_never_fans_out() {

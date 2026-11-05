@@ -893,7 +893,13 @@ fn receive(
             commands.entity(old).despawn();
         }
         let bytes = mesh.as_ref().map_or(0, crate::streaming::mesh_bytes);
-        let entity = show(&mut commands, &mut meshes, &look, id, mesh);
+        let entity = show(
+            &mut streaming.commands(class, &commands),
+            &mut meshes,
+            &look,
+            id,
+            mesh,
+        );
         terrain.shown.insert(id, Shown { sides, entity });
         streaming.entered(class, began, bytes);
     }

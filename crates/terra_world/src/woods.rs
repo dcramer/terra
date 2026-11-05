@@ -485,7 +485,7 @@ impl FarCards {
 /// has lifted, a ring a task so the pool's threads share them, and lets the squares into the
 /// world under the frame's budget, the nearest first.
 fn stream_cards(
-    mut commands: Commands,
+    commands: Commands,
     planet: Res<Planet>,
     mut streaming: ResMut<Streaming>,
     mut cards: ResMut<FarCards>,
@@ -551,7 +551,12 @@ fn stream_cards(
         let began = std::time::Instant::now();
         let bytes = crate::streaming::mesh_bytes(&mesh);
         let material = making.material.clone();
-        commands.spawn(far_square(meshes.add(mesh), material, middle, aabb));
+        (streaming.commands(Class::FarWoods, &commands)).spawn(far_square(
+            meshes.add(mesh),
+            material,
+            middle,
+            aabb,
+        ));
         streaming.entered(Class::FarWoods, began, bytes);
     }
     let Some((trees, count)) = making.made.filter(|_| making.entering.is_empty()) else {

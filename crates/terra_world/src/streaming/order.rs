@@ -146,24 +146,81 @@ pub(crate) struct Budget {
 pub(crate) struct Meter {
     pub ms: f32,
     pub bytes: usize,
-    entered: [usize; Class::COUNT],
+    pub entered: [usize; Class::COUNT],
 }
 
 impl Meter {
-    /// Whether one more of `class` may enter: the first of each class every frame does, so
-    /// none starves behind another, and the near ground always does (Unreal's extra time for
-    /// what is high priority); the rest while the frame's time and bytes are under `budget`.
-    pub(crate) fn may_enter(&self, class: Class, budget: (f32, usize)) -> bool {
+    /// Whether one more of `class`, costing the main thread `cost_ms` once in, may enter: the
+    /// first of each class every frame does, so none starves behind another, and the near
+    /// ground always does (Unreal's extra time for what is high priority); the rest while the
+    /// frame's time with this one's and its bytes are within `budget`.
+    pub(crate) fn may_enter(&self, class: Class, budget: (f32, usize), cost_ms: f32) -> bool {
         class == Class::NearGround
             || self.entered[class.index()] == 0
-            || (self.ms < budget.0 && self.bytes < budget.1)
+            || (self.ms + cost_ms <= budget.0 && self.bytes < budget.1)
     }
 
-    /// Counts one of `class` in, which took `ms` of the main thread and brings `bytes`.
+    /// Counts one of `class` in, which took and will take `ms` of the main thread and brings
+    /// `bytes`.
     pub(crate) fn entered(&mut self, class: Class, ms: f32, bytes: usize) {
         self.ms += ms;
         self.bytes += bytes;
         self.entered[class.index()] += 1;
+    }
+}
+
+/// How much of a running mean a new measure moves: about the last eight frames that let
+/// something in.
+const MEAN_STEP: f32 = 0.25;
+
+/// What one result of each class costs the main thread once it has entered, measured: its
+/// commands applied (spawning it, inserting its parts, their hooks and observers: the spawn a
+/// system's own clock never sees, as Bevy defers it) and what other systems then do with it
+/// (fitting a tree's trunk to the ground: `Aftermath`), each a running mean. The meter charges
+/// a result its class's cost as it enters, so a frame lets in what its budget holds of the
+/// real work and not of the queueing alone, as Unreal's level streaming time-slices
+/// `AddToWorld` by the time its registration takes (`s.LevelStreamingActorsUpdateTimeLimit`)
+/// and Insomniac's streaming charges each asset type its measured cost. Until a class is
+/// measured it costs the whole budget: one a frame, as the meter lets its first in anyway.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Costs {
+    applied: [Option<f32>; Class::COUNT],
+    after: [Option<f32>; Class::COUNT],
+}
+
+fn mean(was: Option<f32>, now: f32) -> Option<f32> {
+    Some(was.map_or(now, |was| was + (now - was) * MEAN_STEP))
+}
+
+impl Costs {
+    /// The main thread's ms one of `class` costs once in, `unknown` until measured.
+    pub(crate) fn of(&self, class: Class, unknown: f32) -> f32 {
+        let k = class.index();
+        self.applied[k].unwrap_or(unknown) + self.after[k].unwrap_or(0.0)
+    }
+
+    /// `count` of `class` had their commands applied in `ms`.
+    pub(crate) fn applied(&mut self, class: Class, ms: f32, count: usize) {
+        if count > 0 {
+            let k = class.index();
+            self.applied[k] = mean(self.applied[k], ms / count as f32);
+        }
+    }
+
+    /// Other systems took `ms` of the main thread over what `entered` (each class's count)
+    /// brought in: shared evenly among them, each class's mean moving toward its share.
+    pub(crate) fn after(&mut self, ms: f32, entered: [usize; Class::COUNT]) {
+        let count: usize = entered.iter().sum();
+        if count == 0 {
+            return;
+        }
+        let each = ms / count as f32;
+        for class in Class::ALL {
+            let k = class.index();
+            if entered[k] > 0 {
+                self.after[k] = mean(self.after[k], each);
+            }
+        }
     }
 }
 
@@ -261,22 +318,62 @@ mod tests {
         let budget = (2.0, 8 << 20);
         let mut meter = Meter::default();
         let mut entered = 0;
-        while meter.may_enter(Class::FarGround, budget) {
+        while meter.may_enter(Class::FarGround, budget, 0.1) {
             meter.entered(Class::FarGround, 0.1, 3 << 20);
             entered += 1;
             assert!(entered < 100);
         }
         // 3 MiB each: three bring 9 MiB, past the 8, and no more come.
         assert_eq!(entered, 3);
-        assert!(!meter.may_enter(Class::FarGround, budget));
+        assert!(!meter.may_enter(Class::FarGround, budget, 0.1));
         // The woods' first still comes this frame, and the near ground always does.
-        assert!(meter.may_enter(Class::FarWoods, budget));
+        assert!(meter.may_enter(Class::FarWoods, budget, 5.0));
         meter.entered(Class::FarWoods, 5.0, 0);
-        assert!(!meter.may_enter(Class::FarWoods, budget));
-        assert!(meter.may_enter(Class::NearGround, budget));
-        // The time holds it too.
+        assert!(!meter.may_enter(Class::FarWoods, budget, 5.0));
+        assert!(meter.may_enter(Class::NearGround, budget, 5.0));
+        // The time holds it too, with what the next one would cost.
         let mut meter = Meter::default();
         meter.entered(Class::Flora, 2.5, 0);
-        assert!(!meter.may_enter(Class::Flora, budget));
+        assert!(!meter.may_enter(Class::Flora, budget, 0.0));
+        let mut meter = Meter::default();
+        meter.entered(Class::Flora, 1.5, 0);
+        assert!(meter.may_enter(Class::Flora, budget, 0.5));
+        assert!(!meter.may_enter(Class::Flora, budget, 0.6));
+    }
+
+    /// A frame lets in as many as the real cost of each fits in its budget, however little
+    /// queueing one takes: one a frame till measured, then the budget over what one costs.
+    #[test]
+    fn a_frame_lets_in_what_the_results_really_cost() {
+        let budget = (2.0, usize::MAX);
+        let frame = |costs: &Costs| {
+            let mut meter = Meter::default();
+            let cost = costs.of(Class::NearWoods, budget.0);
+            while meter.may_enter(Class::NearWoods, budget, cost) {
+                // The system's own time is a trifle; the cost comes after.
+                meter.entered(Class::NearWoods, 0.001 + cost, 0);
+                assert!(meter.entered[Class::NearWoods.index()] < 10_000);
+            }
+            meter.entered[Class::NearWoods.index()]
+        };
+        let mut costs = Costs::default();
+        assert_eq!(frame(&costs), 1, "unmeasured, one a frame");
+        // Spawning one takes 0.1 ms and fitting it 0.15 ms more, each frame measured.
+        for _ in 0..60 {
+            let entered = frame(&costs);
+            costs.applied(Class::NearWoods, 0.1 * entered as f32, entered);
+            let mut by_class = [0; Class::COUNT];
+            by_class[Class::NearWoods.index()] = entered;
+            costs.after(0.15 * entered as f32, by_class);
+        }
+        let entered = frame(&costs);
+        assert!(
+            (7..=8).contains(&entered),
+            "2 ms holds 8 of 0.25 ms, not {entered}"
+        );
+        // What other classes cost does not move this one's, nor what came with none in.
+        costs.applied(Class::FarGround, 50.0, 1);
+        costs.after(500.0, [0; Class::COUNT]);
+        assert!((costs.of(Class::NearWoods, budget.0) - 0.25).abs() < 0.01);
     }
 }

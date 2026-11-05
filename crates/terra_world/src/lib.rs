@@ -90,7 +90,7 @@ pub mod skylight;
 pub mod smoke;
 pub mod spatial;
 pub mod start;
-mod streaming;
+pub mod streaming;
 pub mod terrain;
 pub mod threads;
 pub mod tick;

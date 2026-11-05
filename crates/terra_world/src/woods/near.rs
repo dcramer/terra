@@ -281,7 +281,8 @@ pub(super) fn stream(
             && let Some(tree) = coming.pop()
         {
             let began = std::time::Instant::now();
-            let (tree, _) = grow(&mut commands, &*near.conifers, &mut trunks, &tree);
+            let mut spawn = streaming.commands(Class::NearWoods, &commands);
+            let (tree, _) = grow(&mut spawn, &*near.conifers, &mut trunks, &tree);
             standing.push(tree);
             streaming.entered(Class::NearWoods, began, 0);
             stood += 1;

@@ -26,10 +26,12 @@ use bevy::remote::{BrpResult, builtin_methods::parse_some};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
+use std::time::Instant;
 use terra_core::{Piece, Placement, Relief, Solid};
 use terra_world::flora::{Growth, Obstacles};
 use terra_world::planet::Planet;
 use terra_world::start::Start;
+use terra_world::streaming::Aftermath;
 
 /// A walker's step (`terra_build::Walker`), the most it steps onto without jumping.
 const STEP_M: f32 = 0.4;
@@ -392,8 +394,10 @@ fn trunks(
     mut shapes: ResMut<Shapes>,
     planet: Option<Res<Planet>>,
     mut obstacles: ResMut<Obstacles>,
+    mut aftermath: Option<ResMut<Aftermath>>,
 ) {
     let Some(planet) = planet else { return };
+    let began = Instant::now();
     // Each kind's shapes, once, here; each tree's fit, sampling the ground under it, on every
     // core: a world's 3,500 trees took 5 to 8 s of one frame on entering it (instances j9).
     let mut fits = Vec::new();
@@ -413,6 +417,7 @@ fn trunks(
     let solids = terra_gen::par::map(&fits, |(_, wood, seen, skirted, transform)| {
         tree_solid(planet, transform, wood, seen, *skirted)
     });
+    let fitted = !fits.is_empty();
     for ((entity, wood, seen, _, transform), solid) in fits.into_iter().zip(solids) {
         if let Some(solid) = solid {
             obstacles.add_solid(transform.translation, solid);
@@ -423,6 +428,10 @@ fn trunks(
             top_m: f32::INFINITY,
             low: None,
         });
+    }
+    // The woods' trees stream in round the player: their fits are part of what one costs.
+    if let (true, Some(aftermath)) = (fitted, aftermath.as_mut()) {
+        aftermath.spent(began);
     }
 }
 
