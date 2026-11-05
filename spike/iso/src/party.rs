@@ -52,7 +52,12 @@ const KINDS: &[(&str, [&str; 4])] = &[
     (
         BODY,
         // Busy is sitting: a member at rest by the fire (rest.rs).
-        ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Sitting_Idle_Loop"],
+        [
+            "Idle_Loop",
+            "Walk_Loop",
+            "Jog_Fwd_Loop",
+            "Sitting_Idle_Loop",
+        ],
     ),
     (KNIGHT, ["idle", "walk", "run", "idle"]),
     (crate::wildlife::STAG, ["Idle", "Walk", "Run", "Eat"]),
@@ -321,6 +326,7 @@ fn spawn(
                 .looking_at(Vec3::new(0.0, face / s, 0.0), Vec3::Y),
             ChildOf(body),
             PortraitOf(actor),
+            bevy::camera::visibility::RenderLayers::from_layers(&[0, crate::camp::FIRE_CASTS]),
         ));
     }
 }

@@ -41,6 +41,8 @@ struct Flame {
     lumens: f32,
     seed: f32,
     fire: bool,
+    /// The share of the fire's light this part gives.
+    share: f32,
 }
 
 #[derive(Resource)]
@@ -173,26 +175,33 @@ pub fn build(
         1.0,
     );
     commands.entity(fire).insert(crate::camp::NoShadow);
-    commands.spawn((
-        PointLight {
-            color: Color::srgb(1.0, 0.55, 0.22),
-            intensity: 110_000.0,
-            range: 26.0,
-            // A fire is a broad flame: its shadows soft, the tripod's legs no hard spokes.
-            radius: 0.45,
-            shadow_maps_enabled: true,
-            soft_shadows_enabled: true,
-            ..default()
-        },
-        // Among the flames and beside the pot hung over them (camp.rs), not inside or under
-        // it (there the pot's inside glows white); the fire's own logs cast no shadow.
-        Transform::from_translation(on(FIRE) + Vec3::new(0.2, 0.6, -0.2)),
-        Flame {
-            lumens: 60_000.0,
-            seed: 0.0,
-            fire: true,
-        },
-    ));
+    // The fire's light in two: a near part casting the party's and the camp's big things'
+    // shadows (camp::FIRE_CASTS), soft, gone by 8 m; and a far part casting none, so a shadow
+    // in the firelight is a dimmer patch that fades out, not a black spoke across the clearing.
+    let at = on(FIRE) + Vec3::new(0.0, 0.9, 0.0);
+    for (share, range, shadows) in [(0.6, 10.0, true), (0.4, 26.0, false)] {
+        commands.spawn((
+            PointLight {
+                color: Color::srgb(1.0, 0.55, 0.22),
+                intensity: 110_000.0 * share,
+                range,
+                // A fire is a broad flame: its shadows soft.
+                radius: 0.8,
+                shadow_maps_enabled: shadows,
+                soft_shadows_enabled: shadows,
+                ..default()
+            },
+            // Among the flames; the fire's own logs and stones cast no shadow.
+            Transform::from_translation(at),
+            bevy::camera::visibility::RenderLayers::layer(crate::camp::FIRE_CASTS),
+            Flame {
+                lumens: 60_000.0 * share,
+                seed: 0.0,
+                fire: true,
+                share,
+            },
+        ));
+    }
 
     // The light: the sun (or moon), a sky's fill.
     commands.spawn((
@@ -219,7 +228,10 @@ pub fn build(
 fn light_the_hour(
     hour: Res<Hour>,
     mut sun: Query<(&mut DirectionalLight, &mut Transform), With<Sun>>,
-    mut exposure: Query<&mut bevy::camera::Exposure>,
+    mut exposure: Query<(
+        &mut bevy::camera::Exposure,
+        &mut bevy::core_pipeline::tonemapping::Tonemapping,
+    )>,
     mut ambient: ResMut<GlobalAmbientLight>,
     mut clear: ResMut<ClearColor>,
     glow: Res<Glow>,
@@ -280,11 +292,20 @@ fn light_the_hour(
     // clearing is dim, not black.
     let ev = match *hour {
         Hour::Day => 9.0,
-        Hour::Dusk => 7.9,
-        Hour::Night => 7.4,
+        Hour::Dusk => 8.9,
+        Hour::Night => 8.2,
     };
-    for mut e in &mut exposure {
+    // The tone curve: by day AgX's soft roll to white; at dusk and by night Tony McMapface,
+    // which keeps a fire gold and orange where AgX bleaches it beige (its log curve per
+    // channel squeezes a flame's red-to-blue ratio toward grey).
+    use bevy::core_pipeline::tonemapping::Tonemapping;
+    let curve = match *hour {
+        Hour::Day => Tonemapping::AgX,
+        _ => Tonemapping::TonyMcMapface,
+    };
+    for (mut e, mut t) in &mut exposure {
         e.ev100 = ev;
+        *t = curve;
     }
     let haze = match *hour {
         Hour::Day => Color::srgba(0.62, 0.7, 0.78, 0.55),
@@ -301,7 +322,7 @@ fn light_the_hour(
         m.emissive = LinearRgba::rgb(30.0, 12.0, 3.0) * lit.max(0.15);
     }
     for (mut flame, mut vis) in &mut flames {
-        let base = if flame.fire { 170_000.0 } else { 9_000.0 };
+        let base = if flame.fire { 250_000.0 } else { 9_000.0 } * flame.share;
         flame.lumens = base * lit;
         *vis = if lit > 0.0 || flame.fire {
             Visibility::Inherited

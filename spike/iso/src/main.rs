@@ -13,6 +13,7 @@ mod party;
 mod rest;
 mod rim;
 mod scene;
+mod smoke;
 mod terrain;
 mod ui;
 mod water;
@@ -121,7 +122,7 @@ fn main() {
             rim::plugin,
             water::plugin,
             wildlife::plugin,
-            motes::plugin,
+            (motes::plugin, smoke::plugin),
             camp::plugin,
             rest::plugin,
         ))

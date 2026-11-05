@@ -66,6 +66,8 @@ fn spawn(mut commands: Commands, args: Res<Args>, mut images: ResMut<Assets<Imag
         Bloom::NATURAL,
         Tonemapping::AgX,
         Exposure { ev100: 9.0 },
+        // The fire's light is on its casters' layer (camp::FIRE_CASTS): seen, so it lights.
+        bevy::camera::visibility::RenderLayers::from_layers(&[0, crate::camp::FIRE_CASTS]),
         // A little haze: the land farther off (up the screen) a shade paler and bluer than
         // the crowns near, its colour the hour's (scene.rs).
         bevy::pbr::DistanceFog {

@@ -40,7 +40,11 @@ fn settle(
         }
         tr.translation.x = rest.at.x;
         tr.translation.z = rest.at.y;
-        let to = if rest.sits { FIRE - rest.at } else { rest.at - FIRE };
+        let to = if rest.sits {
+            FIRE - rest.at
+        } else {
+            rest.at - FIRE
+        };
         // The models face +Z.
         let want = Quat::from_rotation_y(to.x.atan2(to.y));
         for kid in kids {
@@ -68,7 +72,11 @@ fn portraits(
         };
         let was = seated.insert(of.0, actor.busy).unwrap_or(false);
         if was != actor.busy {
-            tr.translation.y += if actor.busy { -SEATED_DROP } else { SEATED_DROP };
+            tr.translation.y += if actor.busy {
+                -SEATED_DROP
+            } else {
+                SEATED_DROP
+            };
         }
     }
 }

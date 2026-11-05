@@ -10,7 +10,7 @@ use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, spawn.after(crate::scene::build))
-        .add_systems(Update, (wander, rise, lick, show));
+        .add_systems(Update, (wander, rise, lick, show, face_halo));
 }
 
 #[derive(Component)]
@@ -20,6 +20,10 @@ struct Firefly {
     seed: f32,
     period: f32,
 }
+
+/// A card that turns to face the camera.
+#[derive(Component)]
+struct Halo;
 
 #[derive(Component)]
 struct Tongue {
@@ -53,17 +57,44 @@ fn spawn(
         ..default()
     };
     let glow = materials.add(lit(LinearRgba::rgb(5.0, 8.0, 1.0)));
-    let ember = materials.add(lit(LinearRgba::rgb(3.0, 0.45, 0.03)));
+    let ember = materials.add(lit(LinearRgba::rgb(4.0, 1.1, 0.08)));
+    // The tongues' colour is in their image (gold at the root, orange, red at the tips); kept
+    // below where the tone curve bleaches a colour to white, as overlapping tongues add up.
     let flame = materials.add(StandardMaterial {
         base_color_texture: Some(images.add(tongue_image())),
-        ..lit(LinearRgba::rgb(2.8, 2.6, 2.4))
+        alpha_mode: AlphaMode::Blend,
+        ..lit(LinearRgba::rgb(1.8, 1.8, 1.8))
     });
     let card = meshes.add(Rectangle::new(1.0, 1.0));
+    let soft = images.add(soft_image());
+    // The coals: a bed of red-orange glow among the logs, lying on the ground.
+    commands.spawn((
+        Mesh3d(card.clone()),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color_texture: Some(soft.clone()),
+            ..lit(LinearRgba::rgb(1.1, 0.22, 0.02))
+        })),
+        Transform::from_xyz(FIRE.x, land.height(FIRE) + 0.06, FIRE.y)
+            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
+            .with_scale(Vec3::splat(1.0)),
+        bevy::light::NotShadowCaster,
+    ));
+    // The air about the flames aglow, a faint orange halo round them (Glow faces the camera).
+    commands.spawn((
+        Mesh3d(card.clone()),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color_texture: Some(soft.clone()),
+            ..lit(LinearRgba::rgb(0.16, 0.06, 0.012))
+        })),
+        Transform::from_xyz(FIRE.x, land.height(FIRE) + 0.45, FIRE.y).with_scale(Vec3::splat(2.4)),
+        bevy::light::NotShadowCaster,
+        Halo,
+    ));
     // The fire's flames: tongues over the logs, licking up and falling back.
     let at = Vec3::new(FIRE.x, land.height(FIRE) + 0.12, FIRE.y);
-    for i in 0..9 {
+    for i in 0..12 {
         let a = i as f32 * 2.4;
-        let r = if i < 3 { 0.05 } else { rng.range(0.12, 0.3) };
+        let r = if i < 3 { 0.05 } else { rng.range(0.12, 0.32) };
         commands.spawn((
             Mesh3d(card.clone()),
             MeshMaterial3d(flame.clone()),
@@ -72,7 +103,7 @@ fn spawn(
             Tongue {
                 foot: at + Vec3::new(a.cos() * r, 0.0, a.sin() * r),
                 seed: rng.f() * 50.0,
-                size: if i < 3 { 1.5 } else { rng.range(0.8, 1.2) },
+                size: if i < 3 { 1.6 } else { rng.range(0.7, 1.15) },
             },
         ));
     }
@@ -107,14 +138,14 @@ fn spawn(
         ));
         placed += 1;
     }
-    for i in 0..26 {
+    for i in 0..40 {
         commands.spawn((
             Mesh3d(speck.clone()),
             MeshMaterial3d(ember.clone()),
             Transform::from_xyz(FIRE.x, -100.0, FIRE.y),
             bevy::light::NotShadowCaster,
             Ember {
-                born: -(i as f32) * 0.11,
+                born: -(i as f32) * 0.07,
                 life: rng.range(1.4, 2.6),
                 drift: Vec2::new(rng.range(-0.25, 0.25), rng.range(-0.25, 0.25)),
                 seed: rng.f() * 100.0,
@@ -164,7 +195,7 @@ fn rise(time: Res<Time>, land: Res<Land>, mut embers: Query<(&mut Ember, &mut Tr
             + Vec3::new(e.drift.x + 0.35, 0.0, e.drift.y + 0.2) * age
             + Vec3::Y * (1.1 * age - 0.12 * age * age)
             + swirl;
-        tr.scale = Vec3::splat(0.03 * (1.0 - k).powf(0.8));
+        tr.scale = Vec3::splat(0.022 * (1.0 - k).powf(0.8));
     }
 }
 
@@ -207,14 +238,16 @@ fn tongue_image() -> Image {
             let u = (x as f32 + 0.5) / w as f32 - 0.5;
             let d = if r > 0.0 { u.abs() / r } else { 2.0 };
             let i = ((1.0 - d * d).max(0.0) * (1.0 - v).powf(0.6)).clamp(0.0, 1.0);
-            let hot = (i * 1.4 - 0.4).clamp(0.0, 1.0);
+            // Gold in the hot root, orange through the body, red at the edge and tip; its
+            // opacity the teardrop's.
+            let hot = (i * 1.5 - 0.5).clamp(0.0, 1.0);
             let c = [
-                i * (0.85 + 0.15 * hot),
-                i * (0.22 + 0.55 * hot * hot),
-                i * (0.02 + 0.3 * hot * hot * hot),
+                0.85 + 0.15 * hot,
+                0.15 + 0.25 * hot + 0.25 * hot * hot,
+                0.01 + 0.05 * hot + 0.16 * hot.powi(3),
             ];
             data.extend(c.iter().map(|c| (c * 255.0) as u8));
-            data.push((i * 255.0) as u8);
+            data.push((i.sqrt() * 255.0) as u8);
         }
     }
     Image::new(
@@ -244,4 +277,42 @@ fn show(hour: Option<Res<Hour>>, mut flies: Query<&mut Visibility, With<Firefly>
     for mut v in &mut flies {
         *v = vis;
     }
+}
+
+/// The fire's halo faces the camera.
+fn face_halo(
+    camera: Query<&GlobalTransform, With<crate::camera::MainCamera>>,
+    mut halos: Query<&mut Transform, With<Halo>>,
+) {
+    let Ok(c) = camera.single() else { return };
+    for mut tr in &mut halos {
+        tr.rotation = c.rotation();
+    }
+}
+
+/// A round soft glow: white, its alpha falling smoothly from the middle to nothing at the rim.
+pub fn soft_image() -> Image {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+    let n = 32u32;
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let p = (Vec2::new(x as f32, y as f32) + 0.5) / n as f32 * 2.0 - 1.0;
+            let a = (1.0 - p.length()).clamp(0.0, 1.0);
+            let a = a * a * (3.0 - 2.0 * a);
+            data.extend([255, 255, 255, (a * 255.0) as u8]);
+        }
+    }
+    Image::new(
+        Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    )
 }

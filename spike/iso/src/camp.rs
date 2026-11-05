@@ -17,7 +17,35 @@ const CAMP: &str = "spike://models/camp";
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, build.after(scene::build))
-        .add_systems(Update, (soot, unshadowed));
+        .add_systems(Update, (soot, unshadowed, fire_casters));
+}
+
+/// The render layer of what casts the camp fire's shadow: the fire's light sees only it
+/// (scene.rs), while the camera and portraits see it with the rest. A fire 0.6 m up throws
+/// every blade, twig and bump of the ground's shadow the whole width of the clearing as a
+/// spoke; only the party and the camp's big things (its trunks, stump, bedrolls and bucket)
+/// cast, and softly, as a broad flame lights the ground about them.
+pub const FIRE_CASTS: usize = 2;
+
+/// A model whose meshes cast the fire's shadow (the party's are found by their `Actor`).
+#[derive(Component)]
+pub struct FireShadow;
+
+fn fire_casters(
+    mut commands: Commands,
+    added: Query<Entity, Added<Mesh3d>>,
+    parents: Query<&ChildOf>,
+    marked: Query<(), Or<(With<FireShadow>, With<crate::party::Actor>)>>,
+) {
+    for e in &added {
+        if parents.iter_ancestors(e).any(|a| marked.contains(a)) {
+            commands
+                .entity(e)
+                .insert(bevy::camera::visibility::RenderLayers::from_layers(&[
+                    0, FIRE_CASTS,
+                ]));
+        }
+    }
 }
 
 /// A model whose meshes cast no shadow: the campfire's own logs and stones, which the
@@ -101,23 +129,14 @@ fn build(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>, mut n
         let p = FIRE + d;
         nav.block_rect(p, Vec2::new(1.5 * len, 0.05 + 0.145 * len * GIRTH), yaw);
         let e = put(&mut commands, &asset, &land, "trunk.glb", p, yaw, len, 0.03);
-        commands.entity(e).entry::<Transform>().and_modify(move |mut t| {
-            t.scale = Vec3::new(len, len * GIRTH, len * GIRTH);
-        });
+        commands.entity(e).insert(FireShadow);
+        commands
+            .entity(e)
+            .entry::<Transform>()
+            .and_modify(move |mut t| {
+                t.scale = Vec3::new(len, len * GIRTH, len * GIRTH);
+            });
     }
-    // The cooking tripod over the fire, its pot over the coals; it casts no shadow, as its
-    // legs and pot about the fire's one point of light threw black wedges across the camp.
-    let tripod = put(
-        &mut commands,
-        &asset,
-        &land,
-        "CampTripod.glb",
-        FIRE,
-        0.4,
-        1.2,
-        0.02,
-    );
-    commands.entity(tripod).insert(NoShadow);
     // Bedrolls on the fire's far side, heads away from it, a pack by each.
     for (d, turn) in [
         (Vec2::new(2.35, -0.55), 0.1),
@@ -126,7 +145,7 @@ fn build(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>, mut n
         let p = FIRE + d;
         let yaw = (-d.x).atan2(-d.y) + turn;
         nav.block_rect(p, Vec2::new(0.45, 1.0), yaw);
-        put(
+        let e = put(
             &mut commands,
             &asset,
             &land,
@@ -136,9 +155,10 @@ fn build(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>, mut n
             1.0,
             0.0,
         );
+        commands.entity(e).insert(FireShadow);
     }
     // A bucket of water and a bowl by the fire; an axe laid by the gathered wood.
-    put(
+    let bucket = put(
         &mut commands,
         &asset,
         &land,
@@ -148,6 +168,7 @@ fn build(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>, mut n
         1.0,
         0.01,
     );
+    commands.entity(bucket).insert(FireShadow);
     put(
         &mut commands,
         &asset,
@@ -193,7 +214,7 @@ fn build(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>, mut n
     // A big old stump at the clearing's edge.
     let stump = FIRE + Vec2::new(-5.2, -2.6);
     nav.block_circle(stump, 0.7);
-    put(
+    let stump = put(
         &mut commands,
         &asset,
         &land,
@@ -203,6 +224,7 @@ fn build(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>, mut n
         0.75,
         0.12,
     );
+    commands.entity(stump).insert(FireShadow);
 
     // Twigs and bark trodden into the camp's earth, thickest at its edge, none in the fire.
     let mut placed = 0;
@@ -246,8 +268,8 @@ fn soot(
             continue;
         }
         let factor = match name.0.as_str() {
-            "Stone" => 0.4,
-            "Ground" => 0.6,
+            "Stone" => 0.25,
+            "Ground" => 0.35,
             // The bedroll's Tripo wool came out pale; a camp's blankets are dark and worn.
             n if n.starts_with("tripo_mat_515f618a") => 0.45,
             _ => continue,
