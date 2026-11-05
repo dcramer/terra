@@ -182,6 +182,7 @@ fn light_the_hour(
     glow: Res<Glow>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut flames: Query<(&mut Flame, &mut Visibility)>,
+    mut fog: Query<&mut bevy::pbr::DistanceFog>,
 ) {
     if !hour.is_changed() {
         return;
@@ -236,6 +237,14 @@ fn light_the_hour(
     };
     for mut e in &mut exposure {
         e.ev100 = ev;
+    }
+    let haze = match *hour {
+        Hour::Day => Color::srgba(0.62, 0.7, 0.78, 0.55),
+        Hour::Dusk => Color::srgba(0.42, 0.4, 0.5, 0.5),
+        Hour::Night => Color::srgba(0.05, 0.07, 0.13, 0.6),
+    };
+    for mut f in &mut fog {
+        f.color = haze;
     }
     ambient.color = sky;
     ambient.brightness = nits;

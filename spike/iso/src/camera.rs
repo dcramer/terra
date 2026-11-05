@@ -66,6 +66,17 @@ fn spawn(mut commands: Commands, args: Res<Args>, mut images: ResMut<Assets<Imag
         Bloom::NATURAL,
         Tonemapping::AgX,
         Exposure { ev100: 9.0 },
+        // A little haze: the land farther off (up the screen) a shade paler and bluer than
+        // the crowns near, its colour the hour's (scene.rs).
+        bevy::pbr::DistanceFog {
+            color: Color::NONE,
+            directional_light_color: Color::NONE,
+            falloff: bevy::pbr::FogFalloff::Linear {
+                start: DISTANCE - 2.0,
+                end: DISTANCE + 70.0,
+            },
+            ..default()
+        },
         MainCamera,
     ));
     if args.shot.is_some() {

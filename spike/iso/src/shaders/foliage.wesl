@@ -13,7 +13,7 @@ import bevy_pbr::render::{
 @if(PREPASS_PIPELINE)
 import bevy_pbr::{
     prepass::io::{Vertex, VertexOutput, FragmentOutput, decompress_vertex},
-    render::pbr_prepass_functions::prepass_sample_color_and_alpha_discard,
+    render::pbr_prepass_functions::{prepass_sample_color_and_alpha_discard, calculate_motion_vector},
 };
 @else
 import bevy_pbr::render::{
@@ -178,6 +178,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 }
 @if(UNCLIPPED_DEPTH_ORTHO_EMULATION)
     out.frag_depth = in.unclipped_depth;
+    // The camera's own motion, for the TAA (the sway's is left out).
+@if(MOTION_VECTOR_PREPASS)
+    out.motion_vector = calculate_motion_vector(in.world_position, in.previous_world_position);
     return out;
 }
 @elif(PREPASS_PIPELINE)
