@@ -121,7 +121,9 @@ pub fn plugin(app: &mut App) {
             track.in_set(loading::Track),
             crate::streaming::time_far_view,
         )
-            .chain(),
+            .chain()
+            // The ground is the world's: none chosen or meshed while it is generated (D623).
+            .run_if(crate::instance::in_world),
     );
 }
 

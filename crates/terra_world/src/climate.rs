@@ -324,8 +324,12 @@ struct Painted {
 /// are the world's (D469), read from its planet on entering it.
 pub fn plugin(app: &mut App) {
     entering(app);
-    app.register_type::<ClimateSample>()
-        .add_systems(Update, (sample, paint).after(crate::daylight::Ticking));
+    app.register_type::<ClimateSample>().add_systems(
+        Update,
+        (sample, paint)
+            .after(crate::daylight::Ticking)
+            .run_if(crate::instance::in_world),
+    );
 }
 
 /// What of the climate is the world's (D469).

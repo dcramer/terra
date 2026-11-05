@@ -345,7 +345,13 @@ pub fn plugin(app: &mut App) {
     // The named weathers are every world's.
     app.insert_resource(SnowLyingOpens(file.snow_lying_opens_ev))
         .insert_resource(Names(file.named))
-        .add_systems(Update, (follow, grade).chain().before(Ticking));
+        .add_systems(
+            Update,
+            (follow, grade)
+                .chain()
+                .before(Ticking)
+                .run_if(crate::instance::in_world),
+        );
 }
 
 /// What of the weather is the world's (D469): the weather and its grade.

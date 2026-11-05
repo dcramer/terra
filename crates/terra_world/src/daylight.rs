@@ -385,6 +385,8 @@ pub fn plugin(app: &mut App) {
     terra_gen::tune::register(&[&PACE]);
     app.insert_resource(WorldClimate(crate::data::read(WorldClimate::FILE)))
         .register_type::<Clock>()
+        // The day is the world's: none while it is generated (D623).
+        .configure_sets(Update, Ticking.run_if(crate::instance::in_world))
         // On the yard, the flat test level, the sun stands still.
         .add_systems(
             Update,

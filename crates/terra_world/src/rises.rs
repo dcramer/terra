@@ -98,7 +98,7 @@ pub fn plugin(app: &mut App) {
             wait_s: 3.0,
             fish: None,
         })
-        .add_systems(Update, (rise, leap));
+        .add_systems(Update, (rise, leap).run_if(crate::instance::in_world));
 }
 
 /// Now and then a fish rises somewhere on deep water near the eye, mostly where it looks.

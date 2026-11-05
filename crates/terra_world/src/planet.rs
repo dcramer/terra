@@ -6,7 +6,7 @@
 //! `assets/shaders/ground.wesl` and the sea's in `assets/shaders/water.wesl`; both reload
 //! when saved.
 
-use crate::instance::{Building, InWorld, InstanceApp};
+use crate::instance::{Building, InWorld, InstanceApp, in_world};
 use crate::sky::Sky;
 use sea::{WaterExtension, sea_waves};
 
@@ -856,17 +856,21 @@ pub fn plugin(app: &mut App) {
                     .in_set(Building::Land),
             ),
         )
-        .add_systems(Update, sea_waves)
+        .add_systems(Update, sea_waves.run_if(in_world))
         .add_systems(
             Update,
-            apply_tweaks.run_if(
-                resource_changed::<Tweaks>
-                    .or_eager(resource_exists_and_changed::<Sky>)
-                    .or_eager(resource_changed::<GroundCoverMap>)
-                    .or_eager(resource_changed::<crate::climate::ClimateMaps>)
-                    .or_eager(resource_changed::<crate::quality::Quality>)
-                    .or_eager(resource_exists_and_changed::<crate::horizon::HorizonPicture>),
-            ),
+            // Every condition is evaluated, so one on a world resource asks whether it is
+            // there: none is while the world is generated (D623).
+            apply_tweaks
+                .run_if(
+                    resource_exists_and_changed::<Tweaks>
+                        .or_eager(resource_exists_and_changed::<Sky>)
+                        .or_eager(resource_exists_and_changed::<GroundCoverMap>)
+                        .or_eager(resource_exists_and_changed::<crate::climate::ClimateMaps>)
+                        .or_eager(resource_changed::<crate::quality::Quality>)
+                        .or_eager(resource_exists_and_changed::<crate::horizon::HorizonPicture>),
+                )
+                .run_if(in_world),
         );
 }
 

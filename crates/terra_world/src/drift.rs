@@ -286,7 +286,10 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<DriftMaterial>::default())
         .insert_resource(crate::data::read::<Drifts>(Drifts::FILE))
         .init_resource::<Frame>()
-        .add_systems(Update, (sow, (follow, sense).chain()));
+        .add_systems(
+            Update,
+            (sow, (follow, sense).chain()).run_if(crate::instance::in_world),
+        );
 }
 
 /// A field's cards, every corner at the frame's origin: the first texture coordinate the

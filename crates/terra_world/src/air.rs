@@ -22,7 +22,7 @@
 //! dusk, so from sunset that sky draws the dusk's and the night's colours (`daylight`).
 
 use crate::daylight::{Clock, SkyPath};
-use crate::instance::{Building, InWorld, InstanceApp, WorldScoped};
+use crate::instance::{Building, InWorld, InstanceApp, WorldScoped, in_world};
 use crate::planet::{MainCamera, Planet, Tweaks};
 use bevy::{
     light::{
@@ -245,13 +245,18 @@ pub fn plugin(app: &mut App) {
         Update,
         (
             keep_luts,
-            settings,
+            settings.run_if(in_world),
             picture,
-            clear_cold_air.run_if(not(resource_exists::<ColdAirCleared>)),
+            clear_cold_air
+                .run_if(not(resource_exists::<ColdAirCleared>))
+                .run_if(in_world),
         ),
     )
-    .add_systems(Update, discs)
-    .add_systems(PostUpdate, follow.after(TransformSystems::Propagate));
+    .add_systems(Update, discs.run_if(in_world))
+    .add_systems(
+        PostUpdate,
+        follow.after(TransformSystems::Propagate).run_if(in_world),
+    );
 }
 
 /// The air's make-up, as Hillaire's paper gives Earth's: its gases' Rayleigh scattering

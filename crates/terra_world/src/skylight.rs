@@ -119,7 +119,12 @@ pub fn plugin(app: &mut App) {
         .add_systems(PostStartup, light_camera)
         // Before the images' change events are sent, so a painting is extracted, uploaded and
         // filtered in the frame it is made (as bevy_animation orders its graphs).
-        .add_systems(PostUpdate, paint.before(bevy::asset::AssetEventSystems));
+        .add_systems(
+            PostUpdate,
+            paint
+                .before(bevy::asset::AssetEventSystems)
+                .run_if(crate::instance::in_world),
+        );
 }
 
 fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {

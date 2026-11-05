@@ -281,14 +281,19 @@ impl Plugin for SkyPlugin {
         app.add_systems(
             Update,
             (
-                moving::move_clouds.after(crate::daylight::Ticking),
+                moving::move_clouds
+                    .after(crate::daylight::Ticking)
+                    .run_if(crate::instance::in_world),
+                // Every condition is evaluated, so one on a world resource asks whether it is
+                // there: none is while the world is generated (D623).
                 update
                     .run_if(
                         resource_changed::<Sky>
-                            .or_eager(resource_changed::<Tweaks>)
-                            .or_eager(resource_changed::<Clouds>)
+                            .or_eager(resource_exists_and_changed::<Tweaks>)
+                            .or_eager(resource_exists_and_changed::<Clouds>)
                             .or_eager(resource_added::<AirPicture>),
                     )
+                    .run_if(crate::instance::in_world)
                     .after(moving::move_clouds),
                 keep_around_camera,
             ),

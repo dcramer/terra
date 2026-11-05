@@ -95,7 +95,10 @@ impl Moved {
 pub fn plugin(app: &mut App) {
     app.configure_sets(
         FixedUpdate,
-        (Sim::Act, Sim::World, Sim::Resolve, Sim::End).chain(),
+        (Sim::Act, Sim::World, Sim::Resolve, Sim::End)
+            .chain()
+            // The simulation is of the world: none while it is generated (D623).
+            .run_if(crate::instance::in_world),
     )
     .init_resource::<Ticks>()
     .init_resource::<TickTiming>()

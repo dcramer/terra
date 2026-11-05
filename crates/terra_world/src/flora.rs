@@ -493,7 +493,15 @@ pub fn plugin(app: &mut App) {
     fell::plugin(app);
     entering::plugin(app);
     app.add_plugins(MaterialPlugin::<WindMaterial>::default())
-        .add_systems(Update, (follow_wind, piece::draw))
+        // What grows is the world's: none drawn or cleared while it is generated (D623).
+        .configure_sets(
+            Update,
+            FloraSystems::Clear.run_if(crate::instance::in_world),
+        )
+        .add_systems(
+            Update,
+            (follow_wind, piece::draw.run_if(crate::instance::in_world)),
+        )
         .add_message::<ClearAround>()
         .add_message::<MowAround>()
         .add_message::<ClearedAway>()

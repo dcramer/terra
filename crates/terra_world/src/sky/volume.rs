@@ -279,7 +279,8 @@ impl Plugin for VolumePlugin {
         .add_systems(Update, keep_veil_around)
         .add_systems(
             PostUpdate,
-            tell.after(bevy::transform::TransformSystems::Propagate),
+            tell.after(bevy::transform::TransformSystems::Propagate)
+                .run_if(crate::instance::in_world),
         );
     }
 }

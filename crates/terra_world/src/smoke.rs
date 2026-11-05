@@ -128,7 +128,10 @@ const FOLLOW: f32 = 0.35;
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<SmokeMaterial>::default())
-        .add_systems(Update, (draw, blow).chain());
+        .add_systems(
+            Update,
+            (draw, blow).chain().run_if(crate::instance::in_world),
+        );
 }
 
 /// The cards of a column, every corner at its foot: the first texture coordinate the

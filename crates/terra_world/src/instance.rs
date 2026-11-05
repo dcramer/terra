@@ -237,6 +237,17 @@ fn skip_the_unmade(error: BevyError, context: ErrorContext) {
     }
 }
 
+/// A run condition: the world is made, so a system that reads it (its planet, its start, its
+/// clock, any world resource) may run (D623). Its land is not made while it is generated,
+/// nor is there any world on the way to one or in none; a world system is gated on this as
+/// a Bevy game gates its play on a state, by its plugin's own sets where it has them. A run
+/// with no travel at all, a layer's test that puts the world in by hand, is in its world.
+/// Whatever reads the world and is not gated fails loudly on every load, as Bevy fails a
+/// system whose resource is missing.
+pub fn in_world(travel: Option<Res<State<Travel>>>) -> bool {
+    travel.is_none_or(|travel| matches!(travel.get(), Travel::Entering | Travel::Playing))
+}
+
 /// Generating with nothing left to make: the world is entered, and what reads it is no
 /// longer skipped. Generating with work going: what reads the world is skipped meanwhile.
 fn generated(world: &mut World) {

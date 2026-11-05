@@ -32,7 +32,12 @@ const EVERY_DAYS: f64 = 0.002;
 /// The wind of the world the run is in (D469), and the snow it lifts round the start.
 pub fn plugin(app: &mut App) {
     entering(app);
-    app.add_systems(Update, follow.after(crate::daylight::Ticking));
+    app.add_systems(
+        Update,
+        follow
+            .after(crate::daylight::Ticking)
+            .run_if(crate::instance::in_world),
+    );
 }
 
 /// What of the wind is the world's (D469).

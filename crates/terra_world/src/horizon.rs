@@ -38,8 +38,10 @@ impl HorizonPicture {
 }
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<HorizonPicture>()
-        .add_systems(Update, (bake, baked).chain());
+    app.init_resource::<HorizonPicture>().add_systems(
+        Update,
+        (bake, baked).chain().run_if(crate::instance::in_world),
+    );
 }
 
 /// Starts a bake where there is none yet, or the camera has left the map's middle.
