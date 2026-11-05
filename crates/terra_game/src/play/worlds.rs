@@ -11,7 +11,7 @@
 
 use super::controls::Settings;
 use super::save::SavePath;
-use crate::shell::Options;
+use crate::shell::{Options, TEST_RADIUS_M, WORLD_RADIUS_M};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -35,6 +35,11 @@ pub struct Meta {
     /// changed; a world kept from before worlds had seeds was made from the first.
     #[serde(default = "first_seed")]
     pub seed: u64,
+    /// The planet's radius in metres, chosen when it is made and never changed, as its seed
+    /// (a save's places stand on a planet of this size): [`WORLD_RADIUS_M`] unless `--radius`
+    /// asked; a world kept from before worlds had sizes was made at the 2 km default.
+    #[serde(default = "first_radius")]
+    pub radius_m: f32,
     /// Seconds since 1970, when made and when last played.
     pub made: u64,
     pub played: u64,
@@ -59,6 +64,10 @@ impl Meta {
 
 fn first_seed() -> u64 {
     FIRST_SEED
+}
+
+fn first_radius() -> f32 {
+    TEST_RADIUS_M
 }
 
 /// A world on disk.
@@ -119,12 +128,14 @@ pub fn list(root: &Path) -> Vec<World> {
     worlds
 }
 
-/// Makes a world of that name, mode and seed, in a folder named after it, never over another.
+/// Makes a world of that name, mode, seed and radius, in a folder named after it, never over
+/// another.
 pub fn make(
     root: &Path,
     name: &str,
     creative: bool,
     seed: u64,
+    radius_m: f32,
     now: u64,
 ) -> std::io::Result<World> {
     let taken: Vec<String> = std::fs::read_dir(root)
@@ -139,6 +150,7 @@ pub fn make(
         name: name.trim().to_string(),
         creative,
         seed,
+        radius_m,
         made: now,
         played: now,
         starts: Vec::new(),
@@ -194,20 +206,21 @@ pub fn adopt(root: &Path, old: &Path, now: u64) -> std::io::Result<Option<World>
     if !old.exists() || !list(root).is_empty() {
         return Ok(None);
     }
-    let world = make(root, FIRST, false, FIRST_SEED, now)?;
+    let world = make(root, FIRST, false, FIRST_SEED, TEST_RADIUS_M, now)?;
     std::fs::rename(old, world.save())?;
     Ok(Some(world))
 }
 
 /// Which world a run plays without the title screen, by its command line: the one named,
 /// a new one (`--fresh`), the Creative one played last or a new one (`--creative`), or the
-/// one played last, made if there is none. A world made is made from `seed`; one found keeps
-/// its own.
+/// one played last, made if there is none. A world made is made from `seed` at `radius_m`;
+/// one found keeps its own.
 pub fn pick(
     root: &Path,
     choice: &Choice,
     fresh: bool,
     seed: u64,
+    radius_m: f32,
     now: u64,
 ) -> std::io::Result<World> {
     let worlds = list(root);
@@ -229,7 +242,7 @@ pub fn pick(
                 Some(name) => name.clone(),
                 None => next_name(&list(root), choice.creative),
             };
-            make(root, &name, choice.creative, seed, now)
+            make(root, &name, choice.creative, seed, radius_m, now)
         }
     }
 }
@@ -242,30 +255,48 @@ pub struct Root(pub PathBuf);
 #[derive(Resource, Clone)]
 pub struct Playing(pub World);
 
-/// Plays a world: its save, its mode and its seed, which a `--seed` never overrides.
+/// Plays a world: its save, its mode, its seed and its radius, which a `--seed` or `--radius`
+/// never overrides.
 pub fn play(commands: &mut Commands, options: &mut Options, world: World) {
+    let meta = &world.meta;
     info!(
-        "Playing {} ({}), seed {}.",
-        world.meta.name,
+        "Playing {} ({}), seed {}, {} km round its centre.",
+        meta.name,
         world.dir.display(),
-        world.meta.seed
+        meta.seed,
+        meta.radius_m / 1000.0
     );
-    if options.seed.is_some_and(|asked| asked != world.meta.seed) {
+    if options.seed.is_some_and(|asked| asked != meta.seed) {
         warn!(
             "{} was made from seed {}, which it keeps: --seed makes only a new world (--fresh) (D596).",
-            world.meta.name, world.meta.seed
+            meta.name, meta.seed
+        );
+    }
+    if options
+        .radius_asked
+        .is_some_and(|asked| asked != meta.radius_m)
+    {
+        warn!(
+            "{} was made {} m in radius, which it keeps, its save standing on it: --radius makes only a new world (--fresh) (D13).",
+            meta.name, meta.radius_m
         );
     }
     commands.insert_resource(SavePath(world.save()));
-    options.free_build |= world.meta.creative;
-    options.seed = Some(world.meta.seed);
-    know_the_start(commands, &world.meta, options.radius_m);
+    options.free_build |= meta.creative;
+    options.seed = Some(meta.seed);
+    options.radius_m = meta.radius_m;
+    know_the_start(commands, meta);
     commands.insert_resource(Playing(world));
 }
 
+/// The radius a world made now is made at: `--radius`'s, else the game's world's (D13).
+pub fn new_radius_m(options: &Options) -> f32 {
+    options.radius_asked.unwrap_or(WORLD_RADIUS_M)
+}
+
 /// The start a world found before taken as it is when its land is made, or none known.
-fn know_the_start(commands: &mut Commands, meta: &Meta, radius_m: f32) {
-    match meta.known_start(radius_m) {
+fn know_the_start(commands: &mut Commands, meta: &Meta) {
+    match meta.known_start(meta.radius_m) {
         Some(known) => commands.insert_resource(known),
         None => commands.remove_resource::<KnownStart>(),
     }
@@ -323,17 +354,21 @@ pub fn choose(mut commands: Commands, mut options: ResMut<Options>, choice: Res<
     }
     commands.insert_resource(Root(root.clone()));
     if choice.title {
-        // The title screen opens over the world Continue plays, so it is loaded already.
-        if options.seed.is_none()
-            && let Some(world) = list(&root).first()
-        {
-            options.seed = Some(world.meta.seed);
-            know_the_start(&mut commands, &world.meta, options.radius_m);
+        // The title screen opens over the world Continue plays, so it is loaded already; with
+        // none, over a world as New world makes them.
+        match list(&root).first() {
+            Some(world) if options.seed.is_none() => {
+                options.seed = Some(world.meta.seed);
+                options.radius_m = world.meta.radius_m;
+                know_the_start(&mut commands, &world.meta);
+            }
+            _ => options.radius_m = new_radius_m(&options),
         }
         return;
     }
     let seed = options.seed.unwrap_or(FIRST_SEED);
-    match pick(&root, &choice, options.fresh, seed, now()) {
+    let radius_m = new_radius_m(&options);
+    match pick(&root, &choice, options.fresh, seed, radius_m, now()) {
         Ok(world) => play(&mut commands, &mut options, world),
         Err(problem) => warn!("No world to play in {}: {problem}", root.display()),
     }

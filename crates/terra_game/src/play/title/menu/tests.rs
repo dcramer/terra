@@ -23,7 +23,7 @@ fn world_of(root: &Path, act: Act) -> worlds::World {
             name,
             creative,
             seed,
-        } => worlds::make(root, &name, creative, seed, 100).unwrap(),
+        } => worlds::make(root, &name, creative, seed, 30_000.0, 100).unwrap(),
         other => panic!("not a world: {other:?}"),
     }
 }
@@ -31,12 +31,12 @@ fn world_of(root: &Path, act: Act) -> worlds::World {
 #[test]
 fn the_title_screens_choices_play_the_worlds_the_flags_do() {
     let root = folder_for("flags");
-    worlds::make(&root, "Old", false, 1, 1).unwrap();
-    worlds::make(&root, "Last", false, 1, 2).unwrap();
+    worlds::make(&root, "Old", false, 1, 30_000.0, 1).unwrap();
+    worlds::make(&root, "Last", false, 1, 30_000.0, 2).unwrap();
     // Continue: the world `cargo xtask play continue` (no flag) plays.
     let mut menu = Menu::new(worlds::list(&root));
     let continued = world_of(&root, choose(&mut menu, Item::Continue).unwrap());
-    let flagged = worlds::pick(&root, &Choice::default(), false, 1, 3).unwrap();
+    let flagged = worlds::pick(&root, &Choice::default(), false, 1, 30_000.0, 3).unwrap();
     assert_eq!(
         (continued.dir, continued.meta.creative),
         (flagged.dir, false)
@@ -66,6 +66,7 @@ fn the_title_screens_choices_play_the_worlds_the_flags_do() {
         },
         false,
         1,
+        30_000.0,
         200,
     );
     assert_eq!(flagged.unwrap().dir, creative.dir);
@@ -96,7 +97,7 @@ fn continue_and_the_list_cannot_be_chosen_with_no_world() {
 #[test]
 fn deleting_a_world_asks_first_and_back_keeps_it() {
     let root = folder_for("delete");
-    worlds::make(&root, "Keep me", false, 1, 1).unwrap();
+    worlds::make(&root, "Keep me", false, 1, 30_000.0, 1).unwrap();
     let mut menu = Menu::new(worlds::list(&root));
     choose(&mut menu, Item::Worlds);
     menu.ask_delete(0);

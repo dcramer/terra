@@ -45,13 +45,13 @@ How the candidates feel, for a player jogging at the sandbox's 4.3 m/s:
 
 | Radius | Once round | On foot | Horizon from eye height | Surface |
 |---|---|---|---|---|
-| 2 km (the sandbox today) | 13 km | under an hour | 82 m | 50 km² |
+| 2 km (the scripted tools' test planet) | 13 km | under an hour | 82 m | 50 km² |
 | 10 km | 63 km | 4 hours | 184 m | 1,260 km² |
 | 20 km | 126 km | 8 hours | 261 m | 5,030 km² |
 | **30 km** | **189 km** | **12 hours** | **319 m** | **11,300 km²** |
 | 60 km | 377 km | 24 hours | 452 m | 45,200 km² |
 
-**Proposal: about 30 km for the starting world, and 10 to 50 km for the rest, set by each world's theme** (D13, Leaning until it is walked). At 30 km, walking round takes half a day; the horizon from the ground is a few hundred metres, so the world feels like a world and not a ball, and from a hilltop the curve shows. Realms of this size, with no limit on how many, are far more ground than a thousand players will fill (D52).
+**The game's world is 30 km (D13, the developers' call); 10 to 50 km for the rest, set by each world's theme, is a proposal.** Every world a player makes is made at 30 km and keeps its radius with its save; the 2 km planet is left only under scripted tools that keep no world. At 30 km, walking round takes half a day; the horizon from the ground is a few hundred metres, so the world feels like a world and not a ball, and from a hilltop the curve shows. Realms of this size, with no limit on how many, are far more ground than a thousand players will fill (D52).
 
 What makes a world that size affordable:
 

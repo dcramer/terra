@@ -39,7 +39,8 @@ usage: terra_sandbox [options]
 
   --experiment <name>   switch on an experiment (repeatable)
   --list                list the experiments and exit
-  --radius <metres>     planet radius (default 2000)
+  --radius <metres>     planet radius: a world made takes it (default 30000, D13); a kept
+                        world keeps its own; a run keeping no world, 2000 unless given
   --seed <n>            the world's seed, its only input (default 1; a kept world has its own)
   --shot <file.png>     save a screenshot once the scene has settled, then exit
   --detail-sweep <from>-<to>@<frame>-<frame>
@@ -253,6 +254,14 @@ usage: terra_sandbox [options]
 const SETTLE_FRAMES: u32 = 120;
 const BENCH_FRAMES: usize = 600;
 
+/// The radius of a world a player makes (D13): the 30 km realm with its mountains, lakes,
+/// latitudes and woods. A kept world keeps the radius it was made at (`terra_game`'s worlds).
+pub const WORLD_RADIUS_M: f32 = 30_000.0;
+/// The planet of a run that keeps no world and asks for no radius (`--radius`): the 2 km
+/// test planet the scripted tools' fixed places and baselines stand on, until they move to
+/// the world's (D13).
+pub const TEST_RADIUS_M: f32 = 2_000.0;
+
 /// A date to set the world's clock to (`--date`): the climate's, so tools without the engine read
 /// dates the same way.
 pub use terra_climate::Date;
@@ -284,7 +293,12 @@ pub fn in_the_world(options: Res<Options>) -> bool {
 pub struct Options {
     pub experiments: Vec<String>,
     pub list: bool,
+    /// The planet's radius this run makes its land at: a kept world's own, else `--radius`,
+    /// else [`TEST_RADIUS_M`].
     pub radius_m: f32,
+    /// The radius `--radius` asked for: a world made takes it, else [`WORLD_RADIUS_M`]; a
+    /// world kept keeps its own, as it does its seed.
+    pub radius_asked: Option<f32>,
     /// The world's seed (`--seed`), its only input (D596): every realm's and system's seed
     /// derives from it. A world kept on disk says its own (`terra_game::play::worlds`).
     pub seed: Option<u64>,
@@ -586,7 +600,8 @@ impl Options {
         let mut options = Options {
             experiments: Vec::new(),
             list: false,
-            radius_m: 2000.0,
+            radius_m: TEST_RADIUS_M,
+            radius_asked: None,
             seed: None,
             shot: None,
             shots: None,
@@ -801,6 +816,7 @@ impl Options {
                     options.radius_m = value("--radius")?
                         .parse()
                         .map_err(|_| "--radius needs a number of metres".to_string())?;
+                    options.radius_asked = Some(options.radius_m);
                 }
                 "--seed" => options.seed = Some(seed(&value("--seed")?)?),
                 "--settle" => {

@@ -54,7 +54,7 @@ Ground, water, weather, seasons, life and how realms join.
 | # | Topic | Owner | By | Status | Gist |
 |---|---|---|---|---|---|
 | [D4](decisions/D4.md) | World paradigm | Design | Developers | Decided | Many realms (D17, D87), each a round world… |
-| [D13](decisions/D13.md) | World scale | Design | Agent | Leaning | Always round, fully procedural, and large but finite… |
+| [D13](decisions/D13.md) | World scale | Design | Developers | Decided | Always round, fully procedural, and large but finite… |
 | [D17](decisions/D17.md) | Worlds | Design | Developers | Decided | Many worlds, each different from the others… |
 | [D20](decisions/D20.md) | Only players reshape the ground | Design | Developers | Decided | The solid ground changes only when players dig. |
 | [D43](decisions/D43.md) | What can be harvested | Design | Agent | Leaning | Possibly rock and ore by mining, trees by chopping… |

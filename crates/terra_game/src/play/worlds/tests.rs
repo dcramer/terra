@@ -2,6 +2,9 @@ use super::*;
 
 /// The seed the tests' worlds are made from, not the first, so a seed lost on the way shows.
 const SEED: u64 = 0xDEC0_DE5E_ED00_0001;
+/// The radius they are made at, neither the game's nor the test planet's, so a radius lost
+/// on the way shows.
+const RADIUS: f32 = 12_345.0;
 
 /// An empty folder of its own for a test's worlds.
 fn folder_for(test: &str) -> PathBuf {
@@ -18,9 +21,9 @@ fn names(root: &Path) -> Vec<String> {
 #[test]
 fn a_new_world_never_replaces_another_and_the_last_played_comes_first() {
     let root = folder_for("list");
-    make(&root, "World 1", false, SEED, 10).unwrap();
-    make(&root, "world 1", true, SEED, 20).unwrap();
-    make(&root, "Hill fort", false, SEED, 30).unwrap();
+    make(&root, "World 1", false, SEED, RADIUS, 10).unwrap();
+    make(&root, "world 1", true, SEED, RADIUS, 20).unwrap();
+    make(&root, "Hill fort", false, SEED, RADIUS, 30).unwrap();
     assert_eq!(names(&root), ["Hill fort", "world 1", "World 1"]);
     let mut first = list(&root).pop().unwrap();
     first.played(40).unwrap();
@@ -47,8 +50,8 @@ fn a_folder_name_is_the_name_plainly_and_never_one_taken() {
 fn a_new_world_is_offered_the_first_name_not_taken() {
     let root = folder_for("names");
     assert_eq!(next_name(&list(&root), false), "World 1");
-    make(&root, "World 1", false, SEED, 1).unwrap();
-    make(&root, "World 3", false, SEED, 1).unwrap();
+    make(&root, "World 1", false, SEED, RADIUS, 1).unwrap();
+    make(&root, "World 3", false, SEED, RADIUS, 1).unwrap();
     assert_eq!(next_name(&list(&root), false), "World 2");
     assert_eq!(next_name(&list(&root), true), "Creative 1");
     std::fs::remove_dir_all(root).unwrap();
@@ -57,9 +60,9 @@ fn a_new_world_is_offered_the_first_name_not_taken() {
 #[test]
 fn deleting_a_world_takes_its_save_and_leaves_the_others() {
     let root = folder_for("delete");
-    let doomed = make(&root, "Doomed", false, SEED, 1).unwrap();
+    let doomed = make(&root, "Doomed", false, SEED, RADIUS, 1).unwrap();
     std::fs::write(doomed.save(), "(version: 2)").unwrap();
-    make(&root, "Kept", false, SEED, 2).unwrap();
+    make(&root, "Kept", false, SEED, RADIUS, 2).unwrap();
     doomed.delete().unwrap();
     assert_eq!(names(&root), ["Kept"]);
     assert!(!doomed.dir.exists());
@@ -96,64 +99,82 @@ fn the_command_line_picks_the_world_the_title_screen_would() {
         ..Choice::default()
     };
     // Nothing yet: Continue makes the first world.
-    let first = pick(&root, &choice(false, None), false, SEED, 1).unwrap();
+    let first = pick(&root, &choice(false, None), false, SEED, RADIUS, 1).unwrap();
     assert_eq!(
         (first.meta.name.as_str(), first.meta.creative),
         ("World 1", false)
     );
     // --creative: a new Creative world, then the same one again.
-    let creative = pick(&root, &choice(true, None), false, SEED, 2).unwrap();
+    let creative = pick(&root, &choice(true, None), false, SEED, RADIUS, 2).unwrap();
     assert_eq!(
         (creative.meta.name.as_str(), creative.meta.creative),
         ("Creative 1", true)
     );
     assert_eq!(
-        pick(&root, &choice(true, None), false, SEED, 3)
+        pick(&root, &choice(true, None), false, SEED, RADIUS, 3)
             .unwrap()
             .dir,
         creative.dir
     );
     // Continue: the one played last, which is the Creative one now.
     assert_eq!(
-        pick(&root, &choice(false, None), false, SEED, 4)
+        pick(&root, &choice(false, None), false, SEED, RADIUS, 4)
             .unwrap()
             .dir,
         creative.dir
     );
     // --fresh: always another.
-    let fresh = pick(&root, &choice(false, None), true, SEED, 5).unwrap();
+    let fresh = pick(&root, &choice(false, None), true, SEED, RADIUS, 5).unwrap();
     assert_eq!(fresh.meta.name, "World 2");
     // --world=<name>: that one, or made.
     assert_eq!(
-        pick(&root, &choice(false, Some("world 1")), false, SEED, 6)
-            .unwrap()
-            .dir,
+        pick(
+            &root,
+            &choice(false, Some("world 1")),
+            false,
+            SEED,
+            RADIUS,
+            6
+        )
+        .unwrap()
+        .dir,
         first.dir
     );
-    let named = pick(&root, &choice(false, Some("Hill fort")), false, SEED, 7).unwrap();
+    let named = pick(
+        &root,
+        &choice(false, Some("Hill fort")),
+        false,
+        SEED,
+        RADIUS,
+        7,
+    )
+    .unwrap();
     assert_eq!(named.meta.name, "Hill fort");
     assert_eq!(list(&root).len(), 4);
     std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
-fn a_world_keeps_the_seed_it_was_made_from_and_one_from_before_seeds_has_the_first() {
+fn a_world_keeps_the_seed_and_size_it_was_made_with_and_one_from_before_has_the_first() {
     let root = folder_for("seed");
-    make(&root, "Seeded", false, SEED, 1).unwrap();
-    assert_eq!(list(&root)[0].meta.seed, SEED);
+    make(&root, "Seeded", false, SEED, RADIUS, 1).unwrap();
+    let made = &list(&root)[0].meta;
+    assert_eq!((made.seed, made.radius_m), (SEED, RADIUS));
     // Found again, it keeps its own, whatever a new world would be made from.
     let found = Choice {
         world: Some("Seeded".into()),
         ..Choice::default()
     };
-    assert_eq!(pick(&root, &found, false, 7, 2).unwrap().meta.seed, SEED);
-    // A world.ron written before worlds had seeds.
+    let again = pick(&root, &found, false, 7, 500.0, 2).unwrap().meta;
+    assert_eq!((again.seed, again.radius_m), (SEED, RADIUS));
+    // A world.ron written before worlds had seeds or sizes: the 2 km world it was made on.
     std::fs::create_dir_all(root.join("old")).unwrap();
     let before = "(name: \"Old\", creative: false, made: 1, played: 1)";
     std::fs::write(root.join("old").join(META), before).unwrap();
     let kept = list(&root);
     let old = kept.iter().find(|w| w.meta.name == "Old").unwrap();
     assert_eq!(old.meta.seed, FIRST_SEED);
+    assert_eq!(old.meta.radius_m, 2_000.0);
     assert!(
         old.meta.starts.is_empty(),
         "one from before kept starts has none"
@@ -169,7 +190,7 @@ fn a_worlds_start_is_kept_once_and_taken_again_as_it_was() {
     use bevy::ecs::system::RunSystemOnce;
     use terra_core::{PlanetSpec, Seed};
     let root = folder_for("start");
-    let world = make(&root, "Kept", false, SEED, 1).unwrap();
+    let world = make(&root, "Kept", false, SEED, RADIUS, 1).unwrap();
     let spec = PlanetSpec {
         seed: Seed(SEED),
         radius_m: 2_000.0,
@@ -216,5 +237,57 @@ fn a_worlds_start_is_kept_once_and_taken_again_as_it_was() {
         planet.start(),
         "the land stands where it first did"
     );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+fn options(args: &[&str]) -> Options {
+    Options::from_args(args.iter().map(|a| a.to_string())).unwrap()
+}
+
+/// What `choose` leaves the run's land at, with these flags and worlds kept in `root`.
+fn chosen_radius_m(root: &Path, args: &[&str], title: bool, fresh: bool) -> f32 {
+    use bevy::ecs::system::RunSystemOnce;
+    let mut app = bevy::ecs::world::World::new();
+    let mut options = options(args);
+    options.fresh = fresh;
+    app.insert_resource(options);
+    app.insert_resource(Choice {
+        title,
+        worlds: Some(root.to_path_buf()),
+        ..Choice::default()
+    });
+    app.run_system_once(choose).unwrap();
+    app.resource::<Options>().radius_m
+}
+
+/// The game's world is D13's 30 km one (the developers, 2026-11-04): a world made from the
+/// title screen or the command line is made at it unless `--radius` asks otherwise, and a
+/// world kept is played at the size it was made, its save standing on it, whatever is asked.
+#[test]
+fn a_world_made_is_the_games_30_km_one_and_one_kept_plays_at_its_own_size() {
+    let root = folder_for("size");
+    assert_eq!(new_radius_m(&options(&[])), 30_000.0);
+    assert_eq!(new_radius_m(&options(&["--radius", "8000"])), 8_000.0);
+    // No world kept: the land behind the title screen is as New world makes it, and one
+    // made from the command line is made so.
+    assert_eq!(chosen_radius_m(&root, &[], true, false), 30_000.0);
+    assert_eq!(chosen_radius_m(&root, &[], false, false), 30_000.0);
+    assert_eq!(list(&root)[0].meta.radius_m, 30_000.0);
+    std::fs::remove_dir_all(&root).unwrap();
+    std::fs::create_dir_all(&root).unwrap();
+    // A world kept at another size: Continue's land behind the title screen, and the world
+    // played, are at its size, whatever --radius says; a new one beside it takes --radius.
+    make(&root, "Small", false, SEED, RADIUS, 1).unwrap();
+    assert_eq!(chosen_radius_m(&root, &[], true, false), RADIUS);
+    assert_eq!(
+        chosen_radius_m(&root, &["--radius", "30000"], false, false),
+        RADIUS
+    );
+    assert_eq!(
+        chosen_radius_m(&root, &["--radius", "9000"], false, true),
+        9_000.0
+    );
+    // A run keeping no world at all stands on the test planet its tools are measured on.
+    assert_eq!(options(&[]).radius_m, 2_000.0);
     std::fs::remove_dir_all(root).unwrap();
 }

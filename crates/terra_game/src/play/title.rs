@@ -28,6 +28,7 @@ use menu::{Act, Item, Menu, Page};
 use terra_world::choice::Choice;
 use terra_world::instance::{Cross, WorldSpec};
 use terra_world::loading::{Screen, Then};
+use terra_world::planet::Planet;
 
 /// The title screen's state while it is up.
 #[derive(Resource)]
@@ -207,7 +208,7 @@ fn act(
     mut title: ResMut<Title>,
     mut options: ResMut<Options>,
     root: Option<Res<Root>>,
-    spec: Option<Res<WorldSpec>>,
+    (spec, planet): (Option<Res<WorldSpec>>, Option<Res<Planet>>),
     mut next: ResMut<NextState<Screen>>,
     mut settings: ResMut<OptionsMenu>,
     mut exit: MessageWriter<AppExit>,
@@ -215,19 +216,23 @@ fn act(
     let Some(act) = chosen.0.take() else {
         return;
     };
-    // A world of the seed of the land behind the screen is played on it; one of another seed
+    // A world of the seed and size of the land behind the screen is played on it; another
     // crosses to its own land first, under the loading screen, as a portal crosses (D596).
+    let behind_m = planet.map(|planet| planet.radius_m());
     let mut play = |commands: &mut Commands, options: &mut Options, world: Option<_>, seed| {
         options.seed = Some(seed);
-        if let Some(world) = world {
-            worlds::play(commands, options, world);
+        match world {
+            Some(world) => worlds::play(commands, options, world),
+            None => options.radius_m = worlds::new_radius_m(options),
         }
         commands.insert_resource(Then(Screen::Playing));
+        let resized = behind_m.is_some_and(|behind| behind != options.radius_m);
         match spec.as_deref() {
-            Some(loaded) if loaded.seed != seed => {
+            Some(loaded) if loaded.seed != seed || resized => {
                 info!(
-                    "Crossing from the land of seed {} to seed {seed}.",
-                    loaded.seed
+                    "Crossing from the land of seed {} to seed {seed}, {} km round.",
+                    loaded.seed,
+                    options.radius_m / 1000.0
                 );
                 commands.queue(Cross(WorldSpec {
                     seed,
@@ -251,7 +256,9 @@ fn act(
             seed,
         } => {
             // A run keeping no worlds (a script's, without --worlds) plays one unsaved.
-            let made = root.map(|root| worlds::make(&root.0, &name, creative, seed, worlds::now()));
+            let radius_m = worlds::new_radius_m(&options);
+            let made = root
+                .map(|root| worlds::make(&root.0, &name, creative, seed, radius_m, worlds::now()));
             match made {
                 Some(Err(problem)) => warn!("Could not make the world {name}: {problem}"),
                 Some(Ok(world)) => play(&mut commands, &mut options, Some(world), seed),
