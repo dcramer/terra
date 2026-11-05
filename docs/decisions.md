@@ -603,6 +603,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D617](decisions/D617.md) | The volumetric clouds keep a history of their own, marched at an offset inside the pixel a frame | Tech | Agent | Decided | The march (`cloud_volume.wesl`, D515) sends one ray… |
 | [D618](decisions/D618.md) | The alpha-mask prepass draws its materials in their draw priorities, tall crowns first and the far woods last | Tech | Agent | Decided | Bevy 0.20 draws a binned phase's batch sets in key… |
 | [D619](decisions/D619.md) | The lush forest's trees, floor and wind move into the world, and forest-run stays on the yard reading the same rules | Tech | Agent | Decided | The lush forest's look becomes the world's… |
+| [D620](decisions/D620.md) | Every world with mountains lays its first market town by the player's start | Tech | Agent | Decided | A world's land stands its market towns… |
 
 ## Tools and workflow
 

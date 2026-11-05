@@ -68,8 +68,7 @@ fn app() -> App {
         .census_assets::<crate::lakes::LakeMaterial>()
         .census_assets::<crate::lakes::MistMaterial>()
         .world_resource::<Planet>()
-        .world_resource::<crate::start::Start>()
-        .world_resource::<crate::start::Sited>()
+        .add_plugins(crate::start::plugin)
         .world_resource::<crate::planet::Tweaks>()
         .add_systems(Startup, start)
         .add_systems(

@@ -5,6 +5,7 @@
 //! plot fits on (`Plot::START`, the example base's
 //! ground floor), so a run with no building in it starts in the same place as one with.
 
+use crate::instance::InstanceApp;
 use crate::planet::Planet;
 use bevy::prelude::*;
 use terra_core::Plot;
@@ -80,6 +81,21 @@ pub enum Found {
 /// The place the land's rules made that the world starts at, if `--site` asked for one.
 #[derive(Resource, Clone, Copy, Debug, Deref)]
 pub struct Sited(pub Found);
+
+/// The market towns a world's land stands (D620): the place `--site town` or `settlement`
+/// found, or else, on a world with mountains, its first town, found round the player's start
+/// by the land's rules (`terra_land::Land::first_town`), its fields cleared of the forest.
+/// `terra_folk::town` lays them as the world is entered.
+#[derive(Resource, Clone, Debug, Default)]
+pub struct Towns(pub Vec<terra_land::town::TownSite>);
+
+/// The start, the site and the towns are the world's, made with its land on entering
+/// (`planet::entering`) and left with it (D469).
+pub fn plugin(app: &mut App) {
+    app.world_resource::<Start>()
+        .world_resource::<Sited>()
+        .world_resource::<Towns>();
+}
 
 impl Found {
     /// Where the land round it is worked out from.

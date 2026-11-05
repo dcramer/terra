@@ -137,7 +137,7 @@ pub const ALL: &[Experiment] = &[
     },
     Experiment {
         name: "town",
-        about: "A market town and its people about their day: use with play and --time; with --radius 30000 --site town it stands where the land's rules make room for one, below the range with the forest past its fields; the log gives its vantage points.",
+        about: "Takes the player to the world's market town once it is laid (every world with mountains lays one by its start, D620): use with play, --radius 30000 and --time; with --site town it stands where the land's rules make room for the demo's, below the range with the forest past its fields; the log gives its vantage points.",
         add: town::plugin,
     },
     Experiment {

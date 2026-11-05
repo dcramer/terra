@@ -4,7 +4,7 @@
 use super::{MainCamera, Planet, ROUND_M, Tweaks};
 use crate::instance::{Cross, InstanceKey, WorldSpec};
 use crate::shell::Options;
-use crate::start::{Sited, Start};
+use crate::start::{Found, Sited, Start, Towns};
 use bevy::{camera::ShadowLodOrigin, camera_controller::free_camera::FreeCamera, prelude::*};
 use terra_core::{PlanetSpec, Seed};
 
@@ -58,7 +58,7 @@ pub fn land_of(
     world: &WorldSpec,
     options: &Options,
     known: Option<&KnownStart>,
-) -> (Planet, Start, Option<Sited>) {
+) -> (Planet, Start, Option<Sited>, Towns) {
     let yard = options.yard();
     let spec = planet_spec(world, options.radius_m);
     crate::crash::note("seed", spec.seed.0);
@@ -77,16 +77,50 @@ pub fn land_of(
             planet.look_round(found.middle(), ROUND_M, day);
             planet.clear_woods(|land| found.clearings(land));
             let start = found.start(&planet);
-            (planet, start, Some(Sited(found)))
+            let towns = Towns(match found {
+                Found::Town(site) | Found::Settlement(site) => vec![site],
+                Found::Lake(_) | Found::Tundra(_) => Vec::new(),
+            });
+            (planet, start, Some(Sited(found)), towns)
         }
         None => {
             let start = Start::choose(&planet, yard);
-            if planet.has_mountains() {
+            let mut towns = Towns::default();
+            if planet.has_mountains() && !yard {
                 planet.look_round(start.translation, ROUND_M, day);
+                if let Some(site) = first_town(&planet, &start) {
+                    let want = terra_land::town::MarketTown::FIRST;
+                    planet.clear_woods(|land| want.clearings(land, &site));
+                    towns.0.push(site);
+                }
             }
-            (planet, start, None)
+            (planet, start, None, towns)
         }
     }
+}
+
+/// A world's first market town (D620), found round the player's start by the land's rules
+/// (`terra_land::Land::first_town`), on the land worked out round it; none if its land makes
+/// no such place near, which the log says, and why.
+fn first_town(planet: &Planet, start: &Start) -> Option<terra_land::town::TownSite> {
+    let round = planet.round()?;
+    let began = std::time::Instant::now();
+    let (site, searched) = round.land.first_town(start.translation.normalize());
+    let took = began.elapsed().as_secs_f32();
+    let Some(site) = site else {
+        info!("First town: none near the start ({searched:?}), {took:.1} s");
+        return None;
+    };
+    let at = start.local(planet.surface(site.toward));
+    info!(
+        "First town: {:.0} m east and {:.0} m south of the start, {:.0} m over the sea, the range to {:.0} m {:.1} km off; found in {took:.1} s",
+        at.x,
+        at.z,
+        site.height_m,
+        site.peak_m,
+        site.peak_off_m / 1000.0
+    );
+    Some(site)
 }
 
 /// What the land is drawn and lit with before anything tunes it: the sun high, the sea at
@@ -120,9 +154,10 @@ pub(crate) fn land(world: &mut World) {
     let spec = world.resource::<WorldSpec>().clone();
     let options = world.resource::<Options>();
     let yard = options.yard();
-    let (planet, start, sited) = land_of(&spec, options, world.get_resource::<KnownStart>());
+    let (planet, start, sited, towns) = land_of(&spec, options, world.get_resource::<KnownStart>());
     world.insert_resource(planet);
     world.insert_resource(start);
+    world.insert_resource(towns);
     if let Some(sited) = sited {
         world.insert_resource(sited);
     }

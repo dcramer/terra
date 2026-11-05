@@ -38,62 +38,8 @@ pub fn seed_in(realm: terra_gen::Seed) -> u32 {
     }
 }
 
-/// How far from the place the land's rules found the demo's town (`--site town` or
-/// `settlement`) its square may move, to the most level ground there on the ground as drawn.
-pub const AT_THE_SITE_M: f32 = 40.0;
-
-/// A town wanted near where, in metres east and south of the start; its square goes on the
-/// most level ground within `within` of there, and it is laid from the realm's seed
-/// ([`seed_in`]).
-#[derive(Resource, Clone, Copy, Debug)]
-pub struct Wanted {
-    pub near: Vec2,
-    pub within: f32,
-    /// Whether the player is taken there once it is laid: to its main street, looking
-    /// toward the square.
-    pub arrive: bool,
-    /// Whether its people and animals are out: without them, what they cost is measured.
-    pub lived_in: bool,
-}
-
-/// How far round a square's middle a town reaches, for finding level ground for it.
-const REACH_M: f32 = 60.0;
-
-/// The most level ground for a town near a place, in metres east and south of the start:
-/// of places on a grid within reach, the one whose ground over a town's reach rises and
-/// falls least, the nearer winning a tie. The same on every machine: the planet decides it.
-fn site_for(planet: &Planet, start: &Start, near: Vec2, within: f32) -> Vec2 {
-    let mut best = (f32::MAX, near);
-    let steps = (within / 15.0).ceil() as i32;
-    for i in -steps..=steps {
-        for j in -steps..=steps {
-            let at = near + Vec2::new(i as f32, j as f32) * 15.0;
-            if at.distance(near) > within {
-                continue;
-            }
-            let middle = planet.ground_at(start.at(at.x, at.y));
-            let radius = middle.length();
-            let (mut low, mut high) = (f32::MAX, f32::MIN);
-            for ring in [0.3, 0.6, 1.0] {
-                for k in 0..12 {
-                    let angle = k as f32 / 12.0 * std::f32::consts::TAU;
-                    let offset = Vec2::new(libm::cosf(angle), libm::sinf(angle)) * REACH_M * ring;
-                    let p = at + offset;
-                    let ground = planet.ground_at(start.at(p.x, p.y));
-                    let height =
-                        ground.length() - radius + offset.length_squared() / (2.0 * radius);
-                    low = low.min(height);
-                    high = high.max(height);
-                }
-            }
-            let score = (high - low) + at.distance(near) * 0.002;
-            if score < best.0 {
-                best = (score, at);
-            }
-        }
-    }
-    best.1
-}
+use wanted::site_for;
+pub use wanted::{AT_THE_SITE_M, Visit, Wanted};
 
 /// A town laid out, and its people's lives.
 #[derive(Resource)]
@@ -894,6 +840,7 @@ pub fn plugin(app: &mut App) {
         (burn, light, report).run_if(resource_exists::<Market>),
     );
     windows::plugin(app);
+    wanted::plugin(app);
 }
 
 /// How wide a player is to the town's walkers; and the camera, wider, so they keep out of
@@ -1499,6 +1446,7 @@ fn live(
 
 mod drifts;
 mod vantages;
+mod wanted;
 mod windows;
 
 use drifts::{meadow_seed, patch};

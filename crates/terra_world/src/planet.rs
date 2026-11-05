@@ -811,8 +811,7 @@ impl GroundExtension {
 /// included, made from its spec on entering, never as the app is built.
 pub fn plugin(app: &mut App) {
     app.world_resource::<Planet>()
-        .world_resource::<crate::start::Start>()
-        .world_resource::<crate::start::Sited>()
+        .add_plugins(crate::start::plugin)
         .world_resource::<Tweaks>()
         .world_resource::<GroundTextures>()
         .world_resource::<LandMap>()
