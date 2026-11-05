@@ -30,6 +30,12 @@ use terra_world::woods::{ConiferModels, Conifers, Drawn, Planted, Planting, Tree
 const YOUNG_UNDER_M: f32 = 9.0;
 
 pub fn plugin(app: &mut App) {
+    // The woods are the world layer's (`terra_world::woods`, in `WorldPlugin`), as are the grown
+    // plants' material and the detail scale they are drawn with: with no world layer on (the
+    // sandbox with no experiment) none are planted, so there is nothing to draw.
+    if !app.is_plugin_added::<terra_world::world::WorldPlugin>() {
+        return;
+    }
     // Their material, its climate and its relief are grown plants' (`terra_world::grown`). In
     // each world entered, before its woods are planted (D469).
     app.add_systems(

@@ -76,6 +76,21 @@ fn main() -> AppExit {
         character::plugin,
         appearance::plugin,
     ));
+    if let Err(problem) = add_experiments(&mut app, &options) {
+        eprintln!("{problem}");
+        return AppExit::error();
+    }
+    #[cfg(feature = "dhat-heap")]
+    app.add_plugins(heap::plugin);
+    let exit = app.run();
+    #[cfg(feature = "dhat-heap")]
+    heap::write();
+    exit
+}
+
+/// Each experiment the options name, once, then the woods' drawing, which needs to know
+/// whether an experiment brought the world layer and its woods.
+fn add_experiments(app: &mut App, options: &shell::Options) -> Result<(), String> {
     let mut added: Vec<&str> = Vec::new();
     for name in &options.experiments {
         // Named twice, as play is by the launcher and by an experiment that stands for it
@@ -85,17 +100,47 @@ fn main() -> AppExit {
         }
         added.push(name);
         let Some(experiment) = experiments::ALL.iter().find(|e| e.name == name) else {
-            eprintln!("No experiment called `{name}`. Run with --list to see them.");
-            return AppExit::error();
+            return Err(format!(
+                "No experiment called `{name}`. Run with --list to see them."
+            ));
         };
-        (experiment.add)(&mut app);
+        (experiment.add)(app);
     }
-    // After the experiments, so it knows whether the lush forest brought its materials.
     app.add_plugins(experiments::woods_conifers);
-    #[cfg(feature = "dhat-heap")]
-    app.add_plugins(heap::plugin);
-    let exit = app.run();
-    #[cfg(feature = "dhat-heap")]
-    heap::write();
-    exit
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::{asset::AssetPlugin, state::app::StatesPlugin};
+    use terra_world::instance::{Cross, InWorld, InstanceKey, WorldSpec};
+
+    /// With no experiment on, the sandbox has no world layer, so no woods and no grown
+    /// plants' material: what it adds round the experiments enters a world and runs with
+    /// nothing missing (the woods' drawing, always added, once asked for both and panicked).
+    #[test]
+    fn the_sandbox_enters_a_world_with_no_experiment() {
+        let options = shell::Options::from_args(experiments::expanded(Vec::new()).into_iter())
+            .expect("no arguments are a run's options");
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), StatesPlugin))
+            .add_plugins(terra_world::instance::plugin)
+            .add_systems(Startup, |mut commands: Commands| {
+                commands.queue(Cross(WorldSpec {
+                    key: InstanceKey(1),
+                    kind: "forest".into(),
+                    seed: 7,
+                }));
+            });
+        add_experiments(&mut app, &options).unwrap();
+        // Enough frames to enter the first world and run in it.
+        for _ in 0..6 {
+            app.update();
+        }
+        assert!(
+            app.world().contains_resource::<State<InWorld>>(),
+            "the first world was entered"
+        );
+    }
 }
