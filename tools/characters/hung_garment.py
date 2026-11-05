@@ -48,6 +48,9 @@ from mathutils.bvhtree import BVHTree
 
 import look
 import skin_piece
+import theirs
+
+theirs.refuse("hung_garment.py")
 
 TEXTURE = 2048
 LOOK_M = 0.08        # how far out and in from the piece its colour is looked for

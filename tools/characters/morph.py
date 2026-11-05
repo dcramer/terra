@@ -48,6 +48,9 @@ from mathutils.kdtree import KDTree
 
 import look
 import stretch
+import theirs
+
+theirs.refuse("morph.py")
 
 OUT = look.OUT
 base_path, design_path, name = look.args()[:3]

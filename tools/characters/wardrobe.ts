@@ -4,6 +4,9 @@
 //
 //   node tools/characters/wardrobe.ts
 //
+// - **vendored**, **private**, **reshape**: the guard on their parts (D599, vendored.ts): every
+//   file of theirs as shipped, by SHA256SUMS and the private repository's manifest, and no
+//   script that reshapes meshes can be given one of them (theirs.py, from tools/blender/run.sh).
 // - **catalogue**: every piece's source is there under art/, and every body's head and bare
 //   pieces and every look's pieces are made on that body for that slot (the game's own reading,
 //   `terra_walker::wardrobe::Wardrobe::parse`, refuses the rest).
@@ -22,13 +25,14 @@
 // Node 22.18 or later; no dependencies. Exits 1 on any failure, its details under the stage.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { gltfFiles, type Wardrobe, wardrobeData } from "./build_steps.ts";
+import { bodiesData, buildSteps, gearData, gltfFiles, type Wardrobe, wardrobeData } from "./build_steps.ts";
 import { Glb, matrix, mmul, posed } from "./glb.ts";
 import { check, sources } from "./intact.ts";
 import { figures, type Pairing, pairs } from "./pairings.ts";
+import { privately, reshape, vendored } from "./vendored.ts";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const LOG = join(ROOT, "target", "check", "wardrobe.log");
@@ -89,7 +93,16 @@ function intact(w: Wardrobe): Stage {
     if (!r.ok) faults.push(`${piece}: ${r.lines.join("; ")}`);
     if (r.ours.length) faults.push(`${piece}: ${r.ours.join(", ")} not theirs; a piece of ours goes in as its own row, never under their source`);
   }
-  return { name: "intact", faults, said: `${theirs} meshes theirs as made, ${cuts} exact cuts` };
+  // Nothing made from theirs ships past the check: each body's file carries no mesh, and its
+  // folder holds no model the catalogue does not name.
+  for (const [name, b] of Object.entries(w.bodies)) {
+    if (new Glb(join(ROOT, "assets", b.model)).gltf.meshes?.length) faults.push(`${b.model}: ${name}'s file carries a mesh; it is his skeleton, sockets and clips alone (export_character.py --skeleton), each mesh a piece of the catalogue`);
+    const folder = join(ROOT, "assets", b.pieces);
+    for (const f of existsSync(folder) ? readdirSync(folder).filter((f) => /\.(gltf|glb)$/.test(f)) : []) {
+      if (!w.pieces[f.replace(/\.(gltf|glb)$/, "")]) faults.push(`assets/${b.pieces}/${f} is no piece of the catalogue, so nothing proves it theirs: delete it, or give it a row and rebuild`);
+    }
+  }
+  return { name: "intact", faults, said: `${theirs} meshes theirs as made, ${cuts} exact cuts, nothing else in the pieces' folders` };
 }
 
 function bound(w: Wardrobe): Stage {
@@ -138,7 +151,8 @@ if (import.meta.main) {
   writeFileSync(LOG, "");
   const w = wardrobeData(ROOT);
   let failed = false;
-  for (const stage of [catalogue, pairings, files, intact, bound, looks]) {
+  const guard = [() => vendored(), () => privately(), () => reshape(buildSteps(bodiesData(ROOT), gearData()), Object.values(w.bodies).map((b) => b.pieces))];
+  for (const stage of [...guard, catalogue, pairings, files, intact, bound, looks]) {
     const s = stage(w);
     console.log(s.faults.length ? `✗ ${s.name}\n  ${s.faults.join("\n  ")}` : `✓ ${s.name}: ${s.said}`);
     if (s.faults.length) {

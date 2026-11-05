@@ -33,7 +33,10 @@ from mathutils import Matrix, Vector
 import look
 import retarget
 import stretch
+import theirs
 import twist
+
+theirs.refuse("convert_rig.py")
 
 FIGURE = look.FIGURE
 OUT = os.path.join(HERE, "out")

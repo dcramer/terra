@@ -29,6 +29,9 @@ script=$(realpath "$1")
 shift
 open=(--factory-startup)
 if [[ "${1:-}" == --open ]]; then open=("$(realpath "$2")"); shift 2; fi
+# Quaternius's parts stay as made (D599): a script that reshapes meshes (the stretch, decimation,
+# the clipping fixer's pushes) is refused their files before Blender starts (theirs.py says why).
+if command -v python3 >/dev/null; then python3 "$here/../characters/theirs.py" "$script" "$@" || exit 2; fi
 
 # A Windows Blender takes Windows paths. Relative ones need nothing: it starts in this folder.
 path() { if [[ "$BLENDER" == *.exe ]]; then wslpath -w "$1"; else echo "$1"; fi; }

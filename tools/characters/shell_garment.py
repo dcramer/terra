@@ -52,6 +52,9 @@ from mathutils.bvhtree import BVHTree
 import look
 import patches
 import skin_piece
+import theirs
+
+theirs.refuse("shell_garment.py")
 
 OUT = look.GEAR_MADE
 LOOK_M = 0.06          # how far out and in from the skin to look for the dressed surface

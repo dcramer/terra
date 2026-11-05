@@ -41,6 +41,9 @@ from mathutils.kdtree import KDTree
 
 import look
 import skin_piece
+import theirs
+
+theirs.refuse("carry_gear.py")
 
 base_path, look_path, out_path = look.args()[:3]
 rest = [a for a in look.args()[3:]]

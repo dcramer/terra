@@ -23,6 +23,8 @@ The amounts are D593's, on the developer's word on a test copy ("He looks fine")
 
 import numpy as np
 
+import theirs
+
 REACH = 1.86 / 1.80  # fingertip to fingertip per height: ANSUR II's men's mean
 LEGS = 1.10  # hip joint to ankle, before the whole body is scaled back to its height
 BAND = 1.25 / 1.80  # the T-pose's arms: what lies above this share of the height
@@ -37,7 +39,8 @@ def _smooth(u):
 def plan(points, edges, joints, height):
     """The stretch for a body in its T-pose: `points` its skin (n x 3) and `edges` (k x 2 vertex
     indices), `joints` name -> (x, y, z) of our skeleton's joints, `height` what it is to stand
-    when done. A dict of plain numbers (JSON)."""
+    when done. A dict of plain numbers (JSON). Never on Quaternius's parts (D599)."""
+    theirs.refuse("stretch.py")
     P = np.asarray(points, dtype=float)
     J = {k: np.asarray(v, dtype=float) for k, v in joints.items()}
     floor = float(P[:, 2].min())
@@ -105,6 +108,7 @@ def _legs(r, P):
 
 def apply(r, points):
     """Where the stretch `r` (from `plan`) takes each point (n x 3, or one point)."""
+    theirs.refuse("stretch.py")
     P = np.asarray(points, dtype=float)
     one = P.ndim == 1
     P = np.atleast_2d(P)
