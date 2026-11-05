@@ -73,6 +73,14 @@
         "play-walk": (
             settle: (seconds: 0.0),
         ),
+        // No frame, its load's included, may hold the window past `load_frame_ms`: the loading
+        // screen's bar stood still 13.7 s as the world was entered on every walk at the lake
+        // (crossing-freeze j1). 5 s is where Windows calls a window that has not read its
+        // messages "not responding" and greys it (`IsHungAppWindow`); every load is to come under it,
+        // then under a freeze's 100 ms, a scene at a time.
+        "lake-woods-walk": (
+            load_frame_ms: 5000.0,
+        ),
         // The mountain lake as the developer plays it, under a minute (the developers,
         // 2026-11-02, from 350 s on the worker and 6 min on their 3080).
         "lake-play": (

@@ -41,6 +41,27 @@ fn a_scene_misses_with_ticks_slower_than_their_time() {
     assert_eq!(slow.misses().len(), 1);
 }
 
+/// A scene held to a longest frame misses on a frame of its load past it, as the lake's walk
+/// froze 13.7 s entering the world, and names what held it; one within it, or with no such
+/// budget, does not.
+#[test]
+fn a_scene_misses_on_a_frame_of_its_load_held_too_long() {
+    let entering = "WARN terra_world::recorder: freeze: frame 1017 took 13704 ms, held by the game world: OnEnter(InWorld) schedule 12067 ms, terra_world::woods::plant 4167 ms; 0.7 ms outside anything timed (a wait).";
+    let mut froze = timing(5.0, 9.0, 20.0);
+    assert!(froze.froze.read(entering));
+    assert!(froze.misses().is_empty(), "held to no longest frame");
+    froze.budget.load_frame_ms = Some(5000.0);
+    let missed = froze.misses();
+    assert_eq!(missed.len(), 1);
+    assert!(missed[0].contains("13704 ms") && missed[0].contains("woods::plant"));
+    let mut held = timing(5.0, 9.0, 20.0);
+    held.budget.load_frame_ms = Some(5000.0);
+    assert!(held.froze.read(
+        "freeze: frame 3 took 900 ms, held by the game world: stream 800 ms; 100 ms outside anything timed."
+    ));
+    assert!(held.misses().is_empty());
+}
+
 #[test]
 fn reads_how_a_run_held_to_the_budget() {
     let line = "SANDBOX against the 13.3 ms budget: 0.50% of frames over, 2 hitches over \

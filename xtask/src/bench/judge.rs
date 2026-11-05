@@ -10,6 +10,7 @@ use super::{Timing, play};
 pub(super) fn missed(timing: &Timing) -> Vec<String> {
     let budget = &timing.budget;
     let mut missed = play::load_missed(timing.load_s, budget.load_s);
+    missed.extend(held_still(timing, budget));
     let limits = &budget.play;
     if timing.from_start {
         missed.extend(freezes(timing, limits));
@@ -88,6 +89,20 @@ fn freezes(timing: &Timing, limits: &Limits) -> Option<String> {
             "{} freezes of {:.0} ms or more, past the {most} allowed ({FILE}): {}",
             timing.freezes,
             play::FREEZE_MS,
+            timing.froze.look()
+        )
+    })
+}
+
+/// A frame, its load's too, longer than the scene's `load_frame_ms`: the window drawn nothing
+/// meanwhile, the loading screen's bar held still (crossing-freeze j1: 13.7 s as the world
+/// was entered, every walk at the lake).
+fn held_still(timing: &Timing, budget: &Scene) -> Option<String> {
+    let most = budget.load_frame_ms?;
+    let (ms, _) = timing.froze.worst.as_ref()?;
+    (*ms > most).then(|| {
+        format!(
+            "a frame took {ms:.0} ms, past the {most:.0} ms any frame may hold the window, its load's too ({FILE}'s load_frame_ms): {}; move the work it names off the main thread or spread it over frames, never raise the budget to pass (D414)",
             timing.froze.look()
         )
     })

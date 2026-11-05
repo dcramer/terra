@@ -35,6 +35,8 @@ pub(super) struct Limits {
 pub(super) struct Scene {
     /// The most its load may take, if it is held to one.
     pub load_s: Option<f32>,
+    /// The longest any frame may take, its load's too: the loading screen held still that long.
+    pub load_frame_ms: Option<f32>,
     /// The time to playable every load aims at (D580), and whether it is still provisional.
     pub load_target_s: Option<f32>,
     pub load_provisional: bool,
@@ -75,13 +77,16 @@ pub(super) fn parse(text: &str, scene: &str) -> Result<Scene, String> {
                 "{FILE}: `{name}` is budgeted but is no scene of xtask/src/scenes.rs; rename it to a scene's name or remove it"
             ));
         }
-        known(entry, name, &["load_s", "settle", "play"])?;
+        known(entry, name, &["load_s", "load_frame_ms", "settle", "play"])?;
     }
     let own = file.get("scenes").and_then(|scenes| scenes.get(scene));
-    budgets.load_s = own
-        .and_then(|own| own.get("load_s"))
-        .and_then(Value::number)
-        .map(|n| n as f32);
+    let own_number = |field: &str| {
+        own.and_then(|own| own.get(field))
+            .and_then(Value::number)
+            .map(|n| n as f32)
+    };
+    budgets.load_s = own_number("load_s");
+    budgets.load_frame_ms = own_number("load_frame_ms");
     for (phase, limits) in [("settle", &mut budgets.settle), ("play", &mut budgets.play)] {
         for layer in [every, own] {
             if let Some(value) = layer.and_then(|layer| layer.get(phase)) {
