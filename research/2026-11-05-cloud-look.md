@@ -43,6 +43,25 @@ Over the lake (eye at 84,5,-300 over the start, 1901x1550, temporal on), the 17 
 - **Nubis 2017's in-scattering probability** darkens the edges and bases (p50 0.79 to 0.65 at gain 3).
 - **The phase** stays Jendersie and d'Eon's (HG plus Draine, itself a dual lobe fitted to Mie for 20 µm droplets). A classic dual HG would brighten the sides by about 10 times at 90°, which is not what Mie does.
 
+## Rounds 3 to 11 (clouds-look j2)
+
+Same views and crops. Each round's base is the round before's best. The new tunables are `x_floor` (the diffusion's deep light, 1 / (1 + ¾ (1 − g) τ), under the octaves), `x_stretch` (the shape noise changing slower up a heap than across it), `x_taper` (a heap's coverage narrowing toward its own top) and `x_sky` (the sky's light into the clouds).
+
+| Variant | cover | p5 | p50 | p90 | tint | fine |
+|---|---|---|---|---|---|---|
+| Photographs | 0.48 | 0.60 | 0.78 | 0.90 | 0.11 | 0.013 |
+| main | 0.27 | 0.59 | 0.97 | 0.98 | 0.05 | 0.008 |
+| c: octaves gain 2, a 0.25, density 3, light detail, in-scatter, erosion 0.6, repeats 2 | 0.20 | 0.52 | 0.76 | 0.91 | 0.09 | 0.008 |
+| e3: c with erosion 0.75, stretch 3, taper 0.7, heaped_cover 0.7, floor 2 | 0.19 | 0.53 | 0.83 | 0.96 | 0.07 | 0.009 |
+| **k3**: e3 with density 2, gain 1, floor 1.5, sky 3 | 0.19 | 0.55 | 0.80 | 0.95 | **0.11** | 0.007 |
+| m3: k3 with erosion 0.9, floor 1, sky 2.5 | 0.15 | 0.55 | 0.73 | 0.93 | 0.12 | 0.008 |
+
+- **Shape**: stretching the shape noise 3 times up a heap and narrowing its coverage toward its own top ended the mushroom caps on stalks. The heaps now stand as domed towers on flat bases. Taper costs cover, which heaped_cover 0.7 gives back.
+- **A height-field dome** after Nubis Cubed's dimensional profile (a heap's top as a field over the map, density from how far under it a point is) was tried for four rounds and dropped. Without Nubis 2015's coverage cut, the cover swung between 0.07 and 0.56 and the base became one overcast ceiling.
+- **Light**: the shade is lit too little by the sky. With the sky's light ×3 the shaded sides take the photographs' blue (tint 0.11). The sunlit faces still sit at 0.95 against 0.90. The octaves' gain barely moves p90, so it is the single scattering or the tonemapper's shoulder.
+- **Cost**: e3 measured GPU 7.87 ms on lake-play at 1901x1550 against main's 7.85 and 7.83, with the clouds pass 0.10 ms in both (job 20261105-161947-64d0-patch). The budget is 7.91.
+- **Still open**: cauliflower detail (fine 0.007 to 0.009 against 0.013, and the outlines still read as soft puffs), the cover (0.19 against 0.48, though the photographs choose cloudy skies), and the sunlit p90.
+
 ## Next
 
-The handoff `~/.cache/terra-handoff/clouds-look-j1.md` lists the next steps.
+The handoff `~/.cache/terra-handoff/clouds-look-j2.md` lists the next steps.
