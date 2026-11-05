@@ -16,9 +16,12 @@ A still with no window: `cargo run -- --shot out/dusk.png --demo --hour dusk` (`
 
 ## What it is
 
-- One fixed orthographic camera, 42° down and turned 28°, never rotated, as the Infinity Engine's painted backgrounds are; drawn live in 3D instead (PBR, cascaded and soft sun shadows, point-light shadows from the fire and two lamps, SSAO, TAA, bloom, AgX).
-- A village square: timber-framed houses built from boxes in the game's Poly Haven materials, its props, openings, trees, rocks and grass, mipmapped as `terra_world::mipmaps` does.
-- The party: the male body dressed in its ranger or peasant pieces (bound to the body's joints by name), held things in the hand sockets, idle/walk/jog clips; folk and animals wandering; A* on a half-metre search map with the path pulled straight.
-- BG-style furniture: green circles at the chosen's feet, a marker where they were sent, live portraits rendered from each face, a log with their barks.
+- One fixed orthographic camera, 42° down and turned 28°, never rotated, as the Infinity Engine's painted backgrounds are; drawn live in 3D instead (PBR, cascaded and point-light shadows, SSAO, TAA, bloom, distance haze). Day, dusk (the blue hour) and night (`T`); AgX by day, Tony McMapface at dusk and night, which keeps a fire orange.
+- A clearing in an old wood (scene.rs, forest.rs, terrain.rs): 80 oaks framing a glade, crowns that sway and cut a dithered hole about the party, a pond with reeds, rocks, ferns and grass in drifts, the ground trodden bare about the camp and along its paths, shaded under each crown.
+- The camp (camp.rs): a fire of stones and logs with alpha-blended flame tongues, coals, embers and smoke (motes.rs, smoke.rs); its light in two parts, a near one casting only the party's and the camp's big things' shadows (render layer `FIRE_CASTS`) and a far one casting none; two fallen trunks to sit on, bedrolls, a stump, a bucket, a wood heap, twigs and bark (Poly Haven scans through tools/blender/scan.py, two Tripo props).
+- Life: deer, a boar and a fox grazing and wandering (wildlife.rs), fireflies at dusk and night.
+- The party: a knight and three in the male body's ranger or peasant pieces, idle/walk/jog/sit clips; `--demo` makes camp, each walking to their place, three sitting by the fire, the knight on watch (rest.rs).
+- BG-style furniture: green circles at the chosen's feet, live portraits rendered from each face, a log with their barks.
+- How it was judged: each round a harsh judge scores the dusk still against Pillars of Eternity, Pathfinder WotR and BG3 frames, and a blind pairwise judge picks between it and the last kept still (rounds in ~/.cache/terra-review/iso-forest/).
 
 Scratch output goes in `out/` (ignored).
