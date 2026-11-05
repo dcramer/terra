@@ -15,6 +15,7 @@
 //!   noise of the kind's own like it, and a clump round each.
 
 mod placements;
+mod reach;
 mod variants;
 
 use super::shade::{self, NearShadows};
@@ -127,6 +128,7 @@ pub(super) fn shared(app: &mut App) {
             ),
         );
     terra_world::remote::method(app, "lush.undergrowth", show_undergrowth);
+    reach::plugin(app);
 }
 
 /// The forest's own soil: a dark loam, grey-brown, as a wood's trodden paths and bare
@@ -855,9 +857,11 @@ impl Lay<'_, '_, '_> {
             },
         };
         let drawn_as = |entity: &mut EntityCommands, part: &Part| {
+            let range = band(part.band);
             entity.insert((
                 Mesh3d(part.mesh.clone()),
-                band(part.band),
+                reach::Laid(range.clone()),
+                range,
                 NotShadowCaster,
                 Undergrowth,
             ));
