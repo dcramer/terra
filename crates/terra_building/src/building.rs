@@ -33,7 +33,10 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Offcuts>()
         .init_resource::<act::Applying>()
         .add_systems(Startup, read_rules.after(terra_bases::setup))
-        .add_systems(Update, (sheet::lay, village::lay, village::lay_scale));
+        .add_systems(
+            Update,
+            (sheet::lay, village::lay, village::lay_scale).run_if(terra_world::instance::in_world),
+        );
     fire::plugin(app);
 }
 

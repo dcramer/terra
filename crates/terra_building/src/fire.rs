@@ -67,8 +67,12 @@ const SPLASH_TALL_M: f32 = 5.5;
 const SPLASH_WIDE_M: f32 = 4.0;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<SiteFire>()
-        .add_systems(Update, (kinds, breathe, burn, ease, blazes).chain());
+    app.init_resource::<SiteFire>().add_systems(
+        Update,
+        (kinds, breathe, burn, ease, blazes)
+            .chain()
+            .run_if(terra_world::instance::in_world),
+    );
     method(app, "fire.light", light);
     method(app, "fire.heat", heat);
     method(app, "fire.state", state);

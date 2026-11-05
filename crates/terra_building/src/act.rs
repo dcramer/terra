@@ -118,7 +118,12 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Offcuts>()
         .init_resource::<Applying>()
         .register_required_components::<Player, History>()
-        .add_systems(Update, take_in.before(terra_bases::layout::Drawing::Notice));
+        .add_systems(
+            Update,
+            take_in
+                .before(terra_bases::layout::Drawing::Notice)
+                .run_if(terra_world::instance::in_world),
+        );
 }
 
 /// Acts being worked out on workers, oldest first (`Building::act_later`).

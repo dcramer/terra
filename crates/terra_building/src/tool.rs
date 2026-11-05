@@ -619,7 +619,10 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            (animate, highlight, preview_fit).chain().in_set(Acting),
+            (animate, highlight, preview_fit)
+                .chain()
+                .in_set(Acting)
+                .run_if(terra_world::instance::in_world),
         );
 }
 

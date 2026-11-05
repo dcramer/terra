@@ -100,7 +100,8 @@ pub fn plugin(app: &mut App) {
         Update,
         (harm_aimed, burst, (step, puff))
             .chain()
-            .after(terra_bases::layout::Drawing::Upload),
+            .after(terra_bases::layout::Drawing::Upload)
+            .run_if(terra_world::instance::in_world),
     );
 }
 
