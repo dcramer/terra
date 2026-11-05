@@ -200,7 +200,7 @@ fn spawn(
         DragBox,
     ));
     target(&mut drag);
-    log.note("You arrive in the village of Ashford as the day wanes.".into());
+    log.note("You make camp in a clearing of the old wood as the day wanes.".into());
 }
 
 fn portraits(

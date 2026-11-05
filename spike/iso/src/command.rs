@@ -10,6 +10,7 @@ use crate::party::{Actor, Folk, Member, Selected};
 use crate::scene::Hour;
 use crate::ui::{Log, PORTRAIT_COLUMN};
 use bevy::diagnostic::FrameCount;
+use crate::terrain::Land;
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
@@ -69,10 +70,18 @@ fn hover(
     hovered.0 = best.map(|(_, e)| e);
 }
 
-fn ground(cam: &Camera, cam_tr: &GlobalTransform, at: Vec2) -> Option<Vec2> {
+fn ground(land: &Land, cam: &Camera, cam_tr: &GlobalTransform, at: Vec2) -> Option<Vec2> {
     let ray = cam.viewport_to_world(cam_tr, at).ok()?;
-    let d = ray.intersect_plane(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y))?;
-    Some(ray.get_point(d).xz())
+    Some(land.hit(ray)?.xz())
+}
+
+/// A ring laid on the land, so it follows the slope rather than cutting into it.
+fn ring(gizmos: &mut Gizmos, land: &Land, at: Vec2, r: f32, color: LinearRgba) {
+    let points = (0..=40).map(|i| {
+        let p = at + Vec2::from_angle(i as f32 / 40.0 * std::f32::consts::TAU) * r;
+        Vec3::new(p.x, land.height(p) + 0.05, p.y)
+    });
+    gizmos.linestrip(points, color);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -88,6 +97,7 @@ fn click(
     folk: Query<&Folk>,
     mut actors: Query<&mut Actor>,
     nav: Res<Nav>,
+    land: Res<Land>,
     mut markers: ResMut<Markers>,
     mut log: ResMut<Log>,
 ) {
@@ -152,7 +162,7 @@ fn click(
             return;
         }
     }
-    let Some(goal) = ground(cam, cam_tr, c) else {
+    let Some(goal) = ground(&land, cam, cam_tr, c) else {
         return;
     };
     let chosen: Vec<(Entity, Vec2)> = members
@@ -278,7 +288,7 @@ fn script(
     }
     order(
         &chosen,
-        Vec2::new(-1.5, 3.5),
+        Vec2::new(-4.5, -1.5),
         &nav,
         &mut actors,
         &mut markers,
@@ -294,54 +304,37 @@ fn circles(
     members: Query<(Entity, &Actor, &GlobalTransform, Has<Selected>), With<Member>>,
     folk: Query<(Entity, &Actor, &GlobalTransform), With<Folk>>,
     mut markers: ResMut<Markers>,
+    land: Res<Land>,
 ) {
-    let flat = |p: Vec3| {
-        Isometry3d::new(
-            p + Vec3::Y * 0.04,
-            Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
-        )
-    };
     let green = LinearRgba::rgb(0.2, 3.0, 0.3);
     for (e, actor, tr, sel) in &members {
         let r = actor.radius * 1.5;
         if sel {
-            gizmos
-                .circle(flat(tr.translation()), r, green)
-                .resolution(48);
+            ring(&mut gizmos, &land, tr.translation().xz(), r, green);
         } else if hovered.0 == Some(e) {
-            gizmos
-                .circle(flat(tr.translation()), r, green * 0.35)
-                .resolution(48);
+            ring(&mut gizmos, &land, tr.translation().xz(), r, green * 0.35);
         }
         // Where they are going, a faint dot.
         if sel && let Some(end) = actor.path.back() {
-            gizmos
-                .circle(flat(Vec3::new(end.x, 0.0, end.y)), 0.12, green * 0.5)
-                .resolution(16);
+            ring(&mut gizmos, &land, *end, 0.12, green * 0.5);
         }
     }
     for (e, actor, tr) in &folk {
         if hovered.0 == Some(e) {
-            gizmos
-                .circle(
-                    flat(tr.translation()),
-                    actor.radius * 1.5,
-                    LinearRgba::rgb(0.3, 0.8, 3.0),
-                )
-                .resolution(48);
+            ring(
+                &mut gizmos,
+                &land,
+                tr.translation().xz(),
+                actor.radius * 1.5,
+                LinearRgba::rgb(0.3, 0.8, 3.0),
+            );
         }
     }
     let dt = time.delta_secs();
     markers.0.retain_mut(|(at, age)| {
         *age += dt;
         let r = 0.6 * (1.0 - *age / 0.8).max(0.0) + 0.1;
-        gizmos
-            .circle(
-                flat(Vec3::new(at.x, 0.0, at.y)),
-                r,
-                green * (1.0 - *age / 0.8).max(0.0),
-            )
-            .resolution(32);
+        ring(&mut gizmos, &land, *at, r, green * (1.0 - *age / 0.8).max(0.0));
         *age < 0.8
     });
 }

@@ -64,6 +64,17 @@ impl Nav {
         }
     }
 
+    /// Blocks every cell whose centre `f` says no one stands on.
+    pub fn block_where(&mut self, f: impl Fn(Vec2) -> bool) {
+        for y in 0..N {
+            for x in 0..N {
+                if f(centre(IVec2::new(x, y))) {
+                    self.blocked[(y * N + x) as usize] = true;
+                }
+            }
+        }
+    }
+
     pub fn block_circle(&mut self, at: Vec2, radius: f32) {
         let r = radius + BODY;
         let (lo, hi) = (cell(at - r), cell(at + r));

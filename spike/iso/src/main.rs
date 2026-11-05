@@ -3,7 +3,6 @@
 
 mod camera;
 mod command;
-mod mesh;
 mod mipmaps;
 mod nav;
 mod party;
@@ -40,7 +39,7 @@ fn args() -> Args {
         demo_at: 120,
         hour: scene::Hour::Dusk,
         zoom: 15.0,
-        focus: Vec2::new(3.0, 5.0),
+        focus: Vec2::new(-1.0, 1.0),
         size: (1920, 1080),
     };
     let mut it = std::env::args().skip(1);

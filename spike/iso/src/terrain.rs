@@ -15,6 +15,16 @@ use bevy::shader::ShaderRef;
 /// Half the ground mesh's side, metres, and its cell.
 pub const EXTENT: f32 = 56.0;
 const STEP: f32 = 0.5;
+/// The clearing's middle, where the camp is.
+pub const CAMP: Vec2 = Vec2::new(-1.0, 2.0);
+
+/// How deep in the woods a point is: 0 in the clearing, 1 among the trees, its edge
+/// ragged.
+pub fn woods(p: Vec2) -> f32 {
+    let d = (p - CAMP).length() + 6.0 * (fbm(p * 0.09, 23) - 0.5);
+    smooth(10.5, 15.0, d)
+}
+
 /// The pond's water, metres.
 pub const WATER: f32 = -0.55;
 pub const POND: Vec2 = Vec2::new(13.0, 7.0);
@@ -23,7 +33,8 @@ pub type GroundMaterial = ExtendedMaterial<StandardMaterial, GroundExt>;
 
 pub fn plugin(app: &mut App) {
     embedded_asset!(app, "shaders/ground.wesl");
-    app.add_plugins(MaterialPlugin::<GroundMaterial>::default());
+    app.add_plugins(MaterialPlugin::<GroundMaterial>::default())
+        .insert_resource(Land::new());
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -77,7 +88,7 @@ pub fn fbm(p: Vec2, seed: u32) -> f32 {
     sum / 0.9375
 }
 
-fn smooth(e0: f32, e1: f32, x: f32) -> f32 {
+pub fn smooth(e0: f32, e1: f32, x: f32) -> f32 {
     let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }

@@ -146,11 +146,11 @@ fn pan(
     view.focus = view.focus.clamp(Vec2::splat(-24.0), Vec2::splat(24.0));
 }
 
-fn place(view: Res<View>, mut camera: Query<(&mut Transform, &mut Projection), With<MainCamera>>) {
+fn place(view: Res<View>, land: Res<crate::terrain::Land>, mut camera: Query<(&mut Transform, &mut Projection), With<MainCamera>>) {
     let Ok((mut tr, mut projection)) = camera.single_mut() else {
         return;
     };
-    let focus = Vec3::new(view.focus.x, 0.0, view.focus.y);
+    let focus = Vec3::new(view.focus.x, land.height(view.focus), view.focus.y);
     *tr = Transform::from_translation(focus + offset()).looking_at(focus, Vec3::Y);
     if let Projection::Orthographic(ortho) = projection.as_mut() {
         ortho.scaling_mode = ScalingMode::FixedVertical {

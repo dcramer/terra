@@ -113,6 +113,14 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     if w[4] > 0.01 { t[4] = rock(world, n); }
     if w[5] > 0.01 { t[5] = layer(p, MUD, 1.3); }
     if w[6] > 0.01 { t[6] = layer(p, ROOTS, 1.67); }
+    // The scans are dark, as photographed under cloud: each brought to the albedo its
+    // stuff has in the open (grass greener, moss far lighter).
+    t[0].colour *= vec3<f32>(1.55, 2.1, 1.2);
+    t[1].colour *= vec3<f32>(1.5, 1.45, 1.35);
+    t[2].colour *= vec3<f32>(1.45, 1.4, 1.3);
+    t[3].colour *= vec3<f32>(5.0, 6.0, 3.2);
+    t[4].colour *= vec3<f32>(1.35, 1.35, 1.4);
+    t[6].colour *= vec3<f32>(1.3, 1.3, 1.3);
 
     // Height blending: the highest of what lies there wins, over a short depth.
     var best = -10.0;

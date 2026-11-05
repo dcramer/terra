@@ -3,6 +3,8 @@
 //! search map finds and playing its idle, walk and run clips.
 
 use crate::nav::Nav;
+use crate::scene::FIRE;
+use crate::terrain::Land;
 use bevy::animation::transition::AnimationTransitions;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::gltf::Gltf;
@@ -17,7 +19,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Startup, spawn)
         .add_systems(
             Update,
-            (make_clips, start_animators, dress, hold, walk, gait, wander).chain(),
+            (make_clips, start_animators, dress, hold, walk, stand, gait, wander).chain(),
         );
 }
 
@@ -27,8 +29,6 @@ const PIECES: &str = "models/character/male";
 /// What each kind of model calls its idle, walk and run clips.
 const KINDS: &[(&str, [&str; 3])] = &[
     (BODY, ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop"]),
-    ("models/creatures/Dog.glb", ["Idle", "Walk", "Run"]),
-    ("models/creatures/Chicken.glb", ["Idle", "Walk", "Run"]),
 ];
 
 #[derive(Resource, Default)]
@@ -163,7 +163,7 @@ fn spawn(
                     ("models/held/heater_shield.glb", "socket.hand.L"),
                 ],
             },
-            Vec2::new(5.0, 9.6),
+            FIRE + Vec2::new(-1.5, 1.6),
             ["Aye?", "Lead on.", "My blade is yours."],
         ),
         (
@@ -173,7 +173,7 @@ fn spawn(
                 pieces: RANGER,
                 held: &[("models/held/bow.glb", "socket.hand.L")],
             },
-            Vec2::new(8.0, 9.4),
+            FIRE + Vec2::new(1.5, 1.4),
             ["Yes?", "I'll scout ahead.", "Quietly, now."],
         ),
         (
@@ -183,7 +183,7 @@ fn spawn(
                 pieces: PEASANT,
                 held: &[("models/held/knife.glb", "socket.hand.R")],
             },
-            Vec2::new(4.6, 8.2),
+            FIRE + Vec2::new(-1.9, 0.2),
             ["What?", "Easy money.", "Don't look at me."],
         ),
         (
@@ -193,7 +193,7 @@ fn spawn(
                 pieces: PEASANT,
                 held: &[("models/held/hammer.glb", "socket.hand.R")],
             },
-            Vec2::new(8.4, 8.8),
+            FIRE + Vec2::new(1.9, 0.8),
             ["Peace.", "The light guides us.", "I am ready."],
         ),
     ];
@@ -204,7 +204,7 @@ fn spawn(
             bevy::render::render_resource::TextureFormat::Rgba8Unorm,
             Some(bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb),
         ));
-        let to_fire = Vec2::new(6.5, 8.0) - at;
+        let to_fire = FIRE - at;
         let (actor, body) = person(
             &mut commands,
             &asset,
@@ -238,67 +238,6 @@ fn spawn(
         ));
     }
 
-    let folk = [
-        ("Old Hedda", PEASANT, Vec2::new(-3.6, -2.0), 1.5),
-        ("Brannoc the smith", RANGER, Vec2::new(8.6, -8.4), 3.5),
-        ("Willem", PEASANT, Vec2::new(-1.0, 3.5), 6.0),
-    ];
-    for (name, pieces, at, reach) in folk {
-        let (actor, _) = person(&mut commands, &asset, at, &Dress { pieces, held: &[] }, 0.0);
-        commands.entity(actor).insert((
-            Folk { name },
-            Wander {
-                home: at,
-                reach,
-                wait: 2.0,
-            },
-        ));
-    }
-    let dog = creature(
-        &mut commands,
-        &asset,
-        "models/creatures/Dog.glb",
-        Vec2::new(7.5, 6.0),
-        1.3,
-        4.5,
-        0.6,
-        0.4,
-    );
-    commands.entity(dog).insert((
-        Folk { name: "A dog" },
-        Wander {
-            home: Vec2::new(5.0, 4.0),
-            reach: 7.0,
-            wait: 1.0,
-        },
-    ));
-    for (i, at) in [
-        Vec2::new(3.0, -7.5),
-        Vec2::new(4.2, -7.2),
-        Vec2::new(2.2, -6.8),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let hen = creature(
-            &mut commands,
-            &asset,
-            "models/creatures/Chicken.glb",
-            at,
-            0.5,
-            1.6,
-            0.45,
-            0.22,
-        );
-        commands.entity(hen).insert((
-            Folk { name: "A hen" },
-            Wander {
-                home: at,
-                reach: 2.5,
-                wait: i as f32,
-            },
-        ));
-    }
 }
 
 #[derive(Component)]
@@ -557,7 +496,7 @@ fn walk(
         if actor.path.is_empty() {
             actor.running = false;
         }
-        tr.translation = Vec3::new(moved.x, 0.0, moved.y);
+        tr.translation = Vec3::new(moved.x, tr.translation.y, moved.y);
         if to.length() > 0.01 {
             // The models face +Z.
             let want = Quat::from_rotation_y(to.x.atan2(to.y));
@@ -566,6 +505,16 @@ fn walk(
                     m.rotation = m.rotation.slerp(want, (dt * 10.0).min(1.0));
                 }
             }
+        }
+    }
+}
+
+/// Everyone stands on the land.
+fn stand(land: Res<Land>, mut actors: Query<&mut Transform, With<Actor>>) {
+    for mut tr in &mut actors {
+        let y = land.height(tr.translation.xz());
+        if tr.translation.y != y {
+            tr.translation.y = y;
         }
     }
 }
