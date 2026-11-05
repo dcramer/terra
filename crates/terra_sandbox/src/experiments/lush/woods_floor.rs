@@ -24,6 +24,10 @@ use terra_world::start::{Sited, Start};
 const REACH_M: f32 = 220.0;
 /// None nearer the start than the woods' own clearing round it.
 const CLEAR_M: f32 = 14.0;
+/// Where the stump and the log lie by the base's door, metres east and south of the start,
+/// as if the clearing had been cut.
+const STUMP_AT: Vec2 = Vec2::new(1.0, 11.0);
+const LOG_AT: Vec2 = Vec2::new(-2.5, 12.5);
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(InWorld), lay_woods_floor.in_set(LayingFloor));
@@ -83,35 +87,34 @@ fn lay_woods_floor(
         outer_m: REACH_M,
         among_trees: true,
     };
-    floor::lay(
-        &mut Lay {
-            commands: &mut commands,
-            planet: &planet,
-            start: start.translation,
-            east,
-            south,
-            assets: &assets,
-            meshes: &mut meshes,
-            plain: &mut plain,
-            mossy: &mut mossy,
-            mossy_scans: &mut mossy_scans,
-            flora: &flora,
-            cards: &cards,
-            variants: &mut variants,
-            bark: looks.bark.clone(),
-            pine_bark: looks.pine_bark.clone(),
-            spruce_bark: looks.spruce_bark.clone(),
-            atlas: looks.floor_cards.clone(),
-            thicket: looks.thicket_cards.clone(),
-            seed: planet.seed().derive("woods floor"),
-            foliage: &mut foliage,
-            shrinking: HashMap::default(),
-            shade: NearShadows::new(start.translation, east, south),
-            sun: None,
-        },
-        map,
-        &area,
-    );
+    let mut lay = Lay {
+        commands: &mut commands,
+        planet: &planet,
+        start: start.translation,
+        east,
+        south,
+        assets: &assets,
+        meshes: &mut meshes,
+        plain: &mut plain,
+        mossy: &mut mossy,
+        mossy_scans: &mut mossy_scans,
+        flora: &flora,
+        cards: &cards,
+        variants: &mut variants,
+        bark: looks.bark.clone(),
+        pine_bark: looks.pine_bark.clone(),
+        spruce_bark: looks.spruce_bark.clone(),
+        atlas: looks.floor_cards.clone(),
+        thicket: looks.thicket_cards.clone(),
+        seed: planet.seed().derive("woods floor"),
+        foliage: &mut foliage,
+        shrinking: HashMap::default(),
+        shade: NearShadows::new(start.translation, east, south),
+        sun: None,
+    };
+    floor::lay(&mut lay, map, &area);
+    // A stump and a log of the floor's own wood by the door, in the start's clearing.
+    floor::by_the_door(&mut lay, map, STUMP_AT, LOG_AT);
     info!(
         "Woods: their floor laid within {REACH_M:.0} m of {:.0},{:.0} in {:.1} s",
         middle.x,

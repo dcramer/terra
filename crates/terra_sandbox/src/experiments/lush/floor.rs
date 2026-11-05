@@ -1194,6 +1194,64 @@ pub(super) fn lay<W: Ways>(lay: &mut Lay, map: &mut Floor<W>, area: &Area) {
     lay.hand_over_shadows();
 }
 
+/// A stump at `stump_at` and a fallen log at `log_at`, of the floor's own wood, as if the
+/// clearing they lie in had been cut: cut as the flora's "Stump" and "Log" kinds say, the
+/// first wood to be had (they stood for the old modelled stump and log by the door).
+pub(super) fn by_the_door<W: Ways>(
+    lay: &mut Lay,
+    map: &mut Floor<W>,
+    stump_at: Vec2,
+    log_at: Vec2,
+) {
+    let mut dice = lay.seed.derive("by the door").rng();
+    let end_grain = lay.end_grain();
+    let stump = stump(&mut dice, true);
+    let log = fallen_log(&mut dice);
+    let wood = [
+        ("Stump", stump_at, stump.bark, stump.end, stump.radius, 0.0),
+        ("Log", log_at, log.bark, log.end, log.radius, 0.12),
+    ];
+    for (name, at, bark, end, radius, sink) in wood {
+        let mut mesh = bark.mesh();
+        // Kept on the CPU too, for its footing to be fitted to (D267).
+        mesh.asset_usage = bevy::asset::RenderAssetUsages::all();
+        mesh.generate_tangents()
+            .expect("a stump or log has normals and texture places");
+        let place = lay.on(at, &mut dice, sink, 1.0);
+        let material = if map.here(at).needles > 0.5 {
+            lay.pine_bark.clone()
+        } else {
+            lay.bark.clone()
+        };
+        let cut = lay.cut_as(name, 1.0);
+        let (mesh, end) = (
+            lay.meshes.add(mesh),
+            end.map(|end| lay.meshes.add(end.mesh())),
+        );
+        let mut entity = lay.commands.spawn((
+            Name::new(name),
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            place,
+            within(110.0),
+            Footing,
+            Growth::new(cut, None, 0.4),
+        ));
+        if let Some(end) = end {
+            entity.with_child((
+                Mesh3d(end),
+                MeshMaterial3d(end_grain.clone()),
+                within(110.0),
+            ));
+        }
+        if name == "Stump" {
+            map.canopy.add(Stand::stump(at, radius * 1.3));
+        } else {
+            map.lying.add(at, radius);
+        }
+    }
+}
+
 impl Lay<'_, '_, '_> {
     /// Hands the floor's shadow stand-ins and near shadows to the world, once all is laid.
     fn hand_over_shadows(&mut self) {

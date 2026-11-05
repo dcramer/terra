@@ -115,8 +115,9 @@ pub enum Grows {
     /// Ferns and shrubs on the shaded forest floor, under the trees rather than in the grass,
     /// where its kinds' `site` holds (`flora::under`).
     Understory,
-    /// One placed by the base's door, so many metres east and south, so tall.
-    ByTheDoor(f32, f32, f32),
+    /// Laid and drawn by another layer, the forest floor's stumps and logs: the kind says only
+    /// how it is cut, and has no models.
+    Laid,
 }
 
 impl Grows {
@@ -496,6 +497,14 @@ mod tests {
         }
         let folder = crate::data::assets().join("models/nature");
         for kind in flora.kinds() {
+            if matches!(kind.grows, Grows::Laid) {
+                assert!(
+                    kind.models.is_empty() && kind.grown.is_none() && kind.cut.is_some(),
+                    "{} is laid by another layer, so has no models and says how it is cut",
+                    kind.name
+                );
+                continue;
+            }
             assert!(
                 kind.models.is_empty() == kind.grown.is_some(),
                 "{} must have models or be grown, not both",

@@ -574,7 +574,9 @@ fn plant(
         &assets,
         (&mut meshes, &mut foliage),
     );
-    if models.iter().any(Vec::is_empty) {
+    // A kind another layer lays and draws (`Grows::Laid`) has none of its own.
+    let drawn_here = |kind: usize| !matches!(flora.kinds()[kind].grows, Grows::Laid);
+    if (0..models.len()).any(|kind| drawn_here(kind) && models[kind].is_empty()) {
         error!("Some models are missing, so nothing is planted. Is assets/models/nature there?");
         return;
     }
@@ -921,41 +923,6 @@ fn plant(
                 None,
             );
         });
-    }
-
-    // What lies by the door, such as a stump and a log, as if the clearing had been cut.
-    let by_the_door = flora
-        .kinds()
-        .iter()
-        .enumerate()
-        .filter_map(|(kind, def)| match def.grows {
-            Grows::ByTheDoor(east, south, size) => Some((kind, Vec3::new(east, 0.0, south), size)),
-            _ => None,
-        });
-    for (kind, beside, size) in by_the_door {
-        let model = &models[kind][0];
-        let point = planet.ground_at(start.transform_point(beside));
-        // No clearing was cut where no trees grew.
-        if planet.round().is_some_and(|round| {
-            round
-                .stand(
-                    point,
-                    planet.normal(point),
-                    terra_land::woods::Footing::Soil,
-                )
-                .density
-                < 0.2
-        }) {
-            continue;
-        }
-        let mut rng = seed.derive("props").rng();
-        put(
-            model,
-            standing(&mut rng, point, 0.0, size / model.height, 0.03),
-            1.0,
-            flora.kinds()[kind].cuttable(size),
-            Some((point, 0.5)),
-        );
     }
     for (at, radius) in solid_things {
         obstacles.add(at, radius);

@@ -29,7 +29,8 @@
 //            run down its faces below them, over its own material
 //   sway     how it moves in the wind: Tree, Bush, Plant or Still
 //   grows    the layer it grows in: Trees, Rocks, Bushes, Plants, Flowers, Heath, Shore
-//            or Understory, or ByTheDoor(east, south, height) for one placed by the base's door
+//            or Understory, or Laid for one another layer lays and draws (the forest floor's
+//            stumps and logs), the kind saying only how it is cut, with no models
 //   site     for a Shore or Understory kind, where on the ground it grows: metres over the
 //            nearest water, the steepest slope in degrees, the trees' shade over it (0 open
 //            to 1 a closed forest's), its water's mountain share (0 a lowland lake, 1 one
@@ -265,19 +266,18 @@
             cut: (what: Plant, gives: ("Fibre", 1.0, 0.0), seconds: (0.4, 0.0)),
         ),
 
-        // A stump and a mossy log by the door, as if the clearing had been cut.
+        // The stump and the log the woods' floor lays by the door, as if the clearing had
+        // been cut (`lush::floor::by_the_door`): how they are cut.
         (
             name: "Stump",
-            models: ["TreeStump"],
             sway: Still,
-            grows: ByTheDoor(1.0, 11.0, 0.7),
+            grows: Laid,
             cut: (what: Tree, gives: ("Wood", 2.0, 0.0), seconds: (1.0, 0.0)),
         ),
         (
             name: "Log",
-            models: ["WoodLog_Moss"],
             sway: Still,
-            grows: ByTheDoor(-2.5, 12.5, 0.9),
+            grows: Laid,
             cut: (what: Tree, gives: ("Wood", 2.0, 0.0), seconds: (1.0, 0.0)),
         ),
     ],

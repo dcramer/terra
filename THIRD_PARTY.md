@@ -20,7 +20,6 @@ All by [Quaternius](https://quaternius.com), who releases everything under [CC0 
 
 | Where | From | Changes |
 |---|---|---|
-| `assets/models/nature/` | Ultimate Nature Pack: a stump and a mossy log | None to the files. The sandbox reads their shapes and applies its own colours. Its trees, bushes, plants and flowers were replaced on 2026-10-13 by grown plants and scanned rocks (D222), its grass on 2026-11-04 by the cover's blades. |
 | `assets/models/character/mannequin.glb` | Universal Animation Library v3.0 (2026-06-16, Pro edition, 120 clips) and Universal Animation Library 2 v2.2 (2026-09-28, Source edition, 134 clips), both bought from [quaternius.itch.io](https://quaternius.itch.io/universal-animation-library) on 2026-10-12: the mannequin, its skeleton and the clips the game plays | Only the clips listed in `art/animation/clips.txt` are kept, cut by `tools/characters/clips.py`, keyframes unchanged; the libraries themselves are not committed (`art/README.md`). |
 | `assets/models/creatures/` | Ultimate Animated Animals pack: `Deer.glb`. Easy Enemies pack: `Spider.glb`. Both rigged and animated | None to the files. |
 | `assets/models/tools/` | Survival pack: `Axe.glb`, `Knife.glb`. Medieval Weapons pack: hammer, spear, bow, arrow | None to the files. Made into the held looks in `models/held/` by `tools/characters/fit_held.py`: scaled, set at their grip, and stone and iron heads coloured. |
