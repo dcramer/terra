@@ -435,6 +435,27 @@ pub struct ClearAround(pub Vec3, pub f32);
 #[derive(Message, Clone, Copy)]
 pub struct MowAround(pub Vec3, pub f32);
 
+/// Says a growth was cleared away, hidden for good with its obstacle taken out, by what was
+/// built, set down, mown or dug where it stood; what was drawn for it elsewhere goes with it
+/// (a woods tree's far card, `woods::felled`).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct ClearedAway(pub Entity);
+
+/// Clears a growth away: hidden, its obstacle out of the walkers' way, and said.
+fn clear_away(
+    entity: Entity,
+    growth: &Growth,
+    mut visibility: Mut<Visibility>,
+    obstacles: &mut Obstacles,
+    gone: &mut MessageWriter<ClearedAway>,
+) {
+    visibility.set_if_neq(Visibility::Hidden);
+    if let Some(stood) = growth.obstacle {
+        obstacles.remove(stood);
+    }
+    gone.write(ClearedAway(entity));
+}
+
 /// What grows lower than this, in no one's way, a mown meadow keeps.
 const LOW_M: f32 = 0.9;
 
@@ -470,6 +491,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (follow_wind, piece::draw))
         .add_message::<ClearAround>()
         .add_message::<MowAround>()
+        .add_message::<ClearedAway>()
         .add_systems(
             Update,
             (make_way, clear_new, clear_around, mow_around, follow_digs)
@@ -956,7 +978,8 @@ fn make_way(
     footprints: Query<(Entity, Ref<Footprint>)>,
     cleared: Option<ResMut<Cleared>>,
     mut obstacles: ResMut<Obstacles>,
-    mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
+    mut growth: Query<(Entity, &Growth, &Transform, &mut Visibility)>,
+    mut gone: MessageWriter<ClearedAway>,
     ticks: SystemChangeTick,
 ) {
     terra_gen::stat_scope!("flora");
@@ -990,7 +1013,7 @@ fn make_way(
             .filter(|change| change.frame == footprint.frame)
             .filter_map(Footprint::bounds)
             .collect();
-        for (growth, transform, mut visibility) in &mut growth {
+        for (entity, growth, transform, visibility) in &mut growth {
             if *visibility == Visibility::Hidden {
                 continue;
             }
@@ -1003,10 +1026,7 @@ fn make_way(
                     && at.z < high.y + reach
             });
             if near && footprint.covers_local(at, growth.clearance_m) {
-                *visibility = Visibility::Hidden;
-                if let Some(stood) = growth.obstacle {
-                    obstacles.remove(stood);
-                }
+                clear_away(entity, growth, visibility, &mut obstacles, &mut gone);
             }
         }
     }
@@ -1018,21 +1038,19 @@ fn make_way(
 fn clear_new(
     footprints: Query<&Footprint>,
     mut obstacles: ResMut<Obstacles>,
-    mut growth: Query<(&Growth, &Transform, &mut Visibility), Added<Growth>>,
+    mut growth: Query<(Entity, &Growth, &Transform, &mut Visibility), Added<Growth>>,
+    mut gone: MessageWriter<ClearedAway>,
 ) {
     terra_gen::stat_scope!("flora");
     if footprints.is_empty() {
         return;
     }
-    for (growth, transform, mut visibility) in &mut growth {
+    for (entity, growth, transform, visibility) in &mut growth {
         if footprints
             .iter()
             .any(|footprint| footprint.covers(transform.translation, growth.clearance_m))
         {
-            *visibility = Visibility::Hidden;
-            if let Some(stood) = growth.obstacle {
-                obstacles.remove(stood);
-            }
+            clear_away(entity, growth, visibility, &mut obstacles, &mut gone);
         }
     }
 }
@@ -1045,7 +1063,8 @@ fn follow_digs(
     planet: Res<Planet>,
     planted: Option<Res<Cleared>>,
     mut obstacles: ResMut<Obstacles>,
-    mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
+    mut growth: Query<(Entity, &Growth, &Transform, &mut Visibility)>,
+    mut gone: MessageWriter<ClearedAway>,
     mut seen: Local<usize>,
 ) {
     terra_gen::stat_scope!("flora");
@@ -1064,13 +1083,10 @@ fn follow_digs(
             .iter()
             .any(|&(centre, reach)| (point - centre).reject_from(up).length() < reach + margin)
     };
-    for (growth, transform, mut visibility) in &mut growth {
+    for (entity, growth, transform, visibility) in &mut growth {
         let foot = transform.translation;
         if *visibility != Visibility::Hidden && near(foot, 0.5) && planet.dug(foot) {
-            *visibility = Visibility::Hidden;
-            if let Some(stood) = growth.obstacle {
-                obstacles.remove(stood);
-            }
+            clear_away(entity, growth, visibility, &mut obstacles, &mut gone);
         }
     }
 }
@@ -1079,38 +1095,34 @@ fn follow_digs(
 fn mow_around(
     mut asked: MessageReader<MowAround>,
     mut obstacles: ResMut<Obstacles>,
-    mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
+    mut growth: Query<(Entity, &Growth, &Transform, &mut Visibility)>,
+    mut gone: MessageWriter<ClearedAway>,
 ) {
     terra_gen::stat_scope!("flora");
     for &MowAround(at, radius) in asked.read() {
         let up = at.normalize();
-        for (growth, transform, mut visibility) in &mut growth {
+        for (entity, growth, transform, visibility) in &mut growth {
             if !growth.low && (transform.translation - at).reject_from(up).length() < radius {
-                visibility.set_if_neq(Visibility::Hidden);
-                if let Some(stood) = growth.obstacle {
-                    obstacles.remove(stood);
-                }
+                clear_away(entity, growth, visibility, &mut obstacles, &mut gone);
             }
         }
     }
 }
 
 /// Clears plants where something has been set down since they grew.
-fn clear_around(
+pub(crate) fn clear_around(
     mut asked: MessageReader<ClearAround>,
     mut obstacles: ResMut<Obstacles>,
-    mut growth: Query<(&Growth, &Transform, &mut Visibility)>,
+    mut growth: Query<(Entity, &Growth, &Transform, &mut Visibility)>,
+    mut gone: MessageWriter<ClearedAway>,
 ) {
     terra_gen::stat_scope!("flora");
     for &ClearAround(at, radius) in asked.read() {
         let up = at.normalize();
-        for (growth, transform, mut visibility) in &mut growth {
+        for (entity, growth, transform, visibility) in &mut growth {
             if (transform.translation - at).reject_from(up).length() < radius {
-                *visibility = Visibility::Hidden;
                 // Only the plant's own obstacle goes; whatever was set down stays solid.
-                if let Some(stood) = growth.obstacle {
-                    obstacles.remove(stood);
-                }
+                clear_away(entity, growth, visibility, &mut obstacles, &mut gone);
             }
         }
     }
@@ -1230,11 +1242,20 @@ mod tests {
         };
         let trees = (tree(near), tree(far));
         world.insert_resource(obstacles);
+        world.init_resource::<Messages<ClearedAway>>();
         trees
     }
 
+    /// Whether a plant is hidden; one cleared away is said to be, so what was drawn for it
+    /// elsewhere goes too (a woods tree's far card), and one left standing is not.
     fn hidden(world: &World, tree: Entity) -> bool {
-        world.get::<Visibility>(tree) == Some(&Visibility::Hidden)
+        let said = world
+            .resource::<Messages<ClearedAway>>()
+            .iter_current_update_messages()
+            .any(|&ClearedAway(gone)| gone == tree);
+        let hidden = world.get::<Visibility>(tree) == Some(&Visibility::Hidden);
+        assert_eq!(said, hidden, "a plant hidden is said to be cleared away");
+        hidden
     }
 
     /// Whether a walker at a point would find a trunk there.

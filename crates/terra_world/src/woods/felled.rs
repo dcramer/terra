@@ -1,4 +1,5 @@
-//! A grown tree felled takes its far card with it. The card stands for the tree past its
+//! A grown tree felled, or cleared away by building or digging where it stood, takes its far
+//! card with it. The card stands for the tree past its
 //! last level of detail (`Card::grown`), so a tree cut down near the camera would come back
 //! as a billboard once walked away from. As an impostor batch is rebuilt when one of its
 //! instances goes (SpeedTree's and Unreal's HLOD clusters are rebuilt for what changed), the
@@ -6,7 +7,7 @@
 
 use super::near::NearWoods;
 use super::{Card, SQUARE_M, foot_key, merged};
-use crate::flora::Growth;
+use crate::flora::{ClearedAway, Growth};
 use bevy::{camera::primitives::Aabb, platform::collections::HashMap, prelude::*};
 
 /// A grown tree of the woods: where its foot stands, which finds its far card.
@@ -56,11 +57,13 @@ pub(super) fn square_of(middle: Vec3, east: Vec3, north: Vec3, at: Vec3) -> (i32
     (square.x, square.y)
 }
 
-/// Merges again, without its card, each square a grown tree felled since last time stood in
-/// (felling takes its `Growth`, `terra_survival::harvest`); a square left with none goes.
+/// Merges again, without its card, each square a grown tree felled or cleared away since
+/// last time stood in (felling takes its `Growth`, `terra_survival::harvest`; building or
+/// digging where it stood hides it, `flora::ClearedAway`); a square left with none goes.
 pub(super) fn unfar_the_felled(
     mut commands: Commands,
     mut felled: RemovedComponents<Growth>,
+    mut cleared: MessageReader<ClearedAway>,
     trees: Query<&WoodsTree>,
     (index, mut near): (Option<Res<FarSquares>>, Option<ResMut<NearWoods>>),
     mut squares: Query<(&mut FarSquare, &mut Mesh3d, &mut Transform, &mut Aabb)>,
@@ -69,16 +72,20 @@ pub(super) fn unfar_the_felled(
     terra_gen::stat_scope!("flora");
     let Some(index) = index else {
         felled.clear();
+        cleared.clear();
         return;
     };
     let mut changed: Vec<Entity> = Vec::new();
-    for entity in felled.read() {
+    let gone = felled
+        .read()
+        .chain(cleared.read().map(|&ClearedAway(entity)| entity));
+    for entity in gone {
         // A tree streamed out goes whole, its entity with it, so is not found here.
         let Ok(tree) = trees.get(entity) else {
             continue;
         };
         let key = foot_key(tree.foot);
-        // Felled for good: its block streamed in again leaves it out (D622).
+        // Felled or cleared for good: its block streamed in again leaves it out (D622).
         if let Some(near) = near.as_mut() {
             near.felled.insert(key);
         }
@@ -103,7 +110,7 @@ pub(super) fn unfar_the_felled(
             continue;
         }
         info!(
-            "Woods: a felled tree's far card is gone, its square merged again with {} cards",
+            "Woods: a felled or cleared tree's far card is gone, its square merged again with {} cards",
             far.cards.len()
         );
         let (merged, middle, bounds) = merged(&far.cards);

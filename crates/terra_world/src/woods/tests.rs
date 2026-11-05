@@ -1,4 +1,5 @@
 use super::*;
+use crate::flora::{Growth, Obstacles};
 
 /// A tree drawn as an oak 20 m tall, its crown 4 m round its stem.
 fn drawn() -> Drawn {
@@ -146,67 +147,147 @@ fn a_tree_toward_its_limit_is_shorter_and_squatter() {
 /// other cards stay as they were.
 #[test]
 fn a_felled_grown_tree_leaves_its_far_square_and_the_rest_stay() {
-    use crate::flora::Growth;
-    let ground = Vec3::new(0.0, 30_000.0, 0.0);
-    // Both in the square east and north of the middle.
-    let felled_at = ground + Vec3::new(10.0, 0.0, -5.0);
-    let kept_at = ground + Vec3::new(30.0, 0.0, -40.0);
-    let card = |at, grown| Card {
-        tree: tree(at, TreeKind::Pine, 0.8),
-        widen: 1.0,
-        grown,
-    };
-    let cards = vec![card(felled_at, Some(drawn())), card(kept_at, None)];
-    let both = merged(&cards).0.count_vertices();
-    let one = merged(&cards[1..]).0.count_vertices();
-    assert!(one < both);
+    let mut woods = FarWoods::new();
+    woods.app.update();
+    assert_eq!(woods.vertices(), woods.both, "standing, its card is drawn");
 
-    let mut app = App::new();
-    app.init_resource::<Assets<Mesh>>()
-        .add_systems(Update, felled::unfar_the_felled);
-    let mut index = felled::FarSquares::new(ground, Vec3::X, Vec3::NEG_Z);
-    assert_eq!(index.square_of(felled_at), index.square_of(kept_at));
-    let (mesh, middle, aabb) = merged(&cards);
-    let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(mesh);
-    let square = app
+    let standing = woods.standing;
+    woods
+        .app
         .world_mut()
-        .spawn((
-            Mesh3d(handle),
-            Transform::from_translation(middle),
-            aabb,
-            felled::FarSquare { cards },
-        ))
-        .id();
-    index.by_square.insert(index.square_of(felled_at), square);
-    app.insert_resource(index);
-    let map = near::Map::new(ground, Vec3::X, Vec3::NEG_Z, ground.length());
-    let streamed = near::NearWoods::new(map, terra_gen::Seed(1), Arc::new(Bare));
-    app.insert_resource(streamed);
-    let standing = app
+        .entity_mut(standing)
+        .remove::<Growth>();
+    woods.app.update();
+    woods.only_the_other_card_left("felled");
+}
+
+/// A grown tree cleared away by what is set down where it stood (as building over it or
+/// digging under it does, `flora`'s `make_way` and `follow_digs`) is hidden and takes its far
+/// card with it, as one felled does; one standing off the clearing keeps its card.
+#[test]
+fn a_cleared_grown_tree_leaves_its_far_square_as_a_felled_one_does() {
+    let mut woods = FarWoods::new();
+    woods.app.update();
+    let standing = woods.standing;
+    let felled_at = woods.felled_at;
+    woods
+        .app
         .world_mut()
-        .spawn((
-            felled::WoodsTree { foot: felled_at },
-            Growth::new(None, Some(felled_at), 1.4),
-        ))
-        .id();
-    let vertices = |app: &App| {
-        let handle = &app.world().get::<Mesh3d>(square).unwrap().0;
-        let meshes = app.world().resource::<Assets<Mesh>>();
+        .write_message(crate::flora::ClearAround(felled_at, 3.0));
+    woods.app.update();
+    let hidden = woods.app.world().get::<Visibility>(standing);
+    assert_eq!(
+        hidden,
+        Some(&Visibility::Hidden),
+        "cleared away, it is hidden"
+    );
+    woods.only_the_other_card_left("cleared");
+}
+
+/// A square of two far cards, one of a grown woods tree standing there and one of a tree
+/// 40 m off, with the systems that clear and fell what grows.
+struct FarWoods {
+    app: App,
+    square: Entity,
+    standing: Entity,
+    felled_at: Vec3,
+    kept_at: Vec3,
+    both: usize,
+    one: usize,
+}
+
+impl FarWoods {
+    fn new() -> Self {
+        let ground = Vec3::new(0.0, 30_000.0, 0.0);
+        // Both in the square east and north of the middle.
+        let felled_at = ground + Vec3::new(10.0, 0.0, -5.0);
+        let kept_at = ground + Vec3::new(30.0, 0.0, -40.0);
+        let card = |at, grown| Card {
+            tree: tree(at, TreeKind::Pine, 0.8),
+            widen: 1.0,
+            grown,
+        };
+        let cards = vec![card(felled_at, Some(drawn())), card(kept_at, None)];
+        let both = merged(&cards).0.count_vertices();
+        let one = merged(&cards[1..]).0.count_vertices();
+        assert!(one < both);
+
+        let mut app = App::new();
+        app.init_resource::<Assets<Mesh>>()
+            .init_resource::<Obstacles>()
+            .add_message::<crate::flora::ClearAround>()
+            .add_message::<crate::flora::ClearedAway>()
+            .add_systems(
+                Update,
+                (crate::flora::clear_around, felled::unfar_the_felled).chain(),
+            );
+        let mut index = felled::FarSquares::new(ground, Vec3::X, Vec3::NEG_Z);
+        assert_eq!(index.square_of(felled_at), index.square_of(kept_at));
+        let (mesh, middle, aabb) = merged(&cards);
+        let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(mesh);
+        let square = app
+            .world_mut()
+            .spawn((
+                Mesh3d(handle),
+                Transform::from_translation(middle),
+                aabb,
+                felled::FarSquare { cards },
+            ))
+            .id();
+        index.by_square.insert(index.square_of(felled_at), square);
+        app.insert_resource(index);
+        let map = near::Map::new(ground, Vec3::X, Vec3::NEG_Z, ground.length());
+        let streamed = near::NearWoods::new(map, terra_gen::Seed(1), Arc::new(Bare));
+        app.insert_resource(streamed);
+        let standing = app
+            .world_mut()
+            .spawn((
+                felled::WoodsTree { foot: felled_at },
+                Growth::new(None, Some(felled_at), 1.4),
+                Transform::from_translation(felled_at),
+                Visibility::Inherited,
+            ))
+            .id();
+        Self {
+            app,
+            square,
+            standing,
+            felled_at,
+            kept_at,
+            both,
+            one,
+        }
+    }
+
+    /// The vertices the square draws.
+    fn vertices(&self) -> usize {
+        let handle = &self.app.world().get::<Mesh3d>(self.square).unwrap().0;
+        let meshes = self.app.world().resource::<Assets<Mesh>>();
         meshes.get(handle).unwrap().count_vertices()
-    };
-    app.update();
-    assert_eq!(vertices(&app), both, "standing, its card is drawn");
+    }
 
-    app.world_mut().entity_mut(standing).remove::<Growth>();
-    app.update();
-    let far = app.world().get::<felled::FarSquare>(square).unwrap();
-    assert_eq!(far.cards.len(), 1);
-    assert_eq!(far.cards[0].tree.at, kept_at);
-    assert_eq!(vertices(&app), one, "felled, only the other card is drawn");
-    // And it stays felled: its block, streamed in again, leaves it out (D622).
-    let streamed = app.world().resource::<near::NearWoods>();
-    assert!(streamed.felled.contains(&foot_key(felled_at)));
-    assert!(!streamed.felled.contains(&foot_key(kept_at)));
+    /// The square keeps only the card of the tree off the clearing, and draws only it; and
+    /// the tree stays gone: its block, streamed in again, leaves it out (D622).
+    fn only_the_other_card_left(&self, how: &str) {
+        let far = self
+            .app
+            .world()
+            .get::<felled::FarSquare>(self.square)
+            .unwrap();
+        assert_eq!(far.cards.len(), 1, "{how}, its card is gone");
+        assert_eq!(far.cards[0].tree.at, self.kept_at);
+        assert_eq!(
+            self.vertices(),
+            self.one,
+            "{how}, only the other card is drawn"
+        );
+        let streamed = self.app.world().resource::<near::NearWoods>();
+        assert!(
+            streamed.felled.contains(&foot_key(self.felled_at)),
+            "{how}, kept out"
+        );
+        assert!(!streamed.felled.contains(&foot_key(self.kept_at)));
+    }
 }
 
 /// Conifers drawn as nothing, for the woods' own systems alone.
