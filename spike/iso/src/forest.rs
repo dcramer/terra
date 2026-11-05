@@ -432,7 +432,12 @@ fn plant(
         let mut x = -reach;
         while x < reach {
             if let Some(mesh) = grass(&land, Vec2::new(x, z), chunk, &mut rng, &nav) {
-                commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d(blades.clone())));
+                // No shadow: the fire's light threw each blade's long and spiky across the camp.
+                commands.spawn((
+                    Mesh3d(meshes.add(mesh)),
+                    MeshMaterial3d(blades.clone()),
+                    bevy::light::NotShadowCaster,
+                ));
             }
             x += chunk;
         }

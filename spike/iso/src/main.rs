@@ -6,6 +6,7 @@ mod command;
 mod foliage;
 mod forest;
 mod mipmaps;
+mod motes;
 mod nav;
 mod party;
 mod rim;
@@ -118,6 +119,7 @@ fn main() {
             rim::plugin,
             water::plugin,
             wildlife::plugin,
+            motes::plugin,
         ))
         .add_systems(
             PostStartup,
