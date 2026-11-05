@@ -42,6 +42,3 @@ pub(super) fn of(tree: &Tree) -> Pivots {
         .collect();
     pivots::of(&limbs, &clumps(tree))
 }
-
-/// A material's specialising for meshes carrying pivots: the world's.
-pub(super) use terra_world::grown::pivots::specialize;

@@ -30,20 +30,8 @@ use terra_world::woods::{ConiferModels, Conifers, Drawn, Planted, Planting, Tree
 const YOUNG_UNDER_M: f32 = 9.0;
 
 pub fn plugin(app: &mut App) {
-    // Unless the lush forest is on too, and brought them: its materials, and what keeps them
-    // up with the climate and the quality preset.
-    if !app.is_plugin_added::<MaterialPlugin<Foliage>>() {
-        app.add_plugins(MaterialPlugin::<Foliage>::default())
-            .add_systems(
-                Update,
-                super::seasons::follow_climate.run_if(resource_exists::<Cards>),
-            )
-            .add_systems(
-                PostUpdate,
-                terra_world::quality::follow_relief::<Foliage>.run_if(resource_exists::<Conifers>),
-            );
-    }
-    // In each world entered, before its woods are planted (D469).
+    // Their material, its climate and its relief are grown plants' (`terra_world::grown`). In
+    // each world entered, before its woods are planted (D469).
     app.add_systems(
         OnEnter(InWorld),
         grow_conifers.in_set(Building::View).before(Planting),

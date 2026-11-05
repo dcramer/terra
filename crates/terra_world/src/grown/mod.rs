@@ -16,6 +16,7 @@
 //! a material from the same tool.
 
 pub mod build;
+mod climate;
 pub mod pivots;
 pub mod plants;
 pub mod tree;
@@ -299,6 +300,10 @@ pub struct FoliageExtension {
     #[texture(106, dimension = "2d_array")]
     #[sampler(107)]
     pub climate_leaves: Option<Handle<Image>>,
+    /// Where its batch draws in the alpha-mask prepass (D618): the tall crowns' and everything
+    /// the lush forest grows at -1, so their depth rejects what they hide, ahead of the flora's
+    /// plants at 0 and the far woods at 1. Not the shader's.
+    pub prepass_priority: i32,
 }
 
 /// How many cells of the card atlas a shader can tell the kind of: four by four.
@@ -425,6 +430,10 @@ impl MaterialExtension for FoliageExtension {
         "shaders/foliage_prepass.wesl".into()
     }
 
+    fn prepass_draw_priority(&self) -> Option<i32> {
+        Some(self.prepass_priority)
+    }
+
     fn specialize(
         _pipeline: &bevy::pbr::MaterialExtensionPipeline,
         descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
@@ -496,6 +505,7 @@ impl Looks {
             climate: FoliageClimate::default(),
             climate_ground: None,
             climate_leaves: None,
+            prepass_priority: 0,
         };
         let leaves = foliage.add(Foliage {
             base: StandardMaterial {
@@ -831,51 +841,17 @@ fn draw_children(plant: &mut ChildSpawnerCommands, variant: &Variant, height: f3
     }
 }
 
+/// Grown plants' material, its climate and its relief at the quality preset's depth (a
+/// bark's furrows, D218).
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<Foliage>::default())
         .insert_resource(Cards::read())
-        .add_systems(Update, crate::timed!("flora", follow_climate));
-}
-
-/// Every grown plant's material reads the climate's maps again each time they are painted,
-/// and is changed only if what it is told of them has: the maps are painted again in place,
-/// and a changed material has every plant drawn with it specialized again, some 20 ms of the
-/// render thread over two frames.
-fn follow_climate(
-    maps: Option<Res<crate::climate::ClimateMaps>>,
-    fields: Option<Res<crate::climate::ClimateFields>>,
-    cards: Res<Cards>,
-    assets: Res<AssetServer>,
-    mut materials: ResMut<Assets<Foliage>>,
-) {
-    let Some(maps) = maps.filter(|maps| maps.is_changed()) else {
-        return;
-    };
-    let atlas: Handle<Image> = atlas(&cards, &assets);
-    let of_atlas = FoliageClimate::from_maps(&maps, fields.as_deref(), Some(&cards));
-    let other = FoliageClimate::from_maps(&maps, None, None);
-    let stale: Vec<_> = materials
-        .iter()
-        .filter_map(|(id, material)| {
-            let climate = if material.base.base_color_texture.as_ref() == Some(&atlas) {
-                of_atlas
-            } else {
-                other
-            };
-            let extension = &material.extension;
-            (extension.climate != climate
-                || extension.climate_ground != maps.ground
-                || extension.climate_leaves != maps.leaves)
-                .then_some((id, climate))
-        })
-        .collect();
-    for (id, climate) in stale {
-        if let Some(mut material) = materials.get_mut(id) {
-            material.extension.climate = climate;
-            material.extension.climate_ground = maps.ground.clone();
-            material.extension.climate_leaves = maps.leaves.clone();
-        }
-    }
+        .add_systems(Update, crate::timed!("flora", climate::follow_climate))
+        .add_systems(
+            PostUpdate,
+            crate::quality::follow_relief::<Foliage>
+                .run_if(resource_exists::<crate::quality::Quality>),
+        );
 }
 
 #[cfg(test)]

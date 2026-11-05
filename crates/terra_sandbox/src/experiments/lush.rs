@@ -34,14 +34,10 @@ use bevy::{
     image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
     light::NotShadowCaster,
     mesh::{Indices, MeshTag, PrimitiveTopology},
-    pbr::{ExtendedMaterial, MaterialExtension, ParallaxMappingMethod},
+    pbr::ParallaxMappingMethod,
     platform::collections::HashMap,
     prelude::*,
-    render::{
-        render_resource::{AsBindGroup, TextureFormat},
-        storage::ShaderBuffer,
-    },
-    shader::ShaderRef,
+    render::{render_resource::TextureFormat, storage::ShaderBuffer},
 };
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
@@ -79,7 +75,9 @@ use footing::{Footing, Shapes, SolidShape, Trunk};
 use lump::{crown_clumps, lumps_of};
 use species::{Form, Species};
 
-type Foliage = ExtendedMaterial<StandardMaterial, FoliageExtension>;
+/// The forest is drawn in grown plants' material, its climate and its bark's relief kept up
+/// by `terra_world::grown`.
+use terra_world::grown::{Foliage, FoliageExtension};
 
 /// The forest grows between these distances from the start, so the player starts in a
 /// clearing with the forest round it.
@@ -229,115 +227,22 @@ const LEAF_MEANS: [Vec3; 3] = [
 /// Paths are filed in squares this wide, to find the nearest quickly.
 const PATH_SQUARE_M: f32 = 12.0;
 
-/// What the foliage shader is told. Field order must match the struct in foliage.wesl.
-#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
-pub struct FoliageExtension {
-    #[uniform(100)]
-    direction: Vec3,
-    #[uniform(100)]
-    strength: f32,
-    /// 1 for bark: each tree's bark is shifted by where it stands, and weathered in patches
-    /// with moss and a wet foot (D218); up to 2 for bark that grows less moss (D235).
-    #[uniform(100)]
-    bark: f32,
-    /// For a crown whose cards drop out: from where, to where, and 1 (D223).
-    #[uniform(100)]
-    cards: Vec3,
-    /// For a shadow stand-in: each card or lump shrinks to its middle between x and y, and
-    /// grows from it between z and w; zero where it does not (D234).
-    #[uniform(100)]
-    shrink: Vec4,
-    /// For leaves: how much their colour is greyed, and darkened, how brightly they glow lit
-    /// through from behind, and how dark the inside of a crown goes, at least (D247).
-    #[uniform(100)]
-    leaf: Vec4,
-    /// What its plants make way for: the camera, and bodies walking through them (D271).
-    #[storage(101, read_only)]
-    parting: Handle<ShaderBuffer>,
-    /// For leaves: how far the atlas's normal map turns each leaf from the crown's normal,
-    /// and the map (D269); 0 and none for bark.
-    #[uniform(100)]
-    relief: f32,
-    /// For a crown's solid shadow stand-in: how wide the gaps in its shade are, in metres
-    /// (D359); 0 for none.
-    #[uniform(100)]
-    dapple: f32,
-    #[texture(102)]
-    #[sampler(103)]
-    leaf_normals: Option<Handle<Image>>,
-    /// What the climate does to it, as grown plants' (`terra_world::grown::FoliageClimate`,
-    /// D327), kept up to date by `seasons`.
-    #[uniform(100)]
-    climate: terra_world::grown::FoliageClimate,
-    #[texture(104)]
-    #[sampler(105)]
-    climate_ground: Option<Handle<Image>>,
-    #[texture(106, dimension = "2d_array")]
-    #[sampler(107)]
-    climate_leaves: Option<Handle<Image>>,
-}
-
-impl MaterialExtension for FoliageExtension {
-    fn vertex_shader() -> ShaderRef {
-        "shaders/foliage.wesl".into()
-    }
-
-    fn prepass_vertex_shader() -> ShaderRef {
-        "shaders/foliage.wesl".into()
-    }
-
-    // Crossfades between levels of detail dither in a pattern that moves every frame, for
-    // TAA to blend (D214).
-    fn fragment_shader() -> ShaderRef {
-        "shaders/foliage_fragment.wesl".into()
-    }
-
-    fn prepass_fragment_shader() -> ShaderRef {
-        "shaders/foliage_prepass.wesl".into()
-    }
-
-    // The tall crowns' cut-outs first in the depth prepass, ahead of the undergrowth
-    // (`terra_world::grown`, 0) and the far woods (1), so their depth rejects what they hide
-    // (D618).
-    fn prepass_draw_priority(&self) -> Option<i32> {
-        Some(-1)
-    }
-
-    fn specialize(
-        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
-        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
-        layout: &bevy::mesh::MeshVertexBufferLayoutRef,
-        key: bevy::pbr::MaterialExtensionKey<Self>,
-    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
-        terra_world::grown::test_depth_early(descriptor, key.mesh_key);
-        pivots::specialize(descriptor, layout);
-        Ok(())
-    }
-}
-
 pub fn plugin(app: &mut App) {
-    app.add_plugins((
-        MaterialPlugin::<Foliage>::default(),
-        floor::plugin,
-        footing::plugin,
-        seasons::plugin,
-    ))
-    .init_resource::<Unmipped>()
-    // Its kinds of tree are the app's, grown once (`kinds`).
-    .init_resource::<kinds::Grown>()
-    // The forest is the world's (D469): planted again in each world entered.
-    .world_resource::<Forest>()
-    .add_systems(
-        Update,
-        (
-            plant.run_if(not(resource_exists::<Forest>)),
-            far_land.run_if(resource_added::<Forest>),
-            add_mipmaps,
-            follow_detail,
-        ),
-    )
-    // The bark's relief at the quality preset's depth.
-    .add_systems(PostUpdate, terra_world::quality::follow_relief::<Foliage>);
+    app.add_plugins((floor::plugin, footing::plugin, seasons::plugin))
+        .init_resource::<Unmipped>()
+        // Its kinds of tree are the app's, grown once (`kinds`).
+        .init_resource::<kinds::Grown>()
+        // The forest is the world's (D469): planted again in each world entered.
+        .world_resource::<Forest>()
+        .add_systems(
+            Update,
+            (
+                plant.run_if(not(resource_exists::<Forest>)),
+                far_land.run_if(resource_added::<Forest>),
+                add_mipmaps,
+                follow_detail,
+            ),
+        );
 }
 
 /// Past the far forest, the same forest's low rolling hills to the horizon in the sky (D273).
@@ -738,6 +643,9 @@ fn wind(direction: Vec3, parting: Handle<ShaderBuffer>) -> FoliageExtension {
         climate: default(),
         climate_ground: None,
         climate_leaves: None,
+        // Ahead of the flora's plants in the alpha-mask prepass, as the tall crowns are, so
+        // their depth rejects what they hide (D618).
+        prepass_priority: -1,
     }
 }
 

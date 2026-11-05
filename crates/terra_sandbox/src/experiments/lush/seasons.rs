@@ -1,58 +1,16 @@
-//! The lush forest through the year (climate.md, D327): its leaves, bark and crowns read the
-//! climate's maps as grown plants' do (`terra_world::grown::FoliageClimate`), each time they
-//! are painted. Which kind a leaf is, the card it is drawn from says, as each kind's year in
-//! `assets/data/plant_years.ron` names its cards. And the sky the crowns hide follows the
-//! broadleaves' leaves.
+//! The lush forest through the year (climate.md, D327): its leaves, bark and crowns are grown
+//! plants' material, which reads the climate's maps (`terra_world::grown::FoliageClimate`)
+//! each time they are painted. Which kind a leaf is, the card it is drawn from says, as each
+//! kind's year in `assets/data/plant_years.ron` names its cards. And the sky the crowns hide
+//! follows the broadleaves' leaves.
 
-use super::{Foliage, FoliageExtension};
 use bevy::prelude::*;
 use terra_world::climate::{ClimateFields, ClimateMaps, PastCache};
 use terra_world::daylight::Clock;
-use terra_world::grown::{Cards, FoliageClimate};
 use terra_world::sky_occlusion::{self, SkyOccluders};
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, (follow_climate, follow_leaves));
-}
-
-/// Every one of the forest's foliage materials reads the climate's maps again when painted,
-/// changed only if what it is told of them has (as `terra_world::grown`'s are).
-pub(super) fn follow_climate(
-    maps: Option<Res<ClimateMaps>>,
-    fields: Option<Res<ClimateFields>>,
-    cards: Res<Cards>,
-    assets: Res<AssetServer>,
-    mut materials: ResMut<Assets<Foliage>>,
-) {
-    let Some(maps) = maps.filter(|maps| maps.is_changed()) else {
-        return;
-    };
-    let atlas: Handle<Image> = assets.load(cards.atlas.clone());
-    let of_atlas = FoliageClimate::from_maps(&maps, fields.as_deref(), Some(&cards));
-    let other = FoliageClimate::from_maps(&maps, None, None);
-    let stale: Vec<_> = materials
-        .iter()
-        .filter_map(|(id, material)| {
-            let climate = if material.base.base_color_texture.as_ref() == Some(&atlas) {
-                of_atlas
-            } else {
-                other
-            };
-            let extension: &FoliageExtension = &material.extension;
-            (extension.climate != climate
-                || extension.climate_ground != maps.ground
-                || extension.climate_leaves != maps.leaves)
-                .then_some((id, climate))
-        })
-        .collect();
-    for (id, climate) in stale {
-        if let Some(mut material) = materials.get_mut(id) {
-            let extension: &mut FoliageExtension = &mut material.extension;
-            extension.climate = climate;
-            extension.climate_ground = maps.ground.clone();
-            extension.climate_leaves = maps.leaves.clone();
-        }
-    }
+    app.add_systems(Update, follow_leaves);
 }
 
 /// How much of the sky a broadleaf's crown still hides bare, of what it hides in full leaf:
