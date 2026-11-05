@@ -55,6 +55,7 @@ struct Params {
     // w octaves.
     look: vec4<f32>,
     look2: vec4<f32>,
+    look3: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -433,7 +434,7 @@ fn scattered(l: Lights, c: Column, h: f32, tau_sun: f32, tau_view: f32, body: f3
     let sunward = l.sun * (exp(-tau_sun) * l.phase + multiple);
     let ground = l.ground_sun * (1.0 - c.cover) + l.ground_sky;
     let w = (k * tau_up + DIFFUSION_Z0) / (k * (tau_up + tau_down) + 2.0 * DIFFUSION_Z0);
-    return sunward + mix(l.sky, ground, w);
+    return sunward + mix(l.sky * params.look3.x, ground, w);
 }
 
 @compute @workgroup_size(8, 8, 1)

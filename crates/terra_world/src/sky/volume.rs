@@ -88,6 +88,8 @@ pub struct Params {
     /// gain; z how much a heap's coverage narrows toward its top; w how many times slower the
     /// shape noise changes up a heap than across it.
     pub look2: Vec4,
+    /// x: the sky's light into the clouds, a scale.
+    pub look3: Vec4,
 }
 
 // The cloud-look experiment's tunables (clouds-look j1): each default draws the clouds as before
@@ -98,8 +100,8 @@ pub static LOOK_MS_A: Tunable = Tunable::new(
     0.05..=1.0,
     "experiment: each multiple-scattering octave's share of the depth toward the sun (Hillaire 2016's a)",
 );
-/// The look experiment's tunables as `Params::look` and `look2` take them.
-fn looks() -> [Vec4; 2] {
+/// The look experiment's tunables as `Params::look`, `look2` and `look3` take them.
+fn looks() -> [Vec4; 3] {
     [
         Vec4::new(
             LOOK_INSCATTER.get(),
@@ -113,8 +115,16 @@ fn looks() -> [Vec4; 2] {
             LOOK_TAPER.get(),
             LOOK_STRETCH.get(),
         ),
+        Vec4::new(LOOK_SKY.get(), 0.0, 0.0, 0.0),
     ]
 }
+
+pub static LOOK_SKY: Tunable = Tunable::new(
+    "sky.cloud.x_sky",
+    1.0,
+    0.0..=4.0,
+    "experiment: the sky's light into the clouds, a scale",
+);
 
 pub static LOOK_FLOOR: Tunable = Tunable::new(
     "sky.cloud.x_floor",
@@ -307,6 +317,7 @@ impl Plugin for VolumePlugin {
             &LOOK_FLOOR,
             &LOOK_TAPER,
             &LOOK_STRETCH,
+            &LOOK_SKY,
         ]);
         app.add_plugins((
             MaterialPlugin::<VeilMaterial>::default(),
@@ -477,7 +488,7 @@ fn tell(
         .map_or(0.0, |s| s.0.translation.length() - planet.sea_radius_m());
     let (layers, slab) = clouds::layers_over_sea(ground);
     let air_scale = air_scale.map_or(crate::air::AirScale(crate::air::HAZE_SCALE), |s| *s);
-    let [look, look2] = looks();
+    let [look, look2, look3] = looks();
     let params = Params {
         to_map: clouds.to_map,
         shapes: [
@@ -523,6 +534,7 @@ fn tell(
         }),
         look,
         look2,
+        look3,
     };
     commands.insert_resource(CloudVolume {
         params,
