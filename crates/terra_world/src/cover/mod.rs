@@ -285,9 +285,11 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             OnEnter(InWorld),
+            // After the flora too, which asks the woods' floor where not to sow (`Undergrown`).
             heath::grow_the_lands
                 .in_set(Building::View)
-                .after(forest::LayingFloor),
+                .after(forest::LayingFloor)
+                .after(crate::flora::FloraSystems::Plant),
         )
         .add_plugins(floor::plugin);
 }

@@ -37,6 +37,9 @@ pub(super) struct Sow<'a, 'p> {
     pub woods: &'a Noise,
     pub put: &'a mut Put<'p>,
     pub standing: &'a Standing<'a>,
+    /// Whether the woods' floor lays its own undergrowth at a point (`flora::Undergrown`),
+    /// where none of these bushes, plants and ferns is sown.
+    pub floored: &'a dyn Fn(Vec3) -> bool,
 }
 
 impl Sow<'_, '_> {
@@ -60,11 +63,11 @@ impl Sow<'_, '_> {
         reach: f32,
         on_heath: &dyn Fn(Vec3) -> bool,
     ) {
-        let (planet, flora, season) = (self.planet, self.flora, self.season);
+        let (planet, flora, season, floored) = (self.planet, self.flora, self.season, self.floored);
         scatter(seed.derive("bushes"), 230.0 * reach, 5.5, |rng, x, z| {
             let point = patch.ground(planet, x, z);
             let cover = planet.cover(point, planet.normal(point));
-            if rng.unit() > 0.3 * cover.grass {
+            if rng.unit() > 0.3 * cover.grass || floored(point) {
                 return;
             }
             // Some bear berries, the first food to be found.
@@ -75,7 +78,7 @@ impl Sow<'_, '_> {
         scatter(seed.derive("plants"), 150.0 * reach, 3.2, |rng, x, z| {
             let point = patch.ground(planet, x, z);
             let cover = planet.cover(point, planet.normal(point));
-            if rng.unit() > 0.28 * cover.grass || on_heath(point) {
+            if rng.unit() > 0.28 * cover.grass || on_heath(point) || floored(point) {
                 return;
             }
             if let Some(kind) = flora.choose(Grows::Plants, 0.0, cover.grass, 0.0, season, rng) {
@@ -128,6 +131,7 @@ impl Sow<'_, '_> {
     /// as its kinds' sites say; none on the open heath.
     pub fn understory(&mut self, patch: &Patch, seed: Seed, on_heath: &dyn Fn(Vec3) -> bool) {
         let (planet, flora, season, woods) = (self.planet, self.flora, self.season, self.woods);
+        let floored = self.floored;
         let drifts = Noise::new(seed.derive("fern drifts"));
         scatter(
             seed.derive("understory"),
@@ -136,7 +140,7 @@ impl Sow<'_, '_> {
             |rng, x, z| {
                 let point = patch.ground(planet, x, z);
                 let drift = smoothstep(-0.1, 0.25, drifts.fbm(point / 16.0, 2, 2.0, 0.5));
-                if rng.unit() > 0.2 + 0.8 * drift || on_heath(point) {
+                if rng.unit() > 0.2 + 0.8 * drift || on_heath(point) || floored(point) {
                     return;
                 }
                 let ground = measure(planet, woods, point, Vec2::new(x, z).length());

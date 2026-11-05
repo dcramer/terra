@@ -197,6 +197,21 @@ impl Crowns {
             .push(stand);
     }
 
+    /// Whether a place is among the trees, as the woods' floor is laid (D619): within
+    /// `NO_BARK_M` of a trunk's bark, less the half metre where the floor gives out.
+    pub fn among(&self, at: Vec2) -> bool {
+        let (i, j) = square(at, FLOOR_SQUARE_M);
+        (-CROWN_REACH..=CROWN_REACH).any(|di| {
+            (-CROWN_REACH..=CROWN_REACH).any(|dj| {
+                self.filed
+                    .get(&(i + di, j + dj))
+                    .into_iter()
+                    .flatten()
+                    .any(|stand| stand.at.distance(at) - stand.trunk_m < NO_BARK_M - 0.5)
+            })
+        })
+    }
+
     fn over(&self, at: Vec2) -> Over {
         let (i, j) = square(at, FLOOR_SQUARE_M);
         let (mut light, mut needles_miss, mut bark, mut well) = (1.0f32, 1.0f32, NO_BARK_M, 0.0f32);

@@ -440,6 +440,23 @@ pub enum FloraSystems {
     Clear,
 }
 
+/// Where the layer above lays the woods' own undergrowth on their floor (D619): among the
+/// trees (`Crowns::among`) within `reach_m` of `middle`, metres east and south of the start.
+/// The flora sows none of its bushes, plants, flowers and understory there, which the floor's
+/// hazel, bracken, ferns, herbs and bilberry stand for. Inserted before `FloraSystems::Plant`.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct Undergrown {
+    pub middle: Vec2,
+    pub reach_m: f32,
+}
+
+impl Undergrown {
+    /// Whether the woods' floor lays its undergrowth at a place (start-local, east and south).
+    pub fn holds(&self, canopy: &crate::cover::forest::Crowns, at: Vec2) -> bool {
+        at.distance(self.middle) <= self.reach_m && canopy.among(at)
+    }
+}
+
 pub fn plugin(app: &mut App) {
     fell::plugin(app);
     entering::plugin(app);
@@ -513,6 +530,10 @@ fn plant(
     cards: Res<grown::Cards>,
     assets: Res<AssetServer>,
     parting: Option<Res<crate::parting::Parting>>,
+    (undergrown, woods_floor): (
+        Option<Res<Undergrown>>,
+        Option<Res<crate::cover::forest::WoodsFloor>>,
+    ),
 ) {
     let middle = start.translation;
     let up = middle.normalize();
@@ -563,6 +584,14 @@ fn plant(
     };
 
     let to_base = start.compute_affine().inverse();
+    // Where the woods' floor lays its own undergrowth, none of the old is sown.
+    let floored = |point: Vec3| match (&undergrown, &woods_floor) {
+        (Some(undergrown), Some(floor)) => floor.0.as_ref().is_some_and(|floor| {
+            let local = to_base.transform_point3(point);
+            undergrown.holds(&floor.canopy, Vec2::new(local.x, local.z))
+        }),
+        _ => false,
+    };
     let woods = Noise::new(seed.derive("woods"));
     let species = Noise::new(seed.derive("species"));
     let blooms = Noise::new(seed.derive("blooms"));
@@ -818,6 +847,7 @@ fn plant(
             woods: &woods,
             put: &mut put,
             standing: &standing,
+            floored: &floored,
         };
         sow.in_the_grass(&ground, seed, reach, &on_heath);
         // Flowers, in drifts.
@@ -828,7 +858,7 @@ fn plant(
                 return;
             }
             let cover = planet.cover(point, planet.normal(point));
-            if cover.grass < 0.5 || on_heath(point) {
+            if cover.grass < 0.5 || on_heath(point) || floored(point) {
                 return;
             }
             let Some(kind) = flora.choose(Grows::Flowers, 0.0, cover.grass, 0.0, &season, rng)
@@ -858,6 +888,7 @@ fn plant(
         woods: &woods,
         put: &mut put,
         standing: &standing,
+        floored: &floored,
     };
     sow.shore(&ground, seed);
     sow.understory(&ground, seed, &on_heath);
@@ -1162,6 +1193,34 @@ mod tests {
         for &(east, north, _) in &placed {
             assert!((-13.0..13.0).contains(&east) && (-13.0..13.0).contains(&north));
         }
+    }
+
+    #[test]
+    fn the_old_undergrowth_keeps_off_only_where_the_woods_floor_lays_its_own() {
+        use crate::cover::forest::{Crowns, Stand};
+        let mut canopy = Crowns::default();
+        // Two trunks half a metre thick: one inside the floor's reach, one beyond it.
+        for at in [Vec2::new(40.0, 0.0), Vec2::new(0.0, 260.0)] {
+            canopy.add(Stand {
+                at,
+                trunk_m: 0.5,
+                crown_at: at,
+                crown_m: 3.0,
+                closes: 0.8,
+                conifer: true,
+                spruce: false,
+            });
+        }
+        let floor = Undergrown {
+            middle: Vec2::new(0.0, 20.0),
+            reach_m: 220.0,
+        };
+        // Beside the near trunk, within the reach: the floor's own undergrowth.
+        assert!(floor.holds(&canopy, Vec2::new(43.0, 2.0)));
+        // Open ground in the reach, 9.5 m from the trunk's bark: the old flora's.
+        assert!(!floor.holds(&canopy, Vec2::new(50.0, 0.0)));
+        // Beside the far trunk, 240 m from the middle: the old flora's still.
+        assert!(!floor.holds(&canopy, Vec2::new(0.0, 262.0)));
     }
 
     #[test]

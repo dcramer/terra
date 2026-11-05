@@ -12,6 +12,7 @@ use super::shade::NearShadows;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use terra_world::cover::forest::{LayingFloor, WoodsFloor};
+use terra_world::flora::Undergrown;
 use terra_world::flora_kinds::Flora;
 use terra_world::grown::Cards;
 use terra_world::instance::InWorld;
@@ -69,6 +70,11 @@ fn lay_woods_floor(
             Vec2::new(local.x, local.z)
         })
         .unwrap_or(Vec2::ZERO);
+    // The world's flora sows none of its old undergrowth where this lays its own.
+    commands.insert_resource(Undergrown {
+        middle,
+        reach_m: REACH_M,
+    });
     let area = Area {
         middle,
         from_m: CLEAR_M,

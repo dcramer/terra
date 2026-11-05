@@ -447,7 +447,7 @@ The developers, 2026-11-04: "make sure that we use the lessons learned from this
 |---|---|---|---|
 | Grass of single-triangle tufts, 10 m squares to 95 m round the start, under the cover's blades (714,045 at the 30 km start) | `flora.rs` | The cover's blades on every world (`cover`), the planet's own grass on the 2 km planet (`cover::heath::WildCover`) | Gone, 2026-11-04 |
 | Rocks to 300 m: `Rock_*`, `Rock_Moss_*`, ore rocks | `flora.rs` rocks | The forest floor's scans (`mossy_rock_*`, `boulder_1`) within 220 m of the woods (D619) | Next; the floor's rocks need ore first |
-| Bushes, ferns, herbs and flowers in the grass; understory hazel and woodland fern to 300 m | `flora/under.rs` | The forest floor's hazel, bracken, ferns, herbs and bilberry | Next, under the woods' floor first |
+| Bushes, ferns, herbs and flowers in the grass; understory hazel and woodland fern to 300 m | `flora/under.rs` | The forest floor's hazel, bracken, ferns, herbs and bilberry | None sown where the woods' floor lays its own (`flora::Undergrown`: among the trees within 220 m), 2026-11-04: 24,226 fewer at the 30 km start; the kinds stay for past the floor's reach and the 2 km planet |
 | Stump and mossy log by the door (Ultimate Nature Pack) | `flora.ron` `ByTheDoor` | The floor's stumps and logs | Next |
 | Seven Tripo trees and three grass models | `assets/models/nature/` | Nothing loads them | Gone, 2026-11-04 |
 | Deer herd of five (`Deer.glb`) by the start | `terra_creatures` `Lives::Herd` | Wildlife's red deer stag, hind and calf (`creatures.ron`) | Next; `tools/sandbox/loop.ts` hunts "Deer", the creature check measures against `Deer.glb` |
