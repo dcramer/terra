@@ -704,8 +704,9 @@ fn plant(
     let mut drawn_as = [[0usize; 3]; 3];
     // Their floor, by each tree as drawn (D619).
     let mut canopy = Crowns::default();
-    for &block in &blocks {
-        let trees = near::lay(&planet, &map, block, seed);
+    // Every block's trees laid out at once over every core, each block's its own.
+    let laid = terra_gen::par::map(&blocks, |&block| near::lay(&planet, &map, block, seed));
+    for (&block, trees) in blocks.iter().zip(laid) {
         let mut standing = Vec::with_capacity(trees.len());
         let mut feet = Vec::with_capacity(trees.len());
         for tree in &trees {
@@ -768,13 +769,13 @@ fn plant(
         widen: 1.0,
         grown: Some(conifers.drawn(&planted(tree))),
     });
-    let squares = squares(middle, east, north, cards);
+    let squares: Vec<_> = squares(middle, east, north, cards).into_iter().collect();
     let square_count = squares.len();
     // A square holding a grown tree's card keeps its cards, to be merged again without it
-    // when the tree is felled (`felled`).
+    // when the tree is felled (`felled`). Every square is merged at once over every core.
     let mut holding_grown = felled::FarSquares::new(middle, east, north);
-    for (square, cards) in squares {
-        let (mesh, middle, aabb) = merged(&cards);
+    let far_meshes = terra_gen::par::map(&squares, |(_, cards)| merged(cards));
+    for ((square, cards), (mesh, middle, aabb)) in squares.into_iter().zip(far_meshes) {
         let mut entity =
             commands.spawn(far_square(meshes.add(mesh), material.clone(), middle, aabb));
         if cards.iter().any(|card| card.grown.is_some()) {
