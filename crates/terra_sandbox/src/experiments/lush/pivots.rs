@@ -5,7 +5,6 @@
 use super::Tree;
 use bevy::prelude::*;
 use terra_world::grown::pivots::{self, Clump, Line, Pivots};
-pub(super) use terra_world::grown::pivots::{ATTRIBUTE_PIVOT, ATTRIBUTE_TWIG, NO_PIVOT};
 
 fn clumps(tree: &Tree) -> Vec<Clump> {
     tree.tips

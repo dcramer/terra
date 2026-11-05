@@ -602,6 +602,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D616](decisions/D616.md) | A window past the preset's pixels is drawn at a budget and scaled up, temporally next | Tech | Agent | Decided | The GPU's frame at the lake grows with the pixels drawn. |
 | [D617](decisions/D617.md) | The volumetric clouds keep a history of their own, marched at an offset inside the pixel a frame | Tech | Agent | Decided | The march (`cloud_volume.wesl`, D515) sends one ray… |
 | [D618](decisions/D618.md) | The alpha-mask prepass draws its materials in their draw priorities, tall crowns first and the far woods last | Tech | Agent | Decided | Bevy 0.20 draws a binned phase's batch sets in key… |
+| [D619](decisions/D619.md) | The lush forest's trees, floor and wind move into the world, and forest-run stays on the yard reading the same rules | Tech | Agent | Decided | The lush forest's look becomes the world's… |
 
 ## Tools and workflow
 

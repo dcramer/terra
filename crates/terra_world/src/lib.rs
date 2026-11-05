@@ -95,6 +95,7 @@ pub mod terrain;
 pub mod threads;
 pub mod tick;
 pub mod timed;
+pub mod trees;
 pub mod tune;
 #[cfg(test)]
 mod uniform_tests;

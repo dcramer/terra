@@ -3,7 +3,8 @@
 //! triangles that covers what the ball does from the side and from above, as foliage levels
 //! of detail drop vertices with distance.
 
-use super::{Build, Tree};
+use super::Tree;
+use super::build::Build;
 use bevy::prelude::Vec3;
 use std::f32::consts::{PI, TAU};
 
@@ -18,7 +19,7 @@ const FAR_POINT: f32 = std::f32::consts::SQRT_2;
 /// distance.
 /// With `pivots`, one a tip, each lump carries its branch's first clump's great limb pivot,
 /// so it turns with the limb whose leaves it stands for (D597's wind in levels).
-pub(super) fn crown_clumps(tree: &Tree, scale: f32, shadow: bool, pivots: &[[f32; 4]]) -> Build {
+pub fn crown_clumps(tree: &Tree, scale: f32, shadow: bool, pivots: &[[f32; 4]]) -> Build {
     let mut build = Build {
         offset_in_colour: shadow,
         levels: !pivots.is_empty(),
@@ -41,7 +42,7 @@ pub(super) fn crown_clumps(tree: &Tree, scale: f32, shadow: bool, pivots: &[[f32
 
 /// A crown's lumps, one a branch, as big as most of its leaves times `scale`: their middles
 /// and half sizes, in the tree's own frame.
-pub(super) fn lumps_of(tree: &Tree, scale: f32) -> Vec<(Vec3, Vec3)> {
+pub fn lumps_of(tree: &Tree, scale: f32) -> Vec<(Vec3, Vec3)> {
     (0..tree.branches)
         .filter_map(|branch| {
             let tips: Vec<(Vec3, f32)> = tree

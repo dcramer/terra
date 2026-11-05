@@ -1,22 +1,22 @@
 //! A leaf card in a crown and the picture it wears: drawn near as the octagon round its
 //! leaves, far off as the rectangle round that octagon.
 
-use super::Build;
+use super::build::Build;
+use crate::grown::Cards;
 use bevy::prelude::{Vec2, Vec3};
-use terra_world::grown::Cards;
 
 /// A card's picture: its cell in its atlas, how far across the cell is, and the octagon
 /// round its leaves in the atlas's coordinates.
 #[derive(Clone, Copy)]
-pub(super) struct Leaf {
-    pub(super) cell: Vec2,
-    pub(super) across: f32,
-    pub(super) outline: [(f32, f32); 8],
+pub struct Leaf {
+    pub cell: Vec2,
+    pub across: f32,
+    pub outline: [(f32, f32); 8],
 }
 
 impl Leaf {
     /// A card of the shared atlas grown plants use (`assets/data/foliage.ron`, D222).
-    pub(super) fn of(cards: &Cards, name: &str) -> Self {
+    pub fn of(cards: &Cards, name: &str) -> Self {
         let card = cards.get(name);
         let mut outline = [(0.0, 0.0); 8];
         for (to, from) in outline.iter_mut().zip(&card.outline) {
@@ -56,33 +56,28 @@ impl Leaf {
 /// One leaf card in a crown: where it is, which way it faces, how big, its picture, and
 /// how it is lit and moves.
 #[derive(Clone, Copy)]
-pub(super) struct Card {
-    pub(super) middle: Vec3,
-    pub(super) right: Vec3,
-    pub(super) up: Vec3,
-    pub(super) half: f32,
-    pub(super) normal: Vec3,
-    pub(super) tint: Vec3,
-    pub(super) sway: Vec2,
-    pub(super) flip: f32,
+pub struct Card {
+    pub middle: Vec3,
+    pub right: Vec3,
+    pub up: Vec3,
+    pub half: f32,
+    pub normal: Vec3,
+    pub tint: Vec3,
+    pub sway: Vec2,
+    pub flip: f32,
     /// How much of the sky it sees, least deep in the crown (D216).
-    pub(super) sky: f32,
-    pub(super) leaf: Leaf,
+    pub sky: f32,
+    pub leaf: Leaf,
 }
 
 impl Card {
     /// Draws it, `grow` times its size; `rank`, its place and its clump's count, for a crown
     /// whose cards drop out with distance.
-    pub(super) fn draw(&self, build: &mut Build, grow: f32) {
+    pub fn draw(&self, build: &mut Build, grow: f32) {
         self.draw_ranked(build, grow, None);
     }
 
-    pub(super) fn draw_ranked(
-        &self,
-        build: &mut Build,
-        grow: f32,
-        rank: Option<(usize, usize, usize)>,
-    ) {
+    pub fn draw_ranked(&self, build: &mut Build, grow: f32, rank: Option<(usize, usize, usize)>) {
         self.draw_outline(build, grow, rank, &self.leaf.outline);
     }
 
@@ -92,7 +87,7 @@ impl Card {
     /// as foliage levels of detail trade a cutout's vertices for fill with distance. The
     /// far crowns of pines were 8,600 triangles each and a third of the forest walk's
     /// (forest perf round 2).
-    pub(super) fn draw_far(&self, build: &mut Build, grow: f32) {
+    pub fn draw_far(&self, build: &mut Build, grow: f32) {
         self.draw_outline(build, grow, None, &self.leaf.boxed());
     }
 

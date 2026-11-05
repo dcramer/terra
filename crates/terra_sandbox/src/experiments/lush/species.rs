@@ -16,34 +16,16 @@
 //!   in masses, one a great limb, with gaps between them, each mass lit from its own middle
 //!   as well as the crown's.
 
-use super::{Card, Leaf, Limb, Tree};
+use super::{Card, Leaf, Tree};
 use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
 use terra_gen::Rng;
+/// What a tree is and how it grew are the world's (`terra_world::trees`).
+pub use terra_world::trees::{Form, Species};
 
 #[path = "species_pine.rs"]
 mod pine;
 use pine::{PAD_CLUMP_M, pine_crown};
-
-/// What a tree is: its habit, bark and leaves.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Species {
-    Oak,
-    Pine,
-    Spruce,
-}
-
-/// How a tree grew. An oak: tall and narrow among others, broad where it had room, or
-/// forked low into two stems. A Scots pine (D276): its leader running on to a pointed top;
-/// broad, an old pine's flat umbrella of long level branches; forked high into two leaders;
-/// or broken, its top snapped off and a branch below turned up to lead in its place.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Form {
-    Tall,
-    Broad,
-    Forked,
-    Broken,
-}
 
 /// Rotates `v` about `axis` by `angle`.
 fn turned(v: Vec3, axis: Vec3, angle: f32) -> Vec3 {
@@ -124,73 +106,6 @@ pub(super) fn by_height(points: &[Vec3], radii: &[f32], y: f32) -> (Vec3, f32) {
 fn flare(points: &[Vec3], radii: &mut [f32], strength: f32) {
     for (point, r) in points.iter().zip(radii.iter_mut()) {
         *r *= 1.0 + strength * libm::expf(-point.y / 0.9);
-    }
-}
-
-impl Tree {
-    fn new(species: Species, trunk_m: f32) -> Self {
-        Self {
-            limbs: Vec::new(),
-            tips: Vec::new(),
-            branch_of: Vec::new(),
-            branches: 0,
-            trunk_m,
-            along: Vec::new(),
-            mass_of: Vec::new(),
-            masses: Vec::new(),
-            species,
-            dead: Vec::new(),
-            plates: Vec2::new(0.3, 1.0),
-        }
-    }
-
-    /// A limb of dead wood, bark gone grey, as a pine's shed branches and broken top are.
-    fn dead_limb(&mut self, points: Vec<Vec3>, radii: Vec<f32>, depth: u32) {
-        self.dead.push(self.limbs.len());
-        self.limb(points, radii, depth);
-    }
-
-    fn limb(&mut self, points: Vec<Vec3>, radii: Vec<f32>, depth: u32) {
-        self.limbs.push(Limb {
-            points,
-            radii,
-            depth,
-            pointed: depth > 0,
-        });
-    }
-
-    /// A clump of leaves at a point, its twig running `along`, in a branch's lump (for
-    /// the far crown and its shadow) and a mass of the crown (for its light).
-    fn clump(&mut self, at: Vec3, size: f32, along: Vec3, branch: usize, mass: usize) {
-        self.tips.push((at, size));
-        self.along.push(along.normalize_or(Vec3::Y));
-        self.branch_of.push(branch);
-        self.mass_of.push(mass);
-        self.branches = self.branches.max(branch + 1);
-    }
-
-    /// Takes away every clump lower than `y`.
-    fn bare_below(&mut self, y: f32) {
-        let keep: Vec<bool> = self.tips.iter().map(|(at, _)| at.y >= y).collect();
-        let mut k = keep.iter();
-        self.tips.retain(|_| *k.next().unwrap_or(&true));
-        let mut k = keep.iter();
-        self.along.retain(|_| *k.next().unwrap_or(&true));
-        let mut k = keep.iter();
-        self.branch_of.retain(|_| *k.next().unwrap_or(&true));
-        let mut k = keep.iter();
-        self.mass_of.retain(|_| *k.next().unwrap_or(&true));
-    }
-
-    /// Each mass's middle, from its clumps.
-    fn settle(&mut self) {
-        let count = self.mass_of.iter().copied().max().map_or(0, |m| m + 1);
-        let mut sums = vec![(Vec3::ZERO, 0.0f32); count];
-        for ((at, _), &mass) in self.tips.iter().zip(&self.mass_of) {
-            sums[mass].0 += *at;
-            sums[mass].1 += 1.0;
-        }
-        self.masses = sums.into_iter().map(|(sum, n)| sum / n.max(1.0)).collect();
     }
 }
 
