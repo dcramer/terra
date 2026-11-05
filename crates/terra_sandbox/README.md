@@ -20,7 +20,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 |---|---|
 | `--experiment <name>` | Switch on an experiment. Repeatable. |
 | `--list` | List the experiments |
-| `--radius <metres>` | Planet radius, 2000 by default |
+| `--radius <metres>` | Planet radius: a world made takes it, 30000 by default (D13); a kept world keeps its own; a run keeping no world, 2000 unless given |
 | `--shot <file.png>` | Save a screenshot once the scene has settled, then exit |
 | `--shots <prefix>@<frames>` | Save a screenshot on each of those frames, counted as `--press` counts them, as `<prefix>-<frame>.png`, then exit: a list and ranges, like `out/walk@300-320,600`, so what pops in or out shows from one frame to the next |
 | `--clean` | Leave the frame-time readout off the screen, for pictures |
