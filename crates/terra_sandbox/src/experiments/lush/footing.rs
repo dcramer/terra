@@ -27,7 +27,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use terra_core::{Piece, Placement, Relief, Solid};
-use terra_world::flora::Obstacles;
+use terra_world::flora::{Growth, Obstacles};
 use terra_world::planet::Planet;
 use terra_world::start::Start;
 
@@ -321,6 +321,7 @@ fn footings(
         ),
         With<Footing>,
     >,
+    mut growth: Query<&mut Growth, With<Footing>>,
     meshes: Res<Assets<Mesh>>,
     mut shapes: ResMut<Shapes>,
     planet: Option<Res<Planet>>,
@@ -363,6 +364,13 @@ fn footings(
         if let Some(solid) = solid {
             low = lowest(&solid);
             top_m = solid.top().unwrap_or(0.0);
+            // What can be cut takes its solid with it (harvest removes a Growth's obstacle):
+            // a stump or log cut for its wood stops nobody where it lay.
+            if let Ok(mut growth) = growth.get_mut(entity)
+                && growth.obstacle.is_none()
+            {
+                growth.obstacle = Some(solid.at);
+            }
             obstacles.add_solid(solid.at, solid);
         }
         commands.entity(entity).remove::<Footing>().insert(Fitted {
@@ -728,6 +736,49 @@ fn print_of(
 mod tests {
     use super::*;
     use terra_core::{PlanetSpec, Seed};
+
+    /// A stump or log cut for its wood stops nobody where it lay: its footing, once fitted,
+    /// is filed on its Growth, which cutting takes out of the obstacles (as harvest does).
+    #[test]
+    fn a_cut_things_footing_goes_with_it() {
+        let planet = Planet::smooth(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        let foot = planet.ground_at(planet.start());
+        let up = foot.normalize();
+        let mut app = App::new();
+        app.init_resource::<Assets<Mesh>>()
+            .init_resource::<Shapes>()
+            .init_resource::<Obstacles>()
+            .insert_resource(planet)
+            .add_systems(Update, footings);
+        let mesh = app
+            .world_mut()
+            .resource_mut::<Assets<Mesh>>()
+            .add(Cuboid::new(0.8, 1.6, 0.8));
+        let place =
+            Transform::from_translation(foot).with_rotation(Quat::from_rotation_arc(Vec3::Y, up));
+        let stump = app
+            .world_mut()
+            .spawn((Mesh3d(mesh), place, Footing, Growth::new(None, None, 0.4)))
+            .id();
+        app.update();
+        let filed = app.world().get::<Growth>(stump).unwrap().obstacle;
+        let Some(filed) = filed else {
+            panic!("its footing is not filed on its growth, so cutting it leaves its solid");
+        };
+        let near = |app: &App| {
+            app.world()
+                .resource::<Obstacles>()
+                .solids_near(foot, 1.0)
+                .count()
+        };
+        assert_eq!(near(&app), 1, "standing, it stops a walker");
+        // As harvest takes it when it is cut through.
+        app.world_mut().resource_mut::<Obstacles>().remove(filed);
+        assert_eq!(near(&app), 0, "cut, nothing stops a walker where it lay");
+    }
 
     #[test]
     fn a_trunks_own_solid_is_its_bole_not_its_roots() {
