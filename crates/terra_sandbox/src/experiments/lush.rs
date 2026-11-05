@@ -47,6 +47,7 @@ use terra_world::detail::DetailScale;
 use terra_world::flora_kinds::Flora;
 use terra_world::grown::Cards;
 use terra_world::instance::InstanceApp;
+use terra_world::mesh_sink::MeshSink;
 use terra_world::planet::Planet;
 use terra_world::sky_occlusion::{self, SkyOccluders};
 
@@ -869,13 +870,13 @@ impl Looks {
 
 /// One of `KINDS`, grown from the forest's seed: its model at every level of detail, and
 /// what stops a walker at its trunk and at its crown (D267). With `ivy_leaves`, the ivies
-/// it may wear (D309).
+/// it may wear (D309). Its meshes go to `meshes`, so the kinds grow on many threads at once.
 fn grow(
     kind: usize,
     seed: Seed,
     looks: &Looks,
     ivy_leaves: Option<&[Leaf; 3]>,
-    meshes: &mut Assets<Mesh>,
+    meshes: &MeshSink,
 ) -> (TreeModel, SolidShape, SolidShape) {
     let (species, form, young, (low, high)) = KINDS[kind];
     let (leaf_of, far_crowns, barks) = (&looks.leaf_of, &looks.far_crowns, &looks.barks);

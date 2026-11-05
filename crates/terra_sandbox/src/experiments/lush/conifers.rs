@@ -23,6 +23,7 @@ use terra_world::detail::DetailScale;
 use terra_world::flora_kinds::{CutRule, Flora};
 use terra_world::grown::Cards;
 use terra_world::instance::{Building, InWorld};
+use terra_world::mesh_sink::MeshSink;
 use terra_world::parting::ObstructionFade;
 use terra_world::planet::Planet;
 use terra_world::start::Start;
@@ -270,9 +271,12 @@ fn grow_conifers(
     );
     let looks = Looks::new(&assets, &mut materials, &mut plain, &cards, &wind);
     let seed = forest_seed(&planet);
-    let models: Vec<TreeModel> = (0..KINDS.len())
-        .map(|kind| grow(kind, seed, &looks, None, &mut meshes).0)
-        .collect();
+    // Every kind at once, over every core: one after the next they were 2.1 s of the frame
+    // the world is entered in (crossing-freeze j1).
+    let kinds: Vec<usize> = (0..KINDS.len()).collect();
+    let models: Vec<TreeModel> = MeshSink::making(&mut meshes, |sink| {
+        terra_gen::par::map(&kinds, |&kind| grow(kind, seed, &looks, None, sink).0)
+    });
     let pools = Pools::of(models.iter().map(|m| (m.species, m.young, m.height)));
     info!(
         "Woods: the lush forest's trees for the woods, {} oaks, {} pines, {} spruces, {} young spruces and {} young oaks, in {:.1} s",

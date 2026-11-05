@@ -60,6 +60,7 @@ pub mod lakes;
 pub mod loading;
 pub mod lod;
 pub mod log_file;
+pub mod mesh_sink;
 #[cfg(test)]
 mod mesh_upload_tests;
 pub mod mipmaps;

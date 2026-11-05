@@ -18,6 +18,7 @@ use super::{
 use bevy::prelude::*;
 use std::sync::Arc;
 use terra_gen::Seed;
+use terra_world::mesh_sink::MeshSink;
 use terra_world::sky_occlusion;
 
 /// Every kind's model, the grown `KINDS` then the `VETERANS`, without its materials, and the
@@ -60,9 +61,15 @@ pub(super) fn trees(
     if grown.1 != Some(with.seed) {
         grown.0.clear();
         grown.1 = Some(with.seed);
-        for kind in 0..KINDS.len() {
-            let (model, trunk, seen) =
-                grow(kind, with.seed, with.looks, Some(with.ivy_leaves), meshes);
+        // Every kind at once, over every core, as the woods' conifers are grown.
+        let kinds: Vec<usize> = (0..KINDS.len()).collect();
+        let (seed, looks, ivy_leaves) = (with.seed, with.looks, with.ivy_leaves);
+        let grown_kinds = MeshSink::making(meshes, |sink| {
+            terra_gen::par::map(&kinds, |&kind| {
+                grow(kind, seed, looks, Some(ivy_leaves), sink)
+            })
+        });
+        for (model, trunk, seen) in grown_kinds {
             shapes.remember(&model.wood[0], trunk);
             shapes.remember(&model.crown_near, seen);
             grown.0.push(model.bare());
