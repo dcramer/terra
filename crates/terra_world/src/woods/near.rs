@@ -214,6 +214,28 @@ impl NearWoods {
         );
     }
 
+    /// Files the trees whose feet are `keys` as felled, as a saved game gives them back: those
+    /// still to stand are left out, and those standing are handed back to be taken out.
+    pub(super) fn fell_again(&mut self, keys: &HashSet<[u32; 3]>) -> Vec<Standing> {
+        self.felled.extend(keys.iter().copied());
+        let mut taken = Vec::new();
+        for state in self.blocks.values_mut() {
+            let State::In {
+                standing, coming, ..
+            } = state
+            else {
+                continue;
+            };
+            coming.retain(|tree| !keys.contains(&super::foot_key(tree.at)));
+            let (gone, kept): (Vec<Standing>, Vec<Standing>) = std::mem::take(standing)
+                .into_iter()
+                .partition(|tree| keys.contains(&super::foot_key(tree.foot)));
+            *standing = kept;
+            taken.extend(gone);
+        }
+        taken
+    }
+
     /// How many grown trees stand.
     fn standing(&self) -> usize {
         self.blocks
@@ -285,13 +307,12 @@ pub(super) fn stream(
         {
             take_off_the_floor(floor.as_deref_mut(), canopy);
             for tree in standing {
-                trunks.remove(tree.foot);
-                if let Ok(placed) = placed.get(tree.entity) {
-                    if let (true, Some(obstacles)) = (tree.solid, obstacles.as_mut()) {
-                        obstacles.remove(placed.translation);
-                    }
-                    super::felled::take_out(&mut commands, tree.entity);
-                }
+                take_out(
+                    &mut commands,
+                    (&mut *trunks, obstacles.as_deref_mut()),
+                    &placed,
+                    tree,
+                );
             }
         }
     }
@@ -364,6 +385,23 @@ pub(super) fn stream(
             near.standing(),
             near.blocks.len()
         );
+    }
+}
+
+/// Takes a standing tree out of the world, its trunk and what stops a walker with it, unfiled
+/// as felled (`felled::take_out`).
+pub(super) fn take_out(
+    commands: &mut Commands,
+    (trunks, obstacles): (&mut Trunks, Option<&mut Obstacles>),
+    placed: &Query<&Transform, With<WoodsTree>>,
+    tree: Standing,
+) {
+    trunks.remove(tree.foot);
+    if let Ok(placed) = placed.get(tree.entity) {
+        if let (true, Some(obstacles)) = (tree.solid, obstacles) {
+            obstacles.remove(placed.translation);
+        }
+        super::felled::take_out(commands, tree.entity);
     }
 }
 
@@ -505,5 +543,75 @@ mod tests {
                 map.at(point)
             );
         }
+    }
+
+    /// A saved game's felled trees are felled again as it loads (D622): one standing goes
+    /// with its trunk, one still to stand in its block is left out, the rest stand; and the
+    /// felled are read back as they were given, to be saved again, one whose block is still
+    /// to come with them.
+    #[test]
+    fn trees_felled_in_a_saved_game_are_felled_again_standing_or_still_to_stand() {
+        use super::super::felled::{FellAgain, FelledWoods, fell_again};
+        use bevy::ecs::system::RunSystemOnce;
+        let ground = Vec3::new(0.0, 30_000.0, 0.0);
+        let map = Map::new(ground, Vec3::X, Vec3::NEG_Z, ground.length());
+        let start = Start(Transform::from_translation(ground));
+        let [stood, kept, coming, later] =
+            [0.0, 4.0, 8.0, 300.0].map(|east| tree(ground + Vec3::X * east, TreeKind::Oak, 1.0));
+        let mut world = World::new();
+        world.init_resource::<Messages<FellAgain>>();
+        let mut trunks = Trunks::default();
+        let standing = {
+            let mut commands = world.commands();
+            [stood, kept].map(|tree| {
+                let (standing, _) = grow(&mut commands, &Bare, &mut trunks, &tree);
+                commands
+                    .entity(standing.entity)
+                    .insert(Transform::from_translation(tree.at));
+                standing
+            })
+        };
+        world.flush();
+        let mut near = NearWoods::new(map, terra_gen::Seed(1), start, Arc::new(Bare));
+        near.blocks.insert(
+            (0, 0),
+            State::In {
+                standing: standing.to_vec(),
+                coming: vec![coming],
+                canopy: Vec::new(),
+            },
+        );
+        world.insert_resource(near);
+        world.insert_resource(trunks);
+        let felled = vec![stood.at, coming.at, later.at];
+        world.write_message(FellAgain(felled.clone()));
+        world.run_system_once(fell_again).unwrap();
+
+        assert!(world.get_entity(standing[0].entity).is_err());
+        assert!(world.get_entity(standing[1].entity).is_ok());
+        assert_eq!(
+            world.resource::<Trunks>().len(),
+            1,
+            "the felled one's trunk goes"
+        );
+        let Some(State::In {
+            standing, coming, ..
+        }) = world.resource::<NearWoods>().blocks.get(&(0, 0))
+        else {
+            panic!("the block is in");
+        };
+        assert_eq!(standing.len(), 1);
+        assert!(
+            coming.is_empty(),
+            "the felled one still to stand is left out"
+        );
+        let mut read = world
+            .run_system_once(|felled: FelledWoods| felled.feet())
+            .unwrap();
+        let mut given = felled;
+        for feet in [&mut read, &mut given] {
+            feet.sort_by_key(|foot| super::super::foot_key(*foot));
+        }
+        assert_eq!(read, given);
     }
 }

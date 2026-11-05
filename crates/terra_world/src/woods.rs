@@ -36,6 +36,7 @@ mod felled;
 mod near;
 mod outline;
 
+pub use felled::{FellAgain, FelledWoods};
 pub use terra_land::woods::TreeKind;
 use terra_land::woods::{Tree, Woods};
 
@@ -253,9 +254,14 @@ pub fn plugin(app: &mut App) {
                 see_horizon.run_if(resource_exists_and_changed::<crate::horizon::HorizonPicture>),
                 (stream_cards.run_if(resource_exists::<FarCards>)).run_if(crate::streaming::lifted),
                 near::stream.run_if(crate::streaming::lifted),
-                felled::unfar_the_felled,
+                (
+                    felled::fell_again.run_if(crate::instance::in_world),
+                    felled::unfar_the_felled,
+                )
+                    .chain(),
             ),
-        );
+        )
+        .add_message::<FellAgain>();
 }
 
 /// The flora's generic grown pine (`flora.ron`'s Pine), in its variants, for both kinds.

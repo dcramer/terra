@@ -7,8 +7,10 @@
 
 use super::near::NearWoods;
 use super::{Card, SQUARE_M, foot_key, merged};
-use crate::flora::{ClearedAway, Growth};
-use bevy::{camera::primitives::Aabb, platform::collections::HashMap, prelude::*};
+use crate::flora::{ClearedAway, Growth, Obstacles, Trunks};
+use bevy::ecs::system::SystemParam;
+use bevy::platform::collections::{HashMap, HashSet};
+use bevy::{camera::primitives::Aabb, prelude::*};
 
 /// A grown tree of the woods: where its foot stands, which finds its far card.
 #[derive(Component, Clone, Copy, Debug)]
@@ -140,5 +142,70 @@ pub(super) fn unfar_the_felled(
         mesh.0 = meshes.add(merged);
         transform.translation = middle;
         *aabb = bounds;
+    }
+}
+
+/// The grown trees of the woods felled or cleared away for good, by where their feet stood,
+/// as a saved game keeps them: they stay felled however often their block streams in again
+/// (D622), and a game loaded gives them back with [`FellAgain`].
+#[derive(SystemParam)]
+pub struct FelledWoods<'w> {
+    near: Option<Res<'w, NearWoods>>,
+}
+
+impl FelledWoods<'_> {
+    /// Where each felled tree's foot stood, in a fixed order, so the same felling is saved
+    /// the same.
+    pub fn feet(&self) -> Vec<Vec3> {
+        let mut keys: Vec<[u32; 3]> = self
+            .near
+            .iter()
+            .flat_map(|near| near.felled.iter().copied())
+            .collect();
+        keys.sort_unstable();
+        keys.into_iter()
+            .map(|key| Vec3::from_array(key.map(f32::from_bits)))
+            .collect()
+    }
+}
+
+/// Fells again the grown trees whose feet stood at these places, as a saved game is loaded:
+/// those standing are taken out with their trunks, what stops a walker and their far cards,
+/// and those still to stream in are left out (D622).
+#[derive(Message, Clone, Debug)]
+pub struct FellAgain(pub Vec<Vec3>);
+
+pub(super) fn fell_again(
+    mut commands: Commands,
+    mut asked: MessageReader<FellAgain>,
+    (near, index): (Option<ResMut<NearWoods>>, Option<ResMut<FarSquares>>),
+    (mut trunks, mut obstacles): (ResMut<Trunks>, Option<ResMut<Obstacles>>),
+    placed: Query<&Transform, With<WoodsTree>>,
+) {
+    let feet: Vec<Vec3> = asked
+        .read()
+        .flat_map(|FellAgain(feet)| feet.iter().copied())
+        .collect();
+    let Some(mut near) = near.filter(|_| !feet.is_empty()) else {
+        return;
+    };
+    let keys: HashSet<[u32; 3]> = feet.iter().map(|&foot| foot_key(foot)).collect();
+    let taken = near.fell_again(&keys);
+    info!(
+        "Woods: {} grown trees felled again as saved, {} of them standing",
+        keys.len(),
+        taken.len()
+    );
+    for tree in taken {
+        super::near::take_out(
+            &mut commands,
+            (&mut *trunks, obstacles.as_deref_mut()),
+            &placed,
+            tree,
+        );
+    }
+    // Their far cards go as a felled tree's do.
+    if let Some(mut index) = index {
+        index.felled.extend(feet);
     }
 }

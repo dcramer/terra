@@ -1,7 +1,8 @@
 //! Saving and loading the play experiment: what you built, what you carry and wear, your
-//! body and skills, your claim, and the people you brought home. The land, its plants and
-//! creatures are not saved: they come from the world's rules, and what was cut or killed
-//! grows back, as the world heals outside claims (D94).
+//! body and skills, your claim, the people you brought home, the ground dug and the woods'
+//! grown trees felled, which stay felled as they do while their woods stream (D622). The
+//! rest of the land, its plants and creatures, are not saved: they come from the world's
+//! rules, and what was cut or killed grows back, as the world heals outside claims (D94).
 //!
 //! The save is a RON file in its world's folder (`worlds`, D579), written every half minute,
 //! on F5, and when the game closes, and read when the world is chosen. Scripted runs never
@@ -30,8 +31,11 @@ use std::path::PathBuf;
 use terra_build::Bill;
 use terra_build::ops::Op;
 use terra_build::save::Snapshot;
-use terra_core::{MaterialId, Operation};
 use terra_items::{ActionBar, Cell, Equipment, ItemId};
+use terra_world::woods::{FellAgain, FelledWoods};
+
+mod ground;
+use ground::SavedEdit;
 
 /// Bumped when the format changes; a save of any other version is refused, not converted
 /// (D353).
@@ -59,32 +63,15 @@ struct SaveFile {
     /// How the ground has been dug and filled, in order (D21).
     #[serde(default)]
     ground: Vec<SavedEdit>,
+    /// Where the woods' grown trees felled stood (D622).
+    #[serde(default)]
+    felled: Vec<[f32; 3]>,
     /// The hour of the day.
     #[serde(default)]
     hour: Option<f32>,
     /// The day of the world's clock, which the sun's path and the climate follow.
     #[serde(default)]
     day: Option<i64>,
-}
-
-/// One change to the ground: a sphere dug out, or filled with a material, or a box dug
-/// out.
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-struct SavedEdit {
-    centre: [f32; 3],
-    radius: f32,
-    /// The material it was filled with, for a fill; nothing for a dig.
-    #[serde(default)]
-    fill: Option<u16>,
-    /// For a box, half its size each way and how it is turned; the radius is then unused.
-    #[serde(default)]
-    cut: Option<SavedBox>,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-struct SavedBox {
-    half: [f32; 3],
-    rotation: [f32; 4],
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -206,7 +193,7 @@ fn load(
     mut items: ResMut<Items>,
     mut view: Single<&mut View, IsLocalPlayer>,
     mut waiting: ResMut<Waiting>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    (mut meshes, mut fell): (ResMut<Assets<Mesh>>, MessageWriter<FellAgain>),
     placed: Query<Entity, (With<Prop>, Without<Theirs>)>,
     player: Single<
         (
@@ -260,29 +247,9 @@ fn load(
         clock.day = day;
     }
 
-    // The ground as it was dug and filled, replayed in order (D21).
-    if planet.operations().is_empty() && !save.ground.is_empty() {
-        info!("Replayed {} changes to the ground.", save.ground.len());
-        for edit in &save.ground {
-            let centre = Vec3::from(edit.centre);
-            planet.apply(&match (&edit.cut, edit.fill) {
-                (Some(cut), _) => Operation::DigBox {
-                    centre,
-                    half: Vec3::from(cut.half),
-                    rotation: Quat::from_array(cut.rotation),
-                },
-                (None, None) => Operation::Dig {
-                    centre,
-                    radius: edit.radius,
-                },
-                (None, Some(material)) => Operation::Fill {
-                    centre,
-                    radius: edit.radius,
-                    material: MaterialId(material),
-                },
-            });
-        }
-    }
+    // The ground as it was dug and filled (D21), and the trees felled (D622).
+    ground::replay(&mut planet, &save.ground);
+    ground::fell_again(&save.felled, &mut fell);
 
     // The base and what stands in and around it, where it was begun.
     if let Some((at, turn)) = save.frame {
@@ -458,7 +425,7 @@ fn autosave(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     path: Res<SavePath>,
-    planet: Res<Planet>,
+    (planet, felled): (Res<Planet>, FelledWoods),
     (site, offcuts): (Res<Site>, Res<Offcuts>),
     claim: Single<&Claim, IsLocalPlayer>,
     items: Res<Items>,
@@ -478,7 +445,7 @@ fn autosave(
     *since = 0.0;
     let save = gather(
         &clock,
-        &planet,
+        (&planet, &felled),
         (&site, &offcuts),
         &claim,
         (&items, &recipes),
@@ -498,7 +465,7 @@ fn save_on_exit(
     clock: Res<Clock>,
     mut exits: MessageReader<AppExit>,
     path: Res<SavePath>,
-    planet: Res<Planet>,
+    (planet, felled): (Res<Planet>, FelledWoods),
     (site, offcuts): (Res<Site>, Res<Offcuts>),
     claim: Single<&Claim, IsLocalPlayer>,
     items: Res<Items>,
@@ -511,7 +478,7 @@ fn save_on_exit(
     if exits.read().next().is_some() {
         let save = gather(
             &clock,
-            &planet,
+            (&planet, &felled),
             (&site, &offcuts),
             &claim,
             (&items, &recipes),
@@ -583,7 +550,7 @@ fn kept_items(items: &Items, grid: &terra_items::Grid) -> Vec<SavedItem> {
 
 fn gather(
     clock: &Clock,
-    planet: &Planet,
+    (planet, felled): (&Planet, &FelledWoods),
     (site, offcuts): (&Site, &Offcuts),
     claim: &Claim,
     (items, recipes): (&Items, &Recipes),
@@ -670,42 +637,8 @@ fn gather(
         claim_step: claim.step(),
         hour: Some(clock.hour),
         day: Some(clock.day),
-        ground: planet
-            .operations()
-            .into_iter()
-            .filter_map(|operation| match operation {
-                Operation::Dig { centre, radius } => Some(SavedEdit {
-                    centre: centre.into(),
-                    radius,
-                    fill: None,
-                    cut: None,
-                }),
-                Operation::DigBox {
-                    centre,
-                    half,
-                    rotation,
-                } => Some(SavedEdit {
-                    centre: centre.into(),
-                    radius: 0.0,
-                    fill: None,
-                    cut: Some(SavedBox {
-                        half: half.into(),
-                        rotation: rotation.to_array(),
-                    }),
-                }),
-                Operation::Fill {
-                    centre,
-                    radius,
-                    material,
-                } => Some(SavedEdit {
-                    centre: centre.into(),
-                    radius,
-                    fill: Some(material.0),
-                    cut: None,
-                }),
-                _ => None,
-            })
-            .collect(),
+        ground: ground::kept(planet),
+        felled: felled.feet().iter().map(Vec3::to_array).collect(),
         people: people
             .iter()
             .filter_map(|(person, at)| {
@@ -755,7 +688,7 @@ mod tests {
     use crate::start::Start;
     use bevy::ecs::system::RunSystemOnce;
     use terra_build::BuildOp;
-    use terra_core::{PlanetSpec, Seed};
+    use terra_core::{MaterialId, Operation, PlanetSpec, Seed};
 
     /// What saving and loading need, set up as the game sets them up, with no one in it yet.
     fn game() -> App {
@@ -775,7 +708,8 @@ mod tests {
             .insert_resource(DrivenByPlayer)
             .insert_resource(Flora::read())
             .init_resource::<Clock>()
-            .init_resource::<Waiting>();
+            .init_resource::<Waiting>()
+            .add_message::<FellAgain>();
         registries::plugin(&mut app);
         crate::build::building::plugin(&mut app);
         props::plugin(&mut app);
@@ -1163,7 +1097,7 @@ mod tests {
         let save = world
             .run_system_once(
                 |clock: Res<Clock>,
-                 planet: Res<Planet>,
+                 (planet, felled): (Res<Planet>, FelledWoods),
                  site: Res<Site>,
                  offcuts: Res<Offcuts>,
                  claim: Single<&Claim, IsLocalPlayer>,
@@ -1175,7 +1109,7 @@ mod tests {
                  player: Single<PlayerParts, IsLocalPlayer>| {
                     gather(
                         &clock,
-                        &planet,
+                        (&planet, &felled),
                         (&site, &offcuts),
                         &claim,
                         (&items, &recipes),

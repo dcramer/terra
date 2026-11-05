@@ -32,6 +32,12 @@
     "minutes": 40
   },
   {
+    "name": "saved",
+    "does": "a saved game comes back as saved on a 30 km world behind the loading screen (D579, D622, D623; tools/sandbox/saved.ts): a new world, a claim with a chest and a wall in it, the clock run on, trees felled and the player moved; closed, which saves it, and opened again, each the same",
+    "run": ["cargo", "xtask", "gpu", "still", "--", "node", "tools/sandbox/saved.ts", "--out", "target/check/saved"],
+    "minutes": 20
+  },
+  {
     "name": "debug menu",
     "does": "the debug menu works as a person uses it, at the high preset (D81; tools/sandbox/menucheck.ts): the backtick opens it over the game, a click on a slider sets its tunable and changes the sky, the remote's value shows on it, its reset and the backtick work",
     "run": ["cargo", "xtask", "gpu", "still", "--", "node", "tools/sandbox/menucheck.ts", "--out", "target/check/debug-menu"],
