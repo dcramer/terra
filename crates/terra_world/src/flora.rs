@@ -208,6 +208,16 @@ impl Obstacles {
         })
     }
 
+    /// Whether something is filed within `within` of a point, as a solid trunk is at its foot
+    /// until it is felled. Asks only the cubes round the point, not `solids_near`'s reach
+    /// grown by the widest thing filed (a town's fence line is one thing tens of metres
+    /// long), which every solid trunk near a creature asked once a step.
+    pub fn stands_at(&self, at: Vec3, within: f32) -> bool {
+        self.solid
+            .near(at, within)
+            .any(|(filed, _)| filed.distance(at) < within)
+    }
+
     /// The things a body reaching so far from a point might touch.
     pub fn solids_near(&self, at: Vec3, reach: f32) -> impl Iterator<Item = &Solid> + '_ {
         self.solid
@@ -320,12 +330,7 @@ impl Trunks {
             .near(at, reach)
             .map(|(_, trunk)| *trunk)
             .filter(move |trunk| (trunk.foot - at).reject_from(up).length() <= reach)
-            .filter(move |trunk| {
-                !trunk.solid
-                    || obstacles
-                        .solids_near(trunk.foot, 0.5)
-                        .any(|solid| solid.at.distance(trunk.foot) < 0.5)
-            })
+            .filter(move |trunk| !trunk.solid || obstacles.stands_at(trunk.foot, 0.5))
     }
 
     pub fn len(&self) -> usize {
@@ -1132,6 +1137,40 @@ pub(crate) fn clear_around(
 mod tests {
     use super::*;
     use terra_core::{Operation, PlanetSpec};
+
+    /// A solid trunk is found while what stops a walker stands at its foot, and not once that
+    /// is taken away as it is felled; a long thing filed beside it, a fence line running past
+    /// its foot, is not taken for it. One not solid is found whatever stands.
+    #[test]
+    fn a_solid_trunk_is_found_until_felled_whatever_else_is_filed() {
+        let foot = Vec3::new(0.0, 100.0, 0.0);
+        let fence = foot + Vec3::new(20.0, 0.0, 0.0);
+        let posts = (0..41)
+            .map(|post| Piece::round(Vec2::new(post as f32 - 20.0, 0.0), 0.1, 1.2))
+            .collect();
+        let mut obstacles = Obstacles::default();
+        obstacles.add_solid(fence, Solid::of_pieces(fence, posts));
+        let mut trunks = Trunks::default();
+        let trunk = |foot, solid| Trunk {
+            foot,
+            radius_m: 0.3,
+            height_m: 12.0,
+            solid,
+        };
+        trunks.add(trunk(foot, true));
+        let thin = foot + Vec3::new(0.0, 0.0, 3.0);
+        trunks.add(trunk(thin, false));
+        let found = |obstacles: &Obstacles| -> Vec<Vec3> {
+            trunks.near(foot, 5.0, obstacles).map(|t| t.foot).collect()
+        };
+        assert_eq!(found(&obstacles), [thin], "felled: only the one not solid");
+        obstacles.add(foot, 0.3);
+        let mut standing = found(&obstacles);
+        standing.sort_by(|a, b| a.z.total_cmp(&b.z));
+        assert_eq!(standing, [foot, thin], "standing");
+        obstacles.remove(foot);
+        assert_eq!(found(&obstacles), [thin], "felled again");
+    }
 
     #[test]
     fn no_shore_stone_ends_just_under_the_water() {
