@@ -62,6 +62,25 @@ Same views and crops. Each round's base is the round before's best. The new tuna
 - **Cost**: e3 measured GPU 7.87 ms on lake-play at 1901x1550 against main's 7.85 and 7.83, with the clouds pass 0.10 ms in both (job 20261105-161947-64d0-patch). The budget is 7.91.
 - **Still open**: cauliflower detail (fine 0.007 to 0.009 against 0.013, and the outlines still read as soft puffs), the cover (0.19 against 0.48, though the photographs choose cloudy skies), and the sunlit p90.
 
+## Rounds 12 and 13, and the defaults (clouds-look j3)
+
+| Variant | cover | p5 | p50 | p90 | tint | fine | mid |
+|---|---|---|---|---|---|---|---|
+| Photographs | 0.48 | 0.60 | 0.78 | 0.90 | 0.11 | 0.013 | 0.028 |
+| Photographs at half their size and back | 0.48 | 0.60 | 0.78 | 0.90 | 0.11 | 0.008 | 0.028 |
+| k3 | 0.19 | 0.55 | 0.80 | 0.95 | 0.11 | 0.007 | 0.036 |
+| k3, the detail distorted 100 m (after Nubis 2015's curl, by the noise's own Worley channels) | 0.19 | 0.54 | 0.81 | 0.95 | 0.11 | 0.007 | 0.036 |
+| the same, 300 m | 0.19 | 0.55 | 0.81 | 0.95 | 0.11 | 0.008 | 0.035 |
+| k3, billows (1 − fbm)^0.5, erosion 0.9 | 0.08 | 0.55 | 0.70 | 0.89 | 0.13 | 0.008 | 0.044 |
+| k3, the single scattering halved | 0.19 | 0.54 | 0.80 | 0.95 | 0.11 | 0.007 | 0.035 |
+| k3, octaves' a 0.5, gain 2, floor 0.75 | 0.19 | 0.51 | 0.70 | 0.94 | 0.14 | 0.009 | 0.040 |
+| **b13**: k3 with gain 1.5, floor 0.75 (now the defaults, D626) | 0.19 | 0.54 | 0.77 | 0.94 | 0.12 | 0.007 | 0.036 |
+
+- **The fine detail is the picture's resolution, not the noise's.** The photographs measure 0.008 scaled to half their size and back, and 0.007 at a third: the march draws at half the drawn size and its history at half the shown (D617). At the scale the picture holds (mid, 2 to 8 px), ours already has more than the photographs. Distorting the detail changed nothing; sharper billows ate the cover.
+- **The sunlit p90 does not follow the single scattering**: halved, p90 stays 0.95. It moves only with the deep light's gain (0.75 gives 0.94), so the brightest cloud is the many-times-scattered light in the tonemapper's shoulder.
+- **The steps** against a new supersampled reference (temporal-default j1's measure, the lake crop at frames 410 and 411, the defaults): 1.04 at 3816x1550 and 0.89 at 1901x1550, under D617's bar of 1.10 (1.07 and 0.82 before); native 0.63 at both.
+- **The adversarial judge** (stills of every view, the photographs and the shipped frames): 4.5 out of 10, rejected, though a clear gain on the flat white. Its gaps: caps and stacked lenses on some heaps (v06, v07 at 17 h); bodies smooth inside, no shade between billows; soft outlines with loose specks; horizontal banding on the far, low heaps (v07); far heaps unhazed beside the hazed mountains; the sky overhead empty (cover 0.19).
+
 ## Next
 
-The handoff `~/.cache/terra-handoff/clouds-look-j2.md` lists the next steps.
+The handoff `~/.cache/terra-handoff/clouds-look-j3.md` lists the next steps.

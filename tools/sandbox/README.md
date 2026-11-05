@@ -38,7 +38,7 @@ r start --windows --release -- --experiment play --quality high --time 15 --vant
 r tune list sky.cloud                    # name = value (default, range, who set it): what it does
 r pause
 r shot shots/cover-0.5.png
-r tune set sky.cloud.heaped_cover 0.25   # sky.cloud.heaped_cover: 0.5 -> 0.25 (default 0.5)
+r tune set sky.cloud.heaped_cover 0.25   # sky.cloud.heaped_cover: 0.7 -> 0.25 (default 0.7)
 r shot shots/cover-0.25.png
 r tune reset                             # back to their defaults: sky.cloud.heaped_cover
 ```
@@ -48,7 +48,7 @@ The same tunables on the debug menu's sliders (D81, [development.md](../../docs/
 ```bash
 r start --windows --release -- --experiment play --debug-menu
 r press backtick                         # opens it: "Debug menu: open" in the log
-r menu --search heaped                   # sky.cloud.heaped_cover = 0.5 (default): slider 212 to 388 at y 273, reset at …
+r menu --search heaped                   # sky.cloud.heaped_cover = 0.7 (default): slider 212 to 388 at y 273, reset at …
 r click 256,273                          # a quarter along: Tune: sky.cloud.heaped_cover 0.5 -> 0.25 (…, by debug menu)
 r tune get sky.cloud.heaped_cover        # = 0.25 (default 0.5, 0 to 1, by debug menu)
 ```
@@ -88,7 +88,7 @@ r tune get sky.cloud.heaped_cover        # = 0.25 (default 0.5, 0 to 1, by debug
 | `call build.state`, `call build.lay {…}` … | In play: the player's base, read and built through the same checked operations as the hammer: `build.state`, `build.lay`, `build.opening`, `build.fill`, `build.take_apart`, `build.fit`, `build.door`, `build.undo`, `build.op`, `build.point`, `build.look` (the camera in the base's own metres), `build.example` (the castle put up as the base), `build.damage_drawn` (damage drawn or hidden everywhere, for a check), `build.material`, `build.replace`, `build.carve`, `build.take_out`, `build.cube`, `build.ground` (the ground's height under columns, to see what building changed of it), and harm and its mending (D305): `build.damage`, `build.subside`, `build.repair`; what comes down breaks into fragments, counted in `build.state` (see `crates/terra_building/src/remote.rs`), and `build.memory`, what every base holds on the CPU and the GPU |
 | `call storage.place {…}`, `storage.put`, `storage.state` | In play: set down an item from the build menu, a chest if none is named, paid for as the hammer pays; put things from the pack into the storage within reach; read the storage in the claim and what each holds (see `crates/terra_survival/src/storage.rs`) |
 | `debug.view NAME` | Colour every building by a debug view, its legend on screen, as F4 does in the game: `texels`, `roles`, `detail`, `damage`, `shade`, `normals`, `plan`, `light`, `off`, or `next` and `back` ([development.md](../../docs/development.md#buildings-debug-views)) |
-| `tune list [PREFIX]`, `tune get NAME`, `tune set NAME VALUE\|default`, `tune reset [PREFIX]` | The run's tunables (D547, [development.md](../../docs/development.md#tunables)), named numbers its code reads live, such as `sky.cloud.heaped_cover`: a line each with its value, default, range, what set it and what it does; set one within its range (`sky.cloud.heaped_cover: 0.5 -> 0.25 (default 0.5)`, logged as `Tune: …` for `wait`) until the run ends; put changed ones back. `--tune NAME=VALUE` sets one at the start. [tunecheck.ts](tunecheck.ts) checks a value reaches the picture in one running game |
+| `tune list [PREFIX]`, `tune get NAME`, `tune set NAME VALUE\|default`, `tune reset [PREFIX]` | The run's tunables (D547, [development.md](../../docs/development.md#tunables)), named numbers its code reads live, such as `sky.cloud.heaped_cover`: a line each with its value, default, range, what set it and what it does; set one within its range (`sky.cloud.heaped_cover: 0.7 -> 0.25 (default 0.7)`, logged as `Tune: …` for `wait`) until the run ends; put changed ones back. `--tune NAME=VALUE` sets one at the start. [tunecheck.ts](tunecheck.ts) checks a value reaches the picture in one running game |
 | `menu [open\|close] [--search TEXT] [--page NAME] [--json]` | The debug menu (D81), in a run started with `--debug-menu`: open or close it (the backtick does too, `press backtick`), search its tunables or turn to a page, and say what it shows and where each slider and reset was drawn, in the pixels `click` takes, so a script sets a tunable as a person would; a run without the flag is refused, saying how to start one with it |
 | `shot FILE.png` | Save a screenshot and wait for it. If anything has failed to render in the run (a pipeline whose shader did not compile, an error wgpu reported, D555), it says each once as a `✗ render:` line and exits 1, as does every script that shoots through `client.ts`; `call sandbox.shot {"path": …, "frames": N}` saves the next N frames one after another, as `FILE-00000.png` on, to compare frame by frame what a change does as it happens |
 | `call METHOD [JSON]` | Any method; `call rpc.discover` lists them, Bevy's `world.*` ones included |

@@ -62,7 +62,7 @@ pub struct Params {
     pub sun: Vec4,
     /// The sun's colour times its illuminance, lux, and in w the frame, for the jitter.
     pub sunlight: Vec4,
-    /// The tunables the march reads: [`HEAPED_COVER`], [`BODY_LOW`].
+    /// The tunables the march reads: [`HEAPED_COVER`], [`BODY_LOW`], [`OCTAVES`].
     pub tuned: Vec4,
     /// The kinds' layers over the sea (`clouds::layers_over_sea`): base, base by rain, top, top
     /// by cover, top by rain.
@@ -80,112 +80,24 @@ pub struct Params {
     /// the march stops at: its hills' height in radians (0 for none), 1 for a range's peaks,
     /// the planet's radius.
     pub far_land: Vec4,
-    /// The look experiment's tunables (clouds-look j1, research/2026-11-05-cloud-look.md): the
-    /// in-scattering probability's share, detail in the light march, the density's scale, the
-    /// octaves' gain (0 keeps the f/(1-f) multiple scattering).
-    pub look: Vec4,
-    /// x: each octave's share of the optical depth (Hillaire 2016's a); y the diffusion floor's
-    /// gain; z how much a heap's coverage narrows toward its top; w how many times slower the
-    /// shape noise changes up a heap than across it.
-    pub look2: Vec4,
-    /// x: the sky's light into the clouds, a scale.
-    pub look3: Vec4,
 }
 
-// The cloud-look experiment's tunables (clouds-look j1): each default draws the clouds as before
-// it; the candidate is in the research note. Folded into the defaults or removed once chosen.
-pub static LOOK_MS_A: Tunable = Tunable::new(
-    "sky.cloud.x_ms_a",
-    0.5,
-    0.05..=1.0,
-    "experiment: each multiple-scattering octave's share of the depth toward the sun (Hillaire 2016's a)",
-);
-/// The look experiment's tunables as `Params::look`, `look2` and `look3` take them.
-fn looks() -> [Vec4; 3] {
-    [
-        Vec4::new(
-            LOOK_INSCATTER.get(),
-            LOOK_LIGHT_DETAIL.get(),
-            LOOK_DENSITY.get(),
-            LOOK_OCTAVES.get(),
-        ),
-        Vec4::new(
-            LOOK_MS_A.get(),
-            LOOK_FLOOR.get(),
-            LOOK_TAPER.get(),
-            LOOK_STRETCH.get(),
-        ),
-        Vec4::new(LOOK_SKY.get(), 0.0, 0.0, 0.0),
-    ]
-}
-
-pub static LOOK_SKY: Tunable = Tunable::new(
-    "sky.cloud.x_sky",
-    1.0,
-    0.0..=4.0,
-    "experiment: the sky's light into the clouds, a scale",
-);
-
-pub static LOOK_FLOOR: Tunable = Tunable::new(
-    "sky.cloud.x_floor",
-    0.0,
-    0.0..=4.0,
-    "experiment: the gain of the diffusion's deep light under the octaves, 1 / (1 + 3/4 (1 - g) tau)",
-);
-pub static LOOK_TAPER: Tunable = Tunable::new(
-    "sky.cloud.x_taper",
-    0.0,
-    0.0..=1.0,
-    "experiment: how much a heap's coverage narrows toward its layer's top, so towers end in domes",
-);
-pub static LOOK_STRETCH: Tunable = Tunable::new(
-    "sky.cloud.x_stretch",
-    1.0,
-    1.0..=4.0,
-    "experiment: how many times slower the shape noise changes up a heap than across it",
-);
-pub static LOOK_INSCATTER: Tunable = Tunable::new(
-    "sky.cloud.x_inscatter",
-    0.0,
-    0.0..=1.0,
-    "experiment: how much Nubis 2017's in-scattering probability darkens edges and bases",
-);
-pub static LOOK_LIGHT_DETAIL: Tunable = Tunable::new(
-    "sky.cloud.x_light_detail",
-    0.0,
-    0.0..=1.0,
-    "experiment: 1 takes the light march's first three taps through the eroded edges",
-);
-pub static LOOK_DENSITY: Tunable = Tunable::new(
-    "sky.cloud.x_density",
-    1.0,
-    0.1..=10.0,
-    "experiment: the clouds' extinction scale",
-);
-pub static LOOK_EROSION: Tunable = Tunable::new(
-    "sky.cloud.x_erosion",
-    0.4,
-    0.0..=1.0,
-    "experiment: how deep the detail noise erodes the body",
-);
-pub static LOOK_DETAIL_REPEATS: Tunable = Tunable::new(
-    "sky.cloud.x_detail_repeats",
-    1.0,
-    1.0..=4.0,
-    "experiment: how many times the detail noise repeats over its tile",
-);
-pub static LOOK_OCTAVES: Tunable = Tunable::new(
-    "sky.cloud.x_octaves",
-    0.0,
+/// The gain of the clouds' multiple scattering by Hillaire 2016's octaves (D626, measured
+/// against photographs: research/2026-11-05-cloud-look.md); 0 takes the f / (1 - f) series the
+/// bevy branch had instead, which whitened every heap.
+pub static OCTAVES: Tunable = Tunable::new(
+    "sky.cloud.octaves",
+    1.5,
     0.0..=20.0,
-    "experiment: the gain of Hillaire 2016's multiple-scattering octaves; 0 keeps the f/(1-f) gain",
+    "the gain of the clouds' multiple-scattering octaves; 0 for the old f/(1-f) series, one flat white",
 );
 
 /// The most a heaped column covers, so the 3D noise cuts it into heaps (Nubis's coverage
-/// remap); 0.7 let the whole body through as flat-sided slabs, 0.25 cut nearly every heap.
+/// remap). At 0.5, before heaps narrowed toward their tops (D626), 0.7 let the whole body
+/// through as flat-sided slabs; narrowed, 0.7 gives back the cover the narrowing took.
 pub static HEAPED_COVER: Tunable = Tunable::new(
     "sky.cloud.heaped_cover",
-    0.5,
+    0.7,
     0.0..=1.0,
     "the most a heaped column covers: less cuts the heaps smaller, more joins them into slabs",
 );
@@ -307,17 +219,7 @@ impl Plugin for VolumePlugin {
             &VOLUME,
             &HISTORY,
             &clouds::DRIFT,
-            &LOOK_INSCATTER,
-            &LOOK_LIGHT_DETAIL,
-            &LOOK_DENSITY,
-            &LOOK_OCTAVES,
-            &LOOK_EROSION,
-            &LOOK_DETAIL_REPEATS,
-            &LOOK_MS_A,
-            &LOOK_FLOOR,
-            &LOOK_TAPER,
-            &LOOK_STRETCH,
-            &LOOK_SKY,
+            &OCTAVES,
         ]);
         app.add_plugins((
             MaterialPlugin::<VeilMaterial>::default(),
@@ -488,7 +390,6 @@ fn tell(
         .map_or(0.0, |s| s.0.translation.length() - planet.sea_radius_m());
     let (layers, slab) = clouds::layers_over_sea(ground);
     let air_scale = air_scale.map_or(crate::air::AirScale(crate::air::HAZE_SCALE), |s| *s);
-    let [look, look2, look3] = looks();
     let params = Params {
         to_map: clouds.to_map,
         shapes: [
@@ -510,12 +411,7 @@ fn tell(
         // a count of its own took in the loading screen's frames, and two runs of one build
         // differed at every heap's edge on one script frame.
         sunlight: sunlight.extend((frame.0 % 1024) as f32),
-        tuned: Vec4::new(
-            HEAPED_COVER.get(),
-            BODY_LOW.get(),
-            LOOK_EROSION.get(),
-            LOOK_DETAIL_REPEATS.get(),
-        ),
+        tuned: Vec4::new(HEAPED_COVER.get(), BODY_LOW.get(), OCTAVES.get(), 0.0),
         layers,
         dusk,
         shell: Vec4::new(
@@ -532,9 +428,6 @@ fn tell(
                 0.0,
             )
         }),
-        look,
-        look2,
-        look3,
     };
     commands.insert_resource(CloudVolume {
         params,

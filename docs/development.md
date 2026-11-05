@@ -288,14 +288,14 @@ Built so far, its first page (`crates/terra_world/src/debug_menu/`): start the s
 
 ```rust
 // crates/terra_world/src/sky/volume.rs
-pub static HEAPED_COVER: Tunable = Tunable::new("sky.cloud.heaped_cover", 0.5, 0.0..=1.0, "the most a heaped column covers: …");
+pub static HEAPED_COVER: Tunable = Tunable::new("sky.cloud.heaped_cover", 0.7, 0.0..=1.0, "the most a heaped column covers: …");
 tune::register(&[&HEAPED_COVER, &BODY_LOW]);   // in the owner's plugin
 let cover = HEAPED_COVER.get();                // each frame it is needed; a shader gets it in its uniform
 ```
 
 ```bash
 r tune list sky.cloud                    # every tunable starting so: value, default, range, help
-r tune set sky.cloud.heaped_cover 0.25   # sky.cloud.heaped_cover: 0.5 -> 0.25 (default 0.5)
+r tune set sky.cloud.heaped_cover 0.25   # sky.cloud.heaped_cover: 0.7 -> 0.25 (default 0.7)
 r shot shots/cover-0.25.png
 r tune reset                             # every changed one back to its default
 ```

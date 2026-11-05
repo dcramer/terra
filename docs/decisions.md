@@ -481,6 +481,7 @@ The look, models, bodies and gear, textures and audio.
 | [D600](decisions/D600.md) | What shows in an empty clothing slot on Quaternius's bodies | Design | Developers | Decided | **The swap.** Each clothing slot always holds one piece… |
 | [D611](decisions/D611.md) | Characters are composed per slot at run time from a wardrobe catalogue | Tech | Agent | Decided | A character on Quaternius's bodies… |
 | [D624](decisions/D624.md) | Leaves on the line from the third-person lens to the figure open over the figure alone | Tech | Agent | Decided | Every leaf card the foliage shaders draw… |
+| [D626](decisions/D626.md) | The clouds are lit by octaves of multiple scattering and shaped as domed towers, measured against photographs | Tech | Agent | Decided | Under D516 (the sky photographic) and D515… |
 
 ## Engine and code
 

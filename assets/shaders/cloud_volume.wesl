@@ -38,7 +38,8 @@ struct Params {
     sunlight: vec4<f32>,
     // Tunables (D547, sky/volume.rs): x the most a heaped column covers (Nubis's coverage
     // remap, so the 3D noise cuts it into heaps), y where the body's remapped noise starts,
-    // so it spans 0 to 1 (`shape`).
+    // so it spans 0 to 1 (`shape`), z the multiple scattering's octaves' gain (0 for the
+    // f / (1 - f) series instead, `scattered`).
     tuned: vec4<f32>,
     // The kinds' layers over the sea (clouds::layers_over_sea), x the deck's, y stratocumulus's,
     // z cumulus's: base, base by rain, top, top by cover, top by rain.
@@ -51,11 +52,6 @@ struct Params {
     // The land beyond the world's edge the sky draws (far_land.wesl): x its hills' height,
     // radians (0 for none), y 1 for a range's peaks, z the planet's radius.
     far_land: vec4<f32>,
-    // Experiment: x in-scattering probability, y detail in the light march, z density scale,
-    // w octaves.
-    look: vec4<f32>,
-    look2: vec4<f32>,
-    look3: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -106,6 +102,29 @@ const COLUMN_FILL: f32 = 0.3;
 // The ground's albedo, for the light it sends up into a cloud's base.
 const GROUND_ALBEDO: f32 = 0.15;
 const PI: f32 = 3.14159265;
+// The cloud's look, measured against photographs of fair-weather cumulus (D626,
+// research/2026-11-05-cloud-look.md):
+// - the clouds' water, a scale on the extinctions above: at 1 a heap's sunlit side and its shade
+//   were one white;
+const DENSITY: f32 = 2.0;
+// - how many times slower the shape noise changes up a heap than across it, so its billows run
+//   up it as towers (a 1.3 km heap spanned most of the 3 km tile's height, and the noise made
+//   overhangs and stalks of it);
+const STRETCH: f32 = 3.0;
+// - how much a heap's coverage narrows toward its top, so towers end in domes, not caps;
+const TAPER: f32 = 0.7;
+// - how deep the detail erodes the body, and how many times it repeats over its tile (its
+//   finest cells 23 m rather than 47);
+const EROSION: f32 = 0.75;
+const DETAIL_REPEATS: f32 = 2.0;
+// - each multiple-scattering octave's share of the depth toward the sun (Hillaire 2016's a, at
+//   most its b of 0.5, so energy is kept), and the gain of the diffusion's deep light under them;
+const OCTAVE_DEPTH: f32 = 0.25;
+const DEEP_LIGHT: f32 = 0.75;
+// - the sky's light into the clouds, a scale on the light from the three ways `march` takes
+//   it: so the shade takes the sky's blue, as the photographs' does (its tint 0.05 at 1, 0.11
+//   in the photographs and at 3).
+const SKY_GATHERED: f32 = 3.0;
 
 // The eye, its up and its place on the map, set once a ray.
 var<private> eye_up: vec3<f32>;
@@ -261,10 +280,9 @@ fn shape(c: Column, m: vec2<f32>, h: f32, lod: f32) -> f32 {
     }
     // Taken twice over the tile (3 km), so the body's billows are half the size and a 2D blob
     // breaks into heaps of several sizes: at the tile's 6 km a heap was one smooth 2 km pillow.
-    // The offsets are shares of the tile, so doubled they still ride the wind exactly.
-    // Experiment: the noise stretched up, so a heap's billows run up it as towers (a 1.3 km heap
-    // spanned most of the 3 km tile's height, and the noise made overhangs and stalks of it).
-    let uvw = vec3<f32>(m.x / SHAPE_TILE_M + params.volume.x, h / (SHAPE_TILE_M * params.look2.w), m.y / SHAPE_TILE_M + params.volume.y)
+    // The offsets are shares of the tile, so doubled they still ride the wind exactly. Stretched
+    // up by STRETCH.
+    let uvw = vec3<f32>(m.x / SHAPE_TILE_M + params.volume.x, h / (SHAPE_TILE_M * STRETCH), m.y / SHAPE_TILE_M + params.volume.y)
         * SHAPE_REPEATS;
     let n = textureSampleLevel(noise, repeating, uvw, lod);
     let fbm = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
@@ -274,26 +292,25 @@ fn shape(c: Column, m: vec2<f32>, h: f32, lod: f32) -> f32 {
     // A heap's inside is as dense as its kind's water makes it, however much of the sky the
     // heaps cover (cut by the coverage it was a fifth of that, and from below and above a heap
     // was 5 to 10 times too thin toward the sun); a deck still thins with its cover.
-    // Experiment: a heap's coverage narrowing toward its top (Nubis 2017's anvil bias run the
-    // other way), so its towers end in domes rather than spreading into mushroom caps.
+    // A heap's coverage narrows toward its top (Nubis 2017's anvil bias run the other way), so
+    // its towers end in domes rather than spreading into mushroom caps.
     let up = clamp(lift_in(c, h) / c.top, 0.0, 1.0);
-    let narrowed = c.coverage * (1.0 - params.look2.z * c.kind * up * up);
+    let narrowed = c.coverage * (1.0 - TAPER * c.kind * up * up);
     return remap(body * profiled, 1.0 - narrowed, 1.0) * mix(c.coverage, 1.0, c.kind);
 }
 
 // The edges eroded by the finer Worley noise: wispy low down, billowing higher up (Nubis 2015).
 fn eroded(c: Column, m: vec2<f32>, h: f32, body: f32, lod: f32) -> f32 {
-    let repeats = params.tuned.w;
-    let uvw = vec3<f32>(m.x / DETAIL_TILE_M + params.volume.z, h / DETAIL_TILE_M, m.y / DETAIL_TILE_M + params.volume.w) * repeats;
-    let d = textureSampleLevel(noise, repeating, uvw, lod + log2(repeats));
+    let uvw = vec3<f32>(m.x / DETAIL_TILE_M + params.volume.z, h / DETAIL_TILE_M, m.y / DETAIL_TILE_M + params.volume.w) * DETAIL_REPEATS;
+    let d = textureSampleLevel(noise, repeating, uvw, lod + log2(DETAIL_REPEATS));
     let fbm = d.g * 0.625 + d.b * 0.25 + d.a * 0.125;
     let lift = clamp(lift_in(c, h) * 4.0, 0.0, 1.0);
     let edge = mix(fbm, 1.0 - fbm, lift);
-    return remap(body, edge * params.tuned.z, 1.0) * (1.0 + 2.0 * c.rain);
+    return remap(body, edge * EROSION, 1.0) * (1.0 + 2.0 * c.rain);
 }
 
 fn extinction(c: Column) -> f32 {
-    return mix(DECK_EXTINCTION, CUMULUS_EXTINCTION, c.kind) * params.look.z;
+    return mix(DECK_EXTINCTION, CUMULUS_EXTINCTION, c.kind) * DENSITY;
 }
 
 // Jendersie and d'Eon's approximate Mie phase for droplets 20 um across: a Henyey-Greenstein
@@ -331,8 +348,8 @@ fn toward_sun(c: Column, m: vec2<f32>, h: f32, mu: f32, way: vec2<f32>) -> f32 {
         let at = m + way * s;
         let hs = height_along(h, mu, s);
         var d = shape(c, at, hs, log2(step / (SHAPE_TILE_M / NOISE_SIDE)) + 1.0);
-        // Experiment: the first taps through the eroded edges, so billows shade each other.
-        if params.look.y > 0.5 && k < 3u && d > 0.0 {
+        // The first taps through the eroded edges, so billows shade each other.
+        if k < 3u && d > 0.0 {
             d = eroded(c, at, hs, d, max(log2(step / (DETAIL_TILE_M / NOISE_SIDE)), 0.0));
         }
         tau += d * step;
@@ -368,11 +385,13 @@ fn fine_step(t: f32) -> f32 {
 // "Direct = Transmittance * Phase + Multiple Scattering * Secondary Phase", 2023, with its terms
 // derived and checked against a path tracer there):
 // - the sun's light scattered once, through the cloud toward it, with the droplets' phase;
-// - and many times: the sunlight left at the similarity-reduced depth toward the sun, times
-//   f / (1 - f), the series of further bounces (Hillaire 2020), f the chance light scattered
-//   here does not escape, from how deep it sits toward the sun and the eye and in its column.
-//   Light escapes a thin heap's edge, so its edges facing away from the sun are darker than its
-//   middle (the "powder" look), and little sunlight reaches a deep base;
+// - and many times, by Hillaire 2016's octaves with the diffusion's deep light under them
+//   (`octaves`), less where Nubis 2017's in-scattering probability says little light gathers
+//   (`in_scatter`). The series the branch had, the sunlight left at the similarity-reduced
+//   depth toward the sun times f / (1 - f) (Hillaire 2020), f the chance light scattered here
+//   does not escape, gained 10 to 100 times on a column's whole depth, so a sunlit face sent
+//   up to four times what a white surface would and every heap was one white (D626); it is
+//   kept for `sky.cloud.octaves` 0;
 // - the sky's light and the ground's (its sunlit part shadowed by the cover over it), as the
 //   diffusion through the layer mixes them by the depth of cloud above and below.
 // The former two-stream share, 1 / (1 + 3/4 (1 - g) tau), is a wide deck's: it lit every heap's
@@ -388,7 +407,7 @@ struct Lights {
     cos_sun: f32,
 }
 
-// Experiment: Nubis 2017's in-scattering probability (Schneider, SIGGRAPH 2017 Advances): light
+// Nubis 2017's in-scattering probability (Schneider, SIGGRAPH 2017 Advances): light
 // scattered many times reaches a sample less near the cloud's edge (its density low) and near
 // its base, so crevices between billows and bases are darker than the body's middle.
 fn in_scatter(body: f32, lift: f32) -> f32 {
@@ -397,18 +416,18 @@ fn in_scatter(body: f32, lift: f32) -> f32 {
     return clamp(depth * vertical, 0.0, 1.0);
 }
 
-// Experiment: Hillaire 2016's multiple scattering by octaves (after Wrenninge 2013): each
-// octave's light dimmed by less of the depth, scattered less, by a wider lobe.
+// Hillaire 2016's multiple scattering by octaves (after Wrenninge 2013): each octave's light
+// dimmed by less of the depth, scattered less, by a wider lobe.
 fn octaves(cos_t: f32, tau: f32) -> f32 {
     var sum = 0.0;
     var a = 1.0;
     var b = 1.0;
     for (var i = 0u; i < 4u; i++) {
-        a *= params.look2.x;
+        a *= OCTAVE_DEPTH;
         b *= 0.5;
         sum += b * henyey_greenstein(cos_t, MEAN_COS * b) * exp(-a * tau);
     }
-    return sum * params.look.w;
+    return sum * params.tuned.z;
 }
 
 fn scattered(l: Lights, c: Column, h: f32, tau_sun: f32, tau_view: f32, body: f32) -> vec3<f32> {
@@ -424,17 +443,18 @@ fn scattered(l: Lights, c: Column, h: f32, tau_sun: f32, tau_view: f32, body: f3
     let p_local = 0.5 * (exp(-k * tau_sun) + exp(-k * tau_view));
     let f = 1.0 - max(min(p_column, p_local), 6.1035e-5);
     var multiple = exp(-k * tau_sun) * f / (1.0 - f) * (0.25 / PI);
-    if params.look.w > 0.0 {
+    if params.tuned.z > 0.0 {
         multiple = octaves(l.cos_sun, tau_sun);
-        // Experiment: the diffusion's deep light, which exponential octaves lose (two-stream
-        // transmission falls as 1 / (1 + 3/4 (1 - g) tau), not exponentially).
-        multiple += params.look2.y * (0.25 / PI) / (1.0 + 0.75 * k * tau_sun);
+        // The diffusion's deep light, which exponential octaves lose (two-stream transmission
+        // falls as 1 / (1 + 3/4 (1 - g) tau), not exponentially): without it the shade was too
+        // dark (p5 0.44 against the photographs' 0.60).
+        multiple += DEEP_LIGHT * (0.25 / PI) / (1.0 + 0.75 * k * tau_sun);
     }
-    multiple *= mix(1.0, in_scatter(body, lift), params.look.x);
+    multiple *= in_scatter(body, lift);
     let sunward = l.sun * (exp(-tau_sun) * l.phase + multiple);
     let ground = l.ground_sun * (1.0 - c.cover) + l.ground_sky;
     let w = (k * tau_up + DIFFUSION_Z0) / (k * (tau_up + tau_down) + 2.0 * DIFFUSION_Z0);
-    return sunward + mix(l.sky * params.look3.x, ground, w);
+    return sunward + mix(l.sky * SKY_GATHERED, ground, w);
 }
 
 @compute @workgroup_size(8, 8, 1)

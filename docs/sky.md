@@ -126,6 +126,7 @@ Low layers stand over the ground under them (their air rises from it), middle an
 ## Light and shade
 
 - The sun lights a cloud through the air (its colour and dimming from the atmosphere at the cloud's height), the sky lights it from all round, and the ground lights its base from below: paler and warmer over snow, a burning town or a hearth's glow.
+- **Light many times scattered** is Hillaire 2016's octaves with the diffusion's deep light under them, dimmed by Nubis 2017's in-scattering probability at edges and bases, so a heap has a sunlit side, a grey-blue shade and modelled billows rather than one white (D626, measured against photographs: research/2026-11-05-cloud-look.md).
 - At dusk cloud tops stay sunlit after the ground's sunset and turn rose, then grey from below as the earth's shadow rises (D432); by night clouds are lit by the moon and hide the stars, and a thin veil shows the moon's halo.
 - **On the ground**: a cloud's shadow moves across the land at the wind's speed; under a broken sky the light comes and goes as shadows pass, and under a full deck the sun's light is gone and the shade's colour is the deck's (D418's rule, now by place rather than by the cover's average).
 - **In the air**: the haze takes the cloud shadows, so shafts fall through gaps (crepuscular rays) and the haze under a deck is dim.
