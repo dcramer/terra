@@ -314,7 +314,9 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                prepare.run_if(not(resource_exists::<Populated>)),
+                prepare
+                    .run_if(not(resource_exists::<Populated>))
+                    .run_if(terra_world::instance::in_world),
                 animate,
                 form.run_if(resource_exists::<Populated>),
             ),

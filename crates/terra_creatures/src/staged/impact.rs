@@ -137,7 +137,8 @@ pub fn plugin(app: &mut App) {
                 tumble,
                 litter::flutter,
                 litter::shudder,
-            ),
+            )
+                .run_if(terra_world::instance::in_world),
         );
     method(app, "staged.impact", impact);
 }

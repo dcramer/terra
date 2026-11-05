@@ -145,7 +145,10 @@ pub fn plugin(app: &mut App) {
     app.init_world_resource::<Cells>()
         .init_world_resource::<Perches>()
         .init_world_resource::<Thickets>()
-        .add_systems(Update, hiding::file_thickets)
+        .add_systems(
+            Update,
+            hiding::file_thickets.run_if(terra_world::instance::in_world),
+        )
         .init_world_resource::<Warmth>()
         // Wherever the world says what grows: not on the yard, the flat test level, unless a
         // forest is grown on it.
@@ -155,6 +158,7 @@ pub fn plugin(app: &mut App) {
             // `populate` is over the size limit (D396): timed where it is added (D607).
             (terra_world::timed!("creatures", populate), asked::ask)
                 .chain()
+                .run_if(terra_world::instance::in_world)
                 .run_if(something_grows)
                 .run_if(wild_shown),
         );

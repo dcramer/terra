@@ -23,8 +23,12 @@ pub fn plugin(app: &mut App) {
     // The world's (D469): its animals' materials go with it, and with them the strong
     // handles to the models' own materials they were made from, which an app resource kept
     // for every world ever entered.
-    app.init_world_resource::<Tints>()
-        .add_systems(Update, (choose, dress).chain());
+    app.init_world_resource::<Tints>().add_systems(
+        Update,
+        (choose, dress)
+            .chain()
+            .run_if(terra_world::instance::in_world),
+    );
 }
 
 /// An animal's coat, from its summer's (0) to its winter's (1), and its own tone.

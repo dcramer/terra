@@ -196,7 +196,9 @@ pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         (
-            fireside::keep_clear.after(animate),
+            fireside::keep_clear
+                .after(animate)
+                .run_if(terra_world::instance::in_world),
             quench::quench,
             quench::unshadow,
             wake::ease,
@@ -216,18 +218,23 @@ pub fn plugin(app: &mut App) {
 /// What dresses, moves, animates and bends the figures, without the remote's methods or the
 /// fires they keep, so a headless app runs the same systems the game does.
 fn figures(app: &mut App) {
-    app.add_systems(Update, (dress, stage, animate).chain())
-        .add_systems(
-            PostUpdate,
-            hold.after(bevy::animation::transition::advance_transitions)
-                .before(bevy::animation::animate_targets),
-        )
-        .add_systems(
-            PostUpdate,
-            pose::bend
-                .after(bevy::app::AnimationSystems)
-                .before(bevy::transform::TransformSystems::Propagate),
-        );
+    app.add_systems(
+        Update,
+        (dress, stage, animate)
+            .chain()
+            .run_if(terra_world::instance::in_world),
+    )
+    .add_systems(
+        PostUpdate,
+        hold.after(bevy::animation::transition::advance_transitions)
+            .before(bevy::animation::animate_targets),
+    )
+    .add_systems(
+        PostUpdate,
+        pose::bend
+            .after(bevy::app::AnimationSystems)
+            .before(bevy::transform::TransformSystems::Propagate),
+    );
 }
 
 /// Whether clips fit a model's skeleton: most of the bones they move are its bones, by the
