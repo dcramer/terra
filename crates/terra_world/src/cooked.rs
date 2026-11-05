@@ -68,6 +68,20 @@ pub fn picture(
     }
 }
 
+/// A material's map at `path`, one picture with its mipmaps, cooked as `kind` where the bake
+/// has, otherwise read as made, sRGB only where it is colour.
+pub fn map(assets: &AssetServer, path: &str, kind: cooked::Kind) -> Handle<Image> {
+    let srgb = kind == cooked::Kind::Colour;
+    let cook = Cook {
+        kind,
+        layers: 1,
+        mips: true,
+    };
+    picture(assets, path, cook, move |s: &mut ImageLoaderSettings| {
+        s.is_srgb = srgb;
+    })
+}
+
 /// The cache folder where cooked reading is on; none before the renderer starts or where
 /// the GPU samples no BC.
 pub fn folder() -> Option<PathBuf> {

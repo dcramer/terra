@@ -31,7 +31,6 @@ use super::{
 use bevy::{
     camera::visibility::VisibilityRange,
     gltf::GltfMaterial,
-    image::ImageLoaderSettings,
     light::NotShadowCaster,
     pbr::{ExtendedMaterial, MaterialExtension},
     platform::collections::HashMap,
@@ -389,18 +388,17 @@ pub(super) fn end_grain(
     assets: &AssetServer,
     plain: &mut Assets<StandardMaterial>,
 ) -> Handle<StandardMaterial> {
-    let map = |file: &str, colour: bool| -> Handle<Image> {
-        assets
-            .load_builder()
-            .with_settings(move |settings: &mut ImageLoaderSettings| settings.is_srgb = colour)
-            .load(format!("materials/log_end/{file}"))
+    use terra_core::cooked::Kind;
+    // Cooked by the bake, as the barks are (D188): read raw, each made its mipmaps at load.
+    let map = |file: &str, kind| {
+        terra_world::cooked::map(assets, &format!("materials/log_end/{file}"), kind)
     };
-    let arm = map("arm.jpg", false);
+    let arm = map("arm.jpg", Kind::Data);
     plain.add(StandardMaterial {
         // Weathered: cut wood greys and darkens in a season.
         base_color: Color::srgb(0.62, 0.56, 0.48),
-        base_color_texture: Some(map("color.jpg", true)),
-        normal_map_texture: Some(map("normal.jpg", false)),
+        base_color_texture: Some(map("color.jpg", Kind::Colour)),
+        normal_map_texture: Some(map("normal.jpg", Kind::Normal)),
         occlusion_texture: Some(arm.clone()),
         metallic_roughness_texture: Some(arm),
         perceptual_roughness: 1.0,

@@ -142,7 +142,10 @@ fn jobs(assets: &Path) -> Vec<Job> {
         });
     }
     let materials = assets.join("materials");
-    for dir in ["ground", "flora", "foliage", "litter"]
+    // The materials the GPU draws as they are: the ground's, the plants', the barks', the cut
+    // ends of logs, and the building packs' pieces' atlases (`terra_bases::draw`). The other
+    // building sets are read on the CPU into the texture arrays (D290) and not cooked.
+    for dir in ["ground", "flora", "foliage", "litter", "log_end"]
         .into_iter()
         .map(|d| materials.join(d))
         .chain(
@@ -154,15 +157,19 @@ fn jobs(assets: &Path) -> Vec<Job> {
                 .filter(|p| {
                     p.file_name()
                         .and_then(|n| n.to_str())
-                        .is_some_and(|n| n.contains("bark"))
+                        .is_some_and(|n| n.contains("bark") || n.ends_with("_pieces"))
                 }),
         )
     {
+        // A card atlas's normal map is read as data (`grown::leaf_normals`), its alpha the
+        // leaves' roughness where it has one: cooked as a normal, the litter's, which has
+        // none, was never found and was read raw, its mipmaps made at load.
+        let cards = dir.ends_with("foliage") || dir.ends_with("litter");
         for source in files(&dir, &["jpg", "png"]) {
             let stem = source.file_stem().and_then(|s| s.to_str()).unwrap_or("");
             let kind_hint = match stem {
                 "color" | "cards" => Kind::Colour,
-                "normal" => Kind::Normal,
+                "normal" if !cards => Kind::Normal,
                 _ => Kind::Data,
             };
             jobs.push(Job {
@@ -330,6 +337,42 @@ fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The pictures the game draws read cooked: each has its job, of the kind the game asks
+    /// for (`grown::leaf_normals` asks for its card atlas's normal map as data), or the
+    /// game finds no cooked copy and reads it raw, its mipmaps made at load.
+    #[test]
+    fn what_the_game_reads_cooked_is_cooked_as_it_asks() {
+        let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let jobs = jobs(&assets);
+        let kind = |file: &str| {
+            let job = jobs.iter().find(|job| job.source.ends_with(file));
+            match job.map(|job| &job.what) {
+                Some(What::Picture { kind_hint, .. }) => Some(*kind_hint),
+                _ => None,
+            }
+        };
+        for cards in [
+            "materials/litter/normal.png",
+            "materials/foliage/normal.png",
+        ] {
+            assert!(matches!(kind(cards), Some(Kind::Data)), "{cards}");
+        }
+        // The lush floor's cut ends (`floor::end_grain`) and a building pack's pieces
+        // (`terra_bases::draw`).
+        assert!(matches!(
+            kind("materials/log_end/color.jpg"),
+            Some(Kind::Colour)
+        ));
+        assert!(matches!(
+            kind("materials/log_end/normal.jpg"),
+            Some(Kind::Normal)
+        ));
+        assert!(matches!(
+            kind("materials/logs_pieces/normal.jpg"),
+            Some(Kind::Normal)
+        ));
+    }
 
     #[test]
     fn only_a_prop_whose_map_outresolves_the_screen_is_capped() {

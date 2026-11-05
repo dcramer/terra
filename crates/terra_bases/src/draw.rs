@@ -247,14 +247,10 @@ pub fn kit_materials(
     assets: &AssetServer,
     materials: &mut Assets<StandardMaterial>,
 ) -> Arc<KitMaterials> {
-    let linear = |path: String| -> Handle<Image> {
-        assets
-            .load_builder()
-            .with_settings(|settings: &mut bevy::image::ImageLoaderSettings| {
-                settings.is_srgb = false;
-            })
-            .load(path)
-    };
+    // Cooked (D188): read raw, a pack's 2048² atlas made its mipmaps on the main thread.
+    use terra_core::cooked::Kind;
+    let map = |path: String, kind| terra_world::cooked::map(assets, &path, kind);
+    let linear = |path: String| map(path, Kind::Data);
     let mut made: BTreeMap<(String, [u32; 2]), Handle<StandardMaterial>> = BTreeMap::new();
     let mut out = KitMaterials::default();
     for kit in &kits.0 {
@@ -275,8 +271,8 @@ pub fn kit_materials(
                     let arm: Handle<Image> = linear(format!("{path}/arm.jpg"));
                     let parallax = depth > 0.0;
                     materials.add(StandardMaterial {
-                        base_color_texture: Some(assets.load(format!("{path}/color.jpg"))),
-                        normal_map_texture: Some(linear(format!("{path}/normal.jpg"))),
+                        base_color_texture: Some(map(format!("{path}/color.jpg"), Kind::Colour)),
+                        normal_map_texture: Some(map(format!("{path}/normal.jpg"), Kind::Normal)),
                         metallic_roughness_texture: Some(arm.clone()),
                         occlusion_texture: Some(arm),
                         perceptual_roughness: 1.0,
