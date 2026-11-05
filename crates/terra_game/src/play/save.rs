@@ -175,13 +175,39 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                load.run_if(resource_added::<SavePath>),
+                load.run_if(a_save_to_load),
                 (restore_people, restore_claim, autosave).run_if(resource_exists::<SavePath>),
                 super::worlds::keep_the_start.run_if(resource_exists::<super::worlds::Playing>),
             )
-                .chain(),
+                .chain()
+                // A save is of the world: loaded into it once it is made (D623).
+                .run_if(terra_world::instance::in_world),
         )
-        .add_systems(Last, save_on_exit.run_if(resource_exists::<SavePath>));
+        .add_systems(
+            Last,
+            save_on_exit
+                .run_if(resource_exists::<SavePath>)
+                .run_if(terra_world::instance::in_world),
+        );
+}
+
+/// A save put in (`SavePath`, at start-up or by the title) and not yet loaded, once in the
+/// world (D623). Not `resource_added`: a condition is evaluated every frame, so the save put
+/// in while the land was generated was no longer new by the time the world was entered, and
+/// a 30 km world kept its save unloaded.
+fn a_save_to_load(
+    travel: Option<Res<State<terra_world::instance::Travel>>>,
+    path: Option<Res<SavePath>>,
+    mut loaded: Local<Option<bevy::ecs::change_detection::Tick>>,
+) -> bool {
+    let Some(path) = path else {
+        return false;
+    };
+    if !terra_world::instance::in_world(travel) || *loaded == Some(path.added()) {
+        return false;
+    }
+    *loaded = Some(path.added());
+    true
 }
 
 #[allow(clippy::too_many_arguments)]

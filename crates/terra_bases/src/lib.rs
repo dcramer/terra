@@ -525,7 +525,8 @@ pub fn plugin(app: &mut App) {
             edit.run_if(free.clone()),
             update_readout.run_if(free),
         )
-            .chain(),
+            .chain()
+            .run_if(terra_world::instance::in_world),
     );
 }
 
