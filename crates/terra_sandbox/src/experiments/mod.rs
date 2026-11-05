@@ -22,6 +22,12 @@ mod workbench;
 /// and Norway spruces to draw (D366).
 pub use lush::conifers::plugin as woods_conifers;
 
+/// Experiments drawn in the world layer (`WorldPlugin`), reading what it makes (the day's
+/// clock, the detail scale, the woods' footing), that leave bringing it to walk or play: on
+/// their own they are given it (`add_experiments`), as the workbench gives itself the world's
+/// light. Lush alone once panicked on entering the world for the clock it reads.
+pub const ON_THE_WORLD: &[&str] = &["lush"];
+
 pub struct Experiment {
     pub name: &'static str,
     pub about: &'static str,

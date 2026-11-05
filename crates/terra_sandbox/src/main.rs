@@ -106,6 +106,14 @@ fn add_experiments(app: &mut App, options: &shell::Options) -> Result<(), String
         };
         (experiment.add)(app);
     }
+    // One drawn in the world layer brings it when no other experiment did (lush alone).
+    if added
+        .iter()
+        .any(|name| experiments::ON_THE_WORLD.contains(name))
+        && !app.is_plugin_added::<terra_world::world::WorldPlugin>()
+    {
+        app.add_plugins(terra_world::world::WorldPlugin);
+    }
     app.add_plugins(experiments::woods_conifers);
     Ok(())
 }

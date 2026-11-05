@@ -26,6 +26,12 @@
     "minutes": 20
   },
   {
+    "name": "alone",
+    "does": "every sandbox experiment but the icon baker runs on its own, offscreen, to frame 20 with nothing panicking: no world system runs ungated while the land is generated, and none reads what only another experiment brings (D623; tools/sandbox/alone.ts)",
+    "run": ["node", "tools/sandbox/alone.ts"],
+    "minutes": 40
+  },
+  {
     "name": "debug menu",
     "does": "the debug menu works as a person uses it, at the high preset (D81; tools/sandbox/menucheck.ts): the backtick opens it over the game, a click on a slider sets its tunable and changes the sky, the remote's value shows on it, its reset and the backtick work",
     "run": ["cargo", "xtask", "gpu", "still", "--", "node", "tools/sandbox/menucheck.ts", "--out", "target/check/debug-menu"],
