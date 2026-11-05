@@ -18,8 +18,9 @@ use crate::woods::{Footing, Seasons, stand};
 use glam::{Vec2, Vec3};
 use terra_gen::smoothstep;
 
-/// A town's place found.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// A town's place found; kept in a world's save once found, so it is not searched for again
+/// (D620).
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TownSite {
     /// The direction from the centre to the ground its square is wanted on.
     pub toward: Vec3,

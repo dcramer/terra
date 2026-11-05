@@ -18,7 +18,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use terra_world::choice::Choice;
 use terra_world::planet::Planet;
-use terra_world::planet::entering::{FIRST_SEED, KnownStart};
+use terra_world::planet::entering::{FIRST_SEED, KnownStart, KnownTowns};
+use terra_world::start::{Sited, Towns};
 
 const META: &str = "world.ron";
 const SAVE: &str = "save.ron";
@@ -48,9 +49,23 @@ pub struct Meta {
     /// the start depends on the seed and radius alone, so it is found once.
     #[serde(default)]
     pub starts: Vec<(f32, [f32; 3])>,
+    /// The towns its land's search found round the start when it was first entered, none
+    /// found among them, by the planet's radius (D620): as the start, found once.
+    #[serde(default)]
+    pub towns: Vec<(f32, Vec<terra_land::town::TownSite>)>,
 }
 
 impl Meta {
+    /// The towns kept for a planet of its seed and that radius.
+    pub fn known_towns(&self, radius_m: f32) -> Option<KnownTowns> {
+        let (_, towns) = self.towns.iter().find(|(kept, _)| *kept == radius_m)?;
+        Some(KnownTowns {
+            seed: self.seed,
+            radius_m,
+            towns: towns.clone(),
+        })
+    }
+
     /// The start kept for a planet of its seed and that radius.
     pub fn known_start(&self, radius_m: f32) -> Option<KnownStart> {
         let (_, direction) = self.starts.iter().find(|(kept, _)| *kept == radius_m)?;
@@ -154,6 +169,7 @@ pub fn make(
         made: now,
         played: now,
         starts: Vec::new(),
+        towns: Vec::new(),
     };
     write_meta(&dir, &meta)?;
     Ok(World { dir, meta })
@@ -317,28 +333,51 @@ pub fn new_radius_m(options: &Options) -> f32 {
     options.radius_asked.unwrap_or(WORLD_RADIUS_M)
 }
 
-/// The start a world found before taken as it is when its land is made, or none known.
+/// The start and the towns a world found before taken as they are when its land is made, or
+/// none known.
 fn know_the_start(commands: &mut Commands, meta: &Meta) {
     match meta.known_start(meta.radius_m) {
         Some(known) => commands.insert_resource(known),
         None => commands.remove_resource::<KnownStart>(),
     }
+    match meta.known_towns(meta.radius_m) {
+        Some(known) => commands.insert_resource(known),
+        None => commands.remove_resource::<KnownTowns>(),
+    }
 }
 
-/// Keeps in the world played the start its land's search found, the first time it is
-/// entered at this radius, so the next entry takes it unsearched (`KnownStart`).
-pub fn keep_the_start(mut playing: ResMut<Playing>, planet: Option<Res<Planet>>) {
+/// Keeps in the world played the start and the towns its land's search found, the first time
+/// it is entered at this radius, so the next entry takes them unsearched (`KnownStart`,
+/// `KnownTowns`, D596, D620). Not the towns of a site asked for (`--site`), which are the
+/// site's, not the world's.
+pub fn keep_the_start(
+    mut playing: ResMut<Playing>,
+    planet: Option<Res<Planet>>,
+    towns: Option<Res<Towns>>,
+    sited: Option<Res<Sited>>,
+) {
     let Some(planet) = planet else {
         return;
     };
     let radius_m = planet.radius_m();
     let meta = &playing.0.meta;
-    if planet.seed().0 != meta.seed || meta.known_start(radius_m).is_some() {
+    if planet.seed().0 != meta.seed {
         return;
     }
-    let direction = planet.start_direction().to_array();
+    let start = meta.known_start(radius_m).is_none();
+    let towns =
+        towns.filter(|_| sited.is_none() && !meta.towns.iter().any(|(kept, _)| *kept == radius_m));
+    if !start && towns.is_none() {
+        return;
+    }
     let world = &mut playing.0;
-    world.meta.starts.push((radius_m, direction));
+    if start {
+        let direction = planet.start_direction().to_array();
+        world.meta.starts.push((radius_m, direction));
+    }
+    if let Some(towns) = towns {
+        world.meta.towns.push((radius_m, towns.0.clone()));
+    }
     if let Err(problem) = write_meta(&world.dir, &world.meta) {
         warn!("Could not keep {}'s start: {problem}", world.meta.name);
     }

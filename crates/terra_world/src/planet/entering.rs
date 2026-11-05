@@ -49,16 +49,40 @@ impl KnownStart {
     }
 }
 
+/// The towns a world kept on disk found round its start when it was first entered (D620),
+/// none found among them, so entering it again does not search for them (0.3 to 4 s on a
+/// 30 km world): taken only by a planet of its seed and radius, as [`KnownStart`].
+#[derive(Resource, Clone, Debug, PartialEq)]
+pub struct KnownTowns {
+    pub seed: u64,
+    pub radius_m: f32,
+    pub towns: Vec<terra_land::town::TownSite>,
+}
+
+impl KnownTowns {
+    /// The towns it knows for a planet of that spec, if it is that planet's.
+    pub fn of(
+        known: Option<&KnownTowns>,
+        spec: PlanetSpec,
+    ) -> Option<&[terra_land::town::TownSite]> {
+        known
+            .filter(|known| known.seed == spec.seed.0 && known.radius_m == spec.radius_m)
+            .map(|known| known.towns.as_slice())
+    }
+}
+
 /// A world's land: its planet, the start on it and the site it was asked to stand at
 /// (`--site`). On a world with mountains the land round the start is worked out before
 /// anything stands on it (D322): its lakes, seasons and snow on the clock's date, and the
 /// start's plot chosen on dry ground once its lakes are known. A site the
 /// land's rules make is found first, and the start stood on its shore once its lakes are
-/// known. A start found before (`known`) is taken for a planet of its seed and radius.
+/// known. A start found before (`known`) is taken for a planet of its seed and radius, and so
+/// are the towns found before (`known_towns`).
 pub fn land_of(
     world: &WorldSpec,
     options: &Options,
     known: Option<&KnownStart>,
+    known_towns: Option<&KnownTowns>,
 ) -> (Planet, Start, Option<Sited>, Towns) {
     let yard = options.yard();
     let spec = planet_spec(world, options.radius_m);
@@ -94,10 +118,19 @@ pub fn land_of(
             }
             let start = Start::choose(&planet, yard);
             let mut towns = Towns::default();
-            if looked && let Some(site) = first_town(&planet, &start) {
+            if looked {
+                towns.0 = match KnownTowns::of(known_towns, spec) {
+                    Some(kept) => kept.to_vec(),
+                    None => first_town(&planet, &start).into_iter().collect(),
+                };
                 let want = terra_land::town::MarketTown::FIRST;
-                planet.clear_woods(|land| want.clearings(land, &site));
-                towns.0.push(site);
+                planet.clear_woods(|land| {
+                    towns
+                        .0
+                        .iter()
+                        .flat_map(|site| want.clearings(land, site))
+                        .collect()
+                });
             }
             (planet, start, None, towns)
         }
@@ -159,7 +192,12 @@ pub(crate) fn land(world: &mut World) {
     let spec = world.resource::<WorldSpec>().clone();
     let options = world.resource::<Options>();
     let yard = options.yard();
-    let (planet, start, sited, towns) = land_of(&spec, options, world.get_resource::<KnownStart>());
+    let (planet, start, sited, towns) = land_of(
+        &spec,
+        options,
+        world.get_resource::<KnownStart>(),
+        world.get_resource::<KnownTowns>(),
+    );
     world.insert_resource(planet);
     world.insert_resource(start);
     world.insert_resource(towns);
@@ -299,7 +337,7 @@ mod tests {
             let args = args.iter().map(|a| a.to_string()).chain([seed.to_string()]);
             let options = Options::from_args(args).unwrap();
             let at = std::time::Instant::now();
-            let (planet, start, _, _) = land_of(&first_world(&options), &options, None);
+            let (planet, start, _, _) = land_of(&first_world(&options), &options, None, None);
             let lakes = planet.waters().expect("a 30 km world's lakes are found");
             // The plot and 3 m round it, every metre, and the way out of the door to where the
             // player arrives.

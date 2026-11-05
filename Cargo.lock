@@ -6297,6 +6297,7 @@ dependencies = [
  "terra_folk",
  "terra_gen",
  "terra_items",
+ "terra_land",
  "terra_motion",
  "terra_survival",
  "terra_walker",

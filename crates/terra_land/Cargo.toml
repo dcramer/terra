@@ -7,7 +7,9 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-glam.workspace = true
+# Serialisable, so a world keeps the town its land found (`town::TownSite`, D620); glam is
+# built so already for Bevy's maths.
+glam = { workspace = true, features = ["serde"] }
 libm.workspace = true
 ron.workspace = true
 serde.workspace = true

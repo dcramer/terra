@@ -24,7 +24,7 @@ fn lake_load_by_stage() {
     let options = crate::shell::Options::from_args(args.iter().map(|a| a.to_string())).unwrap();
     let spec = crate::planet::entering::first_world(&options);
     let at = std::time::Instant::now();
-    let (planet, start, _, _) = crate::planet::entering::land_of(&spec, &options, None);
+    let (planet, start, _, _) = crate::planet::entering::land_of(&spec, &options, None, None);
     eprintln!("land worked out in {:.2} s", at.elapsed().as_secs_f32());
     // Each part of the round as a hash of its `Debug` text, which tells every bit of a float
     // apart: a change meant only to be faster leaves every one as it was, and one that changes

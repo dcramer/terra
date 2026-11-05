@@ -240,6 +240,72 @@ fn a_worlds_start_is_kept_once_and_taken_again_as_it_was() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// The towns a world's land found round its start are kept in its folder once, read back bit
+/// for bit and taken again only on a planet of its seed and radius; a world whose search found
+/// none keeps that too, so neither searches again (D620). A site asked for is not kept.
+#[test]
+fn a_worlds_towns_are_kept_once_and_taken_again_as_they_were() {
+    use bevy::ecs::system::RunSystemOnce;
+    use terra_core::{PlanetSpec, Seed};
+    let site = terra_land::town::TownSite {
+        toward: Vec3::new(0.6, 0.0, 0.8),
+        height_m: 412.5,
+        growing_mean_c: 11.25,
+        tree_line_m: 1890.0,
+        relief_m: 6.5,
+        slope_deg: 1.75,
+        forest: 0.7,
+        peak: Vec3::new(0.0, 0.6, 0.8),
+        peak_m: 2510.0,
+        peak_off_m: 4100.0,
+        skyline_deg: 9.5,
+        ringed: 0.4,
+        start: Vec3::new(0.8, 0.0, 0.6),
+        at_km: Vec2::new(-1.25, 2.5),
+        water: Some(Vec2::new(250.0, -30.0)),
+    };
+    let spec = PlanetSpec {
+        seed: Seed(SEED),
+        radius_m: 2_000.0,
+    };
+    let planet = Planet::new(spec);
+    for (name, towns) in [("towns", vec![site]), ("no-towns", Vec::new())] {
+        let root = folder_for(name);
+        let world = make(&root, "Kept", false, SEED, RADIUS, 1).unwrap();
+        let mut app = bevy::ecs::world::World::new();
+        app.insert_resource(Playing(world));
+        app.insert_resource(planet.clone());
+        app.insert_resource(Towns(towns.clone()));
+        app.run_system_once(keep_the_start).unwrap();
+        app.run_system_once(keep_the_start).unwrap();
+        let kept = list(&root).remove(0).meta;
+        assert_eq!(kept.towns.len(), 1, "kept once: {:?}", kept.towns);
+        let known = kept.known_towns(spec.radius_m);
+        assert_eq!(KnownTowns::of(known.as_ref(), spec), Some(&towns[..]));
+        let larger = PlanetSpec {
+            radius_m: 30_000.0,
+            ..spec
+        };
+        assert_eq!(
+            KnownTowns::of(known.as_ref(), larger),
+            None,
+            "another radius searches"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    // A site asked for (`--site town`) is the run's, not the world's.
+    let root = folder_for("sited");
+    let world = make(&root, "Kept", false, SEED, RADIUS, 1).unwrap();
+    let mut app = bevy::ecs::world::World::new();
+    app.insert_resource(Playing(world));
+    app.insert_resource(planet.clone());
+    app.insert_resource(Towns(vec![site]));
+    app.insert_resource(Sited(terra_world::start::Found::Town(site)));
+    app.run_system_once(keep_the_start).unwrap();
+    assert!(list(&root).remove(0).meta.towns.is_empty());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 fn options(args: &[&str]) -> Options {
     Options::from_args(args.iter().map(|a| a.to_string())).unwrap()
 }
