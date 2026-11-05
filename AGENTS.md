@@ -30,7 +30,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 - **Baselines**: lowering one is `cargo xtask nightly`'s alone (D414, D411).
 - **Finish, then clean up at once**: `git fetch`, `git branch -r --contains <commit>`, then `cargo xtask worktrees --done` (D259) the moment the work is on main, never left for the prune; a coordinator removes each subagent's worktree as its report arrives, once its commits are on main (`git worktree remove`; a worktree with unlanded work keeps its branch).
 - At most three or four agents build or check at once, subagents included.
-- **Every task is bounded** (D400): a brief says when the agent stops (a score bar, a number of jobs or two without a gain, a clock time, a context of about 250k at most). Do one unit of work, write a handoff file, end; the next job is a fresh agent from it. Wait on a long run started in the background by its completion notice, never a polling loop, one wait per thing. An agent you start gets the same bounds, one helper at a time.
+- **Every task is bounded** (D400): a brief says when the agent stops (a score bar, a number of jobs or two without a gain, a clock time, a context bound, D627). Do one unit of work, write a handoff file, end; the next job is a fresh agent from it. Wait on a long run started in the background by its completion notice, never a polling loop, one wait per thing. An agent you start gets the same bounds, one helper at a time.
 
 ## Gates and tool output
 
@@ -42,13 +42,12 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 
 ## Context
 
-Every byte an agent reads is paid again each turn.
+Tokens are a constraint of the work (D627): every turn rereads the whole context.
 
-- **Keep context small** (D390): read by range or grep; send long output to a file and read its tail; when the context nudge fires, finish the unit of work and hand off with a summary.
-- **Delegate mechanical work** (D391): finding to `finder` (Haiku), running a check, test or benchmark to `runner` (Sonnet). Judgement, design, debugging and fixes stay on the default model.
-- **A job is a `job` agent** (D538), isolation "worktree": the brief says only the task, the skill, the bound and the handoff files (`~/.cache/terra-handoff/<topic>-j<n>.md`); the agent's file holds the routine.
-- **A subagent's cache lasts an hour** (D397): a wait of minutes is cheap; past an hour the whole context is written again, so hand off instead.
-- **Docs short and precise**: intent, constraints and reasons, not implementation or history. Here and in skills, one line a rule with its decision; the explanation lives in the doc it cites.
+- **The bound is the hook's**: it warns at 80% of yours (a job's from its brief, else 150k), then says STOP: land what is checked, write the handoff with `job.mjs`'s numbers, end. A wait past an hour hands off (D397).
+- **Read little**: grep or line range; long output to a file, its tail read; finding to `finder`, checks to `runner` (D391); a coordinator holds no file dumps.
+- **A job is a `job` agent** (D538), isolation "worktree", briefed with the task, skill, bound and handoff files; mechanical ones at medium effort.
+- **Docs short**: intent, constraints, reasons; one line a rule with its decision; the docs check holds their sizes.
 
 ## Decisions (D389)
 

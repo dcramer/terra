@@ -82,8 +82,11 @@ test("finds a job's transcript by its task, and prints the mean of several", () 
     writeFileSync(join(sub, `agent-${id}.jsonl`), lines.join("\n"));
     writeFileSync(join(sub, `agent-${id}.meta.json`), JSON.stringify({ agentType: "job", description: task }));
   }
+  const brief = JSON.stringify({ type: "user", message: { content: "Task: char-pipeline j2. Read the handoff.\nBound: 150k context." } });
+  writeFileSync(join(sub, "agent-a4.jsonl"), [brief, ...lines].join("\n"));
+  writeFileSync(join(sub, "agent-a4.meta.json"), JSON.stringify({ agentType: "job", description: "Character outfits again" }));
   const jobs = findJobs(root, "char-pipeline j[12]");
-  assert.deepEqual(jobs.map((j) => j.name).sort(), ["char-pipeline j1: catalogue", "char-pipeline j2: outfits"]);
+  assert.deepEqual(jobs.map((j) => j.name).sort(), ["Character outfits again", "char-pipeline j1: catalogue", "char-pipeline j2: outfits"], "by the description or the brief's first line");
   const rows = jobs.map((j) => ({ name: j.name, m: measure(parseTranscript(lines.join("\n"))) }));
   assert.equal(mean(rows.map((r) => r.m)).firstEdit, 13200);
   const text = format(rows);

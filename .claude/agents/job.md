@@ -22,6 +22,7 @@ The worktree guard refuses a command it cannot prove stays in your worktree, at 
 ## Waiting (D400)
 
 - Start a long run (`cargo xtask gpu …`, a film, a bench, a full check) with `run_in_background` and wait on its completion notice, one wait a run. Never `sleep` or an `until`/`while` poll: the hook refuses them. To block on a pid, `tail --pid=<pid> -f /dev/null` with the pid from `$!`.
+- A wait that would pass an hour (a queue, a long render, the developer) is not a wait: write the handoff and end. Your cache lives an hour (D397); past it your whole context is written again.
 - Never call `update_plan` or `wrap_up`: the app shows only the coordinator's.
 
 ## The job
@@ -30,10 +31,10 @@ The worktree guard refuses a command it cannot prove stays in your worktree, at 
 - What the developer saw in play is proven in the game's composed pose or frame, not on a clip or the course alone: the check fails on main first, then passes (the skill says which).
 - Check a premise before working round it: a fix for "X does not work here" starts with the one command that shows X failing. Change nothing outside the repository (crontab, services, packages, shell profiles, Windows settings): name it in your report.
 - A second attempt at one failure: step back (AGENTS.md). Two without a gain: stop and hand off what was tried.
-- Stop at the brief's bound, or at about 200k context, whichever comes first.
+- Your context bound is the brief's, else 150k (D627). The context hook warns at 80%: finish and land the step, start no new one. Its STOP means stop: no further read or step, straight to End. Read by grep or line range, never a whole large file; long output to `target/job/`, its tail read.
 
 ## End
 
-1. Write the handoff the brief names (`~/.cache/terra-handoff/<topic>-j<n>.md`, n the job's number in its line of work): the commits on main, each criterion's number before and after, what was tried and failed and why, and the next steps in order.
+1. Write the handoff the brief names (`~/.cache/terra-handoff/<topic>-j<n>.md`, n the job's number in its line of work): the commits on main, each criterion's number before and after, what was tried and failed and why, the next steps in order, and your tokens: `node tools/token-stats/job.mjs --job '<topic> j<n>'`'s row (D627).
 2. `git fetch`, then `git branch -r --contains <your last commit>`, so you report only what is on main. Leave your worktree to the coordinator.
 3. Report in at most 25 lines: the commits, the numbers, the handoff's path, then one `FOR REVIEW:` line per item for the developer (the review-desk skill's shape) and one `FOUND:` line per piece of out-of-scope work. Never open a session or a task chip.

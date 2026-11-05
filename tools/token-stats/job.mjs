@@ -6,7 +6,7 @@
 // See README.md. No dependencies.
 //
 //   node tools/token-stats/job.mjs PATH…           these transcripts, or the .jsonl files under these folders
-//   node tools/token-stats/job.mjs --job REGEX     subagents whose task (their .meta.json) matches, e.g. 'char-switch j[789]'
+//   node tools/token-stats/job.mjs --job REGEX     subagents whose task (.meta.json, or a job's brief's first line) matches, e.g. 'char-switch j[789]'
 //   … --json                                       the same as JSON
 //
 // A transcript does not count the tokens of a tool result, so context.mjs estimates them at four
@@ -14,11 +14,11 @@
 // call's output plus what came back, and that growth is shared among what came back by its
 // estimates. On our code and logs it is about 1.6 times the estimate.
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseTranscript } from "./context.mjs";
+import { firstPrompt, parseTranscript } from "./context.mjs";
 
 const EDITS = new Set(["Edit", "Write", "NotebookEdit", "MultiEdit"]);
 const ORIENT = /(^|[\s/"'=])(\.agents\/skills|\.claude\/skills|docs|research)\/|terra-handoff|AGENTS\.md|CLAUDE\.md|README\.md|xtask decision/;
@@ -154,9 +154,22 @@ function jsonlFiles(path) {
   return readdirSync(path, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? jsonlFiles(join(path, d.name)) : d.name.endsWith(".jsonl") ? [join(path, d.name)] : []));
 }
 
-// Subagent transcripts whose task matches, with the task as their name.
+// The first line of a transcript's brief ("Task: token-policy j1. Read …"), from its head.
+function briefLine(transcript) {
+  const fd = openSync(transcript, "r");
+  try {
+    const buf = Buffer.alloc(Math.min(fstatSync(fd).size, 16 * 1024));
+    readSync(fd, buf, 0, buf.length, 0);
+    return (firstPrompt(buf.toString("utf8")) ?? "").split("\n")[0].slice(0, 200);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+// Subagent transcripts whose task matches, by the Agent call's description or the first
+// line of the brief, with the task as their name.
 export function findJobs(projects, pattern) {
-  const re = new RegExp(pattern);
+  const re = new RegExp(pattern, "i");
   const found = [];
   if (!existsSync(projects)) return found;
   for (const project of readdirSync(projects)) {
@@ -174,7 +187,9 @@ export function findJobs(projects, pattern) {
           continue;
         }
         const transcript = join(sub, f.replace(/\.meta\.json$/, ".jsonl"));
-        if (re.test(meta.description ?? "") && existsSync(transcript)) found.push({ name: meta.description, file: transcript });
+        if (!existsSync(transcript)) continue;
+        if (re.test(meta.description ?? "")) found.push({ name: meta.description, file: transcript });
+        else if (meta.agentType === "job" && re.test(briefLine(transcript))) found.push({ name: meta.description, file: transcript });
       }
     }
   }

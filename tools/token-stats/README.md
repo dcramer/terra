@@ -87,7 +87,7 @@ A call's cause is, in order: its transcript's **first turn**; **compaction** sin
 
 | Command | What it does |
 |---|---|
-| `node tools/token-stats/job.mjs --job 'char-pipeline j[1-3]'` | The subagents whose task matches, a row each and their mean |
+| `node tools/token-stats/job.mjs --job 'char-pipeline j[1-3]'` | The subagents whose task (the Agent call's description, or a job's brief's first line) matches, ignoring case, a row each and their mean |
 | `node tools/token-stats/job.mjs PATH…` | These transcripts |
 | `… --json` | The same as JSON |
 
