@@ -237,7 +237,7 @@ pub(super) fn stream(
                     if let (true, Some(obstacles)) = (tree.solid, obstacles.as_mut()) {
                         obstacles.remove(placed.translation);
                     }
-                    commands.entity(tree.entity).try_despawn();
+                    super::felled::take_out(&mut commands, tree.entity);
                 }
             }
         }

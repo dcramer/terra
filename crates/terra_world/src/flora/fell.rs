@@ -1,7 +1,8 @@
 //! Felling the trees round a spot on asking (`world.fell`), as a level designer clears trees
 //! from round a set piece by hand: a scene clears the woods so a giant walking through them
 //! towers. Whatever planted a tree, it is found by its trunk ([`Trunks`]), taken out of the
-//! world with everything drawn for it, and no longer stops a walker ([`Obstacles`]). What a
+//! world with everything drawn for it, a woods tree's far card too (`woods::felled`, which
+//! files it as its `Growth` goes), and no longer stops a walker ([`Obstacles`]). What a
 //! forest baked from its crowns, its floor's shade, stays.
 
 use super::{Growth, Obstacles, Trunk, Trunks};

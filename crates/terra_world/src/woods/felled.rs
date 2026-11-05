@@ -30,6 +30,8 @@ pub(super) struct FarSquares {
     pub east: Vec3,
     pub north: Vec3,
     pub by_square: HashMap<(i32, i32), Entity>,
+    /// Where each grown tree felled since last time stood, filed as its `Growth` went.
+    felled: Vec<Vec3>,
 }
 
 impl FarSquares {
@@ -39,6 +41,7 @@ impl FarSquares {
             east,
             north,
             by_square: HashMap::default(),
+            felled: Vec::new(),
         }
     }
 
@@ -57,39 +60,59 @@ pub(super) fn square_of(middle: Vec3, east: Vec3, north: Vec3, at: Vec3) -> (i32
     (square.x, square.y)
 }
 
+/// Files where a grown tree of the woods stood as its `Growth` goes: felled for its logs, which
+/// takes the `Growth` (`terra_survival::harvest`), or despawned outright, as `world.fell` does.
+/// An observer, as the tree is still there to read while it goes; by the next frame a
+/// despawned one is not. A tree streamed out is taken out through [`take_out`], unfiled.
+pub(super) fn file_the_felled(
+    gone: On<Remove<Growth>>,
+    trees: Query<&WoodsTree>,
+    index: Option<ResMut<FarSquares>>,
+) {
+    if let (Ok(tree), Some(mut index)) = (trees.get(gone.entity), index) {
+        index.felled.push(tree.foot);
+    }
+}
+
+/// Takes a grown tree out of the world as it streams out, not felled: it stops being a
+/// [`WoodsTree`] first, so [`file_the_felled`] does not file it and its far card stays.
+pub(super) fn take_out(commands: &mut Commands, tree: Entity) {
+    commands
+        .entity(tree)
+        .try_remove::<WoodsTree>()
+        .try_despawn();
+}
+
 /// Merges again, without its card, each square a grown tree felled or cleared away since
-/// last time stood in (felling takes its `Growth`, `terra_survival::harvest`; building or
+/// last time stood in (felling takes its `Growth` or the tree, [`file_the_felled`]; building or
 /// digging where it stood hides it, `flora::ClearedAway`); a square left with none goes.
 pub(super) fn unfar_the_felled(
     mut commands: Commands,
-    mut felled: RemovedComponents<Growth>,
     mut cleared: MessageReader<ClearedAway>,
     trees: Query<&WoodsTree>,
-    (index, mut near): (Option<Res<FarSquares>>, Option<ResMut<NearWoods>>),
+    (index, mut near): (Option<ResMut<FarSquares>>, Option<ResMut<NearWoods>>),
     mut squares: Query<(&mut FarSquare, &mut Mesh3d, &mut Transform, &mut Aabb)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     terra_gen::stat_scope!("flora");
-    let Some(index) = index else {
-        felled.clear();
+    let Some(mut index) = index else {
         cleared.clear();
         return;
     };
     let mut changed: Vec<Entity> = Vec::new();
-    let gone = felled
-        .read()
-        .chain(cleared.read().map(|&ClearedAway(entity)| entity));
-    for entity in gone {
-        // A tree streamed out goes whole, its entity with it, so is not found here.
-        let Ok(tree) = trees.get(entity) else {
-            continue;
-        };
-        let key = foot_key(tree.foot);
+    let mut gone = std::mem::take(&mut index.felled);
+    gone.extend(
+        cleared
+            .read()
+            .filter_map(|&ClearedAway(entity)| trees.get(entity).ok().map(|tree| tree.foot)),
+    );
+    for foot in gone {
+        let key = foot_key(foot);
         // Felled or cleared for good: its block streamed in again leaves it out (D622).
         if let Some(near) = near.as_mut() {
             near.felled.insert(key);
         }
-        let Some(&square) = index.by_square.get(&index.square_of(tree.foot)) else {
+        let Some(&square) = index.by_square.get(&index.square_of(foot)) else {
             continue;
         };
         let Ok((mut far, ..)) = squares.get_mut(square) else {

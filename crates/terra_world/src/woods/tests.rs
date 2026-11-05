@@ -161,6 +161,37 @@ fn a_felled_grown_tree_leaves_its_far_square_and_the_rest_stay() {
     woods.only_the_other_card_left("felled");
 }
 
+/// A grown tree despawned outright, as `world.fell` takes the trees round a set piece, takes
+/// its far card with it as one felled for its logs does: it is filed as it goes, while it is
+/// still there to read.
+#[test]
+fn a_grown_tree_despawned_outright_leaves_its_far_square() {
+    let mut woods = FarWoods::new();
+    woods.app.update();
+    let standing = woods.standing;
+    woods.app.world_mut().despawn(standing);
+    woods.app.update();
+    woods.only_the_other_card_left("despawned");
+}
+
+/// A grown tree streamed out, past the near woods' reach, is not felled: its far card stays
+/// drawn and its block, streamed in again, lays it again.
+#[test]
+fn a_grown_tree_streamed_out_keeps_its_far_card() {
+    let mut woods = FarWoods::new();
+    woods.app.update();
+    let standing = woods.standing;
+    felled::take_out(&mut woods.app.world_mut().commands(), standing);
+    woods.app.update();
+    assert!(
+        woods.app.world().get_entity(standing).is_err(),
+        "it is gone"
+    );
+    assert_eq!(woods.vertices(), woods.both, "its card is still drawn");
+    let streamed = woods.app.world().resource::<near::NearWoods>();
+    assert!(!streamed.felled.contains(&foot_key(woods.felled_at)));
+}
+
 /// A grown tree cleared away by what is set down where it stood (as building over it or
 /// digging under it does, `flora`'s `make_way` and `follow_digs`) is hidden and takes its far
 /// card with it, as one felled does; one standing off the clearing keeps its card.
@@ -215,6 +246,7 @@ impl FarWoods {
         let mut app = App::new();
         app.init_resource::<Assets<Mesh>>()
             .init_resource::<Obstacles>()
+            .add_observer(felled::file_the_felled)
             .add_message::<crate::flora::ClearAround>()
             .add_message::<crate::flora::ClearedAway>()
             .add_systems(

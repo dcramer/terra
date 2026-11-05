@@ -241,6 +241,7 @@ pub fn plugin(app: &mut App) {
         .init_world_resource::<FarCards>()
         .world_resource::<felled::FarSquares>()
         .world_resource::<near::NearWoods>()
+        .add_observer(felled::file_the_felled)
         .configure_sets(
             OnEnter(InWorld),
             Planting.in_set(Building::View).before(LayingFloor),
