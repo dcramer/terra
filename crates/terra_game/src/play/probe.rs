@@ -45,7 +45,16 @@ const AIM_FRAMES: u32 = 90;
 pub fn plugin(app: &mut App) {
     app.init_resource::<Asked>()
         .add_systems(Startup, open_trace)
-        .add_systems(Update, (give, take, wear, aim).before(super::tool::Acting))
+        .add_systems(
+            Update,
+            (
+                give,
+                take,
+                wear,
+                aim.run_if(terra_world::instance::in_world),
+            )
+                .before(super::tool::Acting),
+        )
         .add_systems(Last, trace);
     method(app, "play.state", state);
     method(app, "play.warp", warp);

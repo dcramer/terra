@@ -71,7 +71,12 @@ pub fn plugin(app: &mut App) {
             OnEnter(InWorld),
             (unexplored, draw_land).in_set(Building::View),
         )
-        .add_systems(Update, (explore, toggle, place_marks).chain());
+        .add_systems(
+            Update,
+            (explore, toggle, place_marks)
+                .chain()
+                .run_if(terra_world::instance::in_world),
+        );
 }
 
 /// Each player has seen nothing of a world on entering it.

@@ -31,7 +31,7 @@ pub fn plugin(app: &mut App) {
         Update,
         (
             give_feet,
-            step,
+            step.run_if(terra_world::instance::in_world),
             creatures_heard,
             player_heard,
             cutting_heard,
