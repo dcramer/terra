@@ -132,12 +132,17 @@ export function parseTranscript(text, file = "") {
     const content = Array.isArray(message?.content) ? message.content : [];
 
     if (entry.type === "assistant" && message?.usage && typeof message.id === "string") {
+      const named = [];
       for (const block of content) {
-        if (block?.type === "tool_use") tools.set(block.id, { name: block.name, input: block.input ?? {} });
+        if (block?.type === "tool_use") {
+          tools.set(block.id, { name: block.name, input: block.input ?? {} });
+          named.push(block.name);
+        }
       }
       const u = message.usage;
       const known = byId.get(message.id);
       if (known) {
+        known.uses.push(...named);
         known.output = Math.max(known.output, u.output_tokens ?? 0);
         known.cache_read = Math.max(known.cache_read, u.cache_read_input_tokens ?? 0);
         known.cache_write = Math.max(known.cache_write, u.cache_creation_input_tokens ?? 0);
@@ -157,6 +162,7 @@ export function parseTranscript(text, file = "") {
         cache_read: u.cache_read_input_tokens ?? 0,
         cache_write: u.cache_creation_input_tokens ?? 0,
         ttl: write5m > 0 && write5m >= (u.cache_creation?.ephemeral_1h_input_tokens ?? 0) ? "5m" : "1h",
+        uses: named, // the tools this call asked for, by name
         added: pending,
       };
       pending = [];
@@ -176,7 +182,12 @@ export function parseTranscript(text, file = "") {
           const { tokens, images } = contentTokens(block.content);
           const item = { kind: "tool", tool: tool.name, tokens, images };
           if (tool.name === "Read") item.path = shortPath(tool.input.file_path, cwd);
-          if (tool.name === "Bash" || /device_bash$/.test(tool.name)) item.command = commandKey(tool.input.command);
+          if (tool.name === "Bash" || /device_bash$/.test(tool.name)) {
+            item.command = commandKey(tool.input.command);
+            item.line = String(tool.input.command ?? "").slice(0, 300); // for job.mjs's grouping by what was read
+          }
+          if (/^(Grep|Glob)$/.test(tool.name)) item.line = String(tool.input.pattern ?? "");
+          if (tool.name === "Agent") item.line = String(tool.input.subagent_type ?? "");
           pending.push(item);
         } else if (block?.type === "image") {
           pending.push({ kind: "prompt", tokens: imageTokens(block.source?.data), images: 1 });

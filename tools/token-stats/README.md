@@ -6,6 +6,7 @@ Records how many Claude tokens and Tripo credits each of us spends on Terra (D82
 - `report.mjs`: a script Claude Code runs as you work (see below). It reads Claude Code's transcripts under `~/.claude/projects` and the credits recorded for other services (below), and sends what it has not sent before. It needs Node 18 or later and nothing else.
 - `report.mjs --spend`: records the credits a task spent on another service, such as Tripo (below).
 - `context.mjs`: says where each session's context went, and nudges a session whose context has grown long ([below](#where-the-context-goes)).
+- `job.mjs`: what each job's context cost, measured: the context at its first edit, its summed input and what its reads carried ([below](#what-a-job-cost)).
 
 ## What counts, and counting once
 
@@ -79,6 +80,18 @@ It prints at most 60 lines, cheap for an agent to read: each session's turns and
 A call's cause is, in order: its transcript's **first turn**; **compaction** since the call before; **cache expired**, longer since the call before than the cache lives (an hour for a session, five minutes for a subagent), a long tool run counting as much as an idle wait, and the tool named; a **cache miss**, less than half the context before read back; otherwise **growth**, what was added since the call before (tool results, attachments, prompts, and that call's own output, thinking included), shared out by size. A transcript does not count the tokens of what it holds, so those sizes are estimates, four characters a token and images by their size; the report says how close they come to the writes measured. A message copied into a resumed session counts once.
 
 **The nudge.** After every tool call, `context.mjs --hook` (`.claude/settings.json`) reads the tail of the session's transcript, or a subagent's own, and when the last call's context has passed 200k tokens, and again at each 100k more, adds one line to what the model sees (`hookSpecificOutput.additionalContext`): finish the unit of work, hand off with a short summary, read by range or grep. Each threshold nudges once; after compaction shrinks the context, it nudges again when the context grows back past one. Why 200k: every turn reads the whole context again, and an idle hour writes it all again, at Opus 5.5's prices $0.04 and $1.60 a turn at 200k and growing with it, while a summary for a fresh session costs a few thousand tokens. It remembers the last threshold per session in `~/.cache/terra-token-stats/nudge/`, and takes about as long as Node takes to start, its own work under a millisecond.
+
+## What a job cost
+
+`job.mjs` is the yardstick for making agent work cheaper ([research](../../research/2026-11-05-agent-pipeline-tokens.md)): for each job, the context when it first edited a file, its summed input (each call reads the whole context again), its own output, its tool results, and how much of the summed input what it read before that first edit carried. The tool results are measured, not estimated: the context grows between two calls by the earlier call's output plus what came back, shared among what came back by its estimates (on our code and logs about 1.75 times `context.mjs`'s four characters a token). Below the table, the results by what was read: our source, search, orientation docs (skills, docs, research, handoffs, decisions), tool output and logs, git, images.
+
+| Command | What it does |
+|---|---|
+| `node tools/token-stats/job.mjs --job 'char-pipeline j[1-3]'` | The subagents whose task matches, a row each and their mean |
+| `node tools/token-stats/job.mjs PATH…` | These transcripts |
+| `… --json` | The same as JSON |
+
+**The baseline for character work**, the six character jobs before the status command (char-switch j7 to j9, char-pipeline j1 to j3, `--job 'char-switch j[789]|Pipeline j[123]'`), a job on average: 143 turns, 111k at the first edit, 221k peak, 21.3M summed input, 75k own output, 115k of tool results, 8.3M (39%) carried by what was read before the first edit; of the results, our source 38k, search 29k in 41 calls, orientation docs 21k, tool output 10k.
 
 ## Deploying the worker
 
