@@ -104,10 +104,30 @@ fn come_back(world: &mut World) {
     world.resource_mut::<Generating>().done(LAND);
 }
 
-/// The loading screen says which part of the land is being made.
+/// The seconds each part of the land takes, as [`Stage::SAID`] names them, then the rest of
+/// the load from the land made to the first playable frame, which the first view's ground
+/// is the last of: seed 9697367627075512559's New world, release (job
+/// 20261105-145004-9d5a-patch, a busy box): the start searched for in 3.6 s, the first town
+/// found in 16.9 s, the land made in 40.1 s, loaded in 91.4 s. Only their shares matter.
+const SHARES_S: [f32; 4] = [3.6, 19.1, 0.5, 16.9];
+const AFTER_THE_LAND_S: f32 = 51.3;
+
+/// The loading screen says which part of the land is being made, and the bar gives each
+/// part, and the ground after it, its measured share of the load (`loading::steps`): those
+/// made are done, the one under way is coming, those after are expected.
 fn said(making: Option<ResMut<Making>>, mut progress: ResMut<Progress>) {
-    if let Some(mut making) = making {
-        making.frames += 1;
-        progress.report(making.stage.said(), 1, 0);
+    let Some(mut making) = making else {
+        return;
+    };
+    making.frames += 1;
+    let now = making.stage.part();
+    for (part, (what, share_s)) in Stage::SAID.into_iter().zip(SHARES_S).enumerate() {
+        progress.expect(what, share_s);
+        match part.cmp(&now) {
+            std::cmp::Ordering::Less => progress.report(what, 0, 1),
+            std::cmp::Ordering::Equal => progress.report(what, 1, 0),
+            std::cmp::Ordering::Greater => {}
+        }
     }
+    progress.expect(crate::terrain::SHAPING, AFTER_THE_LAND_S);
 }

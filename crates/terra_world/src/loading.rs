@@ -19,7 +19,9 @@
 //! - shaders still compiling.
 //!
 //! Work only a feature knows about, such as ground still being meshed, it reports itself,
-//! with a system in [`Track`] that calls [`Progress::report`].
+//! with a system in [`Track`] that calls [`Progress::report`]. The bar gives each part its
+//! measured share of the load, which [`Progress::expect`] says, ahead of the part if known
+//! (`steps`).
 //!
 //! Another screen, such as a title screen, enters `Screen::Loading` to get the same screen
 //! for whatever it starts.
@@ -45,6 +47,7 @@ use bevy::{
 use std::time::Duration;
 
 pub mod hold;
+mod steps;
 #[cfg(test)]
 mod tests;
 pub use hold::Hold;
@@ -110,6 +113,8 @@ pub struct Loading {
     quiet: u32,
     /// How far the bar has come, which never goes back.
     shown: f32,
+    /// The steps of this load, each with its share of the bar.
+    steps: steps::Steps,
     /// How long the screen has been up, in real time.
     up_for: Duration,
     /// When a load after the first began, by the wall clock: a world chosen on the title
@@ -181,6 +186,10 @@ struct Part {
     what: &'static str,
     coming: usize,
     done: usize,
+    /// The seconds it is measured to take of a load, its share of the bar; 0 if unmeasured.
+    share_s: f32,
+    /// Whether it was reported, not only expected.
+    reported: bool,
 }
 
 impl Progress {
@@ -188,20 +197,44 @@ impl Progress {
     /// shown on the screen while it holds the most back, such as "Shaping the ground".
     /// Reports of the same thing add up.
     pub fn report(&mut self, what: &'static str, coming: usize, done: usize) {
-        match self.0.iter_mut().find(|part| part.what == what) {
-            Some(part) => {
-                part.coming += coming;
-                part.done += done;
+        let part = self.part(what);
+        part.coming += coming;
+        part.done += done;
+        part.reported = true;
+    }
+
+    /// Says that something takes about so many seconds of a load, measured, so the bar
+    /// gives it that share (`steps`): what is reported, or what is still to come in this
+    /// load, which the bar waits on from now until it is reported or passed by.
+    pub fn expect(&mut self, what: &'static str, share_s: f32) {
+        let part = self.part(what);
+        part.share_s = part.share_s.max(share_s);
+    }
+
+    fn part(&mut self, what: &'static str) -> &mut Part {
+        let at = match self.0.iter().position(|part| part.what == what) {
+            Some(at) => at,
+            None => {
+                self.0.push(Part {
+                    what,
+                    coming: 0,
+                    done: 0,
+                    share_s: 0.0,
+                    reported: false,
+                });
+                self.0.len() - 1
             }
-            None => self.0.push(Part { what, coming, done }),
-        }
+        };
+        &mut self.0[at]
     }
 
     fn coming(&self) -> usize {
         self.0.iter().map(|part| part.coming).sum()
     }
 
-    /// How far along, from 0 to 1, counting everything alike.
+    /// How far along, from 0 to 1, counting everything alike; the bar weights each part by
+    /// its share instead (`steps`).
+    #[cfg(test)]
     fn fraction(&self) -> f32 {
         let coming = self.coming();
         let all = coming + self.0.iter().map(|part| part.done).sum::<usize>();
@@ -216,6 +249,7 @@ impl Progress {
     fn summary(&self) -> String {
         self.0
             .iter()
+            .filter(|part| part.reported)
             .map(|part| {
                 let all = part.coming + part.done;
                 format!("{} {} of {all}", part.what, part.done)
@@ -511,6 +545,7 @@ fn cover(
     loading.asked = loading.files.len();
     loading.quiet = 0;
     loading.shown = 0.0;
+    loading.steps = steps::Steps::default();
     loading.up_for = Duration::ZERO;
     // What the render world said when last loading is no longer so.
     *drawables = Drawables::default();
@@ -613,7 +648,10 @@ fn watch(
     } else {
         loading.quiet + 1
     };
-    loading.shown = loading.shown.max(progress.fraction());
+    loading.steps.update(&progress);
+    // Not the most ever shown: the files counted before the land said its steps filled 42%
+    // of the bar by the 400th frame (`steps`).
+    loading.shown = loading.steps.fraction();
     bar.width = percent(100.0 * loading.shown);
     if status.0 != progress.status() {
         status.0 = progress.status().into();

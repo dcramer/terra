@@ -147,14 +147,13 @@ impl Terrain {
     }
 }
 
+/// What the loading screen says while the ground in view is meshed.
+pub const SHAPING: &str = "Shaping the ground";
+
 /// The loading screen waits for the ground in view to be meshed, but for its far levels.
 fn track(terrain: Res<Terrain>, mut progress: ResMut<Progress>) {
     let meshed = terrain.first.as_ref().map_or(0, first::Meshing::done);
-    progress.report(
-        "Shaping the ground",
-        terrain.coming_near(),
-        terrain.shown.len() + meshed,
-    );
+    progress.report(SHAPING, terrain.coming_near(), terrain.shown.len() + meshed);
 }
 
 /// Once the loading screen has lifted, asks the streaming's scheduler to mesh the first

@@ -98,7 +98,12 @@ impl Stage {
 
     /// What the land is being made as now.
     pub fn said(&self) -> &'static str {
-        Self::SAID[usize::from(self.0.load(Ordering::Relaxed)).min(Self::SAID.len() - 1)]
+        Self::SAID[self.part()]
+    }
+
+    /// Which of the parts is being made now.
+    pub fn part(&self) -> usize {
+        usize::from(self.0.load(Ordering::Relaxed)).min(Self::SAID.len() - 1)
     }
 }
 
