@@ -58,6 +58,7 @@ impl Kit {
                 (bark, end, stump.radius)
             })
             .collect();
+        lay.grow_all(&PLACEMENTS);
         let undergrowth = PLACEMENTS
             .iter()
             .map(|placement| {

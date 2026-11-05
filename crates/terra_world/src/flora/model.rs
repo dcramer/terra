@@ -3,6 +3,7 @@
 
 use super::super::flora_kinds::{Flora, FloraDef, Sway};
 use super::super::grown;
+use super::super::mesh_sink::MeshSink;
 use super::super::models::{Part, read_model};
 use bevy::{
     asset::RenderAssetUsages, mesh::Indices, platform::collections::HashMap, prelude::*,
@@ -28,7 +29,9 @@ pub(super) enum Drawn {
     Grown(Box<grown::Variant>),
 }
 
-/// Every kind's models, or its grown variants, by its place in `assets/data/flora.ron`.
+/// Every kind's models, or its grown variants, by its place in `assets/data/flora.ron`: every
+/// variant and model of every kind at once, over every core. One after the next they held
+/// the frame the world is entered in (crossing-freeze j2).
 pub(super) fn of_kinds(
     flora: &Flora,
     seed: Seed,
@@ -37,49 +40,81 @@ pub(super) fn of_kinds(
     assets: &AssetServer,
     (meshes, foliage): (&mut Assets<Mesh>, &mut Assets<grown::Foliage>),
 ) -> Vec<Vec<Model>> {
-    flora
-        .kinds()
+    let kinds = flora.kinds();
+    // Each kind's bark, made once on this thread, for all its variants.
+    let barks: Vec<Handle<grown::Foliage>> = kinds
         .iter()
         .map(|kind| {
-            if let Some(how) = &kind.grown {
-                let grew = grown::grow(
-                    how,
-                    &kind.name,
-                    seed.derive("grown").derive(&kind.name),
-                    kind.variants,
-                    kind.size.unwrap_or((1.0, 1.0)),
-                    cards,
-                    looks,
-                    assets,
-                    meshes,
-                    foliage,
-                );
-                return grew
-                    .into_iter()
-                    .map(|variant| Model {
-                        height: variant.height,
-                        spread: variant.spread,
-                        look: Drawn::Grown(Box::new(variant)),
-                    })
-                    .collect();
-            }
-            kind.models
-                .iter()
-                .filter_map(|name| match read_model(&format!("nature/{name}.glb")) {
-                    Ok(parts) => Some(build_model(kind, &parts, meshes)),
-                    Err(problem) => {
-                        error!("Could not read a model of {}. {problem}", kind.name);
-                        None
-                    }
-                })
-                .collect()
+            kind.grown
+                .as_ref()
+                .map_or_else(Handle::default, |how| looks.bark_of(how, assets, foliage))
         })
-        .collect()
+        .collect();
+    // A kind's variants grown, or its models read, each one a piece of work.
+    let work: Vec<(usize, u32)> = kinds
+        .iter()
+        .enumerate()
+        .flat_map(|(at, kind)| {
+            let many = match kind.grown {
+                Some(_) => kind.variants,
+                None => kind.models.len() as u32,
+            };
+            (0..many).map(move |one| (at, one))
+        })
+        .collect();
+    let made = MeshSink::making(meshes, |sink| {
+        terra_gen::par::map(&work, |&(at, one)| {
+            (
+                at,
+                model_of(&kinds[at], seed, (one, &barks[at]), cards, sink),
+            )
+        })
+    });
+    let mut models: Vec<Vec<Model>> = vec![Vec::new(); kinds.len()];
+    for (at, model) in made {
+        models[at].extend(model);
+    }
+    models
+}
+
+/// A kind's variant `one`, grown wearing `bark`, or its model `one`, read and built; none if
+/// its file cannot be read.
+fn model_of(
+    kind: &FloraDef,
+    seed: Seed,
+    (one, bark): (u32, &Handle<grown::Foliage>),
+    cards: &grown::Cards,
+    meshes: &MeshSink,
+) -> Option<Model> {
+    if let Some(how) = &kind.grown {
+        let variant = grown::grow_one(
+            how,
+            (&kind.name, seed.derive("grown").derive(&kind.name)),
+            (one, kind.variants),
+            kind.size.unwrap_or((1.0, 1.0)),
+            cards,
+            bark,
+            meshes,
+        );
+        return Some(Model {
+            height: variant.height,
+            spread: variant.spread,
+            look: Drawn::Grown(Box::new(variant)),
+        });
+    }
+    let name = &kind.models[one as usize];
+    match read_model(&format!("nature/{name}.glb")) {
+        Ok(parts) => Some(build_model(kind, &parts, meshes)),
+        Err(problem) => {
+            error!("Could not read a model of {}. {problem}", kind.name);
+            None
+        }
+    }
 }
 
 /// Turns a model's parts into one mesh in our colours, carrying how each vertex moves in
 /// the wind.
-pub(super) fn build_model(kind: &FloraDef, parts: &[Part], meshes: &mut Assets<Mesh>) -> Model {
+pub(super) fn build_model(kind: &FloraDef, parts: &[Part], meshes: &MeshSink) -> Model {
     let all = || parts.iter().flat_map(|part| part.positions.iter());
     let height = all().map(|p| p.y).fold(0.01, f32::max);
     let spread = all()

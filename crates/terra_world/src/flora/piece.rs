@@ -51,7 +51,11 @@ pub(super) fn draw(
             .entry((piece.kind, piece.model.clone()))
             .or_insert_with(
                 || match read_model(&format!("nature/{}.glb", piece.model)) {
-                    Ok(parts) => match build_model(kind, &parts, &mut meshes).look {
+                    Ok(parts) => match crate::mesh_sink::MeshSink::making(&mut meshes, |sink| {
+                        build_model(kind, &parts, sink)
+                    })
+                    .look
+                    {
                         Drawn::Mesh(mesh) => Some(mesh),
                         Drawn::Grown(_) => None,
                     },

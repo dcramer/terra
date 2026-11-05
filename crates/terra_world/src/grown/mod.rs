@@ -545,6 +545,20 @@ impl Looks {
         }
     }
 
+    /// The bark a kind of tree wears, made once for all its variants; none for a smaller plant.
+    pub fn bark_of(
+        &mut self,
+        def: &Grown,
+        assets: &AssetServer,
+        foliage: &mut Assets<Foliage>,
+    ) -> Handle<Foliage> {
+        let Grown::Tree(def) = def else {
+            return Handle::default();
+        };
+        let tint = Color::srgb(def.bark_tint.0, def.bark_tint.1, def.bark_tint.2);
+        self.bark(&def.bark, tint, assets, foliage)
+    }
+
     /// A bark, `materials/<name>`, tinted: its colour, relief, roughness and crevices.
     fn bark(
         &mut self,
@@ -631,7 +645,7 @@ fn vec3(rgb: (f32, f32, f32)) -> Vec3 {
 }
 
 /// Grows `count` variants of a kind from a seed, each at a height in `size` (a tree's;
-/// smaller plants are grown at about a metre and scaled where they stand).
+/// smaller plants are grown at about a metre and scaled where they stand), all at once.
 #[allow(clippy::too_many_arguments)]
 pub fn grow(
     def: &Grown,
@@ -645,85 +659,95 @@ pub fn grow(
     meshes: &mut Assets<Mesh>,
     foliage: &mut Assets<Foliage>,
 ) -> Vec<Variant> {
-    (0..count)
-        .map(|index| {
-            let mut dice = seed.index(u64::from(index)).rng();
-            match def {
-                Grown::Tree(def) => {
-                    let height = size.0 + (size.1 - size.0) * (index as f32 + 0.5) / count as f32;
-                    let shape = tree::grow(&mut dice, def, height);
-                    let (leaf, tint) = (cards.get(&def.leaves), vec3(def.tint));
-                    let canopy = tree::Canopy::of(&shape, tint);
-                    let pivots = tree::pivots(&shape);
-                    let mut wood = [0, 1, 2].map(|detail| tree::wood(&shape, detail, def.bark_m, &pivots));
-                    let cards = tree::crown_cards(&mut dice, &shape, &canopy);
-                    let mut crown = [0, 1, 2].map(|detail| tree::crown(&cards, &shape, leaf, detail, &pivots));
-                    for build in wood.iter_mut().chain(crown.iter_mut()) {
-                        build.see_sky(|at| canopy.sky(at));
-                    }
-                    let shadow_cards = tree::shadow_cards(&cards, &shape, leaf, &pivots);
-                    let far = tree::lumps(&shape, 1.0, leaf.colour * tint * 0.85, &pivots);
-                    let shadow_lumps = tree::lumps(&shape, SHADOW_LUMP, Vec3::ONE, &pivots);
-                    debug!(
-                        "{name} {index}, {height:.0} m: wood {} {} {}, crown {} {} {}, shadow {} {}, far {} triangles",
-                        wood[0].triangles(),
-                        wood[1].triangles(),
-                        wood[2].triangles(),
-                        crown[0].triangles(),
-                        crown[1].triangles(),
-                        crown[2].triangles(),
-                        shadow_cards.triangles(),
-                        shadow_lumps.triangles(),
-                        far.triangles()
-                    );
-                    let bark = looks.bark(
-                        &def.bark,
-                        Color::srgb(def.bark_tint.0, def.bark_tint.1, def.bark_tint.2),
-                        assets,
-                        foliage,
-                    );
-                    Variant {
-                        grew: Grew::Tree(Box::new(TreeModel {
-                            wood: wood.map(|build| meshes.add(build.mesh(true))),
-                            crown: crown.map(|build| meshes.add(build.mesh(false))),
-                            bark,
-                            far: meshes.add(far.mesh(false)),
-                            shadow_cards: meshes.add(shadow_cards.mesh(false)),
-                            shadow_lumps: meshes.add(shadow_lumps.mesh(false)),
-                            trunk_m: shape.trunk_m,
-                        })),
-                        height,
-                        spread: shape.trunk_m * 1.3,
-                    }
-                }
-                Grown::Bush(def) => {
-                    let build = plants::bush(&mut dice, def, cards.get(&def.leaves), vec3(def.tint));
-                    Variant {
-                        height: build.height(),
-                        spread: 0.3,
-                        grew: Grew::Bush(meshes.add(build.mesh(false))),
-                    }
-                }
-                Grown::Rosette(def) => {
-                    let build = plants::rosette(&mut dice, def, cards.get(&def.card), vec3(def.tint));
-                    Variant {
-                        height: build.height(),
-                        spread: 0.2,
-                        grew: Grew::Small(meshes.add(build.mesh(false))),
-                    }
-                }
-                Grown::Tuft(def) => {
-                    let card = &def.cards[index as usize % def.cards.len()];
-                    let build = plants::tuft(&mut dice, def.planes, cards.get(card), vec3(def.tint));
-                    Variant {
-                        height: build.height(),
-                        spread: 0.1,
-                        grew: Grew::Small(meshes.add(build.mesh(false))),
-                    }
-                }
-            }
+    let bark = looks.bark_of(def, assets, foliage);
+    let indices: Vec<u32> = (0..count).collect();
+    crate::mesh_sink::MeshSink::making(meshes, |sink| {
+        terra_gen::par::map(&indices, |&index| {
+            grow_one(def, (name, seed), (index, count), size, cards, &bark, sink)
         })
-        .collect()
+    })
+}
+
+/// Variant `index` of `count` of a kind, its meshes into `meshes`; a tree wears `bark`.
+pub fn grow_one(
+    def: &Grown,
+    (name, seed): (&str, Seed),
+    (index, count): (u32, u32),
+    size: (f32, f32),
+    cards: &Cards,
+    bark: &Handle<Foliage>,
+    meshes: &crate::mesh_sink::MeshSink,
+) -> Variant {
+    let mut dice = seed.index(u64::from(index)).rng();
+    match def {
+        Grown::Tree(def) => {
+            let height = size.0 + (size.1 - size.0) * (index as f32 + 0.5) / count as f32;
+            let shape = tree::grow(&mut dice, def, height);
+            let (leaf, tint) = (cards.get(&def.leaves), vec3(def.tint));
+            let canopy = tree::Canopy::of(&shape, tint);
+            let pivots = tree::pivots(&shape);
+            let mut wood = [0, 1, 2].map(|detail| tree::wood(&shape, detail, def.bark_m, &pivots));
+            let cards = tree::crown_cards(&mut dice, &shape, &canopy);
+            let mut crown =
+                [0, 1, 2].map(|detail| tree::crown(&cards, &shape, leaf, detail, &pivots));
+            for build in wood.iter_mut().chain(crown.iter_mut()) {
+                build.see_sky(|at| canopy.sky(at));
+            }
+            let shadow_cards = tree::shadow_cards(&cards, &shape, leaf, &pivots);
+            let far = tree::lumps(&shape, 1.0, leaf.colour * tint * 0.85, &pivots);
+            let shadow_lumps = tree::lumps(&shape, SHADOW_LUMP, Vec3::ONE, &pivots);
+            debug!(
+                "{name} {index}, {height:.0} m: wood {} {} {}, crown {} {} {}, shadow {} {}, far {} triangles",
+                wood[0].triangles(),
+                wood[1].triangles(),
+                wood[2].triangles(),
+                crown[0].triangles(),
+                crown[1].triangles(),
+                crown[2].triangles(),
+                shadow_cards.triangles(),
+                shadow_lumps.triangles(),
+                far.triangles()
+            );
+            Variant {
+                grew: Grew::Tree(Box::new(TreeModel {
+                    wood: wood.map(|build| meshes.add(build.mesh(true))),
+                    crown: crown.map(|build| meshes.add(build.mesh(false))),
+                    bark: bark.clone(),
+                    far: meshes.add(far.mesh(false)),
+                    shadow_cards: meshes.add(shadow_cards.mesh(false)),
+                    shadow_lumps: meshes.add(shadow_lumps.mesh(false)),
+                    trunk_m: shape.trunk_m,
+                })),
+                height,
+                spread: shape.trunk_m * 1.3,
+            }
+        }
+        Grown::Bush(def) => {
+            let build = plants::bush(&mut dice, def, cards.get(&def.leaves), vec3(def.tint));
+            Variant {
+                height: build.height(),
+                spread: 0.3,
+                grew: Grew::Bush(meshes.add(build.mesh(false))),
+            }
+        }
+        Grown::Rosette(def) => {
+            let build = plants::rosette(&mut dice, def, cards.get(&def.card), vec3(def.tint));
+            Variant {
+                height: build.height(),
+                spread: 0.2,
+                grew: Grew::Small(meshes.add(build.mesh(false))),
+            }
+        }
+        Grown::Tuft(def) => {
+            let card = &def.cards[index as usize % def.cards.len()];
+            let build = plants::tuft(&mut dice, def.planes, cards.get(card), vec3(def.tint));
+            Variant {
+                height: build.height(),
+                spread: 0.1,
+                grew: Grew::Small(meshes.add(build.mesh(false))),
+            }
+        }
+    }
 }
 
 /// Levels `first` to `last` of a tree `size` times the height the distances are for.
