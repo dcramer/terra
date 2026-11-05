@@ -12,6 +12,7 @@ use crate::loading::Screen;
 use crate::planet::{GroundLook, MainCamera, Planet};
 use bevy::platform::time::Instant;
 use bevy::prelude::*;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread::JoinHandle;
@@ -22,34 +23,46 @@ use terra_voxel::Sides;
 /// shape and to colour, and its vertices, for the log.
 type Meshed = (ChunkId, Sides, Option<Mesh>, [f32; 2], usize);
 
+/// The chunks of the first view chosen: those meshed now, and the far ones left for after
+/// the loading screen.
+type Chosen = (Vec<(ChunkId, Sides)>, Vec<(ChunkId, Sides)>);
+
+/// What the first view's thread gives back: every chunk the camera wants, the far ones left
+/// for later, and the near ones meshed.
+type FirstView = (HashMap<ChunkId, Sides>, Vec<(ChunkId, Sides)>, Vec<Meshed>);
+
 /// The first view being meshed on its own thread.
 pub(super) struct Meshing {
-    thread: Option<JoinHandle<Vec<Meshed>>>,
-    /// How many chunks, and how many of them are meshed so far.
-    count: usize,
+    thread: Option<JoinHandle<FirstView>>,
+    /// How many chunks, once chosen, and how many of them are meshed so far.
+    count: Arc<AtomicUsize>,
     done: Arc<AtomicUsize>,
     began: Instant,
-    /// The seconds choosing them took, on the main thread, and the threads meshing them.
-    chosen: f32,
+    /// The seconds choosing them took, in thousandths, and the threads meshing them.
+    chosen_ms: Arc<AtomicUsize>,
     threads: usize,
     /// Whether it is meshed behind the loading screen, on its thread.
     behind: bool,
 }
 
 impl Meshing {
-    /// The chunks still being meshed.
+    /// The chunks still being meshed, none while they are being chosen.
     pub(super) fn left(&self) -> usize {
-        self.count - self.done.load(Ordering::Relaxed).min(self.count)
+        let count = self.count.load(Ordering::Relaxed);
+        count - self.done.load(Ordering::Relaxed).min(count)
     }
 
     /// The chunks meshed so far.
     pub(super) fn done(&self) -> usize {
-        self.count - self.left()
+        let count = self.count.load(Ordering::Relaxed);
+        self.done.load(Ordering::Relaxed).min(count)
     }
 }
 
 /// Chooses the first view's chunks from where the camera stands and meshes them: on a thread
-/// of its own behind a loading screen, at once without one.
+/// of its own behind a loading screen, the choosing too (it held the frame the world is
+/// entered in for 0.9 to 1.8 s on the mountain lake, crossing-freeze j3), at once without
+/// one.
 pub(super) fn first_view(
     mut commands: Commands,
     planet: Res<Planet>,
@@ -67,43 +80,48 @@ pub(super) fn first_view(
         .and_then(|asked| asked.0)
         .unwrap_or_default()
         .ground_reach();
-    let wanted = wanted(&planet, viewer, reach);
-    let chosen = began.elapsed().as_secs_f32();
-    let (chunks, later): (Vec<(ChunkId, Sides)>, Vec<(ChunkId, Sides)>) = wanted
-        .iter()
-        .map(|(&id, &sides)| (id, sides))
-        .partition(|(id, _)| id.level < super::STREAM_FROM);
-    terrain.later = later.into_iter().collect();
-    terrain.wanted = wanted;
     terrain.chosen_from = Some(viewer);
     terrain.chosen_reach = reach;
     terrain.edits_seen = planet.voxels().edit_count();
-    let done = Arc::new(AtomicUsize::new(0));
+    let (count, done, chosen_ms): (Arc<AtomicUsize>, Arc<AtomicUsize>, Arc<AtomicUsize>) =
+        default();
     let mut meshing = Meshing {
         thread: None,
-        count: chunks.len(),
+        count: Arc::clone(&count),
         done: Arc::clone(&done),
         began,
-        chosen,
+        chosen_ms: Arc::clone(&chosen_ms),
         threads: terra_gen::par::width(),
         behind: screen.is_some(),
     };
+    // Chosen, then meshed, counting them for the loading screen as they are.
+    let first = move |planet: &Planet| -> FirstView {
+        let wanted = wanted(planet, viewer, reach);
+        let (chunks, later): Chosen = wanted
+            .iter()
+            .map(|(&id, &sides)| (id, sides))
+            .partition(|(id, _)| id.level < super::STREAM_FROM);
+        chosen_ms.store(began.elapsed().as_millis() as usize, Ordering::Relaxed);
+        count.store(chunks.len(), Ordering::Relaxed);
+        let meshed = mesh_all(planet, &chunks, &done);
+        (wanted, later, meshed)
+    };
     if screen.is_none() {
-        let meshed = mesh_all(&planet, &chunks, &done);
+        let view = first(&planet);
         put_in(
             &mut commands,
             &mut meshes,
             &look,
             &mut terrain,
             &meshing,
-            meshed,
+            view,
         );
         return;
     }
     let planet = planet.clone();
     let thread = std::thread::Builder::new()
         .name("terra-first-view".into())
-        .spawn(move || mesh_all(&planet, &chunks, &done))
+        .spawn(move || first(&planet))
         .unwrap_or_else(|why| {
             panic!("the first view's thread could not be started ({why}); the machine is out of threads or memory")
         });
@@ -133,7 +151,7 @@ pub(super) fn come_back(
     let Some(thread) = first.thread.take() else {
         return;
     };
-    let meshed = thread
+    let view = thread
         .join()
         .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
     put_in(
@@ -142,7 +160,7 @@ pub(super) fn come_back(
         &look,
         &mut terrain,
         &first,
-        meshed,
+        view,
     );
 }
 
@@ -160,15 +178,18 @@ fn mesh_all(planet: &Planet, chunks: &[(ChunkId, Sides)], done: &AtomicUsize) ->
     })
 }
 
-/// The meshed chunks shown, and how long they took said.
+/// The chunks chosen made the terrain's, the meshed ones shown, and how long they took said.
+/// Nothing is chosen again meanwhile (`super::choose` waits for the first view).
 fn put_in(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     look: &GroundLook,
     terrain: &mut Terrain,
     meshing: &Meshing,
-    meshed: Vec<Meshed>,
+    (wanted, later, meshed): FirstView,
 ) {
+    terrain.wanted = wanted;
+    terrain.later = later.into_iter().collect();
     let count = meshed.len();
     let mut levels: std::collections::BTreeMap<u8, (usize, f32, f32, usize)> = default();
     for (id, sides, mesh, [shaped, coloured], vertices) in meshed {
@@ -198,7 +219,7 @@ fn put_in(
     info!(
         "Meshed the first view of the ground{behind}: {count} chunks in {secs:.2} s on {} threads, {:.2} s of it choosing them, {} far ones of level {} and up left for after the loading screen; {} (summed over threads).",
         meshing.threads,
-        meshing.chosen,
+        meshing.chosen_ms.load(Ordering::Relaxed) as f32 / 1000.0,
         terrain.later.len(),
         super::STREAM_FROM,
         by_level.join("; ")
