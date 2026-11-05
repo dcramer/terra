@@ -9,7 +9,7 @@ use bevy::prelude::*;
 /// and is changed only if what it is told of them has: the maps are painted again in place,
 /// and a changed material has every plant drawn with it specialized again, some 20 ms of the
 /// render thread over two frames. A card of the atlas is told which kind each cell is, cooked
-/// or as the picture it was cooked from (the lush forest gives that its own mipmaps).
+/// or, where none is cooked, as the picture it would be cooked from.
 pub(super) fn follow_climate(
     maps: Option<Res<crate::climate::ClimateMaps>>,
     fields: Option<Res<crate::climate::ClimateFields>>,

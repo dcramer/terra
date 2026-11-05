@@ -637,8 +637,9 @@ const KINDS: [(Species, Form, bool, (f32, f32)); 30] = [
 
 /// A bark's material, `materials/<name>`, tinted: its colour, normal, roughness and
 /// crevices, and its furrows relief-mapped from its height, `relief` deep (D218), and how
-/// much moss it grows, 0 to 1: a pine's bark grows little. Under materials/, so
-/// terra_world gives it its mipmaps.
+/// much moss it grows, 0 to 1: a pine's bark grows little. Read cooked where the bake has
+/// cooked it (D188), as the grown plants' barks are; otherwise terra_world gives it its
+/// mipmaps.
 fn bark_material(
     assets: &AssetServer,
     materials: &mut Assets<Foliage>,
@@ -648,18 +649,26 @@ fn bark_material(
     relief: f32,
     moss: f32,
 ) -> Handle<Foliage> {
-    let map = |file: &str, colour: bool| -> Handle<Image> {
-        assets
-            .load_builder()
-            .with_settings(move |settings: &mut ImageLoaderSettings| settings.is_srgb = colour)
-            .load(format!("materials/{name}/{file}"))
+    use terra_core::cooked::{Cook, Kind};
+    let map = |file: &str, kind: Kind| -> Handle<Image> {
+        let colour = kind == Kind::Colour;
+        terra_world::cooked::picture(
+            assets,
+            &format!("materials/{name}/{file}"),
+            Cook {
+                kind,
+                layers: 1,
+                mips: true,
+            },
+            move |settings: &mut ImageLoaderSettings| settings.is_srgb = colour,
+        )
     };
-    let arm = map("arm.jpg", false);
+    let arm = map("arm.jpg", Kind::Data);
     materials.add(Foliage {
         base: StandardMaterial {
             base_color: tint,
-            base_color_texture: Some(map("color.jpg", true)),
-            normal_map_texture: Some(map("normal.jpg", false)),
+            base_color_texture: Some(map("color.jpg", Kind::Colour)),
+            normal_map_texture: Some(map("normal.jpg", Kind::Normal)),
             // Occlusion in red, roughness in green, metal in blue.
             occlusion_texture: Some(arm.clone()),
             metallic_roughness_texture: Some(arm),
@@ -667,7 +676,7 @@ fn bark_material(
             metallic: 0.0,
             reflectance: 0.3,
             // The furrows read as cut into the trunk, not painted on it.
-            depth_map: Some(map("trunk_depth.jpg", false)),
+            depth_map: Some(map("trunk_depth.jpg", Kind::Data)),
             parallax_depth_scale: relief,
             parallax_mapping_method: ParallaxMappingMethod::Relief { max_steps: 5 },
             max_parallax_layer_count: 16.0,
@@ -742,7 +751,9 @@ impl Looks {
     ) -> Self {
         let mut looks = Self {
             wind: wind.clone(),
-            atlas: assets.load(cards.atlas.clone()),
+            // Cooked, as the flora's: read raw, its 4096² mip chain took 4.2 s of a frame
+            // as the world was entered.
+            atlas: terra_world::grown::atlas(cards, assets),
             cut: cards.cut,
             leaf_normals: terra_world::grown::leaf_normals(cards, assets),
             crown_leaves: Handle::default(),
@@ -1234,7 +1245,7 @@ fn plant(
     ];
     let ivy_material = materials.add(Foliage {
         base: StandardMaterial {
-            base_color_texture: Some(assets.load(litter.atlas.clone())),
+            base_color_texture: Some(terra_world::grown::atlas(&litter, &assets)),
             alpha_mode: AlphaMode::Mask(litter.cut),
             cull_mode: None,
             double_sided: false,
