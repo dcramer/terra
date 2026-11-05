@@ -94,6 +94,12 @@ pub struct MarketTown {
     /// lakes found on its own ten-metre grid, `round::Round`), not the search's coarse one;
     /// none if not asked.
     pub water_m: Option<(f32, f32, f32)>,
+    /// No water within so many metres of its middle as the world draws it (the lakes and
+    /// pools of the land worked out round the start, `round::Round::wet_within`, on their own
+    /// grids), so its houses, yards and streets stand on dry ground back from any shore: the
+    /// search's 50 m grid misses a pond of a few cells, and seed 7's first town stood in one
+    /// (D620). None to look only on the search's grid.
+    pub dry_m: Option<f32>,
     /// Where a demo's place was found and stays, kilometres east and north of the planet's
     /// start (`--site <name>@<east>,<north>`, D393): of the places that fit within
     /// [`PINNED_WITHIN_KM`](crate::site::PINNED_WITHIN_KM) of it, the nearest is taken, so a change to the land that makes
@@ -124,15 +130,18 @@ impl MarketTown {
         step_m: 50.0,
         beyond_m: 0.0,
         water_m: None,
+        dry_m: None,
         pinned_km: None,
     };
 
     /// A world's first town (D620): the demo's valley town, looked for round the player's
     /// start rather than the planet's, within a walk of it ([`FIRST_SEARCH_M`]) and past the
-    /// start's own ground, so its fields do not take the player's plot.
+    /// start's own ground, so its fields do not take the player's plot; on dry ground, its
+    /// last houses well back from any water ([`FIRST_DRY_M`]).
     pub const FIRST: MarketTown = MarketTown {
         search_m: FIRST_SEARCH_M[0],
         beyond_m: 450.0,
+        dry_m: Some(FIRST_DRY_M),
         ..MarketTown::DEMO
     };
 
@@ -275,6 +284,9 @@ pub struct Searched {
     /// than it may be (`MarketTown::beyond_m`).
     pub off_pin: usize,
     pub fit: usize,
+    /// Fit on the search's grid, but with water within `MarketTown::dry_m` as the world
+    /// draws it.
+    pub wet: usize,
     /// Whether the place found is by a lake, as asked.
     pub by_water: bool,
 }
@@ -301,25 +313,39 @@ const EYE_M: f32 = 1.7;
 /// the first, and failing that the second (seed 102's nearest is 7 km off, D620).
 pub const FIRST_SEARCH_M: [f32; 2] = [3_000.0, 9_000.0];
 
+/// How far round a world's first town's middle no water lies, in metres: its houses reach
+/// about 120 m out (`MarketTown::reach_m`) and its square may move 40 m to level ground as it
+/// is laid, so a bank of meadow lies between its last yards and any shore.
+pub const FIRST_DRY_M: f32 = 180.0;
+
+/// How many of the best places a search looks at again at once for water near (`dry_m`)
+/// past the land worked out round the start, each on a window of its own.
+const DRY_BATCH: usize = 16;
+
 impl Land {
     /// The best place for a market town near the planet's start, if the land has one.
     pub fn market_town(&self, start: Vec3, want: &MarketTown) -> Option<TownSite> {
-        self.market_town_searched(start, want).0
+        self.market_town_searched(start, want, None).0
     }
 
     /// A world's first town (D620): [`MarketTown::FIRST`] round the player's start, within
-    /// the first of [`FIRST_SEARCH_M`] and failing that the second; none on a world whose
-    /// land makes no such place so near (one without mountains has none), and what ruled the
-    /// last search's places out. Seconds on a 30 km world: 0.3 to 2.4 s the near search, to
-    /// 11 s the far one (seeds 1 to 9001).
-    pub fn first_town(&self, start: Vec3) -> (Option<TownSite>, Searched) {
+    /// the first of [`FIRST_SEARCH_M`] and failing that the second, on dry ground as `round`
+    /// draws its water (the land worked out round the start, as the game has it; else a
+    /// window round each place); none on a world whose land makes no such place so near (one
+    /// without mountains has none), and what ruled the last search's places out. Seconds on
+    /// a 30 km world: 0.3 to 2.4 s the near search, to 11 s the far one (seeds 1 to 9001).
+    pub fn first_town(
+        &self,
+        start: Vec3,
+        round: Option<&crate::round::Round>,
+    ) -> (Option<TownSite>, Searched) {
         let mut searched = Searched::default();
         for search_m in FIRST_SEARCH_M {
             let want = MarketTown {
                 search_m,
                 ..MarketTown::FIRST
             };
-            let (site, tried) = self.market_town_searched(start, &want);
+            let (site, tried) = self.market_town_searched(start, &want, round);
             searched = tried;
             if site.is_some() {
                 return (site, searched);
@@ -329,11 +355,12 @@ impl Land {
     }
 
     /// [`Land::market_town`], and what each test ruled out, so a query that finds nothing
-    /// says why.
+    /// says why; on dry ground as `round` draws its water if it asks (`MarketTown::dry_m`).
     pub fn market_town_searched(
         &self,
         start: Vec3,
         want: &MarketTown,
+        round: Option<&crate::round::Round>,
     ) -> (Option<TownSite>, Searched) {
         let mut searched = Searched::default();
         if self.ground.mountains().is_none() {
@@ -540,26 +567,63 @@ impl Land {
             }
         }
         fits.sort_by(|a, b| a.0.total_cmp(&b.0));
-        // By a lake if asked: the best few places looked at again as the world draws its
-        // water, the first with a lake's shore where it is wanted and none in its plots.
-        let watered = want.water_m.and_then(|wanted| {
-            let tried: Vec<&(f32, TownSite)> = fits.iter().take(WATER_TRIED).collect();
-            let found =
-                crate::maps::par_map(&tried, |(_, site)| self.lake_beside(site, want, wanted));
-            tried.iter().zip(found).find_map(|((_, site), water)| {
-                water.map(|water| TownSite {
-                    water: Some(water),
-                    ..*site
-                })
-            })
-        });
+        let watered = self.by_water(&fits, want);
         searched.by_water = watered.is_some();
-        let best = watered.or_else(|| fits.first().map(|(_, site)| *site));
+        let best = watered.or_else(|| self.driest(&fits, want, round, &mut searched));
         let best = best.map(|site| TownSite {
             start: self.start_beside(&site, want),
             ..site
         });
         (best, searched)
+    }
+
+    /// By a lake if the query asks (`MarketTown::water_m`): the best few places that fit
+    /// (`fits`, best first) looked at again as the world draws its water, the first with a
+    /// lake's shore where it is wanted and none in its plots.
+    fn by_water(&self, fits: &[(f32, TownSite)], want: &MarketTown) -> Option<TownSite> {
+        let wanted = want.water_m?;
+        let tried: Vec<&(f32, TownSite)> = fits.iter().take(WATER_TRIED).collect();
+        let found = crate::maps::par_map(&tried, |(_, site)| self.lake_beside(site, want, wanted));
+        tried.iter().zip(found).find_map(|((_, site), water)| {
+            water.map(|water| TownSite {
+                water: Some(water),
+                ..*site
+            })
+        })
+    }
+
+    /// The best of the places that fit (`fits`, best first), on dry ground if the query asks
+    /// (`MarketTown::dry_m`): the first with no water within reach as the world draws it,
+    /// the land worked out round the start (`round`) where it reaches, else the lakes found
+    /// on a window round the place, a batch at a time. How many were passed over goes in
+    /// `searched.wet`.
+    fn driest(
+        &self,
+        fits: &[(f32, TownSite)],
+        want: &MarketTown,
+        round: Option<&crate::round::Round>,
+        searched: &mut Searched,
+    ) -> Option<TownSite> {
+        let Some(dry_m) = want.dry_m else {
+            return fits.first().map(|(_, site)| *site);
+        };
+        // Past the land worked out, its lakes filled over a window well wider than the
+        // town's reach, so a pond's basin is not cut off by the window's edge and spilled.
+        let windowed = |site: &TownSite| {
+            crate::water::Waters::round(self, site.toward, dry_m * 2.0 + 2_000.0, WATER_CELL_M)
+                .wet_within(site.toward, dry_m)
+                .unwrap_or(true)
+        };
+        let wet = |site: &TownSite| match round.and_then(|r| r.wet_within(site.toward, dry_m)) {
+            Some(wet) => wet,
+            None => windowed(site),
+        };
+        fits.chunks(DRY_BATCH).find_map(|batch| {
+            let wets = crate::maps::par_map(batch, |(_, site)| wet(site));
+            let first = wets.iter().position(|&wet| !wet);
+            searched.wet += first.unwrap_or(batch.len());
+            first.map(|k| batch[k].1)
+        })
     }
 
     /// Where a lake's nearest shore stands from a town's middle, metres east and north, if
@@ -706,7 +770,7 @@ mod tests {
         for seed in [2, 7, 102] {
             let land = seeded(seed, 30_000.0);
             let start = crate::spawn::find(&land);
-            let (site, searched) = land.first_town(start);
+            let (site, searched) = land.first_town(start, None);
             let site = site.unwrap_or_else(|| panic!("seed {seed}: no town: {searched:?}"));
             let off = (land.surface(site.toward) - land.surface(start)).length();
             let far_m = FIRST_SEARCH_M[1] * core::f32::consts::SQRT_2;
@@ -722,7 +786,7 @@ mod tests {
     fn the_town_found_is_level_warm_wooded_round_and_under_peaks() {
         let land = land(30_000.0);
         let want = MarketTown::DEMO;
-        let (site, searched) = land.market_town_searched(PLANET_START, &want);
+        let (site, searched) = land.market_town_searched(PLANET_START, &want, None);
         let site = site.unwrap_or_else(|| panic!("no town site: {searched:?}"));
         assert_fits(&land, &site, &want);
         let ground = land.surface(site.toward);
@@ -820,7 +884,7 @@ mod tests {
             pinned_km: Some(pin),
             ..MarketTown::SETTLEMENT
         };
-        let (site, searched) = land.market_town_searched(PLANET_START, &want);
+        let (site, searched) = land.market_town_searched(PLANET_START, &want, None);
         let site = site.unwrap_or_else(|| panic!("no settlement at its pin: {searched:?}"));
         // Where it was found, to the log's hundredth of a kilometre, not merely within the
         // pin's 200 m.

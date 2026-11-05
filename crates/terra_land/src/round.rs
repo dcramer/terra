@@ -170,6 +170,19 @@ impl Round {
             .or_else(|| self.waters.lake_near(up, cells))
     }
 
+    /// Whether any water stands within `within_m` of a direction as the world draws it: a
+    /// cell of its lakes or of ground under the sea, on the lakes' ten-metre grid, or a cell
+    /// of the patterned ground's pools on theirs (`Waters::wet_within`); none if that ground
+    /// reaches past the lakes' grid, where none are known.
+    pub fn wet_within(&self, direction: Vec3, within_m: f32) -> Option<bool> {
+        let lakes = self.waters.wet_within(direction, within_m)?;
+        let pools = self
+            .pools
+            .as_ref()
+            .and_then(|pools| pools.wet_within(direction, within_m));
+        Some(lakes || pools == Some(true))
+    }
+
     /// The trees a point on the ground holds, facing `normal`, standing on `footing`.
     pub fn stand(&self, point: Vec3, normal: Vec3, footing: Footing) -> Stand {
         let place = self.land.place(point, normal);

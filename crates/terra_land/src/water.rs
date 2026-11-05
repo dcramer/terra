@@ -114,6 +114,30 @@ impl Waters {
         best.map(|(_, (c, r))| self.region.direction(c, r))
     }
 
+    /// Whether any cell of its lakes, or of ground under the sea, lies within `within_m` of a
+    /// direction, on its own grid, as what draws its water sees it (a lake's surface reaches a
+    /// cell past its shore, `terra_world::lakes`, so a cell whose middle is half a cell further
+    /// counts); none if that ground reaches past its region, where it knows no lakes.
+    pub fn wet_within(&self, direction: Vec3, within_m: f32) -> Option<bool> {
+        let region = &self.region;
+        let (c, r) = region.cell_of(direction)?;
+        let reach = libm::ceilf(within_m / region.cell_m) as usize + 1;
+        let n = region.cells;
+        if c < reach || r < reach || c + reach >= n || r + reach >= n {
+            return None;
+        }
+        let middle = region.offset(c, r);
+        let sea = self.sea_radius_m.map(|sea| sea - self.radius_m);
+        let reach_m = within_m + region.cell_m * 0.5;
+        Some((r - reach..=r + reach).any(|row| {
+            (c - reach..=c + reach).any(|column| {
+                let wet = self.lake_at(column, row).is_some()
+                    || sea.is_some_and(|sea| region.height(column, row) < sea);
+                wet && region.offset(column, row).distance(middle) <= reach_m
+            })
+        }))
+    }
+
     /// The same waters with only the lakes `keep` says, the rest dry ground.
     pub fn keeping(mut self, keep: impl Fn(&Lake) -> bool) -> Self {
         let kept: Vec<bool> = self.lakes.lakes.iter().map(&keep).collect();

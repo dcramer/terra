@@ -143,7 +143,9 @@ pub fn land_of(
 fn first_town(planet: &Planet, start: &Start) -> Option<terra_land::town::TownSite> {
     let round = planet.round()?;
     let began = std::time::Instant::now();
-    let (site, searched) = round.land.first_town(start.translation.normalize());
+    let (site, searched) = round
+        .land
+        .first_town(start.translation.normalize(), Some(round.as_ref()));
     let took = began.elapsed().as_secs_f32();
     let Some(site) = site else {
         info!("First town: none near the start ({searched:?}), {took:.1} s");

@@ -227,7 +227,7 @@ pub fn find_site(planet: &Planet, name: &str) -> Found {
                     terra_land::town::MarketTown::SETTLEMENT
                 }
             };
-            let (site, searched) = land.market_town_searched(terra_land::PLANET_START, &want);
+            let (site, searched) = land.market_town_searched(terra_land::PLANET_START, &want, None);
             let site = site.unwrap_or_else(|| {
                 panic!(
                     "--site {name}: no place for a market town on this world ({searched:?}); it needs --radius 30000"

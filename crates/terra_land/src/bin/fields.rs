@@ -210,7 +210,7 @@ fn run() -> Result<(), String> {
                     terra_land::town::MarketTown::SETTLEMENT
                 }
             };
-            let (found, searched) = land.market_town_searched(PLANET_START, &want);
+            let (found, searched) = land.market_town_searched(PLANET_START, &want, None);
             let found =
                 found.ok_or_else(|| format!("no place for a town on this world: {searched:?}"))?;
             let peak_km = land.east_north_km(found.toward, found.peak);
