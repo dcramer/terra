@@ -68,7 +68,12 @@ struct Readout;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(InWorld), setup.in_set(Building::Stage))
-        .add_systems(Update, (stream, chop, update_readout).chain());
+        .add_systems(
+            Update,
+            (stream, chop, update_readout)
+                .chain()
+                .run_if(terra_world::instance::in_world),
+        );
 }
 
 /// The direction to a point within a cell, given as fractions (0 to 1) across and up it.

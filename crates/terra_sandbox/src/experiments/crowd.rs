@@ -39,7 +39,10 @@ struct Crowd {
 
 pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(InWorld), setup.in_set(Building::Stage))
-        .add_systems(Update, (spawn, report));
+        .add_systems(
+            Update,
+            (spawn, report).run_if(terra_world::instance::in_world),
+        );
 }
 
 fn setup(

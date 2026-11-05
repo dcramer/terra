@@ -238,10 +238,14 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                plant.run_if(not(resource_exists::<Forest>)),
-                far_land.run_if(resource_added::<Forest>),
+                // The forest is the world's: planted once its land is made (D623).
+                (
+                    plant.run_if(not(resource_exists::<Forest>)),
+                    far_land.run_if(resource_added::<Forest>),
+                    follow_detail,
+                )
+                    .run_if(terra_world::instance::in_world),
                 add_mipmaps,
-                follow_detail,
             ),
         );
 }

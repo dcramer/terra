@@ -37,7 +37,12 @@ struct HarvestLog {
 pub fn plugin(app: &mut App) {
     app.init_world_resource::<HarvestLog>()
         .add_systems(OnEnter(InWorld), spawn.in_set(Building::Stage))
-        .add_systems(Update, (harvest, update_readout).chain());
+        .add_systems(
+            Update,
+            (harvest, update_readout)
+                .chain()
+                .run_if(terra_world::instance::in_world),
+        );
 }
 
 pub(super) struct Placement {

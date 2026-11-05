@@ -20,7 +20,10 @@ use terra_world::planet::Planet;
 const STUMP_SCALE: (f32, f32) = (0.4, 2.5);
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(Update, stump_the_felled);
+    app.add_systems(
+        Update,
+        stump_the_felled.run_if(terra_world::instance::in_world),
+    );
 }
 
 /// The flora's kind a tree of a species is cut as.

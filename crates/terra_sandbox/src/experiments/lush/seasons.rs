@@ -10,7 +10,10 @@ use terra_world::daylight::Clock;
 use terra_world::sky_occlusion::{self, SkyOccluders};
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, follow_leaves);
+    app.add_systems(
+        Update,
+        follow_leaves.run_if(terra_world::instance::in_world),
+    );
 }
 
 /// How much of the sky a broadleaf's crown still hides bare, of what it hides in full leaf:

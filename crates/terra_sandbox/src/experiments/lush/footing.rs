@@ -53,7 +53,10 @@ pub(super) fn plugin(app: &mut App) {
     app.init_resource::<Shapes>()
         .init_resource::<Prints>()
         .init_resource::<Track>()
-        .add_systems(Update, (footings, trunks));
+        .add_systems(
+            Update,
+            (footings, trunks).run_if(terra_world::instance::in_world),
+        );
     if app
         .world()
         .contains_resource::<bevy::remote::RemoteMethods>()
