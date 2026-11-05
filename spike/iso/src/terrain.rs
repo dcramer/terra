@@ -25,6 +25,25 @@ pub fn woods(p: Vec2) -> f32 {
     smooth(10.5, 15.0, d)
 }
 
+/// How trodden bare the ground is: the camp's earth about the fire, the paths worn from it
+/// to the pond and out west through the wood, and a few scuffed patches in the clearing.
+pub fn bare(p: Vec2) -> f32 {
+    let fire = crate::scene::FIRE;
+    let wobble = fbm(p * 0.6, 91) - 0.5;
+    let camp = smooth(3.8, 1.2, p.distance(fire) + wobble * 1.8);
+    let path = |a: Vec2, b: Vec2, w: f32| {
+        let ab = b - a;
+        let t = ((p - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0);
+        let d = p.distance(a + ab * t) + wobble * 0.8;
+        smooth(w, 0.0, d) * (0.55 + 0.45 * smooth(0.3, 0.6, fbm(p * 0.9, 95)))
+    };
+    let paths = path(fire, POND + Vec2::new(-4.5, -1.5), 0.75)
+        .max(path(fire, Vec2::new(-9.0, 5.5), 0.65))
+        .max(path(Vec2::new(-9.0, 5.5), Vec2::new(-20.0, 9.0), 0.55));
+    let scuffs = smooth(0.68, 0.8, fbm(p * 0.35, 93)) * (1.0 - woods(p));
+    (camp.max(paths * 0.7).max(scuffs * 0.5)).clamp(0.0, 1.0)
+}
+
 /// The pond's water, metres.
 pub const WATER: f32 = -0.55;
 pub const POND: Vec2 = Vec2::new(13.0, 7.0);

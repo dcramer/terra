@@ -92,8 +92,11 @@ fn cover(p: Vec2, n: Vec3, h: f32) -> ([f32; 4], [f32; 2]) {
     let rock = steep;
     let moss = (terrain::smooth(0.95, 0.82, n.y) * (1.0 - steep) + woods * terrain::smooth(0.55, 0.7, patch) * 0.8)
         .min(1.0);
-    let leaves = woods * (1.0 - rock);
-    let grass = (1.0 - woods * 0.85) * (1.0 - rock) * (1.0 - wet);
+    let bare = terrain::bare(p) * (1.0 - rock);
+    // Trodden earth: the litter's dark soil, a little mud in it.
+    let leaves = (woods * (1.0 - rock)).max(bare * 0.7);
+    let wet = wet.max(bare * 0.12);
+    let grass = (1.0 - woods * 0.85) * (1.0 - rock) * (1.0 - wet) * (1.0 - bare * 0.85);
     let roots = woods * terrain::smooth(0.6, 0.75, terrain::fbm(p * 0.3, 37)) * (1.0 - rock);
     ([grass, leaves, moss, rock], [wet, roots])
 }

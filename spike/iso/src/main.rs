@@ -125,7 +125,7 @@ fn main() {
             PostStartup,
             |mut gizmos: ResMut<GizmoConfigStore>, args: Res<Args>, mut commands: Commands| {
                 let (config, _) = gizmos.config_mut::<DefaultGizmoConfigGroup>();
-                config.line.width = 2.5;
+                config.line.width = 1.8;
                 config.depth_bias = -1.0;
                 commands.insert_resource(args.hour);
             },

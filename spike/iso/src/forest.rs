@@ -148,9 +148,9 @@ fn crown(tips: &[Tip], rng: &mut Rng) -> (Mesh, Shell) {
             let out = (c - middle) / half;
             let depth = out.length().min(1.2);
             // Deeper in the crown, darker; a few clumps yellower.
-            let shade = 0.45 + 0.55 * (depth / 1.2).powf(0.8);
-            let warm = rng.f() * 0.12;
-            let tint = [shade * (0.92 + warm), shade * (1.0 + warm * 0.4), shade * 0.85, 1.0];
+            let shade = 0.28 + 0.6 * (depth / 1.2).powf(1.2);
+            let warm = rng.f() * 0.1;
+            let tint = [shade * (0.74 + warm), shade * (0.92 + warm * 0.3), shade * 0.62, 1.0];
             let cell = if rng.f() < 0.75 { OAKBRANCH } else { OAK };
             let card_n = across.cross(up).normalize();
             cards.quad(
@@ -187,12 +187,11 @@ fn grass(land: &Land, lo: Vec2, size: f32, rng: &mut Rng, nav: &Nav) -> Option<M
         let p = lo + Vec2::new(rng.f(), rng.f()) * size;
         let woods = terrain::woods(p);
         let clump = terrain::fbm(p * 0.35, 51);
-        let want = (1.0 - woods * 0.9) * terrain::smooth(0.25, 0.55, clump + 0.25 * (1.0 - woods));
+        // In clumps and drifts, not a lawn; none where the ground is trodden bare.
+        let want = (1.0 - woods * 0.9)
+            * terrain::smooth(0.38, 0.62, clump + 0.2 * (1.0 - woods))
+            * terrain::smooth(0.6, 0.15, terrain::bare(p));
         if rng.f() > want || land.height(p) < WATER + 0.12 || land.slope(p) > 0.55 {
-            continue;
-        }
-        // Trodden bare round the fire.
-        if p.distance(FIRE) < 1.6 + rng.f() * 0.8 {
             continue;
         }
         let _ = nav;
@@ -265,7 +264,7 @@ fn plant(
         cull_mode: None,
         perceptual_roughness: 0.75,
         reflectance: 0.25,
-        diffuse_transmission: 0.35,
+        diffuse_transmission: 0.2,
         ..default()
     };
     let leaves = foliage::material(&mut materials, &mut mats, cards.clone(), 0.0, 0.035, true);

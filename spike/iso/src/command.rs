@@ -312,17 +312,14 @@ fn circles(
     mut markers: ResMut<Markers>,
     land: Res<Land>,
 ) {
-    let green = LinearRgba::rgb(0.2, 3.0, 0.3);
+    // Quiet enough not to be the loudest thing on screen.
+    let green = LinearRgba::rgb(0.16, 1.2, 0.22);
     for (e, actor, tr, sel) in &members {
         let r = actor.radius * 1.5;
         if sel {
             ring(&mut gizmos, &land, tr.translation().xz(), r, green);
         } else if hovered.0 == Some(e) {
             ring(&mut gizmos, &land, tr.translation().xz(), r, green * 0.35);
-        }
-        // Where they are going, a faint dot.
-        if sel && let Some(end) = actor.path.back() {
-            ring(&mut gizmos, &land, *end, 0.12, green * 0.5);
         }
     }
     for (e, actor, tr) in &folk {
