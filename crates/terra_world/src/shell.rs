@@ -1135,6 +1135,7 @@ impl Plugin for ShellPlugin {
             .add_plugins((
                 loading::plugin,
                 crate::mipmaps::plugin,
+                crate::bounds::plugin,
                 audio::plugin(sound),
                 FreeCameraPlugin,
                 EguiPlugin::default(),
