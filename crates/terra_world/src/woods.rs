@@ -31,6 +31,7 @@ use bevy::{
 };
 use std::sync::Arc;
 
+mod felled;
 mod outline;
 
 pub use terra_land::woods::TreeKind;
@@ -231,6 +232,7 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<FarWoods>::default())
         .world_resource::<Conifers>()
         .init_world_resource::<FarCards>()
+        .world_resource::<felled::FarSquares>()
         .configure_sets(
             OnEnter(InWorld),
             Planting.in_set(Building::View).before(LayingFloor),
@@ -241,6 +243,7 @@ pub fn plugin(app: &mut App) {
             (
                 see_horizon.run_if(resource_exists_and_changed::<crate::horizon::HorizonPicture>),
                 (stream_cards.run_if(resource_exists::<FarCards>)).run_if(crate::streaming::lifted),
+                felled::unfar_the_felled,
             ),
         );
 }
@@ -421,10 +424,8 @@ fn squares(
 ) -> HashMap<(i32, i32), Vec<Card>> {
     let mut squares: HashMap<(i32, i32), Vec<Card>> = HashMap::default();
     for card in cards {
-        let offset = card.tree.at - middle;
-        let at = Vec2::new(offset.dot(east), offset.dot(north));
-        let square = (at / SQUARE_M).floor().as_ivec2();
-        squares.entry((square.x, square.y)).or_default().push(card);
+        let square = felled::square_of(middle, east, north, card.tree.at);
+        squares.entry(square).or_default().push(card);
     }
     squares
 }
@@ -660,7 +661,11 @@ fn plant(
     let mut canopy = Crowns::default();
     for tree in &near {
         let planted = planted(tree);
-        let mut entity = commands.spawn((Name::new("Woods tree"), Visibility::default()));
+        let mut entity = commands.spawn((
+            Name::new("Woods tree"),
+            Visibility::default(),
+            felled::WoodsTree { foot: tree.at },
+        ));
         let drawn = conifers.draw(&mut entity, &planted);
         // A solid one felled is no longer found among the trunks (`Trunks::near`).
         trunks.add(crate::flora::Trunk {
@@ -722,10 +727,19 @@ fn plant(
     });
     let squares = squares(middle, east, north, cards);
     let square_count = squares.len();
-    for (_, cards) in squares {
+    // A square holding a grown tree's card keeps its cards, to be merged again without it
+    // when the tree is felled (`felled`).
+    let mut holding_grown = felled::FarSquares::new(middle, east, north);
+    for (square, cards) in squares {
         let (mesh, middle, aabb) = merged(&cards);
-        commands.spawn(far_square(meshes.add(mesh), material.clone(), middle, aabb));
+        let mut entity =
+            commands.spawn(far_square(meshes.add(mesh), material.clone(), middle, aabb));
+        if cards.iter().any(|card| card.grown.is_some()) {
+            entity.insert(felled::FarSquare { cards });
+            holding_grown.by_square.insert(square, entity.id());
+        }
     }
+    commands.insert_resource(holding_grown);
     far_cards.asked = Some((middle, seed, material));
     say_planted(near.len(), mid.len(), square_count, &drawn_as, began);
 }

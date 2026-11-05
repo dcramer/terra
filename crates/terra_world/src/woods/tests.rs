@@ -140,3 +140,64 @@ fn a_tree_toward_its_limit_is_shorter_and_squatter() {
     // Standing up off the ground, whatever its turn.
     assert!((tall.rotation * Vec3::Y).dot(ground.normalize()) > 0.999);
 }
+
+/// A grown tree felled takes its far card with it: the square holding it is merged again
+/// without it, so it does not come back as a billboard past its last level, and the square's
+/// other cards stay as they were.
+#[test]
+fn a_felled_grown_tree_leaves_its_far_square_and_the_rest_stay() {
+    use crate::flora::Growth;
+    let ground = Vec3::new(0.0, 30_000.0, 0.0);
+    // Both in the square east and north of the middle.
+    let felled_at = ground + Vec3::new(10.0, 0.0, -5.0);
+    let kept_at = ground + Vec3::new(30.0, 0.0, -40.0);
+    let card = |at, grown| Card {
+        tree: tree(at, TreeKind::Pine, 0.8),
+        widen: 1.0,
+        grown,
+    };
+    let cards = vec![card(felled_at, Some(drawn())), card(kept_at, None)];
+    let both = merged(&cards).0.count_vertices();
+    let one = merged(&cards[1..]).0.count_vertices();
+    assert!(one < both);
+
+    let mut app = App::new();
+    app.init_resource::<Assets<Mesh>>()
+        .add_systems(Update, felled::unfar_the_felled);
+    let mut index = felled::FarSquares::new(ground, Vec3::X, Vec3::NEG_Z);
+    assert_eq!(index.square_of(felled_at), index.square_of(kept_at));
+    let (mesh, middle, aabb) = merged(&cards);
+    let handle = app.world_mut().resource_mut::<Assets<Mesh>>().add(mesh);
+    let square = app
+        .world_mut()
+        .spawn((
+            Mesh3d(handle),
+            Transform::from_translation(middle),
+            aabb,
+            felled::FarSquare { cards },
+        ))
+        .id();
+    index.by_square.insert(index.square_of(felled_at), square);
+    app.insert_resource(index);
+    let standing = app
+        .world_mut()
+        .spawn((
+            felled::WoodsTree { foot: felled_at },
+            Growth::new(None, Some(felled_at), 1.4),
+        ))
+        .id();
+    let vertices = |app: &App| {
+        let handle = &app.world().get::<Mesh3d>(square).unwrap().0;
+        let meshes = app.world().resource::<Assets<Mesh>>();
+        meshes.get(handle).unwrap().count_vertices()
+    };
+    app.update();
+    assert_eq!(vertices(&app), both, "standing, its card is drawn");
+
+    app.world_mut().entity_mut(standing).remove::<Growth>();
+    app.update();
+    let far = app.world().get::<felled::FarSquare>(square).unwrap();
+    assert_eq!(far.cards.len(), 1);
+    assert_eq!(far.cards[0].tree.at, kept_at);
+    assert_eq!(vertices(&app), one, "felled, only the other card is drawn");
+}
