@@ -51,7 +51,8 @@ impl KnownStart {
 
 /// A world's land: its planet, the start on it and the site it was asked to stand at
 /// (`--site`). On a world with mountains the land round the start is worked out before
-/// anything stands on it (D322): its lakes, seasons and snow on the clock's date. A site the
+/// anything stands on it (D322): its lakes, seasons and snow on the clock's date, and the
+/// start's plot chosen on dry ground once its lakes are known. A site the
 /// land's rules make is found first, and the start stood on its shore once its lakes are
 /// known. A start found before (`known`) is taken for a planet of its seed and radius.
 pub fn land_of(
@@ -84,15 +85,19 @@ pub fn land_of(
             (planet, start, Some(Sited(found)), towns)
         }
         None => {
+            // The lakes are known before the start's plot is chosen, so it is never chosen
+            // under one's water (seed 9697367627075512559 stood knee-deep): the plot is
+            // within 600 m of the planet's start, well inside the land looked round.
+            let looked = planet.has_mountains() && !yard;
+            if looked {
+                planet.look_round(planet.start(), ROUND_M, day);
+            }
             let start = Start::choose(&planet, yard);
             let mut towns = Towns::default();
-            if planet.has_mountains() && !yard {
-                planet.look_round(start.translation, ROUND_M, day);
-                if let Some(site) = first_town(&planet, &start) {
-                    let want = terra_land::town::MarketTown::FIRST;
-                    planet.clear_woods(|land| want.clearings(land, &site));
-                    towns.0.push(site);
-                }
+            if looked && let Some(site) = first_town(&planet, &start) {
+                let want = terra_land::town::MarketTown::FIRST;
+                planet.clear_woods(|land| want.clearings(land, &site));
+                towns.0.push(site);
             }
             (planet, start, None, towns)
         }
@@ -267,6 +272,67 @@ mod tests {
             far.push(seen_m);
         }
         assert!(far[1] > far[0], "{far:?}");
+    }
+
+    /// A new world's start is never under a lake's water: neither its base's plot nor where
+    /// the player arrives by the door, about 7 m east and 12 m south of its corner
+    /// (`terra_bases::Site::approach`). Seed 9697367627075512559 stood knee-deep in a lake, its
+    /// start chosen before its lakes were known; the rest are random seeds of the sweep's. Slow,
+    /// a 30 km world a seed, on the CPU: `cargo xtask remote-render --cpu -- cargo test
+    /// --release -p terra_world --lib a_new_worlds_start -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn a_new_worlds_start_is_never_under_a_lakes_water() {
+        let seeds: [u64; 8] = [
+            9697367627075512559,
+            11178272265655892607,
+            17407411704616813729,
+            17492275374842887031,
+            14695981039346656037,
+            14695981039346656045,
+            14695981039346656053,
+            14695981039346656061,
+        ];
+        let mut wet = Vec::new();
+        for seed in seeds {
+            let args = ["--experiment", "play", "--radius", "30000", "--seed"];
+            let args = args.iter().map(|a| a.to_string()).chain([seed.to_string()]);
+            let options = Options::from_args(args).unwrap();
+            let at = std::time::Instant::now();
+            let (planet, start, _, _) = land_of(&first_world(&options), &options, None);
+            let lakes = planet.waters().expect("a 30 km world's lakes are found");
+            // The plot and 3 m round it, every metre, and the way out of the door to where the
+            // player arrives.
+            let mut points: Vec<(f32, f32)> = Vec::new();
+            for east in -9..=24 {
+                for south in -9..=6 {
+                    points.push((east as f32, south as f32));
+                }
+            }
+            points.extend((6..=14).map(|south| (7.25, south as f32)));
+            let under: Vec<(f32, f32)> = points
+                .into_iter()
+                .filter(|&(east, south)| {
+                    let ground = planet.ground_at(start.at(east, south));
+                    lakes
+                        .lake_level(ground.normalize())
+                        .is_some_and(|level| level > ground.length())
+                })
+                .collect();
+            eprintln!(
+                "seed {seed}: worked out in {:.1} s, {} lakes, {} points under water",
+                at.elapsed().as_secs_f32(),
+                lakes.lakes().iter().filter(|lake| lake.cells > 0).count(),
+                under.len()
+            );
+            if let Some((east, south)) = under.first() {
+                wet.push(format!(
+                    "seed {seed}: {} points under a lake, the first {east} m east and {south} m south",
+                    under.len()
+                ));
+            }
+        }
+        assert!(wet.is_empty(), "{}", wet.join("; "));
     }
 
     /// Shadows' levels of detail are measured from the main camera, not from whichever

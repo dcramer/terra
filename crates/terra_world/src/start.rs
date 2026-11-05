@@ -267,7 +267,8 @@ pub fn find_site(planet: &Planet, name: &str) -> Found {
     }
 }
 
-/// Where to stand a plot: the most level ground near the start that is clear of the sea,
+/// Where to stand a plot: the most level ground near the start that is clear of the sea and
+/// of the lakes known (`dry`),
 /// turned so its +Z side, a base's door, looks out over the water if there is any; failing
 /// any within 126 m, the nearest out to 600 m (seed 1's valley, D596).
 fn choose_site(planet: &Planet, plot: &Plot) -> Transform {
@@ -330,7 +331,9 @@ fn choose_site(planet: &Planet, plot: &Plot) -> Transform {
                     .sum();
                 let score = (highest - lowest) - 0.8 * water_ahead as f32 - 0.5 * grassy
                     + 0.04 * (above_sea - 4.0).abs();
-                if best.as_ref().is_none_or(|(least, _)| score < *least) {
+                if best.as_ref().is_none_or(|(least, _)| score < *least)
+                    && dry(planet, &frame, low, high, middle)
+                {
                     best = Some((score, frame));
                 }
             }
@@ -372,6 +375,32 @@ fn ground_under(planet: &Planet, frame: &Transform, low: Vec3, high: Vec3) -> (f
         x += 3.0;
     }
     (lowest, highest)
+}
+
+/// Whether a frame's plot, every 3 m between its bounds, and the way out of its door on the
+/// +Z side to where the player arrives (`terra_bases::Site::approach`, about 12 m out) are
+/// all out of a lake's or a pool's water, once the land round was looked at (D322). The sea
+/// is kept off by the plot's height over it alone, as before lakes, so the test planet's
+/// start, which every scripted tool's places are measured from, stays where it was.
+fn dry(planet: &Planet, frame: &Transform, low: Vec3, high: Vec3, middle: Vec3) -> bool {
+    let mut points = Vec::new();
+    let mut x = low.x;
+    while x <= high.x {
+        let mut z = low.z;
+        while z <= high.z {
+            points.push(Vec3::new(x, 0.0, z));
+            z += 3.0;
+        }
+        x += 3.0;
+    }
+    points.extend([6.0, 9.0, 12.0, 15.0].map(|out| Vec3::new(middle.x, 0.0, high.z + out - 3.0)));
+    let sea = planet.sea_radius_m();
+    points.into_iter().all(|point| {
+        let point = frame.transform_point(point);
+        let ground = planet.ground_at(point).length();
+        // Under water over ground above the sea: a lake's or a pool's.
+        ground <= sea || ground >= planet.water_radius_m(point)
+    })
 }
 
 /// The points a floor over these squares of the grid rests on, in metres east and south:
