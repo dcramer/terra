@@ -2,6 +2,7 @@
 //! like on our engine and assets. See README.md.
 
 mod camera;
+mod camp;
 mod command;
 mod foliage;
 mod forest;
@@ -120,6 +121,7 @@ fn main() {
             water::plugin,
             wildlife::plugin,
             motes::plugin,
+            camp::plugin,
         ))
         .add_systems(
             PostStartup,
@@ -149,7 +151,7 @@ fn shoot(
             .spawn(Screenshot::image(image.0.clone()))
             .observe(save_to_disk(path.clone()));
     }
-    if frame.0 == args.frames + 8 {
+    if frame.0 == args.frames + 30 {
         exit.write(AppExit::Success);
     }
 }

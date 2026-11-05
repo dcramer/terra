@@ -106,7 +106,11 @@ fn spawn(mut commands: Commands, asset: Res<AssetServer>, nav: Res<Nav>, land: R
         );
     }
     // Hares out in the grass.
-    for at in [Vec2::new(-6.5, -4.0), Vec2::new(3.5, 7.5), Vec2::new(-8.0, 3.5)] {
+    for at in [
+        Vec2::new(-6.5, -4.0),
+        Vec2::new(3.5, 7.5),
+        Vec2::new(-8.0, 3.5),
+    ] {
         let at = open(at);
         let s = next();
         put(
@@ -155,7 +159,11 @@ fn spawn(mut commands: Commands, asset: Res<AssetServer>, nav: Res<Nav>, land: R
         }
     }
     // Mallards on the pond.
-    for off in [Vec2::new(-1.5, 0.5), Vec2::new(0.8, -1.0), Vec2::new(1.6, 1.2)] {
+    for off in [
+        Vec2::new(-1.5, 0.5),
+        Vec2::new(0.8, -1.0),
+        Vec2::new(1.6, 1.2),
+    ] {
         let at = POND + off;
         let s = next();
         let mut duck = Actor::new(MALLARD, 0.35, 1.2, 0.5, 0.2);
@@ -385,7 +393,10 @@ mod tests {
     use super::*;
 
     fn beast(habit: Habit, at: Vec2) -> (Actor, Beast) {
-        (Actor::new(HIND, 1.2, 7.5, 1.6, 0.5), Beast::new(habit, at, 3.0, 7.0, 16.0, 3))
+        (
+            Actor::new(HIND, 1.2, 7.5, 1.6, 0.5),
+            Beast::new(habit, at, 3.0, 7.0, 16.0, 3),
+        )
     }
 
     #[test]
@@ -397,7 +408,10 @@ mod tests {
         graze(&mut deer, &mut mind, at, Some(walker), 0.016, &nav, &land);
         assert!(deer.running, "it runs");
         let end = *deer.path.back().expect("it has somewhere to go");
-        assert!(end.distance(walker) > at.distance(walker) + 8.0, "away from the walker: {end}");
+        assert!(
+            end.distance(walker) > at.distance(walker) + 8.0,
+            "away from the walker: {end}"
+        );
         // Arrived, it stands alert, then grazes or wanders on, no longer running.
         deer.path.clear();
         graze(&mut deer, &mut mind, end, None, 0.016, &nav, &land);
@@ -410,10 +424,26 @@ mod tests {
         let at = Vec2::new(-4.0, -3.5);
         let (mut bird, mut mind) = beast(Habit::Bird, at);
         mind.flee = 14.0;
-        peck(&mut bird, &mut mind, at, Some(at + Vec2::X), 0.016, &nav, &land);
+        peck(
+            &mut bird,
+            &mut mind,
+            at,
+            Some(at + Vec2::X),
+            0.016,
+            &nav,
+            &land,
+        );
         let to = *bird.path.back().expect("it flies somewhere");
         // Halfway, it is up in the air; at the end, down.
-        peck(&mut bird, &mut mind, at.lerp(to, 0.5), None, 0.016, &nav, &land);
+        peck(
+            &mut bird,
+            &mut mind,
+            at.lerp(to, 0.5),
+            None,
+            0.016,
+            &nav,
+            &land,
+        );
         assert!(bird.lift > 2.0, "lift {}", bird.lift);
         bird.path.clear();
         peck(&mut bird, &mut mind, to, None, 0.016, &nav, &land);

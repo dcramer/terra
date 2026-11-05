@@ -55,7 +55,10 @@ fn rim_for(hour: Hour) -> LinearRgba {
 #[allow(clippy::too_many_arguments)]
 fn swap(
     mut commands: Commands,
-    added: Query<(Entity, &MeshMaterial3d<StandardMaterial>), Added<MeshMaterial3d<StandardMaterial>>>,
+    added: Query<
+        (Entity, &MeshMaterial3d<StandardMaterial>),
+        Added<MeshMaterial3d<StandardMaterial>>,
+    >,
     parents: Query<&ChildOf>,
     actors: Query<Option<&Tint>, With<Actor>>,
     standard: Res<Assets<StandardMaterial>>,
@@ -78,7 +81,9 @@ fn swap(
                 };
                 let mut base = base.clone();
                 let c = base.base_color.to_linear();
-                base.base_color = LinearRgba::new(c.red * tint.x, c.green * tint.y, c.blue * tint.z, c.alpha).into();
+                base.base_color =
+                    LinearRgba::new(c.red * tint.x, c.green * tint.y, c.blue * tint.z, c.alpha)
+                        .into();
                 let h = rims.add(ExtendedMaterial {
                     base,
                     extension: RimExt { rim },

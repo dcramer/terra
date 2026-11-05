@@ -156,7 +156,8 @@ fn rise(time: Res<Time>, land: Res<Land>, mut embers: Query<(&mut Ember, &mut Tr
             continue;
         }
         let k = age / e.life;
-        let swirl = Vec3::new((age * 4.0 + e.seed).sin(), 0.0, (age * 3.3 + e.seed).cos()) * 0.12 * k;
+        let swirl =
+            Vec3::new((age * 4.0 + e.seed).sin(), 0.0, (age * 3.3 + e.seed).cos()) * 0.12 * k;
         let start = Vec3::new((e.seed * 7.1).sin(), 0.0, (e.seed * 3.7).cos()) * 0.3;
         tr.translation = base
             + start
@@ -217,7 +218,11 @@ fn tongue_image() -> Image {
         }
     }
     Image::new(
-        Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
         TextureDimension::D2,
         data,
         TextureFormat::Rgba8Unorm,

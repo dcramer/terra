@@ -79,7 +79,15 @@ pub struct Cards {
 
 impl Cards {
     /// A card about `c`, `a` across and `b` up (the cell's top), in atlas cell `cell`.
-    pub fn quad(&mut self, c: Vec3, a: Vec3, b: Vec3, cell: Vec2, normal: impl Fn(Vec3) -> Vec3, tint: [f32; 4]) {
+    pub fn quad(
+        &mut self,
+        c: Vec3,
+        a: Vec3,
+        b: Vec3,
+        cell: Vec2,
+        normal: impl Fn(Vec3) -> Vec3,
+        tint: [f32; 4],
+    ) {
         let base = self.pos.len() as u32;
         for (x, y) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)] {
             let p = c + a * (x - 0.5) + b * (y - 0.5);
@@ -93,7 +101,8 @@ impl Cards {
             self.col.push(tint);
             self.sway.push([y, if self.leaf { 1.0 } else { 0.0 }]);
         }
-        self.idx.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+        self.idx
+            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
     pub fn mesh(self) -> Mesh {
@@ -133,7 +142,10 @@ fn crown(tips: &[Tip], rng: &mut Rng) -> (Mesh, Shell) {
     });
     let half = ((hi - lo) * 0.5 + 1.0).max(Vec3::splat(1.0));
     let shell = Shell { middle, half };
-    let mut cards = Cards { leaf: true, ..default() };
+    let mut cards = Cards {
+        leaf: true,
+        ..default()
+    };
     for t in tips {
         let count = (3.0 + t.mass * 0.35).min(7.0) as usize;
         for _ in 0..count {
@@ -150,7 +162,12 @@ fn crown(tips: &[Tip], rng: &mut Rng) -> (Mesh, Shell) {
             // Deeper in the crown, darker; a few clumps yellower.
             let shade = 0.28 + 0.6 * (depth / 1.2).powf(1.2);
             let warm = rng.f() * 0.1;
-            let tint = [shade * (0.74 + warm), shade * (0.92 + warm * 0.3), shade * 0.62, 1.0];
+            let tint = [
+                shade * (0.74 + warm),
+                shade * (0.92 + warm * 0.3),
+                shade * 0.62,
+                1.0,
+            ];
             let cell = if rng.f() < 0.75 { OAKBRANCH } else { OAK };
             let card_n = across.cross(up).normalize();
             cards.quad(
@@ -247,6 +264,46 @@ fn grass(land: &Land, lo: Vec2, size: f32, rng: &mut Rng, nav: &Nav) -> Option<M
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Where an oak stands, how large and turned.
+pub struct Spot {
+    pub at: Vec2,
+    pub scale: f32,
+    pub yaw: f32,
+}
+
+/// The oaks' places, the same every run: in the wood, off the water and the steep, apart.
+/// The ground reads them too, for the shade under each crown (scene::cover).
+pub fn tree_spots(land: &Land) -> Vec<Spot> {
+    let mut rng = Rng::new(0x7ee5_0a11);
+    let mut trees: Vec<Spot> = Vec::new();
+    let mut tries = 0;
+    while trees.len() < 46 && tries < 20_000 {
+        tries += 1;
+        let p = Vec2::new(rng.range(-50.0, 50.0), rng.range(-50.0, 50.0));
+        let spacing = rng.range(7.5, 10.0);
+        let scale = rng.range(0.55, 0.85);
+        // Seen from above at the camera's slant, a crown stands up the screen from its
+        // trunk (about a metre for each metre up): it must lie over the wood too, not
+        // hang over the clearing, or it reads as a bush floating by the camp.
+        let toward = crate::camera::offset();
+        let crown = p - Vec2::new(toward.x, toward.z).normalize() * 12.0 * scale;
+        if terrain::woods(p) < 0.6
+            || terrain::woods(crown) < 0.3
+            || terrain::pond(p) > -0.3
+            || land.slope(p) > 0.5
+            || trees.iter().any(|t| t.at.distance(p) < spacing)
+        {
+            continue;
+        }
+        trees.push(Spot {
+            at: p,
+            scale,
+            yaw: rng.f() * std::f32::consts::TAU,
+        });
+    }
+    trees
+}
+
 fn plant(
     mut commands: Commands,
     asset: Res<AssetServer>,
@@ -274,8 +331,14 @@ fn plant(
 
     // The oaks: two modelled trunks, each with its crown.
     let kinds = [
-        ("models/nature/forest/OakBough.glb", "assets/data/trees/oak_bough.ron"),
-        ("models/nature/forest/OakBough2.glb", "assets/data/trees/oak_bough_2.ron"),
+        (
+            "models/nature/forest/OakBough.glb",
+            "assets/data/trees/oak_bough.ron",
+        ),
+        (
+            "models/nature/forest/OakBough2.glb",
+            "assets/data/trees/oak_bough_2.ron",
+        ),
     ];
     let root = std::env::var("BEVY_ASSET_ROOT").unwrap_or_else(|_| "../..".into());
     let kinds: Vec<(Handle<Mesh>, Handle<Mesh>, Shell)> = kinds
@@ -283,31 +346,23 @@ fn plant(
         .map(|(model, data)| {
             let (mesh, shell) = crown(&tips(&format!("{root}/{data}")), &mut rng);
             (
-                asset.load(GltfAssetLabel::Primitive { mesh: 0, primitive: 0 }.from_asset(*model)),
+                asset.load(
+                    GltfAssetLabel::Primitive {
+                        mesh: 0,
+                        primitive: 0,
+                    }
+                    .from_asset(*model),
+                ),
                 meshes.add(mesh),
                 shell,
             )
         })
         .collect();
-    let mut trees: Vec<Vec2> = Vec::new();
-    let mut tries = 0;
-    while trees.len() < 46 && tries < 20_000 {
-        tries += 1;
-        let p = Vec2::new(rng.range(-50.0, 50.0), rng.range(-50.0, 50.0));
-        let spacing = rng.range(7.5, 10.0);
-        if terrain::woods(p) < 0.6
-            || terrain::pond(p) > -0.3
-            || land.slope(p) > 0.5
-            || trees.iter().any(|t| t.distance(p) < spacing)
-        {
-            continue;
-        }
-        trees.push(p);
-    }
-    for (i, p) in trees.iter().enumerate() {
+    let spots = tree_spots(&land);
+    let trees: Vec<Vec2> = spots.iter().map(|t| t.at).collect();
+    for (i, t) in spots.iter().enumerate() {
+        let (p, scale, yaw) = (&t.at, t.scale, t.yaw);
         let (trunk, crown, shell) = &kinds[i % kinds.len()];
-        let scale = rng.range(0.55, 0.85);
-        let yaw = rng.f() * std::f32::consts::TAU;
         let rot = Quat::from_rotation_y(yaw);
         nav.block_circle(*p, 0.9 * scale);
         let at = on(*p) - Vec3::Y * 0.15;
@@ -319,8 +374,17 @@ fn plant(
                 Visibility::default(),
             ))
             .id();
-        commands.spawn((Mesh3d(trunk.clone()), MeshMaterial3d(bark.clone()), ChildOf(root)));
-        commands.spawn((Mesh3d(crown.clone()), MeshMaterial3d(leaves.clone()), ChildOf(root), Crown));
+        commands.spawn((
+            Mesh3d(trunk.clone()),
+            MeshMaterial3d(bark.clone()),
+            ChildOf(root),
+        ));
+        commands.spawn((
+            Mesh3d(crown.clone()),
+            MeshMaterial3d(leaves.clone()),
+            ChildOf(root),
+            Crown,
+        ));
         let _ = shell;
     }
 
@@ -329,18 +393,26 @@ fn plant(
         .map(|i| format!("models/nature/forest/mossy_rock_a_{i}.glb"))
         .chain((1..=7).map(|i| format!("models/nature/forest/mossy_rock_b_{i}.glb")))
         .collect();
-    let rock = |commands: &mut Commands, nav: &mut Nav, rng: &mut Rng, p: Vec2, (lo, hi): (f32, f32)| {
-        let scale = rng.range(lo, hi);
-        let big = rng.f() < 0.55;
-        let path = if big {
-            &rocks[(rng.f() * 6.0) as usize % 6]
-        } else {
-            &rocks[6 + (rng.f() * 7.0) as usize % 7]
+    let rock =
+        |commands: &mut Commands, nav: &mut Nav, rng: &mut Rng, p: Vec2, (lo, hi): (f32, f32)| {
+            let scale = rng.range(lo, hi);
+            let big = rng.f() < 0.55;
+            let path = if big {
+                &rocks[(rng.f() * 6.0) as usize % 6]
+            } else {
+                &rocks[6 + (rng.f() * 7.0) as usize % 7]
+            };
+            let foot = if big { 1.3 } else { 0.55 } * scale;
+            nav.block_circle(p, foot * 0.8);
+            scene::model(
+                commands,
+                &asset,
+                path,
+                on(p) - Vec3::Y * 0.25 * scale,
+                rng.f() * 6.28,
+                scale,
+            );
         };
-        let foot = if big { 1.3 } else { 0.55 } * scale;
-        nav.block_circle(p, foot * 0.8);
-        scene::model(commands, &asset, path, on(p) - Vec3::Y * 0.25 * scale, rng.f() * 6.28, scale);
-    };
     let mut x = -46.0;
     while x < 46.0 {
         let z = terrain::ridge_z(x) + rng.range(-1.0, 1.5);
@@ -360,14 +432,21 @@ fn plant(
     let mut placed = 0;
     while placed < 22 {
         let p = Vec2::new(rng.range(-40.0, 40.0), rng.range(-12.0, 40.0));
-        if terrain::woods(p) < 0.4 || terrain::pond(p) > -0.2 || trees.iter().any(|t| t.distance(p) < 2.0) {
+        if terrain::woods(p) < 0.4
+            || terrain::pond(p) > -0.2
+            || trees.iter().any(|t| t.distance(p) < 2.0)
+        {
             continue;
         }
         rock(&mut commands, &mut nav, &mut rng, p, (0.5, 1.2));
         placed += 1;
     }
     // Three stones by the pond's edge, and one at the camp to sit on.
-    for p in [POND + Vec2::new(-6.8, -2.0), POND + Vec2::new(-5.5, 3.6), POND + Vec2::new(2.0, -5.6)] {
+    for p in [
+        POND + Vec2::new(-6.8, -2.0),
+        POND + Vec2::new(-5.5, 3.6),
+        POND + Vec2::new(2.0, -5.6),
+    ] {
         rock(&mut commands, &mut nav, &mut rng, p, (0.6, 0.8));
     }
 
@@ -375,13 +454,23 @@ fn plant(
     let mut placed = 0;
     while placed < 9 {
         let p = Vec2::new(rng.range(-36.0, 36.0), rng.range(-10.0, 36.0));
-        if terrain::woods(p) < 0.5 || terrain::pond(p) > -0.2 || trees.iter().any(|t| t.distance(p) < 3.0) {
+        if terrain::woods(p) < 0.5
+            || terrain::pond(p) > -0.2
+            || trees.iter().any(|t| t.distance(p) < 3.0)
+        {
             continue;
         }
         let yaw = rng.f() * 6.28;
         let scale = rng.range(1.6, 2.4);
         nav.block_rect(p, Vec2::new(0.85, 0.22) * scale, yaw);
-        let e = scene::model(&mut commands, &asset, "models/props/Log.glb", on(p) - Vec3::Y * 0.12, yaw, scale);
+        let e = scene::model(
+            &mut commands,
+            &asset,
+            "models/props/Log.glb",
+            on(p) - Vec3::Y * 0.12,
+            yaw,
+            scale,
+        );
         let n = land.normal(p);
         commands.entity(e).insert(
             Transform::from_translation(on(p) - Vec3::Y * 0.12)
@@ -391,12 +480,20 @@ fn plant(
         placed += 1;
     }
     for i in 0..6 {
-        let p = trees[(i * 7 + 3) % trees.len()] + Vec2::new(rng.range(-4.0, 4.0), rng.range(2.0, 4.0));
+        let p =
+            trees[(i * 7 + 3) % trees.len()] + Vec2::new(rng.range(-4.0, 4.0), rng.range(2.0, 4.0));
         if terrain::pond(p) > -0.2 {
             continue;
         }
         nav.block_circle(p, 0.6);
-        scene::model(&mut commands, &asset, "models/nature/forest/stump.glb", on(p) - Vec3::Y * 0.08, rng.f() * 6.28, rng.range(0.9, 1.3));
+        scene::model(
+            &mut commands,
+            &asset,
+            "models/nature/forest/stump.glb",
+            on(p) - Vec3::Y * 0.08,
+            rng.f() * 6.28,
+            rng.range(0.9, 1.3),
+        );
     }
 
     // Ferns under the trees, in drifts.
@@ -406,13 +503,24 @@ fn plant(
         tries += 1;
         let p = Vec2::new(rng.range(-44.0, 44.0), rng.range(-30.0, 44.0));
         let drift = terrain::fbm(p * 0.15, 61);
-        if terrain::woods(p) < 0.35 || drift < 0.5 || land.slope(p) > 0.6 || terrain::pond(p) > -0.25 {
+        if terrain::woods(p) < 0.35
+            || drift < 0.5
+            || land.slope(p) > 0.6
+            || terrain::pond(p) > -0.25
+        {
             continue;
         }
         if trees.iter().any(|t| t.distance(p) < 1.0) {
             continue;
         }
-        scene::model(&mut commands, &asset, "models/nature/forest/fern.glb", on(p) - Vec3::Y * 0.05, rng.f() * 6.28, rng.range(0.8, 1.5));
+        scene::model(
+            &mut commands,
+            &asset,
+            "models/nature/forest/fern.glb",
+            on(p) - Vec3::Y * 0.05,
+            rng.f() * 6.28,
+            rng.range(0.8, 1.5),
+        );
         placed += 1;
     }
 
@@ -450,7 +558,11 @@ fn plant(
             continue;
         }
         let (cell, size) = if woods > 0.35 && woods < 0.85 {
-            if rng.f() < 0.5 { (BRAMBLE, rng.range(0.6, 1.0)) } else { continue }
+            if rng.f() < 0.5 {
+                (BRAMBLE, rng.range(0.6, 1.0))
+            } else {
+                continue;
+            }
         } else if woods < 0.3 && terrain::fbm(p * 0.2, 71) > 0.5 {
             match (rng.f() * 3.0) as u32 {
                 0 => (DAISY, rng.range(0.25, 0.4)),
@@ -465,7 +577,14 @@ fn plant(
         for k in 0..2 {
             let a = yaw + k as f32 * std::f32::consts::FRAC_PI_2;
             let across = Vec3::new(a.cos(), 0.0, a.sin()) * size;
-            flowers.quad(base + Vec3::Y * size * 0.48, across, Vec3::Y * size, cell, |_| Vec3::Y, [1.0; 4]);
+            flowers.quad(
+                base + Vec3::Y * size * 0.48,
+                across,
+                Vec3::Y * size,
+                cell,
+                |_| Vec3::Y,
+                [1.0; 4],
+            );
         }
     }
     commands.spawn((Mesh3d(meshes.add(flowers.mesh())), MeshMaterial3d(blooms)));

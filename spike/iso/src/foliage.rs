@@ -86,7 +86,6 @@ pub fn material(
     h
 }
 
-
 /// The wind's time, the camera's axes and the party's places, to every foliage material.
 fn breathe(
     time: Res<Time>,

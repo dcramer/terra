@@ -22,7 +22,7 @@ pub const CAMP: Vec2 = Vec2::new(-1.0, 2.0);
 /// ragged.
 pub fn woods(p: Vec2) -> f32 {
     let d = (p - CAMP).length() + 6.0 * (fbm(p * 0.09, 23) - 0.5);
-    smooth(10.5, 15.0, d)
+    smooth(8.5, 13.0, d)
 }
 
 /// How trodden bare the ground is: the camp's earth about the fire, the paths worn from it
@@ -30,7 +30,9 @@ pub fn woods(p: Vec2) -> f32 {
 pub fn bare(p: Vec2) -> f32 {
     let fire = crate::scene::FIRE;
     let wobble = fbm(p * 0.6, 91) - 0.5;
-    let camp = smooth(3.8, 1.2, p.distance(fire) + wobble * 1.8);
+    // Its edge ragged at two sizes, so it is no disc: lobes where feet went, tufts biting in.
+    let ragged = fbm(p * 2.4, 97) - 0.5;
+    let camp = smooth(4.3, 1.0, p.distance(fire) + wobble * 2.6 + ragged * 1.3);
     let path = |a: Vec2, b: Vec2, w: f32| {
         let ab = b - a;
         let t = ((p - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0);
@@ -237,7 +239,9 @@ impl Land {
 
     /// The ground mesh, its layers' weights from `cover` (grass, leaves, moss, rock in the
     /// colour; mud and roots in the second texture coordinate).
-    pub fn mesh(&self, cover: impl Fn(Vec2, Vec3, f32) -> ([f32; 4], [f32; 2])) -> Mesh {
+    /// `cover` gives each vertex its layers' weights (colour, second UV) and, in the first UV,
+    /// the shade of the crowns over it and how trodden bare it is.
+    pub fn mesh(&self, cover: impl Fn(Vec2, Vec3, f32) -> ([f32; 4], [f32; 2], [f32; 2])) -> Mesh {
         let n = self.n;
         let mut pos = Vec::with_capacity(n * n);
         let mut nor = Vec::with_capacity(n * n);
@@ -251,10 +255,10 @@ impl Land {
                 let normal = self.normal(p);
                 pos.push([p.x, h, p.y]);
                 nor.push(normal.to_array());
-                uv.push([p.x, p.y]);
-                let (c, b) = cover(p, normal, h);
+                let (c, b, a) = cover(p, normal, h);
                 col.push(c);
                 uvb.push(b);
+                uv.push(a);
             }
         }
         let mut idx = Vec::with_capacity((n - 1) * (n - 1) * 6);
@@ -309,7 +313,11 @@ mod tests {
     fn the_clearing_is_walkable_and_the_ridge_and_pond_are_not() {
         let land = Land::new();
         // The camp's ground is gentle.
-        for p in [Vec2::new(0.0, 2.0), Vec2::new(3.0, 5.0), Vec2::new(-4.0, 0.0)] {
+        for p in [
+            Vec2::new(0.0, 2.0),
+            Vec2::new(3.0, 5.0),
+            Vec2::new(-4.0, 0.0),
+        ] {
             assert!(land.slope(p) < 0.35, "{p} slope {}", land.slope(p));
             assert!(land.height(p) > WATER + 0.1);
         }

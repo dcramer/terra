@@ -8,9 +8,9 @@ use crate::camera::MainCamera;
 use crate::nav::Nav;
 use crate::party::{Actor, Folk, Member, Selected};
 use crate::scene::Hour;
+use crate::terrain::Land;
 use crate::ui::{Log, PORTRAIT_COLUMN};
 use bevy::diagnostic::FrameCount;
-use crate::terrain::Land;
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
@@ -337,7 +337,13 @@ fn circles(
     markers.0.retain_mut(|(at, age)| {
         *age += dt;
         let r = 0.6 * (1.0 - *age / 0.8).max(0.0) + 0.1;
-        ring(&mut gizmos, &land, *at, r, green * (1.0 - *age / 0.8).max(0.0));
+        ring(
+            &mut gizmos,
+            &land,
+            *at,
+            r,
+            green * (1.0 - *age / 0.8).max(0.0),
+        );
         *age < 0.8
     });
 }

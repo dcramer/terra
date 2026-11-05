@@ -25,6 +25,8 @@ const DRY: u32 = 4u;
 const LEAVES: u32 = 5u;
 const ROOTS: u32 = 6u;
 const MOSS: u32 = 7u;
+// The camp fire's place (scene::FIRE).
+const FIRE: vec2<f32> = vec2<f32>(0.0, 3.0);
 
 fn hash(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -148,7 +150,29 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let wet = smoothstep(0.2, 0.8, w[5]);
     colour *= mix(1.0, 0.65, wet);
 
+    // Trodden earth: packed soil, greyer and darker than the litter, in blotches where
+    // feet went most, flecked with bits of twig and grit.
+    let bare = in.uv.y;
+    let blotch = noise(p * 1.7 + 11.0) * 0.6 + noise(p * 5.3) * 0.4;
+    let packed = smoothstep(0.35, 0.9, bare) * smoothstep(0.25, 0.7, blotch);
+    let soil = vec3<f32>(dot(colour, vec3<f32>(0.3, 0.5, 0.2))) * vec3<f32>(0.95, 0.85, 0.72);
+    colour = mix(colour, soil * 0.8, packed * 0.75);
+    let fleck = smoothstep(0.82, 0.9, hash(floor(p * 23.0)));
+    colour = mix(colour, colour * vec3<f32>(1.5, 1.35, 1.1), fleck * bare * 0.6);
+    // Ash and char about the fire: grey ash blown out in tongues, black charcoal close in.
+    let d = distance(p, FIRE) + (noise(p * 3.1) - 0.5) * 0.55 + (noise(p * 9.0) - 0.5) * 0.18;
+    let ash = smoothstep(1.7, 0.95, d) * mix(0.55, 1.0, noise(p * 6.0 + 5.0));
+    let char_ = smoothstep(1.05, 0.7, d);
+    let grain = 0.8 + 0.4 * noise(p * 14.0);
+    colour = mix(colour, vec3<f32>(0.045, 0.042, 0.04) * grain, ash * 0.7);
+    colour = mix(colour, vec3<f32>(0.035, 0.03, 0.028) * grain, char_ * 0.9);
+    // The crowns' shade: less of the sky's light under the oaks.
+    let canopy = in.uv.x;
+    colour *= mix(0.72, 1.0, canopy);
+
     pbr_input.material.base_color = vec4<f32>(colour, 1.0);
+    pbr_input.diffuse_occlusion = vec3<f32>(canopy * canopy);
+    pbr_input.specular_occlusion = canopy;
     pbr_input.material.perceptual_roughness = mix(0.92, 0.45, wet);
     // The relief, in a frame laid on the slope: x east, y north (OpenGL's green up).
     let tx = normalize(vec3<f32>(1.0, 0.0, 0.0) - n * n.x);

@@ -35,7 +35,6 @@ impl Hour {
 #[derive(Component)]
 struct Sun;
 
-
 /// A light that burns at night: a lamp's flame or the fire.
 #[derive(Component)]
 struct Flame {
@@ -72,7 +71,14 @@ pub fn material(asset: &AssetServer, name: &str, tint: Color) -> StandardMateria
 }
 
 /// A model from the game's assets, set on the land.
-pub fn model(commands: &mut Commands, asset: &AssetServer, path: &str, at: Vec3, yaw: f32, scale: f32) -> Entity {
+pub fn model(
+    commands: &mut Commands,
+    asset: &AssetServer,
+    path: &str,
+    at: Vec3,
+    yaw: f32,
+    scale: f32,
+) -> Entity {
     commands
         .spawn((
             WorldAssetRoot(asset.load(GltfAssetLabel::Scene(0).from_asset(path.to_string()))),
@@ -83,14 +89,36 @@ pub fn model(commands: &mut Commands, asset: &AssetServer, path: &str, at: Vec3,
         .id()
 }
 
-/// What lies on the ground at a point: grass, leaves, moss, rock; mud, roots.
-fn cover(p: Vec2, n: Vec3, h: f32) -> ([f32; 4], [f32; 2]) {
+/// How much of the sky the oaks' crowns hide from a point on the ground: 1 in the open,
+/// darker toward each trunk, the deep wood dim throughout.
+pub fn canopy(p: Vec2, trees: &[crate::forest::Spot]) -> f32 {
+    let mut open = 1.0 - 0.25 * terrain::woods(p);
+    for t in trees {
+        let r = 7.0 * t.scale;
+        let d = t.at.distance(p) + 1.5 * (terrain::fbm(p * 0.5, 41) - 0.5);
+        if d < r {
+            open *= 1.0 - 0.6 * terrain::smooth(r, r * 0.25, d);
+        }
+    }
+    open
+}
+
+/// What lies on the ground at a point: grass, leaves, moss, rock; mud, roots; and the
+/// crowns' shade and how trodden it is.
+fn cover(
+    p: Vec2,
+    n: Vec3,
+    h: f32,
+    trees: &[crate::forest::Spot],
+) -> ([f32; 4], [f32; 2], [f32; 2]) {
     let woods = terrain::woods(p);
     let steep = terrain::smooth(0.86, 0.7, n.y);
     let patch = terrain::fbm(p * 0.18, 31);
-    let wet = terrain::smooth(WATER + 0.45, WATER + 0.05, h) * terrain::smooth(-0.6, -0.2, terrain::pond(p));
+    let wet = terrain::smooth(WATER + 0.45, WATER + 0.05, h)
+        * terrain::smooth(-0.6, -0.2, terrain::pond(p));
     let rock = steep;
-    let moss = (terrain::smooth(0.95, 0.82, n.y) * (1.0 - steep) + woods * terrain::smooth(0.55, 0.7, patch) * 0.8)
+    let moss = (terrain::smooth(0.95, 0.82, n.y) * (1.0 - steep)
+        + woods * terrain::smooth(0.55, 0.7, patch) * 0.8)
         .min(1.0);
     let bare = terrain::bare(p) * (1.0 - rock);
     // Trodden earth: the litter's dark soil, a little mud in it.
@@ -98,7 +126,11 @@ fn cover(p: Vec2, n: Vec3, h: f32) -> ([f32; 4], [f32; 2]) {
     let wet = wet.max(bare * 0.12);
     let grass = (1.0 - woods * 0.85) * (1.0 - rock) * (1.0 - wet) * (1.0 - bare * 0.85);
     let roots = woods * terrain::smooth(0.6, 0.75, terrain::fbm(p * 0.3, 37)) * (1.0 - rock);
-    ([grass, leaves, moss, rock], [wet, roots])
+    (
+        [grass, leaves, moss, rock],
+        [wet, roots],
+        [canopy(p, trees), bare],
+    )
 }
 
 pub fn build(
@@ -111,6 +143,7 @@ pub fn build(
     mut nav: ResMut<Nav>,
 ) {
     commands.insert_resource(Hour::Dusk);
+    let trees = crate::forest::tree_spots(&land);
     let flames = materials.add(StandardMaterial {
         base_color: Color::srgb(1.0, 0.7, 0.3),
         emissive: LinearRgba::rgb(30.0, 12.0, 3.0),
@@ -123,30 +156,35 @@ pub fn build(
 
     // The land (the pond's water is water.rs's).
     commands.spawn((
-        Mesh3d(meshes.add(land.mesh(cover))),
+        Mesh3d(meshes.add(land.mesh(|p, n, h| cover(p, n, h, &trees)))),
         MeshMaterial3d(grounds.add(terrain::ground_material(&asset))),
     ));
     nav.block_where(|p| land.slope(p) > 0.6 || land.height(p) < WATER + 0.08);
 
-    // The camp: its fire with logs to sit on.
+    // The camp's fire (camp.rs dresses the camp about it).
     let on = |p: Vec2| Vec3::new(p.x, land.height(p), p.y);
     nav.block_circle(FIRE, 0.75);
-    model(&mut commands, &asset, "models/props/Campfire.glb", on(FIRE), 0.0, 1.0);
-    for (dx, dz, yaw) in [(0.2, 2.0, 0.1), (2.1, -0.6, 1.8), (-1.9, -0.8, -1.2)] {
-        let p = FIRE + Vec2::new(dx, dz);
-        nav.block_rect(p, Vec2::new(0.85, 0.25), yaw);
-        model(&mut commands, &asset, "models/props/Log.glb", on(p), yaw, 1.0);
-    }
+    model(
+        &mut commands,
+        &asset,
+        "models/props/Campfire.glb",
+        on(FIRE),
+        0.0,
+        1.0,
+    );
     commands.spawn((
         PointLight {
             color: Color::srgb(1.0, 0.55, 0.22),
-            intensity: 60_000.0,
-            range: 18.0,
-            radius: 0.3,
+            intensity: 110_000.0,
+            range: 26.0,
+            // A fire is a broad flame: its shadows soft, the tripod's legs no hard spokes.
+            radius: 0.45,
             shadow_maps_enabled: true,
+            soft_shadows_enabled: true,
             ..default()
         },
-        Transform::from_translation(on(FIRE) + Vec3::Y * 0.7),
+        // Among the flames and beside the pot hung over them (camp.rs), not inside it.
+        Transform::from_translation(on(FIRE) + Vec3::new(0.2, 0.6, -0.2)),
         Flame {
             lumens: 60_000.0,
             seed: 0.0,
@@ -208,8 +246,8 @@ fn light_the_hour(
             -58.0,
             Color::srgb(1.0, 0.64, 0.4),
             5_000.0,
-            Color::srgb(0.55, 0.62, 0.9),
-            900.0,
+            Color::srgb(0.42, 0.52, 0.95),
+            450.0,
             1.0,
             1.0,
         ),
@@ -256,7 +294,7 @@ fn light_the_hour(
         m.emissive = LinearRgba::rgb(30.0, 12.0, 3.0) * lit.max(0.15);
     }
     for (mut flame, mut vis) in &mut flames {
-        let base = if flame.fire { 60_000.0 } else { 9_000.0 };
+        let base = if flame.fire { 110_000.0 } else { 9_000.0 };
         flame.lumens = base * lit;
         *vis = if lit > 0.0 || flame.fire {
             Visibility::Inherited

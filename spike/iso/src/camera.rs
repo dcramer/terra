@@ -157,7 +157,11 @@ fn pan(
     view.focus = view.focus.clamp(Vec2::splat(-24.0), Vec2::splat(24.0));
 }
 
-fn place(view: Res<View>, land: Res<crate::terrain::Land>, mut camera: Query<(&mut Transform, &mut Projection), With<MainCamera>>) {
+fn place(
+    view: Res<View>,
+    land: Res<crate::terrain::Land>,
+    mut camera: Query<(&mut Transform, &mut Projection), With<MainCamera>>,
+) {
     let Ok((mut tr, mut projection)) = camera.single_mut() else {
         return;
     };

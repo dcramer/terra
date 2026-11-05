@@ -19,7 +19,17 @@ pub fn plugin(app: &mut App) {
         .add_systems(Startup, spawn)
         .add_systems(
             Update,
-            (make_clips, start_animators, dress, hold, walk, stand, gait, wander).chain(),
+            (
+                make_clips,
+                start_animators,
+                dress,
+                hold,
+                walk,
+                stand,
+                gait,
+                wander,
+            )
+                .chain(),
         )
         .add_systems(
             PostUpdate,
@@ -39,7 +49,10 @@ const KNIGHT_SCALE: f32 = 1.84;
 /// What each kind of model calls its idle, walk, run and busy clips (a beast's grazing or
 /// pecking; a bird's run is its flight).
 const KINDS: &[(&str, [&str; 4])] = &[
-    (BODY, ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Idle_Loop"]),
+    (
+        BODY,
+        ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Idle_Loop"],
+    ),
     (KNIGHT, ["idle", "walk", "run", "idle"]),
     (crate::wildlife::STAG, ["Idle", "Walk", "Run", "Eat"]),
     (crate::wildlife::HIND, ["Idle", "Walk", "Run", "Eat"]),
@@ -288,7 +301,6 @@ fn spawn(
             PortraitOf(actor),
         ));
     }
-
 }
 
 #[derive(Component)]
@@ -395,7 +407,11 @@ pub fn creature(
 ) -> Entity {
     let model = actor.model;
     let actor = commands
-        .spawn((Transform::from_xyz(at.x, 0.0, at.y), Visibility::default(), actor))
+        .spawn((
+            Transform::from_xyz(at.x, 0.0, at.y),
+            Visibility::default(),
+            actor,
+        ))
         .id();
     commands.spawn((
         WorldAssetRoot(asset.load(GltfAssetLabel::Scene(0).from_asset(model))),

@@ -42,7 +42,10 @@ fn surface(land: &Land) -> Mesh {
     let step = 0.25;
     let half = Vec2::new(9.5, 8.0);
     let lo = POND - half;
-    let (nx, nz) = ((half.x * 2.0 / step) as usize + 1, (half.y * 2.0 / step) as usize + 1);
+    let (nx, nz) = (
+        (half.x * 2.0 / step) as usize + 1,
+        (half.y * 2.0 / step) as usize + 1,
+    );
     let mut pos = Vec::with_capacity(nx * nz);
     let mut uv = Vec::with_capacity(nx * nz);
     let mut uvb = Vec::with_capacity(nx * nz);
@@ -70,12 +73,15 @@ fn surface(land: &Land) -> Mesh {
         }
     }
     let n = pos.len();
-    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; n])
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, uvb)
-        .with_inserted_indices(Indices::U32(idx))
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; n])
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, uvb)
+    .with_inserted_indices(Indices::U32(idx))
 }
 
 /// Reeds along the margin, in clumps, where the water is shallow or the bank wet: tall
@@ -150,11 +156,14 @@ fn reeds(land: &Land, rng: &mut Rng) -> Mesh {
         }
     }
     debug!("reeds: {clumps} clumps");
-    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
-        .with_inserted_indices(Indices::U32(idx))
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
+    .with_inserted_indices(Indices::U32(idx))
 }
 
 fn spawn(
