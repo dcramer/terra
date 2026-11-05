@@ -495,7 +495,9 @@ pub fn plugin(app: &mut App) {
         .add_plugins(laying::plugin)
         .add_systems(
             Update,
-            (keep_footprint, give_footprints).before(terra_world::flora::FloraSystems::Clear),
+            (keep_footprint, give_footprints)
+                .before(terra_world::flora::FloraSystems::Clear)
+                .run_if(terra_world::instance::in_world),
         )
         .init_resource::<maps::Loading>()
         .init_resource::<atlases::Atlases>()
@@ -503,8 +505,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                reload_kit,
-                maps::load,
+                (reload_kit, maps::load).run_if(terra_world::instance::in_world),
                 arrays::stream.run_if(resource_exists::<arrays::Arrays>),
                 atlases::compress.run_if(resource_exists::<BuildLook>),
             ),

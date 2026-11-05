@@ -19,6 +19,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use terra_build::kit::Kits;
 use terra_build_mesh::sections::{self, Detail, Reach, Section};
+use terra_world::instance::in_world;
 use terra_world::planet::MainCamera;
 use terra_world::shell::Options;
 
@@ -228,7 +229,9 @@ pub fn plugin(app: &mut App) {
                 Drawing::Collect,
                 Drawing::Upload,
             )
-                .chain(),
+                .chain()
+                // Bases are the world's: laid and drawn only once its site is made (D623).
+                .run_if(in_world),
         )
         // Building's group (D607), timed where they are added: `launch`, `draw.rs` and its
         // `upload` are over the size limit (D396), so no system of theirs takes a line more.
@@ -253,7 +256,10 @@ pub fn plugin(app: &mut App) {
                 .in_set(Drawing::Upload),
         )
         .add_systems(Update, collect.in_set(Drawing::Collect))
-        .add_systems(Update, track.in_set(terra_world::loading::Track));
+        .add_systems(
+            Update,
+            track.in_set(terra_world::loading::Track).run_if(in_world),
+        );
 }
 
 /// The loading screen waits for the buildings there are to be laid and drawn, so the first

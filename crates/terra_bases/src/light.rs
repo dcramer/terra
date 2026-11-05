@@ -180,7 +180,12 @@ struct Placed(BTreeMap<Entity, (u64, Vec<(IVec3, IVec3)>)>);
 pub fn plugin(app: &mut App) {
     app.init_resource::<Placed>()
         .init_resource::<RoomLight>()
-        .add_systems(Update, (place, follow, inside, shelter).chain());
+        .add_systems(
+            Update,
+            (place, follow, inside, shelter)
+                .chain()
+                .run_if(terra_world::instance::in_world),
+        );
 }
 
 /// Whether a point is in a room closed and covered, by its probes, each a unit box
