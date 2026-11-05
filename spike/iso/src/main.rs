@@ -8,6 +8,7 @@ mod mipmaps;
 mod nav;
 mod party;
 mod scene;
+mod terrain;
 mod ui;
 
 use bevy::diagnostic::FrameCount;
@@ -97,6 +98,7 @@ fn main() {
         }))
         .add_plugins((
             mipmaps::plugin,
+            terrain::plugin,
             scene::plugin,
             party::plugin,
             camera::plugin,
