@@ -12,6 +12,7 @@ use sea::{WaterExtension, sea_waves};
 
 pub mod entering;
 mod sea;
+mod worn;
 use bevy::math::DVec3;
 use bevy::{
     image::{ImageArrayLayout, ImageLoaderSettings},
@@ -368,7 +369,6 @@ impl Planet {
     pub fn cover(&self, point: Vec3, normal: Vec3) -> Cover {
         let (water, lowland) = crate::shore::near(self, point);
         let steepness = 1.0 - normal.dot(point.normalize());
-        let patches = self.cover.fbm(point / 70.0, 3, 2.0, 0.5);
         // Past the trees the heath holds the ground, not a meadow's grass (`terra_land::heath`).
         let heath = self
             .round
@@ -376,7 +376,7 @@ impl Planet {
             .map_or(0.0, |round| round.heath.at(point).open);
         Cover {
             grass: (1.0 - heath)
-                * smoothstep(-0.4, -0.26, patches)
+                * worn::grass_left(&self.cover, point)
                 * crate::shore::grass(point.length() - water, lowland)
                 * (1.0 - smoothstep(0.14, 0.27, steepness)),
             lush: smoothstep(
