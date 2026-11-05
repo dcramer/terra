@@ -9,7 +9,8 @@
 //! - **Among the trees once they are in.** A piece is laid only when the trees round it have
 //!   arrived on the floor (`NearWoods::trees_in`), so what is laid among them finds them.
 //! - **The same each time.** A piece rolls its own dice, by where it is, so streamed out and
-//!   in again it lays the same things in the same places.
+//!   in again it lays the same things in the same places; a plant cut or cleared away stays
+//!   gone (`FloorPlant`), its dice rolled as ever, so the rest stay where they were.
 //! - **The floor knows.** What a piece lays and takes off goes through `GrownFloor::change`,
 //!   so the ground cover there is grown again round it.
 
@@ -23,6 +24,7 @@ use bevy::prelude::*;
 use std::time::Instant;
 use terra_gen::Seed;
 use terra_world::cover::forest::{GrownFloor, NO_BARK_M};
+use terra_world::flora::{ClearedAway, Growth};
 use terra_world::flora_kinds::Flora;
 use terra_world::grown::Cards;
 use terra_world::instance::InstanceApp;
@@ -46,12 +48,15 @@ const TOLD_EVERY: u32 = 64;
 type Key = (i32, i32);
 
 pub(super) fn plugin(app: &mut App) {
-    app.world_resource::<FloorStream>().add_systems(
-        Update,
-        stream
-            .run_if(terra_world::instance::in_world)
-            .run_if(resource_exists::<FloorStream>),
-    );
+    app.world_resource::<FloorStream>()
+        .add_observer(file_the_cut)
+        .add_systems(
+            Update,
+            (file_the_cleared, stream)
+                .chain()
+                .run_if(terra_world::instance::in_world)
+                .run_if(resource_exists::<FloorStream>),
+        );
 }
 
 /// What streams the woods' floor in past the load's: what it is laid with, where, the pieces
@@ -80,6 +85,14 @@ pub(super) struct FloorStream {
 struct Piece {
     put: Put,
     shadows: Vec<((i32, i32), Entity)>,
+}
+
+/// A cuttable plant of a streamed piece: its piece, and its place in the piece's order of
+/// plants, which is how it is left out once cut.
+#[derive(Component)]
+struct FloorPlant {
+    piece: Key,
+    n: u32,
 }
 
 impl FloorStream {
@@ -342,7 +355,11 @@ fn stream(
                 continue;
             };
             for &thing in &piece.put.things {
-                commands.entity(thing).try_despawn();
+                // Not a cut: it stops being a floor plant first (`file_the_cut`).
+                commands
+                    .entity(thing)
+                    .try_remove::<FloorPlant>()
+                    .try_despawn();
             }
             floor.change(corners(key), |map| take_off(map, &piece.put));
             if let Some(shadows) = shadows.as_mut() {
@@ -376,12 +393,44 @@ fn stream(
         floor.change(corners(key), |map| {
             put = lay_alone(&mut lay, kit, map, (key, at, cut), &next);
         });
+        for &(n, plant) in &put.cuttable {
+            lay.commands
+                .entity(plant)
+                .insert(FloorPlant { piece: key, n });
+        }
         lay.shade
     };
     let shadows = shadows.map_or_else(Vec::new, |mut live| live.merge(shade));
     stream.pieces.insert(key, Piece { put, shadows });
     streaming.entered(Class::Flora, began, 0);
     stream.tell(began.elapsed().as_secs_f32() * 1000.0);
+}
+
+/// Files a streamed piece's plant as cut as its `Growth` goes: cut for its wood or berries,
+/// which takes the `Growth`, or despawned outright. An observer, as the plant is still there
+/// to read while it goes. A piece streamed out takes its plants' `FloorPlant` off first.
+fn file_the_cut(
+    gone: On<Remove<Growth>>,
+    plants: Query<&FloorPlant>,
+    stream: Option<ResMut<FloorStream>>,
+) {
+    if let (Ok(plant), Some(mut stream)) = (plants.get(gone.entity), stream) {
+        stream.cut.entry(plant.piece).or_default().insert(plant.n);
+    }
+}
+
+/// Files a streamed piece's plant as cut once it is cleared away for what was built, set
+/// down, mown or dug where it stood (`flora::ClearedAway`), which hides it.
+fn file_the_cleared(
+    mut cleared: MessageReader<ClearedAway>,
+    plants: Query<&FloorPlant>,
+    mut stream: ResMut<FloorStream>,
+) {
+    for &ClearedAway(entity) in cleared.read() {
+        if let Ok(plant) = plants.get(entity) {
+            stream.cut.entry(plant.piece).or_default().insert(plant.n);
+        }
+    }
 }
 
 #[cfg(test)]

@@ -204,3 +204,69 @@ fn the_pieces_waiting_are_the_nearest_first_and_none_the_load_laid() {
         "a piece across the load's edge is laid"
     );
 }
+
+/// A plant cut in a piece stays gone when the piece streams in again, and everything else in
+/// it lands where it did.
+#[test]
+fn a_plant_cut_stays_gone_when_its_piece_comes_back_and_the_rest_stay() {
+    let mut app = app();
+    let none = HashSet::default();
+    let (key, (put, places)) = ROW
+        .map(|x| (x, 0))
+        .find_map(|key| {
+            let laid = lay(&mut app, key, &none, &[]);
+            if laid.0.cuttable.is_empty() {
+                stream_out(&mut app, &laid.0);
+                return None;
+            }
+            Some((key, laid))
+        })
+        .expect("a piece of the row with a plant to cut");
+    let (n, plant) = put.cuttable[0];
+    let k = put.things.iter().position(|&thing| thing == plant).unwrap();
+    stream_out(&mut app, &put);
+    let (again, places_again) = lay(&mut app, key, &HashSet::from_iter([n]), &[]);
+    let mut kept = places.clone();
+    kept.remove(k);
+    assert_eq!(places_again, kept, "all but the cut plant, where they were");
+    let numbers = |put: &Put| put.cuttable.iter().map(|&(n, _)| n).collect::<Vec<_>>();
+    let uncut: Vec<u32> = numbers(&put).into_iter().filter(|&m| m != n).collect();
+    assert_eq!(
+        numbers(&again),
+        uncut,
+        "the other plants keep their numbers"
+    );
+    assert_eq!(again.lying, put.lying);
+}
+
+/// A streamed piece's plant cut for its wood is filed as cut, as is one cleared away for what
+/// was built where it stood; one streamed out, which stops being a floor plant first, is not.
+#[test]
+fn a_floor_plant_cut_or_cleared_is_filed_and_one_streamed_out_is_not() {
+    let mut app = App::new();
+    let frame = (Vec3::ZERO, Vec3::X, Vec3::Z);
+    app.add_message::<ClearedAway>()
+        .add_observer(file_the_cut)
+        .add_systems(Update, file_the_cleared)
+        .insert_resource(FloorStream::new(Kit::bare(), SEED, MIDDLE, frame));
+    let piece = (20, 0);
+    let mut plant = |n| {
+        let growth = Growth::new(None, None, 0.5);
+        app.world_mut()
+            .spawn((FloorPlant { piece, n }, growth))
+            .id()
+    };
+    let (felled, cleared, streamed) = (plant(3), plant(5), plant(8));
+    let world = app.world_mut();
+    world.entity_mut(felled).remove::<Growth>();
+    world.write_message(ClearedAway(cleared));
+    world
+        .commands()
+        .entity(streamed)
+        .try_remove::<FloorPlant>()
+        .try_despawn();
+    world.flush();
+    app.update();
+    let cut = &app.world().resource::<FloorStream>().cut[&piece];
+    assert_eq!(cut, &HashSet::from_iter([3, 5]));
+}
