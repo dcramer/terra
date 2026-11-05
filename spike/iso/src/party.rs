@@ -36,10 +36,21 @@ const PIECES: &str = "models/character/male";
 const KNIGHT: &str = "spike://models/knight.glb";
 const KNIGHT_SCALE: f32 = 1.84;
 
-/// What each kind of model calls its idle, walk and run clips.
-const KINDS: &[(&str, [&str; 3])] = &[
-    (BODY, ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop"]),
-    (KNIGHT, ["idle", "walk", "run"]),
+/// What each kind of model calls its idle, walk, run and busy clips (a beast's grazing or
+/// pecking; a bird's run is its flight).
+const KINDS: &[(&str, [&str; 4])] = &[
+    (BODY, ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Idle_Loop"]),
+    (KNIGHT, ["idle", "walk", "run", "idle"]),
+    (crate::wildlife::STAG, ["Idle", "Walk", "Run", "Eat"]),
+    (crate::wildlife::HIND, ["Idle", "Walk", "Run", "Eat"]),
+    (crate::wildlife::CALF, ["Idle", "Walk", "Run", "Eat"]),
+    (crate::wildlife::HARE, ["Idle", "Walk", "Run", "Eat"]),
+    (crate::wildlife::BOAR, ["Idle", "Walk", "Trot", "Eat"]),
+    (crate::wildlife::FOX, ["Idle", "Walk", "Run", "Eat"]),
+    (crate::wildlife::CHAFFINCH, ["Idle", "Hop", "Fly", "Peck"]),
+    (crate::wildlife::SPARROW, ["Idle", "Hop", "Fly", "Peck"]),
+    (crate::wildlife::MALLARD, ["Float", "Swim", "Fly", "Dabble"]),
+    (crate::wildlife::SQUIRREL, ["Idle", "Walk", "Run", "Eat"]),
 ];
 
 #[derive(Resource, Default)]
@@ -51,7 +62,7 @@ struct Clips {
 #[derive(Clone)]
 struct Set {
     graph: Handle<AnimationGraph>,
-    nodes: [AnimationNodeIndex; 3],
+    nodes: [AnimationNodeIndex; 4],
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -59,6 +70,7 @@ pub enum Gait {
     Idle,
     Walk,
     Run,
+    Busy,
 }
 
 /// Anyone who moves: their model, how fast they walk and run, and where they are going.
@@ -72,11 +84,33 @@ pub struct Actor {
     /// How far from their feet to their head, for picking them on the screen.
     pub height: f32,
     pub radius: f32,
+    /// Grazing, rooting or pecking while it stands.
+    pub busy: bool,
+    /// How high above the land it is (a bird in flight).
+    pub lift: f32,
+    /// It sits on the water, not the pond's bed.
+    pub swims: bool,
 }
 
 impl Actor {
+    pub fn new(model: &'static str, walk: f32, run: f32, height: f32, radius: f32) -> Self {
+        Actor {
+            model,
+            walk,
+            run,
+            path: VecDeque::new(),
+            running: false,
+            height,
+            radius,
+            busy: false,
+            lift: 0.0,
+            swims: false,
+        }
+    }
+
     pub fn gait(&self) -> Gait {
         match (self.path.is_empty(), self.running) {
+            (true, _) if self.busy => Gait::Busy,
             (true, _) => Gait::Idle,
             (false, false) => Gait::Walk,
             (false, true) => Gait::Run,
@@ -114,6 +148,10 @@ struct Animator {
 struct Piece {
     body: Entity,
 }
+
+/// A clothing piece, for good (Piece goes once it is bound).
+#[derive(Component)]
+struct Clothing;
 
 /// A held thing waiting for its body's hand.
 #[derive(Component)]
@@ -267,15 +305,7 @@ fn person(
         .spawn((
             Transform::from_xyz(at.x, 0.0, at.y),
             Visibility::default(),
-            Actor {
-                model: BODY,
-                walk: 1.45,
-                run: 3.6,
-                path: VecDeque::new(),
-                running: false,
-                height: 1.85,
-                radius: 0.32,
-            },
+            Actor::new(BODY, 1.45, 3.6, 1.85, 0.32),
         ))
         .id();
     let body = commands
@@ -293,6 +323,7 @@ fn person(
             ),
             Transform::default(),
             Piece { body },
+            Clothing,
             ChildOf(body),
         ));
     }
@@ -317,15 +348,7 @@ fn knight(commands: &mut Commands, asset: &AssetServer, at: Vec2, yaw: f32) -> (
         .spawn((
             Transform::from_xyz(at.x, 0.0, at.y),
             Visibility::default(),
-            Actor {
-                model: KNIGHT,
-                walk: 1.4,
-                run: 3.4,
-                path: VecDeque::new(),
-                running: false,
-                height: 1.85,
-                radius: 0.34,
-            },
+            Actor::new(KNIGHT, 1.4, 3.4, 1.85, 0.34),
         ))
         .id();
     let body = commands
@@ -361,35 +384,22 @@ fn knight(commands: &mut Commands, asset: &AssetServer, at: Vec2, yaw: f32) -> (
     (actor, body)
 }
 
-#[allow(dead_code)]
-fn creature(
+/// A beast or bird: its actor, and its model turned to `yaw` and scaled.
+pub fn creature(
     commands: &mut Commands,
     asset: &AssetServer,
-    model: &'static str,
+    actor: Actor,
     at: Vec2,
-    walk: f32,
-    run: f32,
-    height: f32,
-    radius: f32,
+    yaw: f32,
+    scale: f32,
 ) -> Entity {
+    let model = actor.model;
     let actor = commands
-        .spawn((
-            Transform::from_xyz(at.x, 0.0, at.y),
-            Visibility::default(),
-            Actor {
-                model,
-                walk,
-                run,
-                path: VecDeque::new(),
-                running: false,
-                height,
-                radius,
-            },
-        ))
+        .spawn((Transform::from_xyz(at.x, 0.0, at.y), Visibility::default(), actor))
         .id();
     commands.spawn((
         WorldAssetRoot(asset.load(GltfAssetLabel::Scene(0).from_asset(model))),
-        Transform::default(),
+        Transform::from_rotation(Quat::from_rotation_y(yaw)).with_scale(Vec3::splat(scale)),
         Model,
         ChildOf(actor),
     ));
@@ -423,7 +433,7 @@ fn make_clips(
             model,
             Set {
                 graph: graphs.add(graph),
-                nodes: [nodes[0], nodes[1], nodes[2]],
+                nodes: [nodes[0], nodes[1], nodes[2], nodes[3]],
             },
         );
         false
@@ -435,17 +445,19 @@ fn start_animators(
     clips: Res<Clips>,
     actors: Query<(Entity, &Actor), Without<Animator>>,
     children: Query<&Children>,
+    parents: Query<&ChildOf>,
+    pieces: Query<(), With<Clothing>>,
     mut players: Query<&mut AnimationPlayer>,
 ) {
     for (entity, actor) in &actors {
         let Some(set) = clips.ready.get(actor.model) else {
             continue;
         };
-        // The body's own player, not one inside a clothing piece.
-        let Some(player) = children
-            .iter_descendants(entity)
-            .find(|e| players.contains(*e))
-        else {
+        // The body's own player, not one inside a clothing piece (whose scene may come in
+        // first, which left the body in its bind pose when it did).
+        let Some(player) = children.iter_descendants(entity).find(|e| {
+            players.contains(*e) && !parents.iter_ancestors(*e).any(|a| pieces.contains(a))
+        }) else {
             continue;
         };
         let mut transitions = AnimationTransitions::new();
@@ -608,9 +620,14 @@ fn walk(
 }
 
 /// Everyone stands on the land.
-fn stand(land: Res<Land>, mut actors: Query<&mut Transform, With<Actor>>) {
-    for mut tr in &mut actors {
-        let y = land.height(tr.translation.xz());
+fn stand(land: Res<Land>, mut actors: Query<(&mut Transform, &Actor)>) {
+    for (mut tr, actor) in &mut actors {
+        let ground = land.height(tr.translation.xz());
+        let y = if actor.swims {
+            crate::terrain::WATER - 0.05
+        } else {
+            ground + actor.lift
+        };
         if tr.translation.y != y {
             tr.translation.y = y;
         }

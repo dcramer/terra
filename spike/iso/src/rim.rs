@@ -36,8 +36,12 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (swap, tint).chain());
 }
 
+/// A colour the model's own is multiplied by (a pale Tripo coat brought to the beast's).
+#[derive(Component, Clone, Copy)]
+pub struct Tint(pub Vec3);
+
 #[derive(Resource, Default)]
-struct Swapped(HashMap<AssetId<StandardMaterial>, Handle<RimMaterial>>);
+struct Swapped(HashMap<(AssetId<StandardMaterial>, [u32; 3]), Handle<RimMaterial>>);
 
 /// The rim for the hour: faint by day, the sky's blue at dusk and by night.
 fn rim_for(hour: Hour) -> LinearRgba {
@@ -53,7 +57,7 @@ fn swap(
     mut commands: Commands,
     added: Query<(Entity, &MeshMaterial3d<StandardMaterial>), Added<MeshMaterial3d<StandardMaterial>>>,
     parents: Query<&ChildOf>,
-    actors: Query<(), With<Actor>>,
+    actors: Query<Option<&Tint>, With<Actor>>,
     standard: Res<Assets<StandardMaterial>>,
     mut rims: ResMut<Assets<RimMaterial>>,
     mut swapped: ResMut<Swapped>,
@@ -61,20 +65,25 @@ fn swap(
 ) {
     let rim = rim_for(hour.map_or(Hour::Dusk, |h| *h));
     for (e, mat) in &added {
-        if !parents.iter_ancestors(e).any(|a| actors.contains(a)) {
+        let Some(tint) = parents.iter_ancestors(e).find_map(|a| actors.get(a).ok()) else {
             continue;
-        }
-        let handle = match swapped.0.get(&mat.id()) {
+        };
+        let tint = tint.map_or(Vec3::ONE, |t| t.0);
+        let key = (mat.id(), tint.to_array().map(f32::to_bits));
+        let handle = match swapped.0.get(&key) {
             Some(h) => h.clone(),
             None => {
                 let Some(base) = standard.get(&mat.0) else {
                     continue;
                 };
+                let mut base = base.clone();
+                let c = base.base_color.to_linear();
+                base.base_color = LinearRgba::new(c.red * tint.x, c.green * tint.y, c.blue * tint.z, c.alpha).into();
                 let h = rims.add(ExtendedMaterial {
-                    base: base.clone(),
+                    base,
                     extension: RimExt { rim },
                 });
-                swapped.0.insert(mat.id(), h.clone());
+                swapped.0.insert(key, h.clone());
                 h
             }
         };

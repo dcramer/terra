@@ -12,6 +12,7 @@ mod scene;
 mod terrain;
 mod ui;
 mod water;
+mod wildlife;
 
 use bevy::diagnostic::FrameCount;
 use bevy::prelude::*;
@@ -114,6 +115,7 @@ fn main() {
             ui::plugin,
             rim::plugin,
             water::plugin,
+            wildlife::plugin,
         ))
         .add_systems(
             PostStartup,
