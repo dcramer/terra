@@ -22,7 +22,7 @@ pub const CAMP: Vec2 = Vec2::new(-1.0, 2.0);
 /// ragged.
 pub fn woods(p: Vec2) -> f32 {
     let d = (p - CAMP).length() + 6.0 * (fbm(p * 0.09, 23) - 0.5);
-    smooth(8.5, 13.0, d)
+    smooth(6.0, 10.0, d)
 }
 
 /// How trodden bare the ground is: the camp's earth about the fire, the paths worn from it

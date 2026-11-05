@@ -223,6 +223,8 @@ fn soot(
         let factor = match name.0.as_str() {
             "Stone" => 0.4,
             "Ground" => 0.6,
+            // The bedroll's Tripo wool came out pale; a camp's blankets are dark and worn.
+            n if n.starts_with("tripo_mat_515f618a") => 0.45,
             _ => continue,
         };
         if let Some(mut m) = materials.get_mut(&handle.0) {

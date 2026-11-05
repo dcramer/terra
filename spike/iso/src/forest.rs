@@ -277,10 +277,10 @@ pub fn tree_spots(land: &Land) -> Vec<Spot> {
     let mut rng = Rng::new(0x7ee5_0a11);
     let mut trees: Vec<Spot> = Vec::new();
     let mut tries = 0;
-    while trees.len() < 46 && tries < 20_000 {
+    while trees.len() < 80 && tries < 20_000 {
         tries += 1;
         let p = Vec2::new(rng.range(-50.0, 50.0), rng.range(-50.0, 50.0));
-        let spacing = rng.range(7.5, 10.0);
+        let spacing = rng.range(5.5, 8.5);
         let scale = rng.range(0.55, 0.85);
         // Seen from above at the camera's slant, a crown stands up the screen from its
         // trunk (about a metre for each metre up): it must lie over the wood too, not
@@ -404,7 +404,7 @@ fn plant(
             };
             let foot = if big { 1.3 } else { 0.55 } * scale;
             nav.block_circle(p, foot * 0.8);
-            scene::model(
+            let e = scene::model(
                 commands,
                 &asset,
                 path,
@@ -412,6 +412,7 @@ fn plant(
                 rng.f() * 6.28,
                 scale,
             );
+            commands.entity(e).insert(crate::rim::Shade);
         };
     let mut x = -46.0;
     while x < 46.0 {
@@ -472,11 +473,12 @@ fn plant(
             scale,
         );
         let n = land.normal(p);
-        commands.entity(e).insert(
+        commands.entity(e).insert((
+            crate::rim::Shade,
             Transform::from_translation(on(p) - Vec3::Y * 0.12)
                 .with_rotation(Quat::from_rotation_arc(Vec3::Y, n) * Quat::from_rotation_y(yaw))
                 .with_scale(Vec3::splat(scale)),
-        );
+        ));
         placed += 1;
     }
     for i in 0..6 {
@@ -486,7 +488,7 @@ fn plant(
             continue;
         }
         nav.block_circle(p, 0.6);
-        scene::model(
+        let e = scene::model(
             &mut commands,
             &asset,
             "models/nature/forest/stump.glb",
@@ -494,6 +496,7 @@ fn plant(
             rng.f() * 6.28,
             rng.range(0.9, 1.3),
         );
+        commands.entity(e).insert(crate::rim::Shade);
     }
 
     // Ferns under the trees, in drifts.
@@ -513,7 +516,7 @@ fn plant(
         if trees.iter().any(|t| t.distance(p) < 1.0) {
             continue;
         }
-        scene::model(
+        let e = scene::model(
             &mut commands,
             &asset,
             "models/nature/forest/fern.glb",
@@ -521,6 +524,7 @@ fn plant(
             rng.f() * 6.28,
             rng.range(0.8, 1.5),
         );
+        commands.entity(e).insert(crate::rim::Shade);
         placed += 1;
     }
 

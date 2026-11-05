@@ -246,10 +246,11 @@ fn light_the_hour(
         Hour::Dusk => (
             16.0,
             -58.0,
-            Color::srgb(1.0, 0.64, 0.4),
-            5_000.0,
-            Color::srgb(0.42, 0.52, 0.95),
-            450.0,
+            Color::srgb(1.0, 0.58, 0.32),
+            3_500.0,
+            // A grey-blue fill, low, so the fire is the light the eye goes to.
+            Color::srgb(0.56, 0.62, 0.76),
+            240.0,
             1.0,
             1.0,
         ),
@@ -275,7 +276,7 @@ fn light_the_hour(
     // clearing is dim, not black.
     let ev = match *hour {
         Hour::Day => 9.0,
-        Hour::Dusk => 8.2,
+        Hour::Dusk => 7.9,
         Hour::Night => 7.4,
     };
     for mut e in &mut exposure {
@@ -283,7 +284,7 @@ fn light_the_hour(
     }
     let haze = match *hour {
         Hour::Day => Color::srgba(0.62, 0.7, 0.78, 0.55),
-        Hour::Dusk => Color::srgba(0.42, 0.4, 0.5, 0.5),
+        Hour::Dusk => Color::srgba(0.26, 0.28, 0.34, 0.45),
         Hour::Night => Color::srgba(0.05, 0.07, 0.13, 0.6),
     };
     for mut f in &mut fog {
@@ -296,7 +297,7 @@ fn light_the_hour(
         m.emissive = LinearRgba::rgb(30.0, 12.0, 3.0) * lit.max(0.15);
     }
     for (mut flame, mut vis) in &mut flames {
-        let base = if flame.fire { 110_000.0 } else { 9_000.0 };
+        let base = if flame.fire { 170_000.0 } else { 9_000.0 };
         flame.lumens = base * lit;
         *vis = if lit > 0.0 || flame.fire {
             Visibility::Inherited

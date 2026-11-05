@@ -9,6 +9,10 @@ import bevy_pbr::render::{
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> rim: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
+var canopy_map: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(102)
+var canopy_sampler: sampler;
 
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
@@ -19,6 +23,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let up = 0.55 + 0.45 * clamp(pbr_input.N.y, 0.0, 1.0);
     let edge = pow(1.0 - facing, rim.w) * up;
     pbr_input.material.emissive = vec4<f32>(pbr_input.material.emissive.rgb + rim.rgb * edge, pbr_input.material.emissive.a);
+    // Under the oaks the crowns hide the sky: its fill dimmed as the ground's is there
+    // (ground.wesl), and the rim with it (rim.rs's canopy map, 128 m about the middle).
+    let open = textureSample(canopy_map, canopy_sampler, in.world_position.xz / 128.0 + 0.5).r;
+    pbr_input.diffuse_occlusion *= vec3<f32>(open * open);
+    pbr_input.specular_occlusion *= open;
+    pbr_input.material.emissive = vec4<f32>(pbr_input.material.emissive.rgb * open, pbr_input.material.emissive.a);
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
