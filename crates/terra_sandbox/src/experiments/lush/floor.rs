@@ -15,6 +15,7 @@
 //!   noise of the kind's own like it, and a clump round each.
 
 mod builds;
+mod kit;
 mod laying;
 mod placements;
 mod reach;
@@ -39,6 +40,7 @@ use bevy::{
     shader::ShaderRef,
 };
 use builds::*;
+use kit::*;
 use placements::{PLACEMENTS, Placement};
 use std::f32::consts::{PI, TAU};
 use terra_gen::{Noise, Rng, Seed};
@@ -259,19 +261,15 @@ const FOOT_M: f32 = 0.25;
 /// How many variants of each kind of undergrowth are grown, each its own tint.
 const VARIANTS: u64 = 6;
 
-/// A shrub's or young tree's foot is filed for its well when it is set at a place, at its
-/// scale.
-fn planted<W: Ways>(map: &mut Floor<W>, kind: Under, at: Vec2, scale: f32) {
-    if kind.stands_in_a_well() {
-        map.feet.add(at, FOOT_M * scale);
-    }
-}
-
 /// Where a floor is laid on its map: rocks, logs and stumps from `from_m` to `to_m` round
 /// `middle`, the undergrowth from `inner_m` to `outer_m`, each as thickly as the forest walk
 /// lays its own (`YARD`), its tries in proportion to the ground; and whether only among
 /// trees and off water, as round the woods' trees of a world with land (D619), where past
 /// them is the land's own heath, lake or rock.
+///
+/// Or, with `square` (its south-west corner and side), a square piece of a floor streamed
+/// round the camera (`floor_stream`): everything tried uniformly in it, as thickly as the
+/// ring's, and nothing tried within `skip_within_m` of `middle`, which the load laid.
 pub(super) struct Area {
     pub middle: Vec2,
     pub from_m: f32,
@@ -279,6 +277,8 @@ pub(super) struct Area {
     pub inner_m: f32,
     pub outer_m: f32,
     pub among_trees: bool,
+    pub square: Option<(Vec2, f32)>,
+    pub skip_within_m: f32,
 }
 
 impl Area {
@@ -290,11 +290,14 @@ impl Area {
         inner_m: 3.0,
         outer_m: FOREST_M + MEADOW_M * 0.6,
         among_trees: false,
+        square: None,
+        skip_within_m: 0.0,
     };
 
     /// So many of the forest walk's tries, for this area's ground: the same where it is
-    /// the forest walk's.
-    fn tries(&self, yard: u32, undergrowth: bool) -> u32 {
+    /// the forest walk's. A square's are its share of the forest walk's ring by area, the
+    /// fraction left over tried by the dice, so a small square still gets its share.
+    fn tries(&self, yard: u32, undergrowth: bool, dice: &mut Rng) -> u32 {
         let ring = |from: f32, to: f32| f64::from(to * to - from * from);
         let (here, there) = if undergrowth {
             (
@@ -307,12 +310,33 @@ impl Area {
                 ring(Self::YARD.from_m, Self::YARD.to_m),
             )
         };
-        (f64::from(yard) * here / there).round() as u32
+        let Some((_, side)) = self.square else {
+            return (f64::from(yard) * here / there).round() as u32;
+        };
+        let many = f64::from(yard) * f64::from(side * side) / (std::f64::consts::PI * there);
+        let whole = many.floor();
+        whole as u32 + u32::from(f64::from(dice.unit()) < many - whole)
     }
 
     /// A place for a rock, log or stump.
     fn place(&self, dice: &mut Rng) -> Vec2 {
-        self.middle + disc(dice, self.from_m, self.to_m)
+        match self.square {
+            Some((low, side)) => low + Vec2::new(dice.unit(), dice.unit()) * side,
+            None => self.middle + disc(dice, self.from_m, self.to_m),
+        }
+    }
+
+    /// A place a clump of undergrowth is tried at.
+    fn place_undergrowth(&self, dice: &mut Rng) -> Vec2 {
+        match self.square {
+            Some((low, side)) => low + Vec2::new(dice.unit(), dice.unit()) * side,
+            None => self.middle + disc(dice, self.inner_m, self.outer_m),
+        }
+    }
+
+    /// Whether a try's place is left alone, as one the load laid.
+    fn skips(&self, at: Vec2) -> bool {
+        at.distance(self.middle) < self.skip_within_m
     }
 
     /// Whether a place is one the floor is laid at: among trees where it asks.
@@ -507,211 +531,14 @@ impl Drawn {
 }
 
 /// Lays the forest floor, by what the trees and paths leave: rocks and boulders, stumps,
-/// fallen logs, and the undergrowth in drifts; and gives back the map the ground cover is
-/// grown from.
-pub(super) fn lay<W: Ways>(lay: &mut Lay, map: &mut Floor<W>, area: &Area) {
+/// fallen logs, and the undergrowth in drifts; and gives back the kit it was laid with, for
+/// laying more of it later (`floor_stream`).
+pub(super) fn lay<W: Ways>(lay: &mut Lay, map: &mut Floor<W>, area: &Area) -> Kit {
     let mut dice = lay.seed.derive("floor").rng();
-
-    // Rocks and boulders, the rocks scattered round the boulders and alone; sunk a fifth to
-    // two fifths of their height once their meshes are loaded (`Sink`).
-    let rocks: Vec<_> = (1..=7)
-        .map(|n| lay.mossy_scan(&format!("mossy_rock_b_{n}"), 0.8))
-        .collect();
-    let mut boulders: Vec<_> = (1..=6)
-        .map(|n| lay.mossy_scan(&format!("mossy_rock_a_{n}"), 1.0))
-        .collect();
-    boulders.push(lay.mossy_scan("boulder_1", 0.9));
-    let mut laid = [0; 4];
-    // The nearest of each to the start, for scripted runs to look at.
-    let mut nearest = [Vec2::splat(f32::MAX); 4];
-    let note = |nearest: &mut [Vec2; 4], what: usize, at: Vec2| {
-        if at.length() < nearest[what].length() {
-            nearest[what] = at;
-        }
-    };
-    let mut rock = |lay: &mut Lay, map: &mut Floor<W>, dice: &mut Rng, at: Vec2, boulder: bool| {
-        let here = map.here(at);
-        if here.path < 1.2 || here.bark < 0.8 || here.lying < 0.2 || !area.holds(&here) {
-            return;
-        }
-        let (scale, kinds, size) = if boulder {
-            (dice.range(0.6, 1.3), &boulders, 1.2)
-        } else {
-            // Many small stones and a few big ones.
-            let u = dice.unit();
-            (0.4 + 1.8 * u * u, &rocks, 0.35)
-        };
-        // Most sit a fifth to two fifths in the ground; a third are half buried or more,
-        // only their mossy backs showing, as hummocks of the floor.
-        let sink = if dice.unit() < 0.35 {
-            dice.range(0.45, 0.75)
-        } else {
-            dice.range(0.2, 0.4)
-        };
-        let place = lay.on(at, dice, 0.0, scale);
-        let (mesh, material) = kinds[dice.below(kinds.len() as u32) as usize].clone();
-        if lay.off(area, &place) {
-            return;
-        }
-        lay.commands.spawn((
-            Name::new(if boulder { "Boulder" } else { "Rock" }),
-            Mesh3d(mesh),
-            MeshMaterial3d(material),
-            place,
-            within(if boulder { 160.0 } else { 80.0 }),
-            Footing,
-            Sink(sink),
-        ));
-        map.lying.add(at, size * scale * 0.6);
-        laid[boulder as usize] += 1;
-        note(&mut nearest, boulder as usize, at);
-    };
-    for _ in 0..area.tries(70, false) {
-        let at = area.place(&mut dice);
-        rock(lay, map, &mut dice, at, true);
-        // Stones broken from it round its foot.
-        for _ in 0..dice.below(5) {
-            let near = round(&mut dice, at, 2.2);
-            rock(lay, map, &mut dice, near, false);
-        }
-    }
-    for _ in 0..area.tries(1400, false) {
-        let at = area.place(&mut dice);
-        // More in the shade, where the soil is thin over them.
-        if dice.unit() > 0.4 + 0.6 * (1.0 - map.here(at).light) {
-            continue;
-        }
-        rock(lay, map, &mut dice, at, false);
-    }
-
-    // Fallen logs, under the trees most, each from the forest's own trees: tapering,
-    // broken at the crown's end, its stubs of branches, settled into the ground.
-    let end_grain = lay.end_grain();
-    let logs: Vec<(Handle<Mesh>, Option<Handle<Mesh>>, f32, f32)> = (0..LOG_KINDS)
-        .map(|kind| {
-            let mut dice = lay.seed.derive("log").index(kind).rng();
-            let log = fallen_log(&mut dice);
-            let mut mesh = log.bark.mesh();
-            // Kept on the CPU too, for its footing to be fitted to (D267).
-            mesh.asset_usage = bevy::asset::RenderAssetUsages::all();
-            mesh.generate_tangents()
-                .expect("a log has normals and texture places");
-            (
-                lay.meshes.add(mesh),
-                log.end.map(|end| lay.meshes.add(end.mesh())),
-                log.length,
-                log.radius,
-            )
-        })
-        .collect();
-    for _ in 0..area.tries(180, false) {
-        let at = area.place(&mut dice);
-        let here = map.here(at);
-        if dice.unit() > 0.25 + 0.75 * (1.0 - here.light) || !area.holds(&here) {
-            continue;
-        }
-        let (bark_mesh, end_mesh, length, radius) =
-            logs[dice.below(LOG_KINDS as u32) as usize].clone();
-        let scale = dice.range(0.85, 1.15);
-        let place = lay.on(at, &mut dice, 0.12 * scale, scale);
-        let along = lay.on_map(place.rotation * Vec3::X);
-        let half = length * scale * 0.5;
-        // Clear of the paths, the trunks and what else lies there, all along it.
-        let steps = (half / 0.8).ceil() as i32;
-        let clear = (-steps..=steps).all(|k| {
-            let p = at + along * (k as f32 / steps as f32) * half;
-            let h = map.here(p);
-            h.path > 1.0 && h.bark > 0.6 && h.lying > 0.3
-        });
-        if !clear || lay.off(area, &place) {
-            continue;
-        }
-        for k in -steps..=steps {
-            map.lying.add(
-                at + along * (k as f32 / steps as f32) * half,
-                radius * scale,
-            );
-        }
-        // Of the trees round it.
-        let bark = if here.needles > 0.5 {
-            lay.pine_bark.clone()
-        } else {
-            lay.bark.clone()
-        };
-        let mut log = lay.commands.spawn((
-            Name::new("Log"),
-            Mesh3d(bark_mesh),
-            MeshMaterial3d(bark),
-            place,
-            within(110.0),
-            Footing,
-        ));
-        if let Some(end) = end_mesh {
-            log.with_child((
-                Mesh3d(end),
-                MeshMaterial3d(end_grain.clone()),
-                within(110.0),
-            ));
-        }
-        laid[2] += 1;
-        note(&mut nearest, 2, at);
-    }
-
-    // Stumps of trees cut or broken long ago.
-    let stumps: Vec<(Handle<Mesh>, Option<Handle<Mesh>>, f32)> = (0..STUMP_KINDS)
-        .map(|kind| {
-            let mut dice = lay.seed.derive("stump").index(kind).rng();
-            let stump = stump(&mut dice, kind.is_multiple_of(2));
-            let mut mesh = stump.bark.mesh();
-            // Kept on the CPU too, for its footing to be fitted to (D267).
-            mesh.asset_usage = bevy::asset::RenderAssetUsages::all();
-            mesh.generate_tangents()
-                .expect("a stump has normals and texture places");
-            (
-                lay.meshes.add(mesh),
-                stump.end.map(|end| lay.meshes.add(end.mesh())),
-                stump.radius,
-            )
-        })
-        .collect();
-    for _ in 0..area.tries(110, false) {
-        let at = area.place(&mut dice);
-        let here = map.here(at);
-        if here.path < 1.0
-            || here.bark < 1.2
-            || here.lying < 0.5
-            || !area.holds(&here)
-            || dice.unit() > 0.3 + 0.7 * (1.0 - here.light)
-        {
-            continue;
-        }
-        let (bark_mesh, end_mesh, radius) = stumps[dice.below(STUMP_KINDS as u32) as usize].clone();
-        let scale = dice.range(0.8, 1.25);
-        let place = lay.on(at, &mut dice, 0.0, scale);
-        if lay.off(area, &place) {
-            continue;
-        }
-        let bark = if here.needles > 0.5 {
-            lay.pine_bark.clone()
-        } else {
-            lay.bark.clone()
-        };
-        let mut stump = lay.commands.spawn((
-            Name::new("Stump"),
-            Mesh3d(bark_mesh),
-            MeshMaterial3d(bark),
-            place,
-            within(90.0),
-            Footing,
-        ));
-        if let Some(end) = end_mesh {
-            stump.with_child((Mesh3d(end), MeshMaterial3d(end_grain.clone()), within(90.0)));
-        }
-        // Its foot in duff and roots, as a tree's.
-        map.canopy.add(Stand::stump(at, radius * scale * 1.3));
-        laid[3] += 1;
-        note(&mut nearest, 3, at);
-    }
+    let kit = Kit::make(lay);
+    let mut put = Put::default();
+    lay_with(lay, &kit, map, area, &mut dice, &mut put);
+    let (laid, nearest) = (put.wood, put.nearest);
     info!(
         "lush: the floor has {} rocks, {} boulders, {} fallen logs and {} stumps; the nearest \
          of each at {:.1},{:.1}, {:.1},{:.1}, {:.1},{:.1} and {:.1},{:.1} (east, south).",
@@ -728,64 +555,19 @@ pub(super) fn lay<W: Ways>(lay: &mut Lay, map: &mut Floor<W>, area: &Area) {
         nearest[3].x,
         nearest[3].y
     );
-
-    // The undergrowth, kind by kind, in drifts.
-    let mut counts = Vec::new();
-    for placement in &PLACEMENTS {
-        let variants = lay.grow(placement);
-        let drift = Noise::new(lay.seed.derive(placement.name).index(placement.kind as u64));
-        let clear = placement.kind.clear_of();
-        let mut count = 0;
-        let mut closest = Vec2::splat(f32::MAX);
-        for _ in 0..area.tries(placement.tries, true) {
-            let Some(at) = placement.kind.tried_at(&map.ways, area, &mut dice) else {
-                continue;
-            };
-            let drifts = smoothstep(
-                0.38,
-                0.62,
-                0.5 + 0.5 * drift.fbm(Vec3::new(at.x, 0.0, at.y) / placement.drift_m, 2, 2.0, 0.5),
-            );
-            if !lay.starts(placement.kind, at, map.here(at), dice.unit(), drifts) {
-                continue;
-            }
-            let many = placement.clump.0 + dice.below(placement.clump.1 - placement.clump.0 + 1);
-            for k in 0..many {
-                let p = if k == 0 {
-                    at
-                } else {
-                    round(&mut dice, at, placement.spread_m)
-                };
-                let member = lay.member(placement.kind, p, map.here(p), clear);
-                let Some(here) = member.filter(|here| area.holds(here)) else {
-                    continue;
-                };
-                // Smaller toward the clump's edge.
-                let edge = 1.0 - 0.3 * (p.distance(at) / (placement.spread_m * 2.0)).min(1.0);
-                let scale = dice.range(placement.scale.0, placement.scale.1) * edge;
-                let place = lay.on(p, &mut dice, 0.03 * scale, scale);
-                let pick = dice.below(variants.len() as u32) as usize;
-                let drawn = variants[pick].clone();
-                // Rolled as before, so every other plant stays where it was, then left out
-                // if it would stand in the path's line.
-                if !placement.kind.keeps_path_line(here.path) || lay.off(area, &place) {
-                    continue;
-                }
-                lay.plant(placement, &drawn, p, place);
-                planted(map, placement.kind, p, scale);
-                count += 1;
-                if p.length() < closest.length() {
-                    closest = p;
-                }
-            }
-        }
-        counts.push(format!(
-            "{count} {:?} (the nearest at {:.1},{:.1})",
-            placement.kind, closest.x, closest.y
-        ));
-    }
+    let counts: Vec<String> = put
+        .undergrowth
+        .iter()
+        .map(|(kind, count, closest)| {
+            format!(
+                "{count} {kind:?} (the nearest at {:.1},{:.1})",
+                closest.x, closest.y
+            )
+        })
+        .collect();
     info!("lush: undergrowth: {}.", counts.join(", "));
     lay.hand_over_shadows();
+    kit
 }
 
 /// A stump at `stump_at` and a fallen log at `log_at`, of the floor's own wood, as if the

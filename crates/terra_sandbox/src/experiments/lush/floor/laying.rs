@@ -211,14 +211,14 @@ impl Lay<'_, '_, '_> {
 
     /// Spawns one plant of a kind, standing at `at` on the map: its first part drawn by its
     /// own entity, the rest by its children, and its shadow filed for when the camera is
-    /// near (`shade`).
+    /// near (`shade`). Gives back the plant and whether it can be cut, if it has parts.
     pub(super) fn plant(
         &mut self,
         placement: &Placement,
         drawn: &Drawn,
         at: Vec2,
         place: Transform,
-    ) {
+    ) -> Option<(Entity, bool)> {
         let cut = match placement.kind {
             Under::Hazel | Under::Scrub | Under::Sapling | Under::Coppice | Under::Holly => {
                 self.cut_as("Bush", place.scale.y)
@@ -253,9 +253,7 @@ impl Lay<'_, '_, '_> {
                 entity.insert(Footing);
             }
         };
-        let Some((first, rest)) = drawn.parts.split_first() else {
-            return;
-        };
+        let (first, rest) = drawn.parts.split_first()?;
         // It fades as a whole while it is between the camera and the player (D274).
         let mut entity = self.commands.spawn((
             Name::new(placement.name),
@@ -276,9 +274,10 @@ impl Lay<'_, '_, '_> {
         // Its shadow from a copy only the sun sees, which shrinks away rather than ending,
         // as Bevy's shadow passes do not dither (D234), so the plant itself never dithers
         // between two of itself.
+        let plant = entity.id();
         if let Some(set) = drawn.shadow_set {
-            let plant = entity.id();
             self.shade.add(plant, at, set);
         }
+        Some((plant, cut.is_some()))
     }
 }

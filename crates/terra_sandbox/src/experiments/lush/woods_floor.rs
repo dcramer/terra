@@ -86,6 +86,8 @@ fn lay_woods_floor(
         inner_m: CLEAR_M,
         outer_m: REACH_M,
         among_trees: true,
+        square: None,
+        skip_within_m: 0.0,
     };
     let mut lay = Lay {
         commands: &mut commands,

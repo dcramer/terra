@@ -212,3 +212,41 @@ fn verge_tries_start_just_outside_a_paths_edge() {
     let far = starts.iter().filter(|d| **d > VERGE_OUT_M * 0.5).count();
     assert!(far > 150, "spread across the verge, not on the edge: {far}");
 }
+
+#[test]
+fn a_squares_tries_are_as_thick_as_the_rings() {
+    // The woods' ring round their middle, and squares of 16 m streamed past it: each square's
+    // tries, its share of the ring's thickness with the fraction left to the dice, average to
+    // the ring's tries a square metre, for the rocks' many tries and the undergrowth's few.
+    let ring = Area {
+        middle: Vec2::ZERO,
+        from_m: 14.0,
+        to_m: 220.0,
+        inner_m: 14.0,
+        outer_m: 220.0,
+        among_trees: true,
+        square: None,
+        skip_within_m: 0.0,
+    };
+    let ground = PI * (220.0f32 * 220.0 - 14.0 * 14.0);
+    let mut dice = Seed(9).rng();
+    let squares = 20_000;
+    for (yard, undergrowth) in [(1400, false), (70, false), (20, true)] {
+        let thick = ring.tries(yard, undergrowth, &mut dice) as f32 / ground;
+        let tried: u32 = (0..squares)
+            .map(|k| {
+                let low = Vec2::new((k % 100) as f32, (k / 100) as f32) * 16.0;
+                let square = Area {
+                    square: Some((low, 16.0)),
+                    ..ring
+                };
+                square.tries(yard, undergrowth, &mut dice)
+            })
+            .sum();
+        let square_thick = tried as f32 / (squares as f32 * 256.0);
+        assert!(
+            (square_thick / thick - 1.0).abs() < 0.04,
+            "{yard} tries: {square_thick} a square metre in squares, {thick} in the ring"
+        );
+    }
+}

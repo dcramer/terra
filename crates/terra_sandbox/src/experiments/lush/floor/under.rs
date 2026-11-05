@@ -137,7 +137,7 @@ impl Under {
         if self == Under::Verge {
             ways.beside(dice, VERGE_OUT_M)
         } else {
-            Some(area.middle + disc(dice, area.inner_m, area.outer_m))
+            Some(area.place_undergrowth(dice))
         }
     }
 
