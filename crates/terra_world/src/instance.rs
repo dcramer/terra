@@ -29,12 +29,7 @@ use crate::loading::Screen;
 use bevy::{
     app::MainScheduleOrder,
     ecs::{
-        entity_disabling::Disabled,
-        error::{ErrorContext, FallbackErrorHandler},
-        lifecycle::HookContext,
-        query::Allow,
-        schedule::ScheduleLabel,
-        system::SystemParamValidationError,
+        entity_disabling::Disabled, lifecycle::HookContext, query::Allow, schedule::ScheduleLabel,
         world::DeferredWorld,
     },
     prelude::*,
@@ -79,8 +74,8 @@ pub enum Travel {
     /// What the world needs before anything of it can stand is made off the main thread, as
     /// shipped games generate a world behind their loading screen (D623): its land, seconds on
     /// a 30 km world. The loading screen is up and drawn meanwhile; nothing of the world exists
-    /// yet, and a system that reads what it has not made is skipped ([`Generating`]). Entered
-    /// once nothing is left to make, in the same frame.
+    /// yet, and a system that reads it is gated off ([`in_world`]). Entered once nothing is
+    /// left to make ([`Generating`]), in the same frame.
     Generating,
     /// Modules build the world's resources and spawn its content; the loading screen is up.
     Entering,
@@ -177,7 +172,7 @@ pub enum Building {
 /// start-up looks at it, and right after each frame's state transitions, so a world is left
 /// and the next entered in the one frame. No world's system ever runs a frame without its
 /// resources (`Res<Planet>` alone is read by 87 systems): while its land is generated they
-/// are skipped ([`Generating`]).
+/// are gated off ([`in_world`]).
 #[derive(ScheduleLabel, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Crossing;
 
@@ -222,21 +217,6 @@ impl Generating {
     }
 }
 
-/// The error handler the run had before generating began, put back once the world is
-/// entered.
-#[derive(Resource)]
-struct Before(Option<FallbackErrorHandler>);
-
-/// While a world is generated, a system that reads what the world has not made yet (its
-/// planet, its start) is skipped, as Bevy skips one whose `Single` matches nothing, rather than
-/// stopping the game: 87 systems read the planet alone, each written for a world that is
-/// there, and none is gated on it (D623). Any other error is handled as Bevy's default does.
-fn skip_the_unmade(error: BevyError, context: ErrorContext) {
-    if error.downcast_ref::<SystemParamValidationError>().is_none() {
-        bevy::ecs::error::match_severity(error, context);
-    }
-}
-
 /// A run condition: the world is made, so a system that reads it (its planet, its start, its
 /// clock, any world resource) may run (D623). Its land is not made while it is generated,
 /// nor is there any world on the way to one or in none; a world system is gated on this as
@@ -248,8 +228,7 @@ pub fn in_world(travel: Option<Res<State<Travel>>>) -> bool {
     travel.is_none_or(|travel| matches!(travel.get(), Travel::Entering | Travel::Playing))
 }
 
-/// Generating with nothing left to make: the world is entered, and what reads it is no
-/// longer skipped. Generating with work going: what reads the world is skipped meanwhile.
+/// Generating with nothing left to make: the world is entered.
 fn generated(world: &mut World) {
     let generating = world
         .get_resource::<State<Travel>>()
@@ -258,20 +237,7 @@ fn generated(world: &mut World) {
         .get_resource::<Generating>()
         .is_some_and(|generating| !generating.making.is_empty());
     if generating && making {
-        if !world.contains_resource::<Before>() {
-            let before = world.get_resource::<FallbackErrorHandler>().copied();
-            world.insert_resource(Before(before));
-            world.insert_resource(FallbackErrorHandler(skip_the_unmade));
-        }
         return;
-    }
-    if let Some(Before(before)) = world.remove_resource::<Before>() {
-        match before {
-            Some(before) => world.insert_resource(before),
-            None => {
-                world.remove_resource::<FallbackErrorHandler>();
-            }
-        }
     }
     // Not over a crossing asked for meanwhile, to another world.
     let mut next = world.resource_mut::<NextState<Travel>>();

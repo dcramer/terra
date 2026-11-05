@@ -294,9 +294,9 @@ fn what_lives_is_counted_apart_by_name_with_what_hangs_from_it_and_watches_it() 
 }
 
 /// What a world makes off the main thread (D623), as its land is: frames run while it is
-/// made, a system reading the world's resource is skipped meanwhile rather than stopping the
-/// game, the world is entered in the frame the work is done, and a missing resource is the
-/// run's own error again once it is.
+/// made, a system reading the world's resource is gated off meanwhile ([`in_world`]), with
+/// Bevy's own error handling left as it is, so one that is not gated fails loudly, and the
+/// world is entered in the frame the work is done.
 #[test]
 fn a_world_generated_off_the_main_thread_is_entered_once_made() {
     #[derive(Resource, Default)]
@@ -331,15 +331,23 @@ fn a_world_generated_off_the_main_thread_is_entered_once_made() {
                 .in_set(Building::Land),
         )
         // Written for a world that is there, as the planet's readers are.
-        .add_systems(Update, |_: Res<Grove>, mut frames: ResMut<Frames>| {
-            frames.0 += 1;
-        });
+        .add_systems(
+            Update,
+            (|_: Res<Grove>, mut frames: ResMut<Frames>| {
+                frames.0 += 1;
+            })
+            .run_if(in_world),
+        );
     for _ in 0..5 {
         app.update();
     }
     assert_eq!(travel(&app), Travel::Generating);
     assert_eq!(app.world().resource::<Frames>().0, 0);
-    assert!(app.world().contains_resource::<FallbackErrorHandler>());
+    assert!(
+        !app.world()
+            .contains_resource::<bevy::ecs::error::FallbackErrorHandler>(),
+        "Bevy's error handling is the run's own throughout"
+    );
 
     app.world_mut().resource_mut::<Ready>().0 = true;
     app.update();
@@ -349,7 +357,6 @@ fn a_world_generated_off_the_main_thread_is_entered_once_made() {
         1,
         "entered in that frame"
     );
-    assert!(!app.world().contains_resource::<FallbackErrorHandler>());
     app.update();
     assert_eq!(travel(&app), Travel::Playing);
 }
