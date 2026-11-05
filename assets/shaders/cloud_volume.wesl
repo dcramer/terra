@@ -51,6 +51,10 @@ struct Params {
     // The land beyond the world's edge the sky draws (far_land.wesl): x its hills' height,
     // radians (0 for none), y 1 for a range's peaks, z the planet's radius.
     far_land: vec4<f32>,
+    // Experiment: x in-scattering probability, y detail in the light march, z density scale,
+    // w octaves.
+    look: vec4<f32>,
+    look2: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -272,16 +276,17 @@ fn shape(c: Column, m: vec2<f32>, h: f32, lod: f32) -> f32 {
 
 // The edges eroded by the finer Worley noise: wispy low down, billowing higher up (Nubis 2015).
 fn eroded(c: Column, m: vec2<f32>, h: f32, body: f32, lod: f32) -> f32 {
-    let uvw = vec3<f32>(m.x / DETAIL_TILE_M + params.volume.z, h / DETAIL_TILE_M, m.y / DETAIL_TILE_M + params.volume.w);
-    let d = textureSampleLevel(noise, repeating, uvw, lod);
+    let repeats = params.tuned.w;
+    let uvw = vec3<f32>(m.x / DETAIL_TILE_M + params.volume.z, h / DETAIL_TILE_M, m.y / DETAIL_TILE_M + params.volume.w) * repeats;
+    let d = textureSampleLevel(noise, repeating, uvw, lod + log2(repeats));
     let fbm = d.g * 0.625 + d.b * 0.25 + d.a * 0.125;
     let lift = clamp(lift_in(c, h) * 4.0, 0.0, 1.0);
     let edge = mix(fbm, 1.0 - fbm, lift);
-    return remap(body, edge * 0.4, 1.0) * (1.0 + 2.0 * c.rain);
+    return remap(body, edge * params.tuned.z, 1.0) * (1.0 + 2.0 * c.rain);
 }
 
 fn extinction(c: Column) -> f32 {
-    return mix(DECK_EXTINCTION, CUMULUS_EXTINCTION, c.kind);
+    return mix(DECK_EXTINCTION, CUMULUS_EXTINCTION, c.kind) * params.look.z;
 }
 
 // Jendersie and d'Eon's approximate Mie phase for droplets 20 um across: a Henyey-Greenstein
@@ -316,7 +321,14 @@ fn toward_sun(c: Column, m: vec2<f32>, h: f32, mu: f32, way: vec2<f32>) -> f32 {
     var step = 30.0;
     for (var k = 0u; k < 8u; k++) {
         let s = along + step * 0.5;
-        tau += shape(c, m + way * s, height_along(h, mu, s), log2(step / (SHAPE_TILE_M / NOISE_SIDE)) + 1.0) * step;
+        let at = m + way * s;
+        let hs = height_along(h, mu, s);
+        var d = shape(c, at, hs, log2(step / (SHAPE_TILE_M / NOISE_SIDE)) + 1.0);
+        // Experiment: the first taps through the eroded edges, so billows shade each other.
+        if params.look.y > 0.5 && k < 3u && d > 0.0 {
+            d = eroded(c, at, hs, d, max(log2(step / (DETAIL_TILE_M / NOISE_SIDE)), 0.0));
+        }
+        tau += d * step;
         along += step;
         step *= 1.5;
     }
@@ -366,9 +378,33 @@ struct Lights {
     ground_sun: vec3<f32>,
     ground_sky: vec3<f32>,
     phase: f32,
+    cos_sun: f32,
 }
 
-fn scattered(l: Lights, c: Column, h: f32, tau_sun: f32, tau_view: f32) -> vec3<f32> {
+// Experiment: Nubis 2017's in-scattering probability (Schneider, SIGGRAPH 2017 Advances): light
+// scattered many times reaches a sample less near the cloud's edge (its density low) and near
+// its base, so crevices between billows and bases are darker than the body's middle.
+fn in_scatter(body: f32, lift: f32) -> f32 {
+    let depth = 0.05 + pow(max(body, 0.0), mix(0.5, 2.0, clamp((lift - 0.3) / 0.55, 0.0, 1.0)));
+    let vertical = pow(mix(0.1, 1.0, clamp((lift - 0.07) / 0.07, 0.0, 1.0)), 0.8);
+    return clamp(depth * vertical, 0.0, 1.0);
+}
+
+// Experiment: Hillaire 2016's multiple scattering by octaves (after Wrenninge 2013): each
+// octave's light dimmed by less of the depth, scattered less, by a wider lobe.
+fn octaves(cos_t: f32, tau: f32) -> f32 {
+    var sum = 0.0;
+    var a = 1.0;
+    var b = 1.0;
+    for (var i = 0u; i < 4u; i++) {
+        a *= params.look2.x;
+        b *= 0.5;
+        sum += b * henyey_greenstein(cos_t, MEAN_COS * b) * exp(-a * tau);
+    }
+    return sum * params.look.w;
+}
+
+fn scattered(l: Lights, c: Column, h: f32, tau_sun: f32, tau_view: f32, body: f32) -> vec3<f32> {
     let k = 1.0 - MEAN_COS;
     // The depth of cloud above and below in the column the sample stands in, as a level layer.
     let column = extinction(c) * c.coverage * COLUMN_FILL * c.thickness;
@@ -380,7 +416,11 @@ fn scattered(l: Lights, c: Column, h: f32, tau_sun: f32, tau_view: f32) -> vec3<
     let p_column = 0.5 * (exp_integral_e2(k * tau_up) + exp_integral_e2(k * tau_down));
     let p_local = 0.5 * (exp(-k * tau_sun) + exp(-k * tau_view));
     let f = 1.0 - max(min(p_column, p_local), 6.1035e-5);
-    let multiple = exp(-k * tau_sun) * f / (1.0 - f) * (0.25 / PI);
+    var multiple = exp(-k * tau_sun) * f / (1.0 - f) * (0.25 / PI);
+    if params.look.w > 0.0 {
+        multiple = octaves(l.cos_sun, tau_sun);
+    }
+    multiple *= mix(1.0, in_scatter(body, lift), params.look.x);
     let sunward = l.sun * (exp(-tau_sun) * l.phase + multiple);
     let ground = l.ground_sun * (1.0 - c.cover) + l.ground_sky;
     let w = (k * tau_up + DIFFUSION_Z0) / (k * (tau_up + tau_down) + 2.0 * DIFFUSION_Z0);
@@ -491,6 +531,7 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
     lights.ground_sun = GROUND_ALBEDO * sunlight * max(height, 0.0) / PI;
     lights.ground_sky = GROUND_ALBEDO * sky;
     lights.phase = mie(dot(direction, sun));
+    lights.cos_sun = dot(direction, sun);
     let sun_way = map_way(sun);
 
     var transmittance = 1.0;
@@ -558,7 +599,7 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
             // The sun's cosine to the up where the sample is, as the shells curve.
             let up_here = normalize(eye_up * (params.shell.y + eye_height) + direction * s);
             let tau = toward_sun(c, m, h, dot(sun, up_here), sun_way);
-            let lit = scattered(lights, c, h, tau, seen_through + 0.5 * sigma * dt) * sigma;
+            let lit = scattered(lights, c, h, tau, seen_through + 0.5 * sigma * dt, body) * sigma;
             seen_through += sigma * dt;
             let through = exp(-sigma * dt);
             let took = transmittance * (1.0 - through);
@@ -606,7 +647,7 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
         if opacity > 0.0 {
             let at = far_at;
             // Lit as the march lights a cloud's middle: a little way in from the sunlit side.
-            let lit = scattered(lights, far, h, 8.0, 2.0);
+            let lit = scattered(lights, far, h, 8.0, 2.0, 0.6);
             let clear = exp(-at / HAZE_M);
             light += transmittance * opacity * lit * clear;
             hazed += transmittance * opacity * (1.0 - clear);
