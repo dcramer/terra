@@ -25,10 +25,15 @@ pub fn plugin(app: &mut App) {
 
 const BODY: &str = "models/character/male.glb";
 const PIECES: &str = "models/character/male";
+/// The knight (a Tripo model with its own skeleton and clips, in the spike's assets); its
+/// armature is about a metre tall.
+const KNIGHT: &str = "spike://models/knight.glb";
+const KNIGHT_SCALE: f32 = 1.84;
 
 /// What each kind of model calls its idle, walk and run clips.
 const KINDS: &[(&str, [&str; 3])] = &[
     (BODY, ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop"]),
+    (KNIGHT, ["idle", "walk", "run"]),
 ];
 
 #[derive(Resource, Default)]
@@ -109,6 +114,7 @@ struct Piece {
 struct Held {
     path: &'static str,
     socket: &'static str,
+    at: Transform,
 }
 
 /// Walks to somewhere near home now and then.
@@ -157,11 +163,8 @@ fn spawn(
             "Aldric",
             "Fighter",
             Dress {
-                pieces: RANGER,
-                held: &[
-                    ("models/held/arming_sword.glb", "socket.hand.R"),
-                    ("models/held/heater_shield.glb", "socket.hand.L"),
-                ],
+                pieces: &[],
+                held: &[],
             },
             FIRE + Vec2::new(-1.5, 1.6),
             ["Aye?", "Lead on.", "My blade is yours."],
@@ -205,13 +208,16 @@ fn spawn(
             Some(bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb),
         ));
         let to_fire = FIRE - at;
-        let (actor, body) = person(
-            &mut commands,
-            &asset,
-            at,
-            &dress,
-            to_fire.x.atan2(to_fire.y),
-        );
+        let yaw = to_fire.x.atan2(to_fire.y);
+        let knight = dress.pieces.is_empty();
+        let (actor, body) = if knight {
+            self::knight(&mut commands, &asset, at, yaw)
+        } else {
+            person(&mut commands, &asset, at, &dress, yaw)
+        };
+        // The camera is the body's child, so it is in the body's scale.
+        let s = if knight { KNIGHT_SCALE } else { 1.0 };
+        let face = if knight { 1.6 } else { 1.66 };
         commands.entity(actor).insert(Member {
             slot,
             name,
@@ -232,7 +238,8 @@ fn spawn(
                 fov: 16f32.to_radians(),
                 ..default()
             }),
-            Transform::from_xyz(0.0, 1.72, 1.6).looking_at(Vec3::new(0.0, 1.66, 0.0), Vec3::Y),
+            Transform::from_xyz(0.0, (face + 0.06) / s, 1.6 / s)
+                .looking_at(Vec3::new(0.0, face / s, 0.0), Vec3::Y),
             ChildOf(body),
             PortraitOf(actor),
         ));
@@ -285,7 +292,11 @@ fn person(
     }
     for (path, socket) in dress.held {
         commands.spawn((
-            Held { path, socket },
+            Held {
+                path,
+                socket,
+                at: Transform::default(),
+            },
             ChildOf(body),
             Transform::default(),
             Visibility::default(),
@@ -294,6 +305,53 @@ fn person(
     (actor, body)
 }
 
+/// The knight in his harness, sword in hand and shield on his arm.
+fn knight(commands: &mut Commands, asset: &AssetServer, at: Vec2, yaw: f32) -> (Entity, Entity) {
+    let actor = commands
+        .spawn((
+            Transform::from_xyz(at.x, 0.0, at.y),
+            Visibility::default(),
+            Actor {
+                model: KNIGHT,
+                walk: 1.4,
+                run: 3.4,
+                path: VecDeque::new(),
+                running: false,
+                height: 1.85,
+                radius: 0.34,
+            },
+        ))
+        .id();
+    let body = commands
+        .spawn((
+            WorldAssetRoot(asset.load(GltfAssetLabel::Scene(0).from_asset(KNIGHT))),
+            Transform::from_rotation(Quat::from_rotation_y(yaw))
+                .with_scale(Vec3::splat(KNIGHT_SCALE)),
+            Model,
+            ChildOf(actor),
+        ))
+        .id();
+    // The male body's hand sockets, brought into the knight's smaller bones.
+    let grip = |x: f32| Transform {
+        translation: Vec3::new(x, 0.047, -0.003),
+        rotation: Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+        scale: Vec3::splat(1.0 / KNIGHT_SCALE),
+    };
+    for (path, socket, at) in [
+        ("models/held/arming_sword.glb", "hand_r", grip(-0.026)),
+        ("models/held/heater_shield.glb", "hand_l", grip(0.026)),
+    ] {
+        commands.spawn((
+            Held { path, socket, at },
+            ChildOf(body),
+            Transform::default(),
+            Visibility::default(),
+        ));
+    }
+    (actor, body)
+}
+
+#[allow(dead_code)]
 fn creature(
     commands: &mut Commands,
     asset: &AssetServer,
@@ -463,7 +521,7 @@ fn hold(
         commands.entity(entity).despawn();
         commands.spawn((
             WorldAssetRoot(asset.load(GltfAssetLabel::Scene(0).from_asset(h.path))),
-            Transform::default(),
+            h.at,
             ChildOf(socket),
         ));
     }

@@ -84,6 +84,11 @@ fn main() {
         })
     };
     App::new()
+        // The spike's own models (the knight), beside the repository's assets.
+        .register_asset_source(
+            "spike",
+            bevy::asset::io::AssetSourceBuilder::platform_default("spike/iso/assets", None),
+        )
         .insert_resource(args.clone())
         .insert_resource(ClearColor(Color::BLACK))
         .add_plugins(DefaultPlugins.set(WindowPlugin {
