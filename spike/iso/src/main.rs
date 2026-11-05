@@ -7,9 +7,11 @@ mod forest;
 mod mipmaps;
 mod nav;
 mod party;
+mod rim;
 mod scene;
 mod terrain;
 mod ui;
+mod water;
 
 use bevy::diagnostic::FrameCount;
 use bevy::prelude::*;
@@ -39,7 +41,7 @@ fn args() -> Args {
         demo: false,
         demo_at: 120,
         hour: scene::Hour::Dusk,
-        zoom: 15.0,
+        zoom: 11.0,
         focus: Vec2::new(-1.0, 1.0),
         size: (1920, 1080),
     };
@@ -110,6 +112,8 @@ fn main() {
             camera::plugin,
             command::plugin,
             ui::plugin,
+            rim::plugin,
+            water::plugin,
         ))
         .add_systems(
             PostStartup,

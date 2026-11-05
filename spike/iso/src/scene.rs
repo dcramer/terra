@@ -2,7 +2,7 @@
 //! with its fire; and the light, at day, dusk or night.
 
 use crate::nav::Nav;
-use crate::terrain::{self, Land, POND, WATER};
+use crate::terrain::{self, Land, WATER};
 use bevy::image::ImageLoaderSettings;
 use bevy::light::{CascadeShadowConfigBuilder, light_consts::lux};
 use bevy::prelude::*;
@@ -34,6 +34,7 @@ impl Hour {
 
 #[derive(Component)]
 struct Sun;
+
 
 /// A light that burns at night: a lamp's flame or the fire.
 #[derive(Component)]
@@ -117,22 +118,10 @@ pub fn build(
         flames: flames.clone(),
     });
 
-    // The land, and the pond's water.
+    // The land (the pond's water is water.rs's).
     commands.spawn((
         Mesh3d(meshes.add(land.mesh(cover))),
         MeshMaterial3d(grounds.add(terrain::ground_material(&asset))),
-    ));
-    commands.spawn((
-        Mesh3d(meshes.add(Circle::new(9.0).mesh().resolution(48))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba(0.05, 0.08, 0.07, 0.86),
-            perceptual_roughness: 0.06,
-            reflectance: 0.6,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
-        Transform::from_xyz(POND.x, WATER, POND.y)
-            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
     nav.block_where(|p| land.slope(p) > 0.6 || land.height(p) < WATER + 0.08);
 
@@ -187,6 +176,7 @@ pub fn build(
 fn light_the_hour(
     hour: Res<Hour>,
     mut sun: Query<(&mut DirectionalLight, &mut Transform), With<Sun>>,
+    mut exposure: Query<&mut bevy::camera::Exposure>,
     mut ambient: ResMut<GlobalAmbientLight>,
     mut clear: ResMut<ClearColor>,
     glow: Res<Glow>,
@@ -236,6 +226,16 @@ fn light_the_hour(
         let (el, az) = (el.to_radians(), az.to_radians());
         let toward = Vec3::new(el.cos() * az.sin(), el.sin(), el.cos() * az.cos());
         *tr = Transform::default().looking_to(-toward, Vec3::Y);
+    }
+    // The exposure: dusk and night are opened up a little, as a game grades them, so the
+    // clearing is dim, not black.
+    let ev = match *hour {
+        Hour::Day => 9.0,
+        Hour::Dusk => 8.2,
+        Hour::Night => 7.4,
+    };
+    for mut e in &mut exposure {
+        e.ev100 = ev;
     }
     ambient.color = sky;
     ambient.brightness = nits;
