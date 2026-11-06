@@ -20,7 +20,7 @@ Read D631 (the methods, in order), D455 (the foot lock), D452 (the ratchet's rul
 2. **Find the cause** by measurement first (change the one thing, rerun), before building the method D631 names for it.
 3. **Change** the least that moves it, in the figure (`figure.rs` and its modules; `figure.rs` is near the 1,000-line limit: a new method is its own module).
 4. **Score**: `cargo xtask anim`: nothing `✗`, the row lower. Run `cargo test -p terra_walker --lib` and `cargo xtask controller` (the feet and stops share the figure).
-5. **Confirm in play**: one still or film of the game's own frame for the `FOR REVIEW` line when the figure's look changed; the course scores the pose, not the camera.
+5. **Confirm in play**: one still or film of the game's own frame for the `FOR REVIEW` line when the figure's look changed; the course scores the pose, not the camera. The figure's transitions in play (a sprint's stop, a jump, a roll, the guard, a slash) film as the duel does, in the background (about 4.5 min): `cargo xtask gpu film -- cargo xtask duel --script duels/transitions.ron --out ~/.cache/terra-review/anim-play` (`duel-desk.mp4`, `sheet.jpg`; it exits 1 on the duel's own fight checks, not this script's; the player's own camera, the grid's fourth panel, keeps it through the sprint).
 6. **Bank**: land on main. Two jobs without a gain on a row: stop, step back, hand off what was tried.
 
 ## The task list (anim-blend j6, 2026-11-06)
