@@ -12,11 +12,12 @@ export type Result = { check: string; ok: boolean; value: string; want: string; 
 /** Frames a clip is sampled at, a second. */
 const FPS = 30;
 
-type Skeleton = { joints: number[]; body: number; feet: number[]; restHeight: number };
+type Skeleton = { joints: number[]; body: number; chain: number[]; feet: number[]; restHeight: number };
 
-/** The skin's joints, the body joint (the first that branches, the pelvis of a biped) and the
- * feet (the joints lowest at rest), found by shape rather than by name, so any rig Tripo makes
- * is read alike. */
+/** The skin's joints, the body joint (the first that branches, the pelvis of a biped), the chain
+ * from the top joint down to it, and the feet (the joints under the body lowest at rest), found by
+ * shape rather than by name, so any rig Tripo makes is read alike. Tripo's V3 rig has a `root`
+ * joint on the ground above the pelvis, as low as the feet: it is no foot. */
 export function skeleton(glb: Glb): Skeleton | undefined {
   const skin = glb.doc.skins?.[0];
   if (!skin) return undefined;
@@ -27,13 +28,19 @@ export function skeleton(glb: Glb): Skeleton | undefined {
   const kids = (j: number) => (nodes[j].children ?? []).filter((c: number) => set.has(c));
   const roots = joints.filter((j) => !joints.some((p) => kids(p).includes(j)));
   let body = roots[0];
-  while (kids(body).length === 1) body = kids(body)[0];
+  const chain = [body];
+  while (kids(body).length === 1) chain.push((body = kids(body)[0]));
+  const under: number[] = [];
+  const down = (j: number) => kids(j).forEach((c: number) => (under.push(c), down(c)));
+  down(body);
   const ys = joints.map((j) => origin(world[j])[1]);
   const low = Math.min(...ys);
   const high = Math.max(...ys);
   const restHeight = high - low;
-  const feet = joints.filter((_, i) => ys[i] <= low + 0.08 * restHeight && kids(joints[i]).length <= 1);
-  return { joints, body, feet: feet.length ? feet : [joints[ys.indexOf(low)]], restHeight };
+  const below = under.length ? under : joints;
+  const footLow = Math.min(...below.map((j) => ys[joints.indexOf(j)]));
+  const feet = below.filter((j) => ys[joints.indexOf(j)] <= footLow + 0.08 * restHeight && kids(j).length <= 1);
+  return { joints, body, chain, feet: feet.length ? feet : [below[0]], restHeight };
 }
 
 export type Motion = {

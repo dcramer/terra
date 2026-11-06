@@ -7,19 +7,21 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { check, measure } from "./check.ts";
-import { type Glb, pixelSize, readGlb, writeGlb } from "./gltf.ts";
+import { check, measure, skeleton } from "./check.ts";
+import { type Glb, clips, pixelSize, readGlb, sample, writeGlb } from "./gltf.ts";
 import { type Ctx, ROOT, conceptPrompt, main, parseOutput } from "./iso-art.ts";
 import { clipsFor } from "./kinds.ts";
 import { readAsset, readmeCost, statusTable, writeAsset } from "./ledger.ts";
-import { place, renameClips } from "./normalize.ts";
+import { cut, inPlace, place, renameClips } from "./normalize.ts";
 
 const README = readFileSync(join(ROOT, "tools", "tripo", "README.md"), "utf8");
 const GUIDE = readFileSync(join(ROOT, "docs", "art-style.md"), "utf8");
 
 /** A GLB from plain arrays: a hips joint 1 m up with two feet and a head, one point skinned
- * to each, and the clips given as [name, [[node, path, times, values]]]. */
-function walker(anims: [string, [number, string, number[], number[][]][]][], sceneRotation?: number[]): Glb {
+ * to each, and the clips given as [name, [[node, path, times, values]]]. `rooted` puts it as
+ * Tripo's V3 rig has it: a `root` joint (node 6) on the ground above the hips, turned Z-up (a
+ * quarter about X), so the hips' and feet's keys are in its frame (`zUp`). */
+function walker(anims: [string, [number, string, number[], number[][]][]][], sceneRotation?: number[], rooted = false): Glb {
   const chunks: Buffer[] = [];
   const accessors: any[] = [];
   const views: any[] = [];
@@ -39,7 +41,8 @@ function walker(anims: [string, [number, string, number[], number[][]][]][], sce
   const joints = add([[0, 0, 0, 0], [1, 0, 0, 0], [2, 0, 0, 0], [3, 0, 0, 0]], "VEC4", 5121);
   const weights = add(rest.map(() => [1, 0, 0, 0]), "VEC4");
   const indices = add([[0], [1], [2], [0], [2], [3]], "SCALAR", 5123);
-  const ibm = add(rest.map(([x, y, z]) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -x, -y, -z, 1]), "MAT4");
+  const ibm = add([...rest, [0, 0, 0]].map(([x, y, z]) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -x, -y, -z, 1]), "MAT4");
+  const at = (p: number[]) => (rooted ? zUp(p) : p);
   const animations = anims.map(([name, chans]) => ({
     name,
     samplers: chans.map(([, path, times, values]) => ({ input: add(times.map((t) => [t]), "SCALAR"), output: add(values, path === "rotation" ? "VEC4" : "VEC3"), interpolation: "LINEAR" })),
@@ -50,15 +53,16 @@ function walker(anims: [string, [number, string, number[], number[][]][]][], sce
     scene: 0,
     scenes: [{ nodes: [0, 5] }],
     nodes: [
-      { name: "armature", children: [1], ...(sceneRotation ? { rotation: sceneRotation } : {}) },
-      { name: "hips", translation: [0, 1, 0], children: [2, 3, 4] },
-      { name: "foot_l", translation: [0.1, -1, 0] },
-      { name: "foot_r", translation: [-0.1, -1, 0] },
-      { name: "head", translation: [0, 0.8, 0] },
+      { name: "armature", children: [rooted ? 6 : 1], ...(sceneRotation ? { rotation: sceneRotation } : {}) },
+      { name: "hips", translation: at([0, 1, 0]), children: [2, 3, 4] },
+      { name: "foot_l", translation: at([0.1, -1, 0]) },
+      { name: "foot_r", translation: at([-0.1, -1, 0]) },
+      { name: "head", translation: at([0, 0.8, 0]) },
       { name: "body", mesh: 0, skin: 0 },
+      ...(rooted ? [{ name: "root", rotation: [-Math.SQRT1_2, 0, 0, Math.SQRT1_2], children: [1] }] : []),
     ],
     meshes: [{ primitives: [{ attributes: { POSITION: pos, JOINTS_0: joints, WEIGHTS_0: weights }, indices }] }],
-    skins: [{ joints: [1, 2, 3, 4], inverseBindMatrices: ibm }],
+    skins: [{ joints: rooted ? [1, 2, 3, 4, 6] : [1, 2, 3, 4], inverseBindMatrices: ibm }],
     animations,
     accessors,
     bufferViews: views,
@@ -66,6 +70,9 @@ function walker(anims: [string, [number, string, number[], number[][]][]][], sce
   };
   return readGlb(writeGlb({ doc, bin: Buffer.concat(chunks) }));
 }
+
+/** A point in the world as a key in the Z-up root's frame: (x, y, z) is (x, -z, y) there. */
+const zUp = ([x, y, z]: number[]) => [x, -z, y];
 
 // In place: each foot planted for half the cycle, sliding back 0.6 m in 0.5 s (1.2 m/s), then
 // lifted 0.2 m and swung forward.
@@ -96,7 +103,7 @@ test("a walk's speed and heading come from its planted foot", () => {
 test("a model turned a quarter is seen walking toward +X, and export's root node turns it back and makes it life size", () => {
   const s = Math.SQRT1_2;
   const glb = walker([IDLE, WALK, FALL], [0, s, 0, s]); // 90 degrees about Y: its front to +X
-  assert.deepEqual(renameClips(glb, clipsFor("biped")), ["run", "attack", "hit"]);
+  assert.deepEqual(renameClips(glb, clipsFor("biped")), ["run", "attack"]);
   const before = measure(glb).clips.walk.motion!;
   assert.ok(Math.abs(before.heading - 90) < 2, `heading ${before.heading}`);
   place(glb, "walker", 3.6, before.heading);
@@ -108,13 +115,53 @@ test("a model turned a quarter is seen walking toward +X, and export's root node
   assert.ok(after.clips.death.motion!.endHeight < 0.3, "the fall ends down");
 });
 
+// Tripo's V3 rig as the knight came (2026-11-05): a Z-up `root` joint on the ground over the
+// pelvis, kept still by Tripo's in-place export while the pelvis walks forward 1.2 m/s.
+const travelling = (k: number[][], t: number[]) => k.map((p, i) => zUp([p[0], p[1], p[2] + 1.2 * t[i]]));
+const ROOTED_WALK: [string, any[]] = ["walk", [
+  [1, "translation", [0, 0.25, 0.5, 0.75, 1], travelling([[0, 1, 0], [0, 1.03, 0], [0, 1, 0], [0, 1.03, 0], [0, 1, 0]], [0, 0.25, 0.5, 0.75, 1])],
+  [2, "translation", footL[2], footL[3].map(zUp)],
+  [3, "translation", footR[2], footR[3].map(zUp)],
+]];
+
+test("the root joint on the ground over the pelvis is no foot", () => {
+  const glb = walker([IDLE, ROOTED_WALK], undefined, true);
+  const sk = skeleton(glb)!;
+  assert.deepEqual(sk.feet.map((j) => glb.doc.nodes[j].name).sort(), ["foot_l", "foot_r"]);
+  assert.equal(glb.doc.nodes[sk.body].name, "hips");
+});
+
+test("export takes the pelvis's travel out of a walk Tripo kept in place only at its root", () => {
+  const glb = walker([IDLE, ROOTED_WALK], undefined, true);
+  const before = measure(glb).clips.walk.motion!;
+  assert.ok(before.travel > 1, `Tripo's walk travels ${before.travel} m`);
+  assert.deepEqual(inPlace(glb, clipsFor("biped")), ["walk"]);
+  const after = measure(readGlb(writeGlb(glb))).clips.walk.motion!;
+  assert.ok(after.travel < 0.01, `in place: ${after.travel} m`);
+  assert.ok(after.gap < 0.01, `the loop closes: ${after.gap}`);
+  assert.ok(Math.abs(after.speed - 1.2) < 0.05, `the planted foot still says 1.2 m/s: ${after.speed}`);
+  assert.ok(Math.abs(after.heading) < 2, `toward +Z: ${after.heading}`);
+  const hips = clips(readGlb(writeGlb(glb))).find((c) => c.name === "walk")!.channels[0];
+  assert.ok(Math.abs(hips.values[1][2] - 1.03) < 1e-5, "the bob stays, up being the root frame's z");
+});
+
+test("export cuts a clip to its window, keeping the poses in it", () => {
+  const swing: [string, any[]] = ["attack", [[4, "translation", [0, 1, 2, 3], [[0, 0.8, 0], [0, 0.8, 0.2], [0, 0.8, 0.6], [0, 0.8, 0]]]]];
+  const glb = walker([IDLE, swing]);
+  const original = clips(glb).find((c) => c.name === "attack")!;
+  assert.deepEqual(cut(glb, [{ name: "attack", preset: "slash", loop: false, seconds: [0.4, 4], window: [0.5, 2.5] }]), ["attack"]);
+  const cutClip = clips(readGlb(writeGlb(glb))).find((c) => c.name === "attack")!;
+  assert.equal(cutClip.duration, 2);
+  for (const t of [0, 0.7, 1.5, 2]) assert.deepEqual(sample(cutClip.channels[0], t).map((v) => v.toFixed(5)), sample(original.channels[0], t + 0.5).map((v) => v.toFixed(5)), `at ${t} s`);
+});
+
 test("the checks name what is missing and pass what is right", () => {
   const glb = walker([IDLE, WALK, FALL]);
   renameClips(glb, clipsFor("biped"));
   const results = check(measure(glb), "hero", "biped", 1.8);
   const by = Object.fromEntries(results.map((r) => [r.check, r]));
   for (const ok of ["clip idle", "clip walk", "walk in place", "walk speed", "walk facing", "walk loops", "death ends down", "height", "on the ground", "triangles"]) assert.ok(by[ok].ok, `${ok}: ${by[ok].value}`);
-  for (const bad of ["clip run", "clip attack", "clip hit", "textures"]) assert.equal(by[bad].ok, false, bad);
+  for (const bad of ["clip run", "clip attack", "textures"]) assert.equal(by[bad].ok, false, bad);
   // A quadruped gets the one walk Tripo has for it.
   assert.deepEqual(clipsFor("quadruped").map((c) => c.preset), ["walk"]);
   assert.deepEqual(clipsFor("serpentine").map((c) => c.preset), ["march"]);

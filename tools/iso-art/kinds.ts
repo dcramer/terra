@@ -33,15 +33,21 @@ export const SPECS: Record<Kind, KindSpec> = {
  * Tripo's presets for its V3 rig (developers.tripo3d.com, animations-retarget, 2026-11-05):
  * a biped has idle, walk, run, dive, climb, jump, slash, shoot, hurt, fall and turn; every other
  * body has one, a walk (`march` for serpentine and aquatic bodies). There is no attack, hit or
- * death preset by those names: `slash`, `hurt` and `fall` are the nearest. */
-export type ClipSpec = { name: string; preset: string; loop: boolean; seconds: [number, number]; moves?: "walk" | "run"; ends?: "down" };
+ * death preset by those names: `slash` and `fall` are the nearest. `hurt` is no hit: on the
+ * knight (2026-11-05) it is 13.8 s lying wounded on the ground from its first frame, so a hit is
+ * the game's flinch and hit-stop, or a `--prompt` motion (20 credits).
+ *
+ * `window` cuts a clip to the part the game plays, in the preset's own seconds: `slash` is 6.6 s,
+ * a wind-up from 0.75 s, the swing at 1.5 to 2 s and a slow return to guard from 2.75 to 5.5 s,
+ * which an ARPG's attack does not wait for (the game blends back to idle). */
+export type ClipSpec = { name: string; preset: string; loop: boolean; seconds: [number, number]; moves?: "walk" | "run"; ends?: "down"; window?: [number, number] };
 
 const BIPED: ClipSpec[] = [
-  { name: "idle", preset: "idle", loop: true, seconds: [1, 12] },
+  // Tripo's idle is 15.3 s, a still stance with two fidgets in it: a long idle is a usual one.
+  { name: "idle", preset: "idle", loop: true, seconds: [1, 20] },
   { name: "walk", preset: "walk", loop: true, seconds: [0.5, 3], moves: "walk" },
   { name: "run", preset: "run", loop: true, seconds: [0.3, 2], moves: "run" },
-  { name: "attack", preset: "slash", loop: false, seconds: [0.4, 4] },
-  { name: "hit", preset: "hurt", loop: false, seconds: [0.2, 3] },
+  { name: "attack", preset: "slash", loop: false, seconds: [0.4, 4], window: [0.75, 2.75] },
   { name: "death", preset: "fall", loop: false, seconds: [0.4, 6], ends: "down" },
 ];
 

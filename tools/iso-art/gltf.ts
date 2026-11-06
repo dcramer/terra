@@ -153,26 +153,53 @@ function slerp(a: number[], b: number[], t: number): number[] {
 }
 
 /** A clip read once: each channel's node, path, times and values. */
-export type Clip = { name: string; duration: number; channels: { node: number; path: string; times: number[]; values: number[][]; step: boolean }[] };
+export type Channel = { node: number; path: string; times: number[]; values: number[][]; step: boolean };
+export type Clip = { name: string; duration: number; channels: Channel[] };
+
+/** A channel of an animation in the file (`anim.channels[i]`), its keys read. */
+export function readChannel(glb: Glb, anim: any, ch: any): Channel {
+  const s = anim.samplers[ch.sampler];
+  const times = accessor(glb, s.input).map((e) => e[0]);
+  let values = accessor(glb, s.output);
+  // A cubic spline keeps an in-tangent, the value and an out-tangent per key: take the value.
+  if (s.interpolation === "CUBICSPLINE") values = values.filter((_, k) => k % 3 === 1);
+  return { node: ch.target.node, path: ch.target.path, times, values, step: s.interpolation === "STEP" };
+}
 
 export function clips(glb: Glb): Clip[] {
   return (glb.doc.animations ?? []).map((anim: any, i: number) => {
-    const channels = (anim.channels ?? [])
-      .filter((ch: any) => ch.target?.node !== undefined && ch.target.path !== "weights")
-      .map((ch: any) => {
-        const s = anim.samplers[ch.sampler];
-        const times = accessor(glb, s.input).map((e) => e[0]);
-        let values = accessor(glb, s.output);
-        // A cubic spline keeps an in-tangent, the value and an out-tangent per key: take the value.
-        if (s.interpolation === "CUBICSPLINE") values = values.filter((_, k) => k % 3 === 1);
-        return { node: ch.target.node, path: ch.target.path, times, values, step: s.interpolation === "STEP" };
-      });
+    const channels = (anim.channels ?? []).filter((ch: any) => ch.target?.node !== undefined && ch.target.path !== "weights").map((ch: any) => readChannel(glb, anim, ch));
     const duration = Math.max(0, ...channels.map((c: any) => c.times.at(-1) ?? 0));
     return { name: anim.name ?? `animation ${i}`, duration, channels };
   });
 }
 
-function sample(ch: Clip["channels"][number], t: number): number[] {
+/** Appends float elements to the binary chunk as a new accessor; returns its index. A SCALAR
+ * one gets its min and max, which glTF asks of an animation's times. */
+export function addAccessor(glb: Glb, rows: number[][], type: "SCALAR" | "VEC3" | "VEC4"): number {
+  const { doc } = glb;
+  const start = glb.bin.length + ((4 - (glb.bin.length % 4)) % 4);
+  const data = Buffer.from(new Float32Array(rows.flat()).buffer);
+  glb.bin = Buffer.concat([glb.bin, Buffer.alloc(start - glb.bin.length), data]);
+  doc.buffers ??= [{ byteLength: 0 }];
+  doc.buffers[0].byteLength = glb.bin.length;
+  doc.bufferViews ??= [];
+  doc.bufferViews.push({ buffer: 0, byteOffset: start, byteLength: data.length });
+  doc.accessors ??= [];
+  const flat = rows.map((r) => r[0]);
+  doc.accessors.push({ bufferView: doc.bufferViews.length - 1, componentType: 5126, count: rows.length, type, ...(type === "SCALAR" ? { min: [Math.min(...flat)], max: [Math.max(...flat)] } : {}) });
+  return doc.accessors.length - 1;
+}
+
+/** Replaces the keys of `anim.channels[i]`'s sampler, as new accessors (the old stay unread). */
+export function writeChannel(glb: Glb, anim: any, i: number, times: number[], values: number[][]): void {
+  const s = anim.samplers[anim.channels[i].sampler];
+  s.input = addAccessor(glb, times.map((t) => [t]), "SCALAR");
+  s.output = addAccessor(glb, values, values[0].length === 4 ? "VEC4" : "VEC3");
+  if (s.interpolation === "CUBICSPLINE") s.interpolation = "LINEAR";
+}
+
+export function sample(ch: Channel, t: number): number[] {
   const { times, values } = ch;
   if (t <= times[0]) return values[0];
   if (t >= times.at(-1)!) return values.at(-1)!;

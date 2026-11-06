@@ -13,7 +13,7 @@ import { check, measure, printResults } from "./check.ts";
 import { readGlb, writeGlb } from "./gltf.ts";
 import { type Body, KINDS, type Kind, SPECS, clipsFor, isoPart } from "./kinds.ts";
 import { type Asset, type Stage, type StageRecord, allAssets, assetDir, readAsset, readmeCost, statusTable, writeAsset } from "./ledger.ts";
-import { place, renameClips } from "./normalize.ts";
+import { cut, inPlace, place, renameClips } from "./normalize.ts";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TRIPO = join(ROOT, "tools", "tripo", "tripo.ts");
@@ -155,12 +155,15 @@ export function exportAsset(ctx: Ctx, name: string): void {
   const glb = readGlb(readFileSync(r.out.files?.[0] ?? raw));
   const missing = renameClips(glb, specs);
   if (missing.length) throw new Error(`Tripo's export has no clip for ${missing.join(", ")} (it has ${(glb.doc.animations ?? []).map((x: any) => x.name).join(", ") || "none"}): run \`animate ${name}\` first`);
+  const still = inPlace(glb, specs);
+  const cuts = cut(glb, specs);
   const walk = specs.some((c) => c.name === "walk") ? measure(glb).clips.walk?.motion : undefined;
   const placed = place(glb, name, a.height, walk?.heading ?? 0);
   const out = assetFile(ctx.root, name);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, writeGlb(glb));
-  record(ctx, a, "export", { credits: r.out.credits ?? 0, minutes: r.minutes, files: [relative(ctx.root, out)], scale: Number(placed.scale.toFixed(4)), turn: Math.round(placed.turn), note: `scaled ${placed.scale.toFixed(3)}, turned ${Math.round(placed.turn)} deg` });
+  const did = [`scaled ${placed.scale.toFixed(3)}`, `turned ${Math.round(placed.turn)} deg`, still.length && `in place ${still.join(" ")}`, cuts.length && `cut ${cuts.join(" ")}`].filter(Boolean).join(", ");
+  record(ctx, a, "export", { credits: r.out.credits ?? 0, minutes: r.minutes, files: [relative(ctx.root, out)], scale: Number(placed.scale.toFixed(4)), turn: Math.round(placed.turn), note: did });
 }
 
 export function checkAsset(ctx: Ctx, name: string, file?: string): boolean {
