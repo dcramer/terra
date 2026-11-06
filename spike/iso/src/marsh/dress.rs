@@ -34,9 +34,10 @@ const LANTERN_LM: f32 = 20_000.0;
 /// At EV 7.5 the 1,100 lux moon swamps a point light past sqrt(I / 1100) m, the fire's about
 /// 2.5 m and the lantern's 1.2 m, so their pools read tiny (the judge); a fill high over each
 /// widens its pool on the ground and lights the mist. Not a `Glint`: the water mirrors the
-/// flame, not the fill.
-const FIRE_FILL: (f32, f32, f32) = (3.0, 150_000.0, 12.0);
-const LANTERN_FILL: (f32, f32, f32) = (1.6, 60_000.0, 9.0);
+/// flame, not the fill. Ranges 12 and 9 lifted the whole frame's darks (p5 0.0063 to 0.0101):
+/// the range window keeps each pool and ends its tail.
+const FIRE_FILL: (f32, f32, f32) = (3.0, 150_000.0, 9.0);
+const LANTERN_FILL: (f32, f32, f32) = (1.6, 60_000.0, 7.5);
 
 /// Where the lamp's foot hangs: under the crossarm's end.
 fn lamp() -> Vec3 {
@@ -127,7 +128,7 @@ fn spawn(
         },
         Glint,
     ));
-    commands.spawn(fill(bed, FIRE_FILL, Color::srgb(1.0, 0.55, 0.22), 1.0));
+    commands.spawn(fill(bed, FIRE_FILL, Color::srgb(1.0, 0.55, 0.22), 1.0, true));
     // The lantern on its pole: a round post of rough wood with a crossarm toward the
     // screen's left, the lamp hung from the arm's end, a crisp flame in its lit glass (a
     // 0.7 m soft glow card here read as "a bloom ball with no readable post", "a sprite").
@@ -191,18 +192,26 @@ fn spawn(
         },
         Glint,
     ));
-    commands.spawn(fill(lamp, LANTERN_FILL, Color::srgb(1.0, 0.62, 0.3), 7.0));
+    commands.spawn(fill(lamp, LANTERN_FILL, Color::srgb(1.0, 0.62, 0.3), 7.0, false));
 }
 
-/// A lamp's fill over `at`, flickering with its flame (the same seed).
-fn fill(at: Vec3, (up, lm, range): (f32, f32, f32), color: Color, seed: f32) -> impl Bundle {
+/// A lamp's fill over `at`, flickering with its flame (the same seed). The fire's casts
+/// shadows: unshadowed over the fight it filled every shadow and lifted the frame's p5 from
+/// 0.0063 to 0.0092 to 0.0101.
+fn fill(
+    at: Vec3,
+    (up, lm, range): (f32, f32, f32),
+    color: Color,
+    seed: f32,
+    shadows: bool,
+) -> impl Bundle {
     (
         PointLight {
             color,
             intensity: lm,
             range,
             radius: 0.5,
-            shadow_maps_enabled: false,
+            shadow_maps_enabled: shadows,
             ..default()
         },
         Transform::from_translation(at + Vec3::Y * up),
@@ -233,10 +242,12 @@ mod tests {
         assert!(shape(image) < LEVEL - 0.1, "the lantern glints on the bank at {image}");
     }
 
-    /// Lux on level ground at `p` from an isotropic point light of `lm` lumens at `at`.
-    fn lux(at: Vec3, lm: f32, p: Vec3) -> f32 {
+    /// Lux on level ground at `p` from an isotropic point light of `lm` lumens at `at`, under
+    /// Bevy's range window (pbr's `getDistanceAttenuation`: (1 - (d / range)^4)^2).
+    fn lux(at: Vec3, lm: f32, range: f32, p: Vec3) -> f32 {
         let d = at - p;
-        lm / (4.0 * std::f32::consts::PI) * (d.y / d.length()) / d.length_squared()
+        let window = (1.0 - (d.length() / range).powi(4)).clamp(0.0, 1.0).powi(2);
+        lm / (4.0 * std::f32::consts::PI) * (d.y / d.length()) / d.length_squared() * window
     }
 
     /// Each lamp's pool reaches past where the moon swamped its flame alone: 4 m from the
@@ -247,13 +258,14 @@ mod tests {
         let quarter = crate::marsh::light::MOON_LUX * 0.25;
         let bed = FIRE.extend(shape(FIRE)).xzy();
         let p = bed + Vec3::X * 4.0;
-        let fire = lux(bed + Vec3::Y * 0.6, FIRE_LM, p)
-            + lux(bed + Vec3::Y * FIRE_FILL.0, FIRE_FILL.1, p);
+        let (up, lm, range) = FIRE_FILL;
+        let fire = lux(bed + Vec3::Y * 0.6, FIRE_LM, 9.0, p) + lux(bed + Vec3::Y * up, lm, range, p);
         assert!(fire > quarter, "the fire lights 4 m out at {fire} lux");
         let lamp = lamp();
         let p = Vec3::new(lamp.x, LEVEL, lamp.z) + Vec3::Z * 2.5;
-        let lantern = lux(lamp + Vec3::Y * 0.17, LANTERN_LM, p)
-            + lux(lamp + Vec3::Y * LANTERN_FILL.0, LANTERN_FILL.1, p);
+        let (up, lm, range) = LANTERN_FILL;
+        let lantern = lux(lamp + Vec3::Y * 0.17, LANTERN_LM, 6.0, p)
+            + lux(lamp + Vec3::Y * up, lm, range, p);
         assert!(lantern > quarter, "the lantern lights 2.5 m out at {lantern} lux");
     }
 
