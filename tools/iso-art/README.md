@@ -50,4 +50,10 @@ A re-export Tripo has cached takes 0.0 minutes: cost from the first.
 | triangles, textures | the budget (`budget()` in `kinds.ts`): one triangle a pixel of the asset's box at the closest camera (117 px a metre), at least 1,000, at most the kind's cap (hero and creature 24k, NPC 16k, prop 8k, scenery 20k for trees and set pieces) |
 | height, on the ground | life size within 5%; the lowest point of the idle's first frame on y=0 |
 
+## Measuring a still
+
+`node tools/iso-art/stats.ts <out.json> <still>...` adds each still's measures (luma p5, p50, p95 and mean, fine detail, saturation, the dark, mid and bright shares, all at 960x540) to the JSON and prints every row; `name=path` copies the still beside the JSON first. A PNG is decoded with node:zlib, any other image through ffmpeg; the downscale is Pillow's Lanczos, its fixed point and passes, so the numbers are the judges' old `stats.py`'s: on the ruin's step1-fight.png both give p5 0.0015, p50 0.0156, p95 0.121, mean 0.0342, fine 0.0676, saturation 0.5163, shares 0.8161, 0.1779, 0.006; on le-river-beam.jpg they differ by at most 0.0005 (ffmpeg's JPEG decoder against libjpeg's). What the measures mean: the skill's judging page. `node --test tools/iso-art/stats.test.ts`.
+
+## Reading a GLB
+
 Read from the GLB in Node (`gltf.ts`: accessors, the node hierarchy posed by a clip, the skin's points), so a check needs no GPU. The checks are `check.ts`; what export does to Tripo's file (names, in place, cuts, loops, the root node) is `normalize.ts`; the ledgers and the credits read from Tripo's README are `ledger.ts`. The pipeline's choices are D628. Looking at it in the iso spike is that spike's own command: this tool depends on no spike (D133).

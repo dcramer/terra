@@ -12,7 +12,7 @@ The isometric experiment's art pipeline, as it proved out from 2026-11-05 (exper
 - **The tool**: [tools/iso-art](../../../tools/iso-art/README.md), `node tools/iso-art/iso-art.ts`, TypeScript, no dependencies; `node --test tools/iso-art/iso-art.test.ts`. It depends on no spike (D133).
 - **The assets**: `assets/models/iso/<name>.glb`, each with its ledger `art/iso/NAME/asset.json`; `node tools/iso-art/iso-art.ts status` lists them.
 - **The scenes**: the experiment's code lives in a spike, `spike/iso/` (D133: throwaway, deleted once its research note is written; nothing lasting may depend on it). A biome is a `--scene` there; the ruin at night is `spike/iso/src/ruin/`.
-- **Judging**: outside the repository in `~/.cache/terra-review/iso-art/`: `judge.md`, `refs/` (store frames never committed, `refs.md`, `stats.json`), `stats.py`. What a fresh agent needs from them is in [judging.md](references/judging.md).
+- **Judging**: outside the repository in `~/.cache/terra-review/iso-art/`: `judge.md`, `refs/` (store frames never committed, `refs.md`, `stats.json`); the measure is in the repository, `node tools/iso-art/stats.ts`. What a fresh agent needs from them is in [judging.md](references/judging.md).
 - **Handoffs**: `~/.cache/terra-handoff/iso-art-j<n>.md`, the coordinator's `iso-art-lead.md`. Read only the last one and what it points to.
 
 ## The steps (each a page beside this one)
@@ -26,7 +26,7 @@ The isometric experiment's art pipeline, as it proved out from 2026-11-05 (exper
 
 1. Read the last handoff's next steps and only the files it names. `node tools/iso-art/iso-art.ts status` for assets; `node tools/tripo/tripo.ts balance` before anything that spends.
 2. Take one gap: the judge's first, else the handoff's first. Say the number it should move (a stats measure against the refs of the same kind, a check, a clip's read).
-3. Make the change in its own module; one look a change: shoot the still on the render worker (scene.md), measure it with stats.py, look at it at 960 px and a 1:1 crop where it matters.
+3. Make the change in its own module; one look a change: shoot the still on the render worker (scene.md), measure it with stats.ts, look at it at 960 px and a 1:1 crop where it matters.
 4. Land each checked step on main as its own commit naming iso-art, with the numbers before and after and the still's path in the message: an asset with its ledger, a scene module, a tool fix with its test. Spike tests pass on the worker; `node --test` for the tool.
 5. At a round's end, the blind pairwise judge, then the scorer (judging.md). Keep a change only on a clear or strong win; two rounds without a gain stops the line of work.
 6. Hand off: commits, each still's stats line, scores, what failed and why, next steps in order, a `FOR REVIEW` line for each still or film for the developer (the review-desk skill).

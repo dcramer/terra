@@ -1,6 +1,6 @@
 # Judging
 
-Every round: measure the still, a harsh judge scores it on the rubric, and a blind pairwise judge says whether it beat the last kept one. The pairwise answer decides whether the change is kept. The working copies live outside the repository in `~/.cache/terra-review/iso-art/`: `judge.md` (the rubric below), `refs/` (the stills, `refs.md`, `stats.json`) and `stats.py`. If they are missing, rebuild them from this page.
+Every round: measure the still, a harsh judge scores it on the rubric, and a blind pairwise judge says whether it beat the last kept one. The pairwise answer decides whether the change is kept. The working copies live outside the repository in `~/.cache/terra-review/iso-art/`: `judge.md` (the rubric below), `refs/` (the stills, `refs.md`, `stats.json`); the measure is `tools/iso-art/stats.ts`. If they are missing, rebuild them from this page.
 
 ## The references (never commit them)
 
@@ -25,7 +25,7 @@ Fourteen Steam store screenshots, 1920x1080, first-party, two or three a game, p
 
 What each shows is in `refs/refs.md` (D4: candle and brazier pools, decals, near-black floor; PoE2: flipbook fire and embers on a mossy ruin; Last Epoch: ribbon slashes, river glints; V Rising: lamplit cobbles, volumetric fog; Hades II: a style apart, not a target). A new biome adds two or three refs of its own kind (a forest by day, a marsh) the same way: store frames of a fight at the closest camera, the URL kept, measured.
 
-## The measures (stats.py)
+## The measures (stats.ts)
 
 Each image resized to 960x540 (Lanczos), so any size compares at one. `L` is linear-light luminance: sRGB decoded (v/12.92 under 0.04045, else ((v+0.055)/1.055)^2.4), Rec.709 weights 0.2126, 0.7152, 0.0722.
 - `luma_p5`, `luma_p50`, `luma_p95`, `luma_mean`: percentiles of L, 0 to 1. p5 is the blacks (the sky fill), p95 the pools.
@@ -33,7 +33,7 @@ Each image resized to 960x540 (Lanczos), so any size compares at one. `L` is lin
 - `saturation`: mean (max-min)/max of the sRGB channels over pixels with max over 0.02.
 - `dark_share` L under 0.05, `mid_share` 0.05 to 0.35, `bright_share` over 0.35.
 
-`python3 -I ~/.cache/terra-review/iso-art/stats.py <out.json> <still>...` adds each still to the JSON and prints every row (`name=path` copies the still beside the JSON first). It needs numpy and Pillow, so it stays out of the repository (D121: tooling is TypeScript); a TypeScript port reading raw RGB from `ffmpeg -vf scale=960:540:flags=lanczos -f rawvideo -pix_fmt rgb24` would let it in. Put every still's line in the handoff against the refs of its kind.
+`node tools/iso-art/stats.ts <out.json> <still>...` adds each still to the JSON and prints every row (`name=path` copies the still beside the JSON first). Node, no dependencies: a PNG decoded with node:zlib, a JPEG through ffmpeg, the downscale Pillow's own Lanczos (its fixed point, horizontal pass first), so a PNG's numbers are the old `stats.py`'s to the fourth place and a JPEG's within 0.0005 (ffmpeg's decoder against libjpeg's). Put every still's line in the handoff against the refs of its kind.
 
 ## The rubric (judge.md)
 
