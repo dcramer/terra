@@ -10,6 +10,8 @@ mod mipmaps;
 mod motes;
 mod nav;
 mod party;
+#[allow(dead_code)] // The marsh's water and next the ruin's pool; no scene draws it yet.
+mod pool;
 mod rest;
 mod rim;
 mod ruin;

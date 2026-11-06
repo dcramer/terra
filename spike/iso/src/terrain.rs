@@ -162,6 +162,11 @@ pub struct Land {
 
 impl Land {
     pub fn new() -> Self {
+        Self::from_shape(shape)
+    }
+
+    /// Another scene's land (the marsh's) on the same grid and in the same layers.
+    pub fn from_shape(shape: impl Fn(Vec2) -> f32) -> Self {
         let n = (EXTENT * 2.0 / STEP) as usize + 1;
         let mut h = vec![0.0; n * n];
         for j in 0..n {
