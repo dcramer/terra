@@ -31,6 +31,8 @@ pub struct RimExt {
     pub canopy: Handle<Image>,
     /// x: how much of the rim the canopy leaves (0 dims it as the sky's fill, 1 keeps it
     /// whole: a fighter's rim is the ARPGs' lift, not the sky's light, iso-art j28).
+    /// y, z: a fighter's hard band, whole where the surface faces the view under y (the
+    /// cosine), gone over z; z zero is the fresnel of power `rim.a` (the party's).
     #[uniform(103)]
     pub lift: Vec4,
 }
@@ -154,22 +156,25 @@ fn rim_for(hour: Hour) -> LinearRgba {
 
 /// The fighters' rim: the ARPGs' cold lift on every body against the warm local lights
 /// (Diablo IV's and Last Epoch's night frames), blue-white, about 5 times the party's, so
-/// it reads as an edge at 70 px a figure. A power of 3.4: at 2.5 the ARPG camera's
-/// downward view grazes so much of a hunched body that the whole ogre frosted over
-/// instead of edging (iso-art j28's first still). With no hour (the ruin, the marsh) it
-/// is the night's.
+/// it reads as an edge at 70 px a figure. Drawn as a hard band on the outline (`lift`),
+/// not a fresnel: a power-3.4 fresnel's tail washed the ogre lavender and frosted the tree
+/// monster's crown (iso-art j30's judges); the band, a few pixels wide, takes four times the
+/// light to read. With no hour (the ruin, the marsh) it is the night's.
 fn fighter_rim(hour: Option<Hour>) -> LinearRgba {
     match hour.unwrap_or(Hour::Night) {
-        Hour::Day => LinearRgba::new(0.42, 0.48, 0.58, 3.4),
-        Hour::Dusk => LinearRgba::new(0.45, 0.56, 0.95, 3.4),
-        Hour::Night => LinearRgba::new(0.50, 0.68, 1.25, 3.4),
+        Hour::Day => LinearRgba::new(1.7, 1.9, 2.3, 0.0),
+        Hour::Dusk => LinearRgba::new(1.8, 2.2, 3.8, 0.0),
+        Hour::Night => LinearRgba::new(2.0, 2.7, 5.0, 0.0),
     }
 }
 
 /// The rim the canopy leaves on each kind (`RimExt::lift`).
 fn lift(kind: Kind) -> Vec4 {
     match kind {
-        Kind::Fighter => Vec4::new(0.8, 0.0, 0.0, 0.0),
+        // The band from 66 to 83 degrees off the view: on a round body seen from above,
+        // the outer tenth of its radius, 2 to 3 px at 70 px a figure (iso-art j30; at 73
+        // degrees Tripo's coarse normals barely reached it and it did not read).
+        Kind::Fighter => Vec4::new(0.8, 0.12, 0.4, 0.0),
         _ => Vec4::ZERO,
     }
 }

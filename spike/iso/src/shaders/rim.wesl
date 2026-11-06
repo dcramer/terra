@@ -28,9 +28,22 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         n = -n;
     }
     let facing = clamp(dot(n, normalize(pbr_input.V)), 0.0, 1.0);
-    // Brighter where the edge faces up, as a sky's light would.
-    let up = 0.55 + 0.45 * clamp(n.y, 0.0, 1.0);
-    let edge = pow(1.0 - facing, rim.w) * up;
+    var edge: f32;
+    if lift.z > 0.0 {
+        // A fighter's: a hard band on the silhouette only (facing under `lift.z`, whole
+        // under `lift.y`), not a fresnel's tail: at 70 px a figure the tail of a power-3
+        // curve is half its body, a wash of cold light on every surface that faces up
+        // (iso-art j30's judges). Masked by the normal's height, as Dota 2's rim keeps to
+        // its world-space top-down mask: a moon over the fight edges the sides and the
+        // upper outline, never a top (at the ARPG's 55 degrees a normal over about 0.6 up
+        // faces the camera; a canopy's leaves are all such) nor an underside.
+        let sky = smoothstep(-0.35, 0.1, n.y) * (1.0 - smoothstep(0.5, 0.8, n.y));
+        edge = (1.0 - smoothstep(lift.y, lift.z, facing)) * sky;
+    } else {
+        // Brighter where the edge faces up, as a sky's light would.
+        let up = 0.55 + 0.45 * clamp(n.y, 0.0, 1.0);
+        edge = pow(1.0 - facing, rim.w) * up;
+    }
     // Under the oaks the crowns hide the sky: its fill dimmed as the ground's is there
     // (ground.wesl), and the rim with it (rim.rs's canopy map, 128 m about the middle),
     // but for the share `lift.x` a fighter's rim keeps (the ARPGs' lift, not the sky's).
