@@ -60,4 +60,5 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 - A film's frames read darker than the 1920x1080 still — compare like with like.
 - Every job hit the 80% context hook at about 120k by its third shot — plan one look an effect, not a look a tweak, and land each checked step at once.
 - Three verdicts, the code and three 960 stills cost a helper about 120k before its first edit — brief a helper on one task with its diagnosis, not five.
+- The spike is not rustfmt-clean, and `rustfmt` on a `mod.rs` formats its child modules too: run it on the leaf files you changed and check `git diff --stat` before committing.
 - Sample a ref's and a still's colours by box (ffmpeg to raw rgb24 at 960x540, a mean a box in node) before tuning a hue: the eye called the marsh's water blue while it measured violet grey.
