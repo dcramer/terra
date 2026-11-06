@@ -68,21 +68,30 @@ pub fn mark(
         .id()
 }
 
-/// The mark's texture: alpha its cover (whole in the middle, a ragged edge), the colour its
-/// heat (a bright broken ring where the impact threw out, flecks, a dimmer middle).
+/// The mark's texture: alpha its cover, the colour its heat. A splat as the ARPGs' ground
+/// decals are painted (Diablo IV's scorches, PoE 2's burns): a radial noise mask, its edge
+/// soft and wandering in and out by two scales of noise round it, lobes thrown out along
+/// streaks; the heat in streaks radiating from the middle, a broken arc of rim (never a
+/// whole ring: "the rings look like UI circles", the lead's judges) and flecks. A window
+/// takes everything to nothing well inside the card, so its square never shows.
 pub fn mark_image() -> Image {
-    let noise = Noise::new(8, 0xa11c);
+    let (broad, fine, grit) = (Noise::new(8, 0xa11c), Noise::new(16, 0xa11d), Noise::new(32, 0xa11e));
     let n = 128;
     image(n, n, |x, y| {
         let p = (Vec2::new(x as f32, y as f32) + 0.5) / n as f32 * 2.0 - 1.0;
         let r = p.length();
+        // Round the mark: 0 to 1, so the noise read along it tiles where it meets itself.
         let a = p.y.atan2(p.x) / std::f32::consts::TAU + 0.5;
-        let ragged = noise.at(Vec2::new(a * 8.0, r * 3.0));
-        let cover = 1.0 - smooth(0.45, 0.92, r + (ragged - 0.5) * 0.35);
-        let ring = (-((r - 0.55 - (ragged - 0.5) * 0.2) / 0.09).powi(2)).exp();
-        let flecks = smooth(0.72, 0.85, noise.at(p * 6.0 + 3.0)) * cover;
-        let heat = (0.3 + 0.7 * ring.max(flecks)).min(1.0);
-        [heat, heat, heat, cover * (0.55 + 0.45 * ring.max(0.5))]
+        let lobes = broad.at(Vec2::new(a * 8.0, 0.5));
+        let streaks = fine.at(Vec2::new(a * 16.0, r * 1.5));
+        let edge = 0.5 + 0.24 * (lobes - 0.5) * 2.0 + 0.12 * (streaks - 0.5) * 2.0;
+        let rough = grit.at(p * 9.0 + 5.0);
+        let cover = (1.0 - smooth(edge - 0.22, edge + 0.04, r + (rough - 0.5) * 0.12)) * (1.0 - smooth(0.78, 0.92, r));
+        let rim = (-((r - edge * 0.82) / 0.05).powi(2)).exp() * smooth(0.45, 0.7, broad.at(Vec2::new(a * 8.0, 3.5)));
+        let rays = smooth(0.55, 0.85, streaks) * (1.0 - smooth(0.1, edge, r));
+        let flecks = smooth(0.7, 0.85, rough) * cover;
+        let heat = (0.15 + 0.85 * rim.max(rays).max(flecks)).min(1.0) * cover;
+        [heat, heat, heat, cover * (0.5 + 0.5 * rim.max(rays))]
     })
 }
 
@@ -134,5 +143,33 @@ mod tests {
         let alpha = |x: usize, y: usize| d[(y * 128 + x) * 4 + 3];
         assert!(alpha(64, 64) > 100, "middle {}", alpha(64, 64));
         assert!(alpha(2, 2) == 0 && alpha(125, 3) == 0);
+    }
+
+    /// Nothing reaches the card's border, so its square edge never shows on the floor, and
+    /// the edge wanders: the cover's reach differs round the mark by a fifth of its size.
+    #[test]
+    fn the_mark_has_no_square_and_a_wandering_edge() {
+        let img = mark_image();
+        let d = img.data.as_ref().unwrap();
+        let px = |x: usize, y: usize| &d[(y * 128 + x) * 4..(y * 128 + x) * 4 + 4];
+        for k in 0..128 {
+            for (x, y) in [(k, 0), (k, 127), (0, k), (127, k), (k, 4), (4, k)] {
+                assert_eq!(px(x, y)[3], 0, "alpha at ({x}, {y})");
+            }
+        }
+        let reach: Vec<f32> = (0..64)
+            .map(|j| {
+                let a = j as f32 / 64.0 * std::f32::consts::TAU;
+                (0..64)
+                    .map(|s| s as f32 / 64.0)
+                    .find(|&r| {
+                        let (x, y) = (64.0 + a.cos() * r * 64.0, 64.0 + a.sin() * r * 64.0);
+                        px(x as usize, y as usize)[3] < 40
+                    })
+                    .unwrap_or(1.0)
+            })
+            .collect();
+        let (lo, hi) = reach.iter().fold((1.0f32, 0.0f32), |(l, h), &r| (l.min(r), h.max(r)));
+        assert!(hi - lo > 0.2, "the edge reaches {lo} to {hi} of the half-size");
     }
 }

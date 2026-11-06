@@ -8,7 +8,7 @@
 //! first bolt has just struck and the other two are in the air.
 
 use super::Stage;
-use super::kit::{Burst, Cam, Clock, glow, image, smooth, sparks, star_image};
+use super::kit::{Burst, Cam, Clock, Noise, glow, image, smooth, sparks, star_image};
 use super::mark::{Mark, mark, mark_image};
 use crate::forest::Rng;
 use bevy::asset::RenderAssetUsages;
@@ -227,21 +227,30 @@ fn spawn(
     }
 }
 
-/// The impact's shell as a white texture, its brightness in the alpha: a sphere's edge as a
-/// card draws it, bright at the rim and faint inside, gone outside.
+/// The impact's shell as a white texture, its brightness in the alpha: a shockwave as the
+/// ARPGs' impact flipbooks draw one (an eroded shell, not a drawn circle: a perfect ring
+/// read as "UI circles", the lead's judges, 2026-11-06), its rim wandering in and out,
+/// thick and thin, broken into arcs by noise round it, with streaks thrown inward.
 fn shell_image() -> Image {
+    let (round, arcs) = (Noise::new(8, 0x5e11), Noise::new(16, 0x5e12));
     let n = 128;
     image(n, n, |x, y| {
         let p = (Vec2::new(x as f32, y as f32) + 0.5) / n as f32 * 2.0 - 1.0;
-        [1.0, 1.0, 1.0, shell(p.length())]
+        let a = p.y.atan2(p.x) / std::f32::consts::TAU + 0.5;
+        let (wander, broken) = (round.at(Vec2::new(a * 8.0, 0.5)), arcs.at(Vec2::new(a * 16.0, p.length() * 3.0)));
+        [1.0, 1.0, 1.0, shell(p.length(), wander, broken)]
     })
 }
 
-/// The shell's brightness at `r` of its radius.
-fn shell(r: f32) -> f32 {
-    let rim = (-((r - 0.86) / 0.07).powi(2)).exp();
-    let inside = 0.25 * (r / 0.86).powi(4) * (1.0 - smooth(0.86, 0.9, r));
-    (rim + inside).min(1.0)
+/// The shell's brightness at `r` of its radius, its rim moved and thickened by `wander`
+/// and broken by `broken` (both 0 to 1, noise round it).
+fn shell(r: f32, wander: f32, broken: f32) -> f32 {
+    let at = 0.8 + 0.1 * (wander - 0.5) * 2.0;
+    let width = 0.035 + 0.06 * wander;
+    let gaps = smooth(0.3, 0.62, broken);
+    let rim = (-((r - at) / width).powi(2)).exp() * gaps;
+    let inside = 0.3 * (r / at).powi(5) * (1.0 - smooth(at, at + 0.04, r)) * smooth(0.45, 0.8, broken);
+    (rim + inside).min(1.0) * (1.0 - smooth(0.93, 0.99, r))
 }
 
 /// A ribbon `width` wide at the bolt through `points` (tail first) facing the camera at
@@ -352,7 +361,9 @@ fn fly(
                 let k = (struck / SHELL_LIFE).clamp(0.0, 1.0);
                 let on = (0.0..SHELL_LIFE).contains(&struck);
                 tr.translation = path(stage, *i, 1.0);
-                tr.rotation = cam.rot;
+                // Each bolt's shell turned its own way and turning as it swells, so its
+                // gaps are not one stamp.
+                tr.rotation = cam.rot * Quat::from_rotation_z(*i as f32 * 2.1 + 0.8 * k);
                 let grow = 1.0 - (1.0 - k) * (1.0 - k);
                 tr.scale = Vec3::splat(if on { SHELL.0 + (SHELL.1 - SHELL.0) * grow } else { 0.0 });
                 if let Some(mut m) = materials.get_mut(mat) {
@@ -404,6 +415,29 @@ mod tests {
         assert!(under > 4.0 * BOLT_LM / (high * high), "pool {under} vs bolt at {high} m");
         let out = POOL_LM * POOL_UP / (1.0 + POOL_UP * POOL_UP).powf(1.5);
         assert!(out < 0.25 * under, "a metre out the pool is {out} of {under}");
+    }
+
+    /// The shell is broken: round it the rim's brightest is under a third of its peak in
+    /// places (gaps) and whole in others, and nothing reaches the card's border.
+    #[test]
+    fn the_shell_is_broken_not_a_circle() {
+        let img = shell_image();
+        let d = img.data.as_ref().unwrap();
+        let alpha = |x: usize, y: usize| d[(y * 128 + x) * 4 + 3];
+        let best: Vec<u8> = (0..90)
+            .map(|j| {
+                let a = j as f32 / 90.0 * std::f32::consts::TAU;
+                (40..64)
+                    .map(|s| alpha((64.0 + a.cos() * s as f32) as usize, (64.0 + a.sin() * s as f32) as usize))
+                    .max()
+                    .unwrap()
+            })
+            .collect();
+        let peak = *best.iter().max().unwrap();
+        let gaps = best.iter().filter(|&&b| (b as f32) < peak as f32 / 3.0).count();
+        let whole = best.iter().filter(|&&b| (b as f32) > peak as f32 * 0.8).count();
+        assert!(peak > 200 && gaps > 9 && whole > 9, "peak {peak}, {gaps} gaps, {whole} whole of 90");
+        assert!((0..128).all(|k| alpha(k, 0) == 0 && alpha(0, k) == 0 && alpha(127, k) == 0));
     }
 
     /// Each bolt leaves the hero and ends at the target, above the floor all the way.
