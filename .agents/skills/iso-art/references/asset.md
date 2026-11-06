@@ -24,7 +24,7 @@ Concepts now cost 10 to 20 credits: the month's 100 free images were used by 202
 
 ## 3. Export
 
-`export NAME`, free, to `assets/models/iso/NAME.glb` at the kind's texture size. In Node, no Blender (`normalize.ts`):
+`export NAME`, free, to `assets/models/iso/<name>.glb` at the kind's texture size. In Node, no Blender (`normalize.ts`):
 - **names** the clips ours (Tripo's are plain `idle walk run slash fall`);
 - **in place**: Tripo's `--in-place` keeps only its `root` joint still while the pelvis walks 2.8 m and runs 5.5 m, so each chain joint's ground drift (end minus start, in its parent's frame) is taken out, as Mixamo's and Unreal's in-place cuts;
 - **cuts** a clip to its `window` in the preset's seconds (the attack to 0.75 to 2.75 s of the 6.6 s slash; the game blends back to idle);

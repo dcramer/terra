@@ -10,7 +10,7 @@ The isometric experiment's art pipeline, as it proved out from 2026-11-05 (exper
 ## Where things are
 
 - **The tool**: [tools/iso-art](../../../tools/iso-art/README.md), `node tools/iso-art/iso-art.ts`, TypeScript, no dependencies; `node --test tools/iso-art/iso-art.test.ts`. It depends on no spike (D133).
-- **The assets**: `assets/models/iso/NAME.glb`, each with its ledger `art/iso/NAME/asset.json`; `node tools/iso-art/iso-art.ts status` lists them.
+- **The assets**: `assets/models/iso/<name>.glb`, each with its ledger `art/iso/NAME/asset.json`; `node tools/iso-art/iso-art.ts status` lists them.
 - **The scenes**: the experiment's code lives in a spike, `spike/iso/` (D133: throwaway, deleted once its research note is written; nothing lasting may depend on it). A biome is a `--scene` there; the ruin at night is `spike/iso/src/ruin/`.
 - **Judging**: outside the repository in `~/.cache/terra-review/iso-art/`: `judge.md`, `refs/` (store frames never committed, `refs.md`, `stats.json`), `stats.py`. What a fresh agent needs from them is in [judging.md](references/judging.md).
 - **Handoffs**: `~/.cache/terra-handoff/iso-art-j<n>.md`, the coordinator's `iso-art-lead.md`. Read only the last one and what it points to.
