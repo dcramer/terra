@@ -37,33 +37,73 @@ pub fn wet(p: Vec2) -> f32 {
     a.max(b).max(c).clamp(0.0, 1.0)
 }
 
-/// The land's height: hummocks on the banks, shelving into the waters.
+/// The trodden path: from the far channel's bank past the treant, through the fight and on
+/// to the mere's bank under the lantern (the refs run a path through every fight).
+const PATH: [Vec2; 5] = [
+    Vec2::new(-6.5, -3.4),
+    Vec2::new(-3.0, -1.6),
+    KNIGHT,
+    Vec2::new(2.6, -0.5),
+    Vec2::new(4.4, -0.9),
+];
+
+/// How far a point lies from the path's middle line (m).
+pub fn from_path(p: Vec2) -> f32 {
+    PATH.windows(2)
+        .map(|w| {
+            let (a, b) = (w[0], w[1]);
+            let t = ((p - a).dot(b - a) / (b - a).length_squared()).clamp(0.0, 1.0);
+            p.distance(a + (b - a) * t)
+        })
+        .fold(f32::MAX, f32::min)
+}
+
+/// How much of the path a point lies on: 1 down its middle, 0 off it, its edge wandering
+/// between about 0.4 and 1 m out.
+pub fn path(p: Vec2) -> f32 {
+    let half = 0.7 + 0.6 * (fbm(p * 0.5, 41) - 0.5);
+    smooth(half, half * 0.45, from_path(p))
+}
+
+/// Puddles in the path's ruts, sunk under the water's face (so pool.rs draws them and the
+/// lights glint in them), none where the cast stands.
+fn puddle(p: Vec2) -> f32 {
+    let feet = [KNIGHT, super::FOE, super::TARGET]
+        .iter()
+        .map(|c| p.distance(*c))
+        .fold(f32::MAX, f32::min);
+    path(p) * smooth(0.58, 0.7, fbm(p * 0.9, 43)) * smooth(1.2, 1.8, feet) * 0.34
+}
+
+/// The land's height: hummocks on the banks, shelving into the waters, the path's puddles.
 pub fn shape(p: Vec2) -> f32 {
     let bank = BANK + 0.18 * (fbm(p * 0.3, 11) - 0.5) + 0.08 * (fbm(p * 1.1, 13) - 0.5);
     let s = smooth(0.0, 0.6, wet(p));
-    bank * (1.0 - s) + DEEP * s
+    bank * (1.0 - s) + DEEP * s - puddle(p)
 }
 
 /// Each vertex's layers, in broad zones a few metres across so the ground is not one even
 /// tone: a band of wet black mud at the water's line, mud flats in the hollows and trodden
 /// about the fight, cushions of bright moss, grass on the hummocks, drifts of dead leaves,
-/// roots breaking through.
+/// roots breaking through; the path wet mud down its middle and packed earth at its edges,
+/// and patches a couple of metres across (moss cushions, leaf litter) so no hummock is one
+/// even carpet of grass (blind-marsh3).
 fn cover(p: Vec2, _n: Vec3, h: f32) -> ([f32; 4], [f32; 2], [f32; 2]) {
-    let margin = smooth(0.12, 0.02, h - LEVEL);
+    let margin = smooth(0.22, 0.02, h - LEVEL);
     let zone = fbm(p * 0.16, 31);
+    let patch = fbm(p * 0.45, 47);
     let detail = fbm(p * 0.7, 21);
     let flats = smooth(0.42, 0.32, zone) * smooth(0.26, 0.08, h - LEVEL);
     let trod = smooth(3.2, 1.2, p.distance(KNIGHT));
-    let mud = margin.max(flats).max(trod * 0.75);
-    let moss = (1.0 - mud) * smooth(0.52, 0.64, zone * 0.6 + detail * 0.4);
-    let leaves = (1.0 - mud) * (1.0 - moss) * smooth(0.55, 0.68, fbm(p * 0.33, 23)) * 0.8;
+    let path = path(p);
+    let mud = margin.max(flats).max(trod * 0.75).max(path * 0.9);
+    let moss = (1.0 - mud) * smooth(0.46, 0.58, zone * 0.5 + detail * 0.2 + patch * 0.3);
+    let litter = smooth(0.55, 0.68, fbm(p * 0.33, 23)).max(smooth(0.4, 0.3, patch));
+    let leaves = (1.0 - mud) * (1.0 - moss) * litter * 0.8;
     let grass = (1.0 - mud) * (1.0 - moss) * (1.0 - leaves * 0.7);
     let roots = (1.0 - margin) * smooth(0.66, 0.78, fbm(p * 0.9, 29)) * 0.5;
-    (
-        [grass, leaves, moss, 0.0],
-        [mud, roots],
-        [1.0, trod * 0.6],
-    )
+    let bare = (trod * 0.6).max(smooth(0.0, 0.5, path) * 0.8);
+    ([grass, leaves, moss, 0.0], [mud, roots], [1.0, bare])
 }
 
 /// The water's look by moonrise: a saturated deep blue sky in it (vr-pond-slash's water is
@@ -74,7 +114,7 @@ pub fn look() -> Look {
     Look {
         deep: Vec4::new(0.002, 0.005, 0.009, 0.35),
         shallow: Vec4::new(0.015, 0.016, 0.012, 0.45),
-        sky: Vec4::new(0.8, 6.0, 26.0, 25.0),
+        sky: Vec4::new(0.3, 5.0, 26.0, 25.0),
         horizon: Vec4::new(5.0, 11.0, 22.0, 0.5),
         wave: Vec4::new(super::WIND.x, super::WIND.y, 0.05, 0.0),
         look: Vec4::new(0.0, 600.0, 1.0, 0.3),
@@ -99,7 +139,7 @@ pub fn edge() -> Edge {
 pub fn sheen() -> Sheen {
     Sheen {
         toward: super::light::MOON.extend(8.0),
-        colour: Vec4::new(14.0, 50.0, 110.0, 0.3),
+        colour: Vec4::new(10.0, 55.0, 130.0, 0.3),
     }
 }
 
@@ -142,5 +182,27 @@ mod tests {
         for p in [Vec2::new(0.0, near(0.0)), Vec2::new(-2.0, far(-2.0)), MERE] {
             assert!(shape(p) < LEVEL - 0.25, "{p} is not open water: {}", shape(p));
         }
+    }
+
+    /// The path runs unbroken from the far channel's bank through the fight to the mere's,
+    /// mostly dry underfoot, with a few puddles standing in it.
+    #[test]
+    fn the_path_runs_from_the_fight_to_the_lantern_with_puddles() {
+        let (mut on, mut wet_, mut dry) = (0, 0, 0);
+        for w in PATH.windows(2) {
+            for k in 0..40 {
+                let p = w[0].lerp(w[1], k as f32 / 40.0);
+                assert!(path(p) > 0.9, "the path breaks at {p}: {}", path(p));
+                on += 1;
+                if shape(p) < LEVEL - 0.02 {
+                    wet_ += 1;
+                } else {
+                    dry += 1;
+                }
+            }
+        }
+        assert!(wet_ >= 3, "{wet_} of {on} steps stand in a puddle");
+        assert!(dry > on * 2 / 3, "only {dry} of {on} steps are dry");
+        assert!(path(Vec2::new(0.0, 3.0)) == 0.0, "the path spreads to the near channel");
     }
 }

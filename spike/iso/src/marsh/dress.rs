@@ -24,7 +24,14 @@ const POST: f32 = 1.8;
 const LANTERN_LM: f32 = 20_000.0;
 
 /// Model, place, yaw (degrees), scale, how far sunk (m).
-const PROPS: [(&str, Vec2, f32, f32, f32); 14] = [
+const PROPS: [(&str, Vec2, f32, f32, f32); 20] = [
+    // Stones at the path's edges and standing in the shallows, breaking the water's line.
+    ("models/nature/forest/mossy_rock_b_2.glb", Vec2::new(3.3, -1.7), 60.0, 0.2, 0.04),
+    ("models/nature/forest/mossy_rock_a_3.glb", Vec2::new(-1.8, -1.7), 200.0, 0.16, 0.03),
+    ("models/nature/forest/mossy_rock_b_4.glb", Vec2::new(-7.0, -2.8), 120.0, 0.25, 0.06),
+    ("models/nature/forest/mossy_rock_a_4.glb", Vec2::new(-0.6, 2.3), 15.0, 0.22, 0.08),
+    ("models/nature/forest/mossy_rock_b_5.glb", Vec2::new(2.6, 2.9), 300.0, 0.28, 0.1),
+    ("models/nature/forest/mossy_rock_b_1.glb", Vec2::new(5.0, 1.8), 80.0, 0.24, 0.12),
     ("models/iso/dead-tree-a.glb", Vec2::new(-7.6, 2.9), 20.0, 1.0, 0.3),
     ("models/iso/dead-tree-b.glb", Vec2::new(8.6, -4.8), 200.0, 1.0, 0.3),
     ("models/iso/dead-tree-a.glb", Vec2::new(-5.4, -7.0), 110.0, 0.8, 0.3),

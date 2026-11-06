@@ -40,6 +40,7 @@ pub fn stage() -> Stage {
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(stage())
+        .insert_resource(light::fog())
         .insert_resource(crate::terrain::Land::from_shape(land::shape))
         .add_plugins((
             crate::pool::plugin,

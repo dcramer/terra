@@ -8,11 +8,21 @@ use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 
 /// The moon on the ground, in lux, and the sky's fill, in nits.
-pub const MOON_LUX: f32 = 700.0;
+pub const MOON_LUX: f32 = 1100.0;
 pub const SKY_NITS: f32 = 22.0;
-/// Toward the moon: 40 degrees up, 20 degrees left of the camera's line, so its mirror in
+/// Toward the moon: 34 degrees up, 20 degrees left of the camera's line, so its mirror in
 /// the water falls over the frame's upper left and fades down it (`light::tests`).
-pub const MOON: Vec3 = Vec3::new(-0.493, 0.643, -0.587);
+pub const MOON: Vec3 = Vec3::new(-0.533, 0.559, -0.635);
+
+/// The marsh's ground fog: thin, cold and low, so it does not grey the deep blue water and
+/// the fight (the default's grey cards cut the frame's saturation, iso-art j24).
+pub fn fog() -> crate::ruin::ambient::fog::FogLook {
+    crate::ruin::ambient::fog::FogLook {
+        thick: 0.22,
+        colour: Vec3::new(0.2, 0.3, 0.5),
+        height: (0.05, 0.35),
+    }
+}
 /// The haze over the far marsh, and its colour toward the moon.
 pub const HAZE: Color = Color::srgb(0.05, 0.07, 0.12);
 pub const SUN_HAZE: Color = Color::srgb(0.2, 0.26, 0.38);

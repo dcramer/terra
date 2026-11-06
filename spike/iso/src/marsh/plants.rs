@@ -4,7 +4,8 @@
 //! ruin's wind material (ruin/ambient/grass.rs): the reeds bend by their height over 1.4 m,
 //! the sedge as the ruin's grass.
 
-use super::land::{shape, wet};
+use super::land::{from_path, path, shape, wet};
+use crate::terrain::smooth;
 use super::{FOE, KNIGHT, LEVEL, TARGET};
 use crate::forest::Rng;
 use crate::ruin::ambient::grass::{WindMaterial, material};
@@ -86,12 +87,21 @@ impl Blades {
     }
 }
 
-/// Whether a point is kept clear for the fight (the cast's feet and the space between).
+/// Whether a point is kept clear for the fight (the cast's feet and the space between) and
+/// the trodden path.
 pub fn clear(p: Vec2) -> bool {
     [KNIGHT, FOE, TARGET, super::dress::FIRE]
         .iter()
         .any(|c| p.distance(*c) < 1.4)
         || p.distance((KNIGHT + FOE) * 0.5) < 1.2
+        || path(p) > 0.05
+}
+
+/// How likely a sedge tuft is to grow: in patches over the hummocks, and thick along the
+/// path's verges where feet do not reach.
+fn tufted(c: Vec2) -> f32 {
+    let verge = smooth(1.7, 1.1, from_path(c));
+    crate::terrain::fbm(c * 0.5, 17).max(verge * 0.9)
 }
 
 /// Where reeds grow: the water's edge, from 0.25 m deep to 0.12 m up the bank.
@@ -134,7 +144,7 @@ fn spawn(
     for _ in 0..TUFTS {
         let c = Vec2::new(rng.range(LO.x, HI.x), rng.range(LO.y, HI.y));
         let h = shape(c) - LEVEL;
-        if h < 0.06 || wet(c) > 0.02 || clear(c) || rng.f() > crate::terrain::fbm(c * 0.5, 17) {
+        if h < 0.06 || wet(c) > 0.02 || clear(c) || rng.f() > tufted(c) {
             continue;
         }
         let foot = c.extend(shape(c)).xzy();
