@@ -13,7 +13,9 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 - The month's 100 free images run out (a 403 "Insufficient credits") — concepts cost 10 to 20; try no other `--model` without the credits.
 - Tripo's file is about 1 unit tall and may lie turned (the wagon 45 degrees off X) — export scales by `--height`; turn a prop in the scene.
 - A re-export Tripo has cached takes 0.0 min — cost from the first export.
-- The knight's GLB shows no sword at game size — check a weapon reads before staging an attack on it.
+- The knight's GLB shows no sword at game size — check a weapon reads before staging an attack on it; hang one on `hand_r` (asset.md, held props).
+- A held prop under the bone inherits the armature's 1.89 scale, and a finder of bodies by `WorldAssetRoot` near a place takes the prop for the body — undo the bone's scale; filter finders `Without<ChildOf>`.
+- `tripo.ts list` shows 20 projects — `list -n 300` to find an older one by id.
 
 ## The scene
 
@@ -34,6 +36,7 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 - A wisp's 6 cm core and 0.6 m glow are dots at 960 px — a 1.3 m soft orb and a 3 m faint haze card about a 10 cm core.
 - `patch` is a reserved word in WGSL: the shader fails at run time with only an ERROR line in the run's log, the frame still saved — grep the run for ERROR before judging a still.
 - Effects sized as they feel read as nothing at 70 px a metre (motes under 0.07 m, banner tears) — size them at the game camera.
+- A 0.7 m soft halo over a 0.13 m core reads as a soft blue blob in every biome's judge — a 0.04 m core drawn out along the flight, a 0.3 m dim halo, a thin white ribbon inside the coloured trail, and a hard star card (kit::star) for the impact, not a swelling disc; a 4k lm bolt light lights no floor beside 60k to 140k lm braziers — about 30k.
 - An attack held at the wrong moment reads as arms raised — a sheet of times first (below).
 
 ## The worker and the guard

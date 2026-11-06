@@ -35,6 +35,13 @@ Concepts now cost 10 to 20 credits: the month's 100 free images were used by 202
 
 `check NAME` exits 1 on a failure; it reads the GLB in Node, no GPU. Clips by name and length, loops close, walk and run in place, walk and run speed from the planted foot (recorded, the game moves the body at it; run over 1.3x walk), facing +Z within 25 degrees, death ends under 60% of its start height, triangles and textures within budget, height within 5%, the idle's first frame on y=0. Then look at it in the scene at the game camera (scene.md) and judge it (judging.md, the asset rubric).
 
+## 5. Held props on a Tripo rig
+
+Tripo's characters come empty-handed (the knight), so a weapon is its own prop hung on a hand bone, as Unreal's `hand_r` socket:
+- `adopt NAME PROJECT --kind prop --height M` then `export NAME`, both free (the sword: d7c0d997, 0.95 m, 0.2 min). Read its profile along y in Node (gltf.ts `accessor` and `pose`) to find pommel, grip and guard: Tripo's sword stands blade up, edges along x, grip 0.05 to 0.15 m.
+- Measure the grip on the body's GLB, not by eye: the hand's finger joints in the hand's own frame (fingers along +y, palm -z, thumb -x on Tripo's V3 rig), then the hand's axes over the attack clip; the blade goes along the axis that sweeps back at the wind-up, forward at the blow and down after it (the fingers' +y tipped 0.35 to the thumb).
+- The bone's world scale is the armature's (1.89 on the knight): take it out from the bone's `GlobalTransform` every frame, or the sword is twice its size. Spawn it a child of the bone (`WorldAssetRoot` with `ChildOf(bone)`), and keep body finders to `Without<ChildOf>` so they never take the prop for a body (`spike/iso/src/ruin/held.rs`).
+
 ## The budgets (D628; D630 is Open on whether to keep main Terra's)
 
 One triangle a pixel of the asset's box at the closest camera (the hero at 0.20 of a 1080p frame, 117 px a metre), the box the larger of its front and its top, at least 1,000 and at most the kind's cap: hero 24k, creature 24k, NPC 16k, prop 8k, scenery 20k (each kind's share of about 1M triangles a frame; an estimate a bench of the scene is to confirm, D185). Textures: hero, creature and scenery 2K, NPC and prop 1K. Over budget: decimate in Blender, free (the models skill, on a machine that may run it), or `retopo` at 10 credits. Over on 2026-11-05: ogre 28.6k, tree-monster 29.0k, bone-pile 9.8k over 8k; torch 4.6k and skull 7.8k over their 1,000 (the skull has 22 triangles a pixel).
