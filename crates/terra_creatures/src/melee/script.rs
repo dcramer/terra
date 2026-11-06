@@ -50,6 +50,8 @@ fn actions(intent: Intent) -> &'static [Action] {
         Intent::Back => &[Action::Back],
         Intent::Left => &[Action::Left],
         Intent::Right => &[Action::Right],
+        Intent::Sprint => &[Action::Sprint],
+        Intent::Jump => &[Action::Jump],
     }
 }
 

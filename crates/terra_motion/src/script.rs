@@ -31,6 +31,9 @@ pub enum Intent {
     Back,
     Left,
     Right,
+    /// The run while held, as sprint is (a stop from it, for the figure's transitions in play).
+    Sprint,
+    Jump,
 }
 
 /// When a step comes.
@@ -203,6 +206,19 @@ mod tests {
         ))
         .unwrap();
         MoveSet::read(&text).unwrap()
+    }
+
+    /// Every script under assets/data/duels reads, so a film is not started on one that panics.
+    #[test]
+    fn every_duel_script_reads() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/data/duels");
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            let text = std::fs::read_to_string(&path).unwrap();
+            let script = Script::read(&text)
+                .unwrap_or_else(|problem| panic!("{}: {problem}", path.display()));
+            assert!(!script.steps.is_empty(), "{}", path.display());
+        }
     }
 
     /// Runs a script against a body that starts each move it is asked for, and another that

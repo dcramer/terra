@@ -1,0 +1,21 @@
+// The figure's transitions in play (the anim skill's "confirm in play", D631): a stop from a
+// sprint, a jump, a roll, the guard raised and let go back to the idle, and a slash, each
+// with time after it to settle, filmed as the duel is:
+// `cargo xtask gpu film -- cargo xtask duel --script duels/transitions.ron --out ~/.cache/terra-review/anim-play`.
+// The duel's fight checks are not this script's to pass; the film is what it is for.
+//
+// A step: (name, when, press: [intents], hold: seconds), as yard.ron's.
+(
+    steps: [
+        // Across the partner's line, to the player's left, so it is not run into.
+        (name: "sprint", when: After(1.0), press: [Left, Sprint], hold: 1.6),
+        // Let go at 1.6 s: the stop, with 1.4 s to settle into the idle.
+        (name: "jump", when: After(3.0), press: [Jump], hold: 0.1),
+        (name: "draw", when: After(1.8), press: [Draw]),
+        (name: "roll", when: After(1.5), press: [Right, Roll], hold: 0.3),
+        (name: "guard", when: After(1.5), press: [Guard], hold: 1.2),
+        (name: "idle", when: After(2.5), press: []),
+        (name: "slash", when: After(0.2), press: [Light]),
+        (name: "end", when: After(2.5), press: []),
+    ],
+)
