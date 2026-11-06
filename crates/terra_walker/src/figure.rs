@@ -810,6 +810,9 @@ fn doing(
 }
 
 #[cfg(test)]
+mod course;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
