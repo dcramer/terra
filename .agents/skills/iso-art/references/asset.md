@@ -32,6 +32,8 @@ Concepts now cost 10 to 20 credits: the month's 100 free images were used by 202
 - **centres** the walk and run over the body's rest place (`centre()`, after the loop): the in-place cut takes out a straight line end to end, and the run's loop, cut from 0.41 s where Tripo's pelvis is still gathering speed from a stand, kept the body 41 to 58% of the height ahead (1.2 m on the tree monster), so the run drew ahead of its entity and leapt there at every switch from walk (iso-art j29; the ledger's "centred run (body N% of height off)");
 - **root node** named for the asset: life size, facing +Z by its walk, standing on y=0 with the body over the origin.
 
+Then, over its triangle budget, `decimate NAME CUT` after every export (export writes the mesh anew). The cut is Blender's collapse on the mesh in rest pose with the vertex groups carried (`tools/blender/decimate.py`, on the render worker only: tools/iso-art/README.md has the job's line); only the mesh is spliced into export's GLB, joints by name and points mapped through both files' binds, so the skeleton, clips and the hand frames a held prop uses stay byte for byte. Spliced unmapped, a rigged cut came out 76 to 159% off (j25): Blender writes the skinned points in the world at rest. Then `check`, and re-shoot the asset view: the posed bounds should stay within about 2% of the uncut in every clip.
+
 ## 4. Check
 
 `check NAME` exits 1 on a failure; it reads the GLB in Node, no GPU. Clips by name and length, loops close, walk and run in place, walk and run speed from the planted foot (recorded, the game moves the body at it; run over 1.3x walk), facing +Z within 25 degrees, death ends under 60% of its start height, triangles and textures within budget, height within 5%, the idle's first frame on y=0; each loop's seam (every joint at 30 fps: the step across the seam under 3x the clip's median step, the change of velocity under 1.5x the clip's largest; Tripo's come in at 0.8 to 1.7x and 0.3 to 1.1x) and the walk and run centred (body under 3% of height off its rest place). Then the asset view at the game camera: `--asset NAME --shot views/NAME.png` writes the still and each clip's strip for `sheet`, and with `--film N` N frames of the walk three laps then the run three, as the game plays them (repeat, its 220 ms crossfade), to see the seams and the switch hold. Then look at it in the scene at the game camera (scene.md) and judge it (judging.md, the asset rubric).
@@ -47,7 +49,7 @@ Tripo's characters come empty-handed (the knight), so a weapon is its own prop h
 
 ## The budgets (D628; D630 is Open on whether to keep main Terra's)
 
-One triangle a pixel of the asset's box at the closest camera (the hero at 0.20 of a 1080p frame, 117 px a metre), the box the larger of its front and its top, at least 1,000 and at most the kind's cap: hero 24k, creature 24k, NPC 16k, prop 8k, scenery 20k (each kind's share of about 1M triangles a frame; an estimate a bench of the scene is to confirm, D185). Textures: hero, creature and scenery 2K, NPC and prop 1K. Over budget: decimate in Blender, free (the models skill, on a machine that may run it), or `retopo` at 10 credits. Over on 2026-11-05: ogre 28.6k, tree-monster 29.0k, bone-pile 9.8k over 8k; torch 4.6k and skull 7.8k over their 1,000 (the skull has 22 triangles a pixel).
+One triangle a pixel of the asset's box at the closest camera (the hero at 0.20 of a 1080p frame, 117 px a metre), the box the larger of its front and its top, at least 1,000 and at most the kind's cap: hero 24k, creature 24k, NPC 16k, prop 8k, scenery 20k (each kind's share of about 1M triangles a frame; an estimate a bench of the scene is to confirm, D185). Textures: hero, creature and scenery 2K, NPC and prop 1K. Over budget: `decimate`, free (Export above), or `retopo` at 10 credits. Cut 2026-11-06: ogre 28.6k, tree-monster 29.0k, treant-a 28.9k, treant-b 27.6k to 23.7k; the sword 4.8k to 2.4k. Still over: bone-pile 9.8k over 8k; torch 4.6k and skull 7.8k over their 1,000 (the skull has 22 triangles a pixel).
 
 ## The ledger
 
@@ -62,6 +64,6 @@ One triangle a pixel of the asset's box at the closest camera (the hero at 0.20 
 | New hero, NPC or biped creature | concept 10 to 20 + model 55 (25 standard) + rig 20 = 85 to 95 (55 to 65) | model and rig not yet timed |
 | New other-bodied creature | the same; one walk only | as above |
 | New prop or scenery | concept 10 to 20 + model 55 (25) | as above |
-| Over budget | + retopo 10, or a free decimation | |
+| Over budget | + retopo 10, or `decimate`, free | |
 
 A re-export Tripo has cached reads 0.0 min; use the first export's minutes for cost.

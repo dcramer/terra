@@ -46,7 +46,7 @@ The isometric experiment's art pipeline, as it proved out from 2026-11-05 (exper
 ## What is still unknown
 
 - Model and rig minutes for a new asset (only adopted projects were timed); whether `--standard` models pass the asset judge.
-- The budgets' 1M-triangle frame share: no bench of the ruin yet (D185); the over-budget ogre, tree-monster, bone-pile, torch and skull are not yet decimated.
+- The budgets' 1M-triangle frame share: no bench of the ruin yet (D185); the rigged ogre, tree-monster and treants are decimated (`decimate`, asset.md), the bone-pile, torch and skull not yet.
 - No asset has been judged on the asset rubric; the asset view, its sheet and its walk-and-run film (asset.md, Check) are at the game camera, the sheets right only from iso-art j31.
 - The forest by day and the marsh at dusk (`--scene marsh`) are made; neither has refs of its own kind yet (they are judged on the water and night refs) nor a judge's approval.
 - Water works (`pool.rs`, scene.md's water section) in the marsh and the forest's pond; how it reads by day beside le-river-beam is unjudged.

@@ -9,6 +9,7 @@ node $iso model ranger          # 55 credits (--standard 25); refuses if the bal
 node $iso rig ranger            # 20; humanoid for hero and npc, as its shape reads for a creature (--body)
 node $iso animate ranger        # free: the kind's presets
 node $iso export ranger         # free: assets/models/iso/ranger.glb
+node $iso decimate ranger [CUT] # free: over its budget, the mesh cut in Blender (or CUT, decimate.py's) and spliced in
 node $iso check ranger          # exits 1 if a check fails
 node $iso adopt ogre a661c0b1 --kind creature --height 2.8   # an existing project, at its step
 node $iso status                # every asset's stages, credits and minutes
@@ -23,6 +24,7 @@ Each stage prints a line; Tripo's progress goes to `target/iso-art/NAME/<stage>.
   - **cut**: a clip with a `window` in `kinds.ts` is cut to it, in the preset's own seconds: the attack to 0.75 to 2.75 s of the 6.6 s `slash`, whose last 3 s return slowly to guard (the game blends back to idle).
   - **loop**: a looping clip whose ends meet within 1% is only closed; any other is cut to the window whose ends meet best (searched at 120 fps within the spec's length bounds, each joint against the body over the ground) and what is left spread over it, rotations by the quaternion between (Unity's loop match and Loop Pose). Tripo's run is nearly two strides 15 to 23% of the height apart; one stride inside meets within 4 to 6%. A best window over 10% is left uncut, for `check` to fail. After closing `check` reads 0, so the ledger's export note ("ends X% apart before closing") is the honest number; `check`'s seam reads the rest (below).
   - **centre**: a walk or run's body is moved, by its mean place over the clip, back over its rest place: the run's loop is cut from 0.41 s on, where Tripo's pelvis is 0.8 to 1.5 m ahead (41 to 58% of the height, all five bipeds, 2026-11-06), so it played ahead of the body and leapt there from the walk.
+- **decimate**, after every export (export writes the mesh anew): Blender's collapse decimation of the mesh in its rest pose, Decimate first in the stack ahead of the Armature, so the vertex groups (the weights) follow the cut (`tools/blender/decimate.py`, as Simplygon's and Unreal's LOD reduction keep the skin). Only the mesh is spliced back into export's GLB (`decimate.ts`), so its skeleton, binds, clips and the hands' frames a held prop is measured in stay byte for byte; its joints are remapped by name and its points mapped through both files' binds (Blender writes a skinned mesh in the world at rest, Tripo's carries export's scale under it). Blender runs on the render worker only: `cargo xtask remote-render --collect target/job/dec -- sh -c "mkdir -p target/job/dec; tools/blender/run.sh tools/blender/decimate.py assets/models/iso/NAME.glb target/job/dec/NAME.glb BUDGET > target/job/dec/NAME.txt 2>&1; true"` (BUDGET `check`'s triangle "at most"), then `decimate NAME ~/.cache/terra-review/remote/<job>/target/job/dec/NAME.glb` here. The ogre, tree-monster and both treants, 27.5k to 29.0k, went to 23.7k so (2026-11-06), their posed bounds within 2% of the uncut in every clip.
 
 ## Cost per asset by kind
 
@@ -34,7 +36,7 @@ Measured 2026-11-05; the credits are tools/tripo/README.md's.
 | An adopted prop or scenery | 0 | export 0.1 to 0.2 |
 | A new hero, NPC or creature | concept 10 to 20, model 55 (25 `--standard`), rig 20: 85 to 95 (55 to 65) | model and rig not timed yet |
 | A new prop or scenery | concept 10 to 20, model 55 (25): 65 to 75 (35 to 45) | as above |
-| Over its triangle budget | retopo 10, or a free decimation in Blender | |
+| Over its triangle budget | retopo 10, or `decimate` free | the splice under 0.01; Blender's cut on the worker not timed yet |
 
 A re-export Tripo has cached takes 0.0 minutes: cost from the first.
 
