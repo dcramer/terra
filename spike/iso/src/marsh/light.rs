@@ -10,11 +10,13 @@ use bevy::prelude::*;
 /// The moon on the ground, in lux, and the sky's fill, in nits.
 pub const MOON_LUX: f32 = 1100.0;
 pub const SKY_NITS: f32 = 22.0;
-/// Toward the moon: 46 degrees up behind the fight, just left of the camera's line, so its
-/// mirror falls on the far channel a quarter down the frame and its lane runs down the water
-/// toward the eye (`light::tests`; at 34 degrees it was over the frame's top and the water
-/// read flat, blind-marsh6).
-pub const MOON: Vec3 = Vec3::new(-0.322, 0.724, -0.611);
+/// Toward the moon: 42 degrees up behind the fight, left of the camera's line, so its
+/// mirror falls on the far channel's left reach a seventh down the frame, a fifth of the
+/// frame left of the caster, and its lane runs down the water toward the eye clear of the
+/// fight (`light::tests`; at 34 degrees it was over the frame's top and the water read flat,
+/// blind-marsh6; 10 degrees to the right it lay behind the caster and the bolts lost their
+/// contrast, the judge 2026-11-06).
+pub const MOON: Vec3 = Vec3::new(-0.492, 0.670, -0.556);
 /// Its light's colour (linear rgb, the key's and the lane's: sRGB 0.6, 0.72, 1).
 pub const MOON_COLOUR: Vec3 = Vec3::new(0.319, 0.477, 1.0);
 
@@ -99,15 +101,28 @@ mod tests {
             "the moon's mirror is out of frame (best {best} at {at:?})"
         );
         assert!(
-            at.0.abs() < 0.6 && at.1 > 0.2,
+            at.0.abs() < 0.8 && at.1 > 0.2 && at.1 < 0.9,
             "the lane's head is at {at:?}"
         );
-        // Where that ray meets the water's face, the water is open.
         let mid = (crate::marsh::KNIGHT * 2.0 + crate::marsh::FOE + crate::marsh::TARGET) / 4.0;
         let focus = mid
             .extend(super::super::land::shape(mid).max(0.0) + 1.2)
             .xzy();
         let eye = focus + crate::ruin::camera::offset();
+        // Clear of the fight: a fifth of the frame or more from where the caster, the
+        // knight and the foe stand on screen (behind the caster its glare ate the bolts).
+        for c in [
+            crate::marsh::TARGET,
+            crate::marsh::KNIGHT,
+            crate::marsh::FOE,
+        ] {
+            let d = c.extend(1.0).xzy() - eye;
+            let z = d.dot(f);
+            let (fx, fy) = (d.dot(right) / z / t / (16.0 / 9.0), d.dot(up) / z / t);
+            let gap = Vec2::new((at.0 - fx) * 16.0 / 9.0, at.1 - fy).length();
+            assert!(gap > 0.4, "the lane's head {at:?} is {gap} from {c}");
+        }
+        // Where that ray meets the water's face, the water is open.
         let d = ray(at.0, at.1);
         let hit = eye + d * (-eye.y / d.y);
         let ground = super::super::land::shape(hit.xz());

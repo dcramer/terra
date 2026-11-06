@@ -28,12 +28,18 @@ pub fn far(x: f32) -> f32 {
     -5.0 - 0.12 * x + 0.9 * (x * 0.25 + 1.0).sin()
 }
 
-/// How far into open water a point lies: 1 in a channel's middle, 0 on the bank.
+/// How far into open water a point lies: 1 in a channel's middle, 0 on the bank. The
+/// mere's shore runs in bays and points (two angular lobes and a finer wander), not a
+/// round disc (the judge: "the mere's hard-edged disc").
 pub fn wet(p: Vec2) -> f32 {
     let wob = (fbm(p * 0.4, 7) - 0.5) * 1.6;
     let a = 1.0 - ((p.y - near(p.x) - wob * 0.5).abs() / (1.7 + wob * 0.4));
     let b = 1.0 - ((p.y - far(p.x) - wob * 0.5).abs() / (1.5 + wob * 0.4));
-    let c = 1.0 - (p - MERE).length() / (2.8 + wob * 0.7);
+    let m = p - MERE;
+    let ang = m.y.atan2(m.x);
+    let bays = 0.35 * (3.0 * ang + 0.7).sin() + 0.2 * (5.0 * ang + 2.1).sin();
+    let shore = 2.8 + wob * 0.9 + bays + (fbm(p * 1.2, 17) - 0.5) * 0.5;
+    let c = 1.0 - m.length() / shore;
     a.max(b).max(c).clamp(0.0, 1.0)
 }
 
@@ -140,27 +146,32 @@ pub fn look() -> Look {
 }
 
 /// The margin: the water fading in over 30 cm of depth onto the wet mud, the sky broken
-/// into blots about 6 m across, duckweed in dark clumps (not a band: an even mat along the
+/// into blots about 3.5 m across (at 6 m the mere was one even blue disc), duckweed in dark clumps (not a band: an even mat along the
 /// water line read as a pale green rim, iso-art j24) and nearly a lily pad a m² of open
 /// shallows.
 pub fn edge() -> Edge {
     Edge {
-        fade: Vec4::new(0.3, 0.8, 6.0, 0.0),
+        fade: Vec4::new(0.3, 0.8, 3.5, 0.0),
         weed: Vec4::new(0.6, 0.2, 2.4, 0.9),
         green: Vec4::new(0.035, 0.07, 0.018, 0.24),
     }
 }
 
 /// The moon in the water: a broad sheen of its cold light about its mirror on the far
-/// channel, and its lane down the water toward the eye, three fifths of it glitter in 4 cm
-/// facets; the fire, the lantern and the wisps streak the same way (vr-pond-slash's pond).
+/// channel's left reach, and its lane down the water toward the eye: one soft streak, long
+/// and narrow, seen on half the ripples' tilt and brought under 160 nits (a light blue, the
+/// fight's effects stay the brightest thing), three tenths of it glints in 9 cm facets drawn
+/// as dashes three times as long across the lane (at 4 cm, 0.6 of it, and full gain it was
+/// "a field of blown white speckles, like snow", the judge 2026-11-06); the fire, the
+/// lantern and the wisps streak the same way (vr-pond-slash's pond).
 pub fn sheen() -> Sheen {
     use super::light::{MOON, MOON_COLOUR, MOON_LUX};
     Sheen {
         toward: MOON.extend(8.0),
         colour: Vec4::new(6.0, 33.0, 80.0, 0.3),
-        lane: Vec4::new(0.08, 0.03, 0.04, 0.6),
-        moon: (MOON_COLOUR * MOON_LUX).extend(1.0),
+        lane: Vec4::new(0.1, 0.025, 0.09, 0.3),
+        moon: (MOON_COLOUR * MOON_LUX).extend(0.4),
+        soft: Vec4::new(160.0, 0.5, 3.0, 0.0),
     }
 }
 

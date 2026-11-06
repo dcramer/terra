@@ -30,6 +30,7 @@ struct Sheen {
     colour: vec4<f32>,
     lane: vec4<f32>,
     moon: vec4<f32>,
+    soft: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -187,9 +188,13 @@ fn streak(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, p: vec2<f32>, t: f32) -> f32
     let smooth_ = exp(-dot(s.xy, s.xy)) * norm;
     var glitter = 0.0;
     if sheen.lane.w > 0.0 {
-        // A facet's own lobe, k of the lane's spread; a round dot in its cell.
+        // A facet's own lobe, k of the lane's spread; a dot in its cell, drawn `soft.z`
+        // times as long across the line to the eye as along it (a dash).
         let k = 0.45;
-        let q = (p - pool.wave.xy * t * 0.15) / sheen.lane.z;
+        let toward = select(vec2<f32>(0.0, 1.0), normalize(v.xz), dot(v.xz, v.xz) > 1e-6);
+        let across = vec2<f32>(-toward.y, toward.x);
+        let drift = p - pool.wave.xy * t * 0.15;
+        let q = vec2<f32>(dot(drift, across) / max(sheen.soft.z, 1.0), dot(drift, toward)) / sheen.lane.z;
         let id = floor(q);
         let seed = id + floor(t * 4.0 + hash(id + 2.7) * 4.0) * 17.31;
         let g = vec2<f32>(
@@ -272,7 +277,15 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let lane = sheen.lane.x > 0.0;
     if lane && sheen.moon.w > 0.0 {
         let l = normalize(sheen.toward.xyz);
-        mirror += sheen.moon.rgb * streak(n, v, l, p, t) * fresnel * sheen.moon.w;
+        // Seen on a calmer face than the lights' (`soft.y`), and brought softly under its
+        // peak (`soft.x`), so it is one long soft streak, never a field of blown speckles.
+        let calm_ = 1.0 - sheen.soft.y;
+        let nm = normalize(vec3<f32>(n.x * calm_, n.y, n.z * calm_));
+        var moon = sheen.moon.rgb * streak(nm, v, l, p, t) * fresnel * sheen.moon.w;
+        if sheen.soft.x > 0.0 {
+            moon = moon / (1.0 + max(moon.r, max(moon.g, moon.b)) / sheen.soft.x);
+        }
+        mirror += moon;
     }
     // Each light's reflection: its illuminance at the face times a narrow normalised lobe
     // about the mirror direction.

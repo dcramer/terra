@@ -85,6 +85,13 @@ pub struct Sheen {
     /// The moon's illuminance on the water (lux, rgb: its colour times its lux) and, w, the
     /// lane's gain over physical (0: no lane).
     pub moon: Vec4,
+    /// How soft the moon's lane is (all zero: as the ripples and the lobe make it): x its
+    /// peak (nits, its brightest channel, reached softly as x / (1 + x / peak), so the lane
+    /// never outshines a fight's effects); y how much of the ripples' tilt it sees taken
+    /// away (0..1: 0.5 halves it, so broad ripples do not break it into blotches); z the
+    /// glints' stretch across it (a facet's dot drawn z times as long as it is tall: the
+    /// stacked dashes of a painted moon's lane, not round speckles).
+    pub soft: Vec4,
 }
 
 /// Clear water by day (the forest's pond against le-river-beam's river): the bed showing
