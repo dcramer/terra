@@ -81,9 +81,10 @@ function pairings(w: Wardrobe): Stage {
 
 const pieceFile = (w: Wardrobe, piece: string) => `assets/${w.bodies[w.pieces[piece].body].pieces}/${piece}.gltf`;
 
-function files(w: Wardrobe): Stage {
-  const want = [...new Set([...Object.values(w.bodies).map((b) => `assets/${b.model}`), ...Object.keys(w.pieces).flatMap((p) => (existsSync(join(ROOT, pieceFile(w, p))) ? gltfFiles(pieceFile(w, p)) : [pieceFile(w, p)]))])];
-  const faults = want.filter((f) => !existsSync(join(ROOT, f))).map((f) => `${f} is missing: build it, tools/characters/build_bodies.sh --step wardrobe:<body>`);
+/** `has` says whether a file (from the repository's root) is there; a test pretends one gone. */
+export function files(w: Wardrobe, has = (f: string) => existsSync(join(ROOT, f))): Stage {
+  const want = [...new Set([...Object.values(w.bodies).map((b) => `assets/${b.model}`), ...Object.keys(w.pieces).flatMap((p) => (has(pieceFile(w, p)) ? gltfFiles(pieceFile(w, p)) : [pieceFile(w, p)]))])];
+  const faults = want.filter((f) => !has(f)).map((f) => `${f} is missing: build it, tools/characters/build_bodies.sh --step wardrobe:<body>`);
   return { name: "files", faults, said: `${want.length} files` };
 }
 
@@ -111,15 +112,16 @@ function intact(w: Wardrobe): Stage {
   return { name: "intact", faults, said: `${theirs} meshes theirs as made, ${cuts} exact cuts, nothing else in the pieces' folders` };
 }
 
-function bound(w: Wardrobe): Stage {
+/** `open` reads a file (from the repository's root); a test hands back one with a fault in it. */
+export function bound(w: Wardrobe, open = (f: string) => new Glb(join(ROOT, f))): Stage {
   const faults: string[] = [];
   let joints = 0;
   for (const [name, b] of Object.entries(w.bodies)) {
-    const body = new Glb(join(ROOT, "assets", b.model));
+    const body = open(`assets/${b.model}`);
     const rest = posed(body, undefined, 0);
     const world = new Map(body.gltf.nodes.map((n, i) => [n.name ?? "", matrix(rest[i])]));
     for (const piece of Object.keys(w.pieces).filter((p) => w.pieces[p].body === name)) {
-      const g = new Glb(join(ROOT, pieceFile(w, piece)));
+      const g = open(pieceFile(w, piece));
       let worst = 0;
       for (const skin of g.gltf.skins ?? []) {
         const ibm = g.read(skin.inverseBindMatrices);
