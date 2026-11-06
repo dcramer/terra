@@ -41,8 +41,6 @@ pub struct Inertia {
     /// Each bone's offset and how long since it was taken, s.
     offsets: HashMap<Entity, Offset>,
     t: f32,
-    /// Whether the clip playing is an act's, so the clip after it is taken up at once too.
-    acting: bool,
 }
 
 impl Inertia {
@@ -53,17 +51,13 @@ impl Inertia {
         Duration::ZERO
     }
 
-    /// The crossfade of `over` a clip is played with: none, inertialized instead, for an act
-    /// (`act`) and for whatever follows one, as an act's end is a gap as large as its start
-    /// (Low_Guard to Idle_Loop popped 2.0 times its clips' worst as a crossfade); a stride
-    /// loop after a stride loop crossfades, kept in step by its markers.
-    pub fn play(&mut self, act: bool, over: Duration) -> Duration {
-        let after_act = std::mem::replace(&mut self.acting, act);
-        if act || after_act {
-            self.start(over)
-        } else {
-            over
-        }
+    /// The crossfade of `over` a clip is played with: a stride loop taking over from another
+    /// in step (`in_step`, by their markers) crossfades, their feet and phase matched; every
+    /// other change (an act's start and end, a start, a stop, a jump and its landing) is
+    /// inertialized instead, as a crossfade's straight ramp jumps each joint's velocity at its
+    /// ends (Low_Guard to Idle_Loop 2.0 times its clips' worst, the jump 5.0).
+    pub fn play(&mut self, in_step: bool, over: Duration) -> Duration {
+        if in_step { over } else { self.start(over) }
     }
 }
 
@@ -251,16 +245,17 @@ mod tests {
     }
 
     #[test]
-    fn an_act_and_the_clip_after_it_are_inertialized_and_a_stride_change_crossfades() {
+    fn only_a_stride_loop_taking_over_in_step_crossfades() {
         let over = Duration::from_millis(200);
         let mut inertia = Inertia::default();
-        assert_eq!(inertia.play(false, over), over, "jog to sprint crossfades");
-        assert_eq!(inertia.play(true, over), Duration::ZERO, "into the act");
+        assert_eq!(inertia.play(true, over), over, "jog to sprint in step");
+        assert_eq!(inertia.asked, None);
+        assert_eq!(
+            inertia.play(false, over),
+            Duration::ZERO,
+            "a stop, a jump, an act"
+        );
         assert_eq!(inertia.asked, Some(0.2));
-        inertia.asked = None;
-        assert_eq!(inertia.play(false, over), Duration::ZERO, "out of the act");
-        assert_eq!(inertia.asked, Some(0.2));
-        assert_eq!(inertia.play(false, over), over, "and on, crossfading again");
     }
 
     #[test]

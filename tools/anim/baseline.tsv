@@ -12,7 +12,7 @@ glide.steady	0	first number 2026-11-06
 glide.gait	0.788	the course stands on the world (anim-blend j4): the foot lock's up is a body's place from the planet's centre, and the course on a plane through the origin had it lying along the ground, so the lock gated every plant as aloft and the feet went free all course. On the world the lock holds them: a stop's feet now end where they were locked and step to the idle after (stop.rest 0.007 to 0.055 m, stop.settle 0.167 to 0.5 s), the game's figure's own, the course no longer blind to it
 pop.gait	1.411	first number 2026-11-06
 pop.turn	1	first number 2026-11-06
-stop.settle	0.5	the course stands on the world (anim-blend j4): the foot lock's up is a body's place from the planet's centre, and the course on a plane through the origin had it lying along the ground, so the lock gated every plant as aloft and the feet went free all course. On the world the lock holds them: a stop's feet now end where they were locked and step to the idle after (stop.rest 0.007 to 0.055 m, stop.settle 0.167 to 0.5 s), the game's figure's own, the course no longer blind to it
+stop.settle	0.667	stop.settle 0.5 to 0.667 s for stop.rest 0.055 to 0.020 m: a stop now inertialized, the lock steps each foot to the idle's stance after the body stands (left +0.53 s, right +0.68 s, cargo xtask anim --trace stop.jog), so the feet end on it; distance-matched stops (next) are to land them there without the steps
 glide.turn	0	first number 2026-11-06
 glide.jump	0	first number 2026-11-06
 slide.start	0.001	lowered by nightly 2026-11-06

@@ -670,9 +670,9 @@ fn change(
                 }
             }
             animated.mixed.retain(|m| m.mix != node);
-            // An act, and the clip after it, are taken up whole at once and inertialized from
-            // what showed (D631); a stride loop crossfades, kept in step by its markers.
-            let fade = inertia.play(act.is_some(), blend);
+            // A stride loop after a stride loop crossfades in step (its markers); any other
+            // clip is taken up whole at once, inertialized from what showed (D631).
+            let fade = inertia.play(synced.is_some(), blend);
             let playing = transitions.play(animator, node, fade);
             if !once {
                 playing.repeat();
