@@ -1,23 +1,23 @@
 id	value	why
-pop.fight	13.603	first number 2026-11-06
+pop.fight	2.009	lowered by nightly 2026-11-06
 slide.steady	0	first number 2026-11-06
 glide.stop	2.732	first number 2026-11-06
 start.root	1.611	first number 2026-11-06
 pop.jump	7.488	first number 2026-11-06
-pop.stop	3.741	first number 2026-11-06
-slide.fight	0.3	inertialized acts (anim-blend j3): pop.fight 13.6 to 3.13. The slide rows' down is the run's lowest ball, set by the roll's ball 3.4 cm under the ground; inertialized, the roll dips no more, down's mark rises 3.7 cm and the other moves' swings near the ground count. Not a slide of the figure's: measured on main by the ball's standing height (2.2 cm, 98% of grounded frames) the same rows read 0.20 to 0.48 m; the measure is the next job (anim-blend j4)
-pop.start	2.795	first number 2026-11-06
-seam.loops	2.795	first number 2026-11-06
+pop.stop	3.659	lowered by nightly 2026-11-06
+slide.fight	0.011	lowered by nightly 2026-11-06
+pop.start	2.691	lowered by nightly 2026-11-06
+seam.loops	2.768	lowered by nightly 2026-11-06
 glide.steady	0	first number 2026-11-06
-glide.gait	0.786	first number 2026-11-06
+glide.gait	0.788	the course stands on the world (anim-blend j4): the foot lock's up is a body's place from the planet's centre, and the course on a plane through the origin had it lying along the ground, so the lock gated every plant as aloft and the feet went free all course. On the world the lock holds them: a stop's feet now end where they were locked and step to the idle after (stop.rest 0.007 to 0.055 m, stop.settle 0.167 to 0.5 s), the game's figure's own, the course no longer blind to it
 pop.gait	1.411	first number 2026-11-06
 pop.turn	1	first number 2026-11-06
-stop.settle	0.167	first number 2026-11-06
+stop.settle	0.5	the course stands on the world (anim-blend j4): the foot lock's up is a body's place from the planet's centre, and the course on a plane through the origin had it lying along the ground, so the lock gated every plant as aloft and the feet went free all course. On the world the lock holds them: a stop's feet now end where they were locked and step to the idle after (stop.rest 0.007 to 0.055 m, stop.settle 0.167 to 0.5 s), the game's figure's own, the course no longer blind to it
 glide.turn	0	first number 2026-11-06
 glide.jump	0	first number 2026-11-06
-slide.start	0.177	inertialized acts (anim-blend j3): pop.fight 13.6 to 3.13. The slide rows' down is the run's lowest ball, set by the roll's ball 3.4 cm under the ground; inertialized, the roll dips no more, down's mark rises 3.7 cm and the other moves' swings near the ground count. Not a slide of the figure's: measured on main by the ball's standing height (2.2 cm, 98% of grounded frames) the same rows read 0.20 to 0.48 m; the measure is the next job (anim-blend j4)
-slide.stop	0.278	inertialized acts (anim-blend j3): pop.fight 13.6 to 3.13. The slide rows' down is the run's lowest ball, set by the roll's ball 3.4 cm under the ground; inertialized, the roll dips no more, down's mark rises 3.7 cm and the other moves' swings near the ground count. Not a slide of the figure's: measured on main by the ball's standing height (2.2 cm, 98% of grounded frames) the same rows read 0.20 to 0.48 m; the measure is the next job (anim-blend j4)
+slide.start	0.001	lowered by nightly 2026-11-06
+slide.stop	0.01	lowered by nightly 2026-11-06
 slide.gait	0	first number 2026-11-06
-slide.turn	0.231	inertialized acts (anim-blend j3): pop.fight 13.6 to 3.13. The slide rows' down is the run's lowest ball, set by the roll's ball 3.4 cm under the ground; inertialized, the roll dips no more, down's mark rises 3.7 cm and the other moves' swings near the ground count. Not a slide of the figure's: measured on main by the ball's standing height (2.2 cm, 98% of grounded frames) the same rows read 0.20 to 0.48 m; the measure is the next job (anim-blend j4)
+slide.turn	0.034	lowered by nightly 2026-11-06
 slide.jump	0	first number 2026-11-06
-stop.rest	0.007	first number 2026-11-06
+stop.rest	0.055	the course stands on the world (anim-blend j4): the foot lock's up is a body's place from the planet's centre, and the course on a plane through the origin had it lying along the ground, so the lock gated every plant as aloft and the feet went free all course. On the world the lock holds them: a stop's feet now end where they were locked and step to the idle after (stop.rest 0.007 to 0.055 m, stop.settle 0.167 to 0.5 s), the game's figure's own, the course no longer blind to it

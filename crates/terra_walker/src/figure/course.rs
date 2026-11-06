@@ -308,7 +308,7 @@ fn run() -> (Vec<Frame>, Vec<Tag>, Vec<(Vec3, Vec3)>) {
             Motion::facing(Vec3::NEG_Z),
             Stance::default(),
             Acting::default(),
-            Transform::default(),
+            on_world(Vec3::ZERO, Vec3::NEG_Z).0,
         ))
         .id();
     let start = std::time::Instant::now();
@@ -352,23 +352,22 @@ fn run() -> (Vec<Frame>, Vec<Tag>, Vec<(Vec3, Vec3)>) {
         for _ in 0..n {
             mover.tick(step, &kind, dt);
             let facing = mover.facing();
+            let (place, tilt) = on_world(mover.at + Vec3::Y * mover.height, facing);
             let world = app.world_mut();
             {
                 let mut motion = world.get_mut::<Motion>(body).unwrap();
-                motion.velocity = facing * mover.speed;
+                motion.velocity = tilt * facing * mover.speed;
                 motion.rising = mover.rising;
                 motion.on_ground = mover.height <= 0.0;
                 motion.airborne = mover.airborne;
-                motion.facing = facing;
+                motion.facing = tilt * facing;
             }
-            *world.get_mut::<Transform>(body).unwrap() =
-                Transform::from_translation(mover.at + Vec3::Y * mover.height)
-                    .looking_to(facing, Vec3::Y);
+            *world.get_mut::<Transform>(body).unwrap() = place;
             if step.stance {
                 world.get_mut::<crate::feet::Kept>(body).unwrap().stance = true;
             }
             app.update();
-            frames.push(record(&mut app, animator, &turns, balls, &mover));
+            frames.push(record(&mut app, body, animator, &turns, balls, &mover));
             places.push((mover.at, facing));
         }
         if let Some((name, family)) = &step.tag {
@@ -378,9 +377,34 @@ fn run() -> (Vec<Frame>, Vec<Tag>, Vec<(Vec3, Vec3)>) {
     (frames, tags, places)
 }
 
+/// The radius of the world the course stands on, m (the world's tests', `terra_world`'s
+/// climate): the game's up is a body's place from the planet's centre at the origin (the foot
+/// lock's, `feet.rs`), so a course on a plane through the origin had its up lying along the
+/// ground once the body left the origin, and the lock gated every plant as aloft (anim-blend
+/// j4: rests 45 cm under the root, the feet free through the whole course).
+const WORLD_M: f32 = 2000.0;
+
+/// The mover's place on its flat course (`at`, up `Y`) and facing as the game has them on the
+/// world: on the sphere of `WORLD_M` above it, turned so its up is that place's; and the turn
+/// from the course's frame to the world's there.
+fn on_world(at: Vec3, facing: Vec3) -> (Transform, Quat) {
+    let up = Vec3::new(at.x, WORLD_M, at.z).normalize();
+    let tilt = Quat::from_rotation_arc(Vec3::Y, up);
+    let place = Transform::from_translation(up * (WORLD_M + at.y))
+        .with_rotation(tilt * Transform::IDENTITY.looking_to(facing, Vec3::Y).rotation);
+    (place, tilt)
+}
+
+/// A point of the world (`on_world`) back in the course's flat frame, the body at `at` there.
+fn off_world(point: Vec3, at: Vec3) -> Vec3 {
+    let (place, tilt) = on_world(at, Vec3::NEG_Z);
+    at + tilt.inverse() * (point - place.translation)
+}
+
 /// The figure as posed this frame.
 fn record(
     app: &mut App,
+    body: Entity,
     animator: Entity,
     turns: &[Entity],
     balls: [Entity; 2],
@@ -420,6 +444,16 @@ fn record(
         pushed += w * pace * size * rate.abs() * warp;
         weight += w;
     }
+    let kept = world.get::<crate::feet::Kept>(body).unwrap();
+    if let Some(why) = kept.gated() {
+        panic!(
+            "the man's feet cannot be kept playing {clip} ({why}): the course's slide reads \
+             contact from the clips' baked lock curves (D455, D631), so every clip it plays \
+             needs its markers baked (the character skill's export); do not read contact from \
+             the ball's height instead (anim-blend j3)"
+        );
+    }
+    let lock = kept.locks().map(|[curve, _]| curve);
     Frame {
         t: world.resource::<Time>().elapsed_secs(),
         clip,
@@ -429,10 +463,14 @@ fn record(
             .iter()
             .map(|e| world.get::<Transform>(*e).unwrap().rotation)
             .collect(),
-        balls: balls.map(|e| world.get::<GlobalTransform>(e).unwrap().translation()),
+        balls: balls.map(|e| {
+            let ball = world.get::<GlobalTransform>(e).unwrap().translation();
+            off_world(ball, mover.at + Vec3::Y * mover.height)
+        }),
         speed,
         stride: if weight > 0.0 { pushed / weight } else { 0.0 },
         aloft: mover.height > 0.0,
+        lock,
     }
 }
 
@@ -456,7 +494,6 @@ fn the_animation_course_measures_the_mans_transitions() {
     let dt = 1.0 / FPS;
     let kicks = measure::kicks(&frames, dt);
     let steady = measure::steady(&frames, &kicks);
-    let lowest = measure::lowest(&frames);
     let mut worst: HashMap<String, f32> = HashMap::new();
     let mut put = |id: String, v: f32| {
         let w = worst.entry(id).or_insert(0.0);
@@ -465,6 +502,8 @@ fn the_animation_course_measures_the_mans_transitions() {
     // The idle's own stance, at the end of the first stretch, the body still.
     let still = (2.0 * FPS) as usize - 1;
     let idle = stance_of(&frames[still], ats[still].0, ats[still].1);
+    // Each ball's height there, standing (the slide's ground).
+    let stand = frames[still].balls.map(|b| b.y);
     for (name, family, from, end) in &tags {
         // A steady stretch is its whole; a transition its first WINDOW_S.
         let to = match *family {
@@ -474,7 +513,7 @@ fn the_animation_course_measures_the_mans_transitions() {
         let before = frames[from.saturating_sub(1)].clip.as_str();
         let after = frames[to - 1].clip.as_str();
         let (pop, joint, at_frame) = measure::pop(&kicks, &steady, &[before, after], (*from, to));
-        let slide = measure::slide(&frames, lowest, (*from, to));
+        let slide = measure::slide(&frames, stand, (*from, to));
         let glide = measure::glide(&frames, (*from, to));
         put(format!("pop.{family}"), pop);
         put(format!("slide.{family}"), slide);

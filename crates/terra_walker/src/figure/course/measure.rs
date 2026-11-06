@@ -7,8 +7,8 @@
 //!   moving one way to a pose moving another changes the velocity in a frame (Bollo, GDC 2018,
 //!   "Inertialization": the discontinuity a blend leaves); a ratio over 1 is a frame rougher
 //!   than either clip ever is.
-//! - **Slide**: a foot's ball moving over the ground while it is down (within `DOWN_M` of its
-//!   lowest), summed over each stay down: a planted foot moves none.
+//! - **Slide**: a foot's ball moving over the ground while its clips have it planted (their
+//!   baked lock curve at 1), summed over each stay planted: a planted foot moves none.
 //! - **Glide**: the body's speed over the ground against the speed the clips' feet push it at
 //!   (each clip's stride pace by its rate and warp, by its weight): a body going faster or
 //!   slower than its feet glides (Unreal's stride warping and play-rate matching, Lyra's).
@@ -16,8 +16,9 @@
 
 use bevy::math::{Quat, Vec3};
 
-/// A ball within this of its lowest over the ground is down (the yard's `sole`, D455), m.
+/// A ball within this over its standing height is on the ground (the duel's `PLANTED_M`), m.
 pub const DOWN_M: f32 = 0.02;
+
 /// A joint's steady change of angular velocity a frame is never taken as under this, deg/s:
 /// a joint its clips hold still would otherwise make any turn a pop. One degree a frame of
 /// speed gained over a frame at 60 fps (3600 deg/s²), under what the eye reads as a jerk.
@@ -40,6 +41,9 @@ pub struct Frame {
     pub speed: f32,
     pub stride: f32,
     pub aloft: bool,
+    /// Each foot's lock curve over the clips coming in (`feet::Kept::locks`, the contact their
+    /// files bake, ALS's FootLock curves): 1 where the clips have the foot planted.
+    pub lock: [f32; 2],
 }
 
 /// Each frame's change of angular velocity, a joint each, deg/s (0 for the first two frames).
@@ -123,16 +127,28 @@ pub fn pop(
     worst
 }
 
-/// How far each foot's ball went over the ground in its worst stay down within frames
-/// `from..to`, m: down while within `DOWN_M` of `lowest` (each ball's own over the run, on the
-/// flat ground the course stands on, its up `Y`).
-pub fn slide(frames: &[Frame], lowest: [f32; 2], (from, to): (usize, usize)) -> f32 {
+/// How far each foot's ball went over the ground in its worst stay planted within frames
+/// `from..to`, m: planted while the clips coming in have it down (`Frame::lock` at
+/// `terra_motion::feet::FULL`, the contact their files bake, as the controller's feet glide
+/// reads it; ALS's FootLock), the body on the ground and the ball within `DOWN_M` of `stand`
+/// (its height standing still, over the course's ground at `Y` 0), as the duel's feet sliding
+/// reads a plant from the ball over the ground: a foot lifted, as the lock's step lifts it to
+/// its clip's place (ALS's dynamic transition), steps and does not slide. Contact is the
+/// clips' first, the height only gating it: a mark set by the height alone, the run's lowest
+/// ball, hid every slide once a roll dipped a ball under the ground, and one at the standing
+/// ball took a sprint's swing skimming the ground for a slide (anim-blend j3). Along the
+/// ground, its up `Y`; a foot rolling off as its curve ramps down is a release, not counted.
+pub fn slide(frames: &[Frame], stand: [f32; 2], (from, to): (usize, usize)) -> f32 {
     let mut worst: f32 = 0.0;
-    for (foot, low) in lowest.iter().enumerate() {
+    for (foot, stand) in stand.iter().enumerate() {
+        let planted = |f: &Frame| {
+            !f.aloft
+                && f.lock[foot] >= terra_motion::feet::FULL
+                && f.balls[foot].y <= stand + DOWN_M
+        };
         let mut stay = 0.0;
         for i in from.max(1)..to.min(frames.len()) {
-            let down = |f: &Frame| !f.aloft && f.balls[foot].y < low + DOWN_M;
-            if down(&frames[i]) && down(&frames[i - 1]) {
+            if planted(&frames[i]) && planted(&frames[i - 1]) {
                 let d = frames[i].balls[foot] - frames[i - 1].balls[foot];
                 stay += Vec3::new(d.x, 0.0, d.z).length();
                 worst = worst.max(stay);
@@ -154,17 +170,6 @@ pub fn glide(frames: &[Frame], (from, to): (usize, usize)) -> f32 {
         .fold(0.0, f32::max)
 }
 
-/// Each ball's lowest over the frames on the ground.
-pub fn lowest(frames: &[Frame]) -> [f32; 2] {
-    [0, 1].map(|foot| {
-        frames
-            .iter()
-            .filter(|f| !f.aloft)
-            .map(|f| f.balls[foot].y)
-            .fold(f32::MAX, f32::min)
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,6 +189,7 @@ mod tests {
                 speed: 0.0,
                 stride: 0.0,
                 aloft: false,
+                lock: [1.0; 2],
             })
             .collect()
     }
@@ -213,17 +219,42 @@ mod tests {
         assert!((still - 100.0 / FLOOR_DEG_S).abs() < 1e-5);
     }
 
-    /// A ball down that moves 1 cm a frame for 5 frames slid 5 cm; one lifted between the
-    /// moves, or moving while up, slid none.
+    /// A ball its clips have planted that moves 1 cm a frame for 5 frames slid 5 cm; one its
+    /// clips lift between the moves, or moving while the body is aloft, slid none.
     #[test]
-    fn a_slide_is_how_far_a_ball_went_while_down() {
+    fn a_slide_is_how_far_a_ball_went_while_planted() {
         let mut f = turning(&[0.0; 8], "a");
         for (i, frame) in f.iter_mut().enumerate() {
             frame.balls[0] = Vec3::new(i.min(5) as f32 * 0.01, 0.0, 0.0);
-            frame.balls[1] = Vec3::new(i as f32 * 0.01, if i % 2 == 0 { 0.1 } else { 0.0 }, 0.0);
+            frame.balls[1] = Vec3::new(i as f32 * 0.01, 0.0, 0.0);
+            frame.lock[1] = if i % 2 == 0 { 0.0 } else { 1.0 };
         }
-        let s = slide(&f, lowest(&f), (0, 8));
+        let s = slide(&f, [0.0; 2], (0, 8));
         assert!((s - 0.05).abs() < 1e-5, "{s}");
+        for frame in &mut f {
+            frame.aloft = true;
+        }
+        assert_eq!(slide(&f, [0.0; 2], (0, 8)), 0.0);
+    }
+
+    /// The slide's contact is the clips', not the ball's height: a ball dipped under the ground
+    /// once in the run (a roll's) hides no slide later, and a swing skimming the ground at a
+    /// planted ball's height is no slide (anim-blend j3's two faults of a height mark).
+    #[test]
+    fn a_dip_elsewhere_hides_no_slide_and_a_low_swing_is_none() {
+        let mut f = turning(&[0.0; 12], "a");
+        for (i, frame) in f.iter_mut().enumerate() {
+            frame.balls[0] = Vec3::new(0.0, 0.022, 0.0);
+            if i >= 6 {
+                frame.balls[0].x = (i - 6) as f32 * 0.008;
+            }
+            // The right foot swings 12 cm a frame at the standing height, its clips' curve 0.
+            frame.balls[1] = Vec3::new(i as f32 * 0.12, 0.022, 0.0);
+            frame.lock[1] = 0.0;
+        }
+        f[1].balls[0].y = -0.034;
+        let s = slide(&f, [0.022; 2], (0, 12));
+        assert!((s - 0.04).abs() < 1e-5, "{s}");
     }
 
     /// A loop's seam is where its time goes back.
