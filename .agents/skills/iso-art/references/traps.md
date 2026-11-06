@@ -58,3 +58,4 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 - Look at stills at 960 or 640 wide, 1:1 crops only where you judge; two film frames tiled at 640 cost little.
 - A film's frames read darker than the 1920x1080 still — compare like with like.
 - Every job hit the 80% context hook at about 120k by its third shot — plan one look an effect, not a look a tweak, and land each checked step at once.
+- Sample a ref's and a still's colours by box (ffmpeg to raw rgb24 at 960x540, a mean a box in node) before tuning a hue: the eye called the marsh's water blue while it measured violet grey.
