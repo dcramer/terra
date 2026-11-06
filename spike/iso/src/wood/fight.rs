@@ -42,6 +42,8 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
         );
         commands.entity(body).insert((
             crate::rim::Fighter::default(),
+            // The oaks before the fight open about each of the cast (foliage.rs).
+            crate::foliage::Seen,
             Pose {
                 gltf: asset.load(path),
                 clip,

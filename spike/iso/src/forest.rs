@@ -263,8 +263,13 @@ fn grass(land: &Land, lo: Vec2, size: f32, rng: &mut Rng, nav: &Nav) -> Option<M
     )
 }
 
+/// Oaks a scene stands beyond the wood's own (the iso forest's, framing its fight).
+#[derive(Resource, Default)]
+pub struct Extra(pub Vec<Spot>);
+
 #[allow(clippy::too_many_arguments)]
 /// Where an oak stands, how large and turned.
+#[derive(Clone, Copy)]
 pub struct Spot {
     pub at: Vec2,
     pub scale: f32,
@@ -304,6 +309,7 @@ pub fn tree_spots(land: &Land) -> Vec<Spot> {
     trees
 }
 
+#[allow(clippy::too_many_arguments)]
 fn plant(
     mut commands: Commands,
     asset: Res<AssetServer>,
@@ -312,6 +318,7 @@ fn plant(
     mut mats: ResMut<FoliageMats>,
     land: Res<Land>,
     mut nav: ResMut<Nav>,
+    extra: Option<Res<Extra>>,
 ) {
     let mut rng = Rng::new(0x51ed_270b);
     let on = |p: Vec2| Vec3::new(p.x, land.height(p), p.y);
@@ -358,7 +365,8 @@ fn plant(
             )
         })
         .collect();
-    let spots = tree_spots(&land);
+    let mut spots = tree_spots(&land);
+    spots.extend(extra.iter().flat_map(|e| e.0.iter().copied()));
     let trees: Vec<Vec2> = spots.iter().map(|t| t.at).collect();
     for (i, t) in spots.iter().enumerate() {
         let (p, scale, yaw) = (&t.at, t.scale, t.yaw);

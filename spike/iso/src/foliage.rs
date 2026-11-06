@@ -52,6 +52,10 @@ const WIND: Vec2 = Vec2::new(0.86, 0.5);
 /// The hole's radius about each of the party (m, on the screen).
 const HOLE: f32 = 2.8;
 
+/// One the wood opens about as about the party, not one of it (a scene's fighters).
+#[derive(Component)]
+pub struct Seen;
+
 pub fn plugin(app: &mut App) {
     embedded_asset!(app, "shaders/foliage.wesl");
     app.add_plugins(MaterialPlugin::<FoliageMaterial>::default())
@@ -92,7 +96,7 @@ fn breathe(
     mats: Res<Mats>,
     mut materials: ResMut<Assets<FoliageMaterial>>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
-    party: Query<&GlobalTransform, With<Member>>,
+    party: Query<&GlobalTransform, Or<(With<Member>, With<Seen>)>>,
     land: Res<crate::terrain::Land>,
 ) {
     let Ok(cam) = camera.single() else {

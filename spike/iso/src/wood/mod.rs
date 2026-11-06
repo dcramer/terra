@@ -4,8 +4,10 @@
 //! the knight fighting the iso pipeline's tree creatures, with the ruin's spell and hit;
 //! a moose walking the far bank, birds crossing, pollen in the sun (life.rs).
 
+mod dress;
 mod fight;
 mod life;
+mod pond;
 
 use crate::ruin::effects::Stage;
 use crate::terrain::shape;
@@ -34,7 +36,9 @@ const FOCUS: Vec2 = Vec2::new(4.6, 4.8);
 const EV100: f32 = 8.0;
 const SUN_LUX: f32 = 3_200.0;
 const SKY_NITS: f32 = 330.0;
-const SATURATION: f32 = 1.45;
+/// 1.45 at r1 made the sunlit grass acid lime (judge forest-r1, both judges); 1.3 keeps
+/// the shade's greens.
+const SATURATION: f32 = 1.3;
 
 pub fn stage() -> Stage {
     Stage {
@@ -47,9 +51,46 @@ pub fn stage() -> Stage {
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(stage())
-        .add_plugins((crate::ruin::effects::plugin, crate::ruin::fight::plugin, life::plugin))
+        .add_plugins((
+            crate::ruin::effects::plugin,
+            crate::ruin::fight::plugin,
+            life::plugin,
+            dress::plugin,
+            pond::plugin,
+        ))
         .add_systems(Startup, (camera, fight::spawn))
+        .add_systems(
+            PostStartup,
+            smoulder.before(crate::ruin::effects::kit::Found),
+        )
         .add_systems(PostUpdate, day);
+}
+
+/// By day the camp fire is out but for its coals and smoke (judge forest-r1: a fire burning
+/// at noon): its halo card is taken from the ruin's flipbook fire before the fires are found
+/// (kit::Found) and hidden, and its light reaches only the coals.
+fn smoulder(
+    mut commands: Commands,
+    args: Res<crate::Args>,
+    halos: Query<Entity, With<crate::motes::Halo>>,
+    mut lights: Query<(&mut PointLight, &bevy::camera::visibility::RenderLayers)>,
+) {
+    if args.hour != crate::scene::Hour::Day {
+        return;
+    }
+    for e in &halos {
+        commands
+            .entity(e)
+            .remove::<crate::motes::Halo>()
+            .insert(Visibility::Hidden);
+    }
+    let fire = bevy::camera::visibility::RenderLayers::layer(crate::camp::FIRE_CASTS);
+    for (mut light, layers) in &mut lights {
+        if layers.intersects(&fire) {
+            light.range = 1.4;
+            light.shadow_maps_enabled = false;
+        }
+    }
 }
 
 /// The forest's day, set after the glade's hour has set its own (scene.rs, in Update).
