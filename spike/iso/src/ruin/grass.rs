@@ -23,7 +23,8 @@ pub fn grassy(p: Vec2) -> f32 {
     let drift = smooth(0.3, 0.6, fbm(p * 0.22, 501));
     // None in the pool, a few stalks at its bank (water.rs).
     let dry = 1.0 - smooth(0.05, 0.25, super::water::pool(p));
-    earth * (0.25 + 0.75 * drift) * dry
+    // A few tufts in the broken flags' cracks where the debris lies (scatter.rs).
+    earth * (0.25 + 0.75 * drift) * dry + 0.15 * super::scatter::strewn(p)
 }
 
 pub fn spawn(

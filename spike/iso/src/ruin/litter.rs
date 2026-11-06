@@ -9,6 +9,7 @@
 
 use super::blocks::Blocks;
 use super::ground::{TOP, paved, smooth};
+use super::scatter::strewn;
 use super::walls::{BACK_Z, WEST_X};
 use crate::forest::Rng;
 use crate::scene::material;
@@ -64,7 +65,8 @@ pub fn leafy(p: Vec2) -> f32 {
     let drift = smooth(0.35, 0.7, fbm(p * 0.35, 601));
     let broken = 1.0 - smooth(0.4, 0.9, paved(p));
     let lie = (0.12 + 0.6 * by_walls(p) + 0.4 * broken) * (0.3 + 0.7 * drift);
-    (lie * (0.15 + 0.85 * open(p)) * (1.0 - smooth(0.05, 0.3, wet(p)))).min(1.0)
+    let lie = lie * (0.15 + 0.85 * open(p)) * (1.0 - smooth(0.05, 0.3, wet(p)));
+    (lie + 0.45 * strewn(p)).min(1.0)
 }
 
 /// How thick the rubble lies at `p` (0..1): heaped at the walls' feet, strewn at the broken
@@ -73,7 +75,8 @@ pub fn rubbly(p: Vec2) -> f32 {
     let heap = smooth(0.3, 0.65, fbm(p * 0.5, 611));
     let broken = 1.0 - smooth(0.3, 0.85, paved(p));
     let lie = (0.08 + 0.8 * by_walls(p) + 0.45 * broken) * (0.35 + 0.65 * heap);
-    (lie * (0.2 + 0.8 * open(p)) * (1.0 - smooth(0.4, 0.7, wet(p)))).min(1.0)
+    let lie = lie * (0.2 + 0.8 * open(p)) * (1.0 - smooth(0.4, 0.7, wet(p)));
+    (lie + 0.5 * strewn(p)).min(1.0)
 }
 
 /// How much ivy creeps at `p` (0..1): out from the walls' feet and over the broken edge.

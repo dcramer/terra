@@ -18,6 +18,7 @@ mod held;
 mod life;
 mod light;
 mod litter;
+mod scatter;
 mod walls;
 mod water;
 
@@ -39,6 +40,7 @@ pub fn plugin(app: &mut App) {
                 fight::spawn,
                 water::spawn,
                 litter::spawn,
+                scatter::spawn,
             ),
         )
         .add_plugins((
