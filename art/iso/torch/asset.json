@@ -1,0 +1,42 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-10-27T07:16:22.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "13d61829-936c-4f28-80e5-ec5ed5367cc5",
+      "note": "v3.1-20260211"
+    },
+    "export": {
+      "at": "2026-11-06T06:53:55.364Z",
+      "credits": 0,
+      "minutes": 0.22278333333333333,
+      "files": [
+        "assets/models/iso/torch.glb"
+      ],
+      "scale": 0.612,
+      "turn": 0,
+      "note": "scaled 0.612, turned 0 deg"
+    },
+    "check": {
+      "at": "2026-11-06T06:56:37.494Z",
+      "credits": 0,
+      "minutes": 0.0001,
+      "passed": 4,
+      "of": 4,
+      "failed": [],
+      "clips": {},
+      "speeds": {},
+      "triangles": 4621,
+      "height": 0.6,
+      "note": "passed 4 of 4"
+    }
+  },
+  "name": "torch",
+  "kind": "prop",
+  "height": 0.6,
+  "theme": "a dark-fantasy ruin at night",
+  "description": "a burnt wooden torch",
+  "project": "13d61829-936c-4f28-80e5-ec5ed5367cc5"
+}

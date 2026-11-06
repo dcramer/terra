@@ -1,0 +1,42 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-10-15T13:58:07.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "3331bc13-6a3b-41b0-b0f6-1bd882f55031",
+      "note": "v3.0-20250812"
+    },
+    "export": {
+      "at": "2026-11-06T06:54:00.856Z",
+      "credits": 0,
+      "minutes": 0.08953333333333334,
+      "files": [
+        "assets/models/iso/barrel.glb"
+      ],
+      "scale": 0.9018,
+      "turn": 0,
+      "note": "scaled 0.902, turned 0 deg"
+    },
+    "check": {
+      "at": "2026-11-06T06:56:37.603Z",
+      "credits": 0,
+      "minutes": 0.00011666666666666667,
+      "passed": 4,
+      "of": 4,
+      "failed": [],
+      "clips": {},
+      "speeds": {},
+      "triangles": 4580,
+      "height": 0.9,
+      "note": "passed 4 of 4"
+    }
+  },
+  "name": "barrel",
+  "kind": "prop",
+  "height": 0.9,
+  "theme": "a dark-fantasy ruin at night",
+  "description": "a wooden barrel",
+  "project": "3331bc13-6a3b-41b0-b0f6-1bd882f55031"
+}

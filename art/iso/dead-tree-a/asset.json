@@ -1,0 +1,44 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-10-14T01:23:14.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "129fbaf6-f9ee-4565-b52d-181750555588",
+      "note": "v3.1-20260211"
+    },
+    "export": {
+      "at": "2026-11-06T06:53:52.867Z",
+      "credits": 0,
+      "minutes": 0.15811666666666666,
+      "files": [
+        "assets/models/iso/dead-tree-a.glb"
+      ],
+      "scale": 7.1264,
+      "turn": 0,
+      "note": "scaled 7.126, turned 0 deg"
+    },
+    "check": {
+      "at": "2026-11-06T06:56:37.712Z",
+      "credits": 0,
+      "minutes": 0.00016666666666666666,
+      "passed": 3,
+      "of": 4,
+      "failed": [
+        "triangles"
+      ],
+      "clips": {},
+      "speeds": {},
+      "triangles": 19224,
+      "height": 7,
+      "note": "passed 3 of 4"
+    }
+  },
+  "name": "dead-tree-a",
+  "kind": "prop",
+  "height": 7,
+  "theme": "a dark-fantasy ruin at night",
+  "description": "a dead tree",
+  "project": "129fbaf6-f9ee-4565-b52d-181750555588"
+}

@@ -1,0 +1,44 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-10-27T07:56:15.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "de5bf953-255e-457e-80ee-0e0d7f2f285c",
+      "note": "v3.0-20250812"
+    },
+    "export": {
+      "at": "2026-11-06T06:56:37.142Z",
+      "credits": 0,
+      "minutes": 0.010216666666666667,
+      "files": [
+        "assets/models/iso/bone-pile.glb"
+      ],
+      "scale": 1.5268,
+      "turn": 0,
+      "note": "scaled 1.527, turned 0 deg"
+    },
+    "check": {
+      "at": "2026-11-06T06:56:47.348Z",
+      "credits": 0,
+      "minutes": 0.00011666666666666667,
+      "passed": 3,
+      "of": 4,
+      "failed": [
+        "triangles"
+      ],
+      "clips": {},
+      "speeds": {},
+      "triangles": 9778,
+      "height": 0.5,
+      "note": "passed 3 of 4"
+    }
+  },
+  "name": "bone-pile",
+  "kind": "prop",
+  "height": 0.5,
+  "theme": "a dark-fantasy ruin at night",
+  "description": "a pile of human bones and skulls, about 1.5 m across",
+  "project": "de5bf953-255e-457e-80ee-0e0d7f2f285c"
+}

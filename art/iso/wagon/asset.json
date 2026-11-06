@@ -1,0 +1,42 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-10-15T13:57:41.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "b7197e3b-009c-4216-b8a4-0dc5b2272c37",
+      "note": "v3.0-20250812"
+    },
+    "export": {
+      "at": "2026-11-06T06:54:12.729Z",
+      "credits": 0,
+      "minutes": 0.15776666666666667,
+      "files": [
+        "assets/models/iso/wagon.glb"
+      ],
+      "scale": 2.8151,
+      "turn": 0,
+      "note": "scaled 2.815, turned 0 deg"
+    },
+    "check": {
+      "at": "2026-11-06T06:56:37.941Z",
+      "credits": 0,
+      "minutes": 0.00016666666666666666,
+      "passed": 4,
+      "of": 4,
+      "failed": [],
+      "clips": {},
+      "speeds": {},
+      "triangles": 4640,
+      "height": 1.6,
+      "note": "passed 4 of 4"
+    }
+  },
+  "name": "wagon",
+  "kind": "prop",
+  "height": 1.6,
+  "theme": "a dark-fantasy ruin at night",
+  "description": "a wooden wagon",
+  "project": "b7197e3b-009c-4216-b8a4-0dc5b2272c37"
+}

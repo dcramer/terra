@@ -1,0 +1,42 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-10-27T07:56:34.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "87f07c31-25fb-45a7-813e-eb048ccd0e90",
+      "note": "v3.0-20250812"
+    },
+    "export": {
+      "at": "2026-11-06T06:56:37.904Z",
+      "credits": 0,
+      "minutes": 0.010833333333333334,
+      "files": [
+        "assets/models/iso/skull.glb"
+      ],
+      "scale": 0.1966,
+      "turn": 0,
+      "note": "scaled 0.197, turned 0 deg"
+    },
+    "check": {
+      "at": "2026-11-06T06:56:47.246Z",
+      "credits": 0,
+      "minutes": 0.0001,
+      "passed": 4,
+      "of": 4,
+      "failed": [],
+      "clips": {},
+      "speeds": {},
+      "triangles": 7786,
+      "height": 0.17,
+      "note": "passed 4 of 4"
+    }
+  },
+  "name": "skull",
+  "kind": "prop",
+  "height": 0.17,
+  "theme": "a dark-fantasy ruin at night",
+  "description": "a human skull, about 0.2 m front to back",
+  "project": "87f07c31-25fb-45a7-813e-eb048ccd0e90"
+}
