@@ -48,5 +48,5 @@ The isometric experiment's art pipeline, as it proved out from 2026-11-05 (exper
 - Model and rig minutes for a new asset (only adopted projects were timed); whether `--standard` models pass the asset judge.
 - The budgets' 1M-triangle frame share: no bench of the ruin yet (D185); the over-budget ogre, tree-monster, bone-pile, torch and skull are not yet decimated.
 - No asset has been judged on the asset rubric; there is no asset view or sheet at the game camera yet.
-- A second biome (a forest by day, a marsh) is planned, not made: its refs, light numbers and living nature are to be added here as it proves out.
-- Water: the ruin's pool rendered as a flat lit disc and is unlanded.
+- The forest by day and the marsh at dusk (`--scene marsh`) are made; neither has refs of its own kind yet (they are judged on the water and night refs) nor a judge's approval.
+- Water works (`pool.rs`, scene.md's water section) in the marsh and the forest's pond; how it reads by day beside le-river-beam is unjudged.

@@ -27,6 +27,12 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 - A soft black decal under a 140k lm pool does not show — a texture with rings and flecks, or a darker albedo.
 - A glossy, reflective water face under a strong point light renders as one flat lit disc — check the light's specular before tuning a faked reflection (the ruin's pool is unlanded: `~/.cache/terra-handoff/iso-art-j10-pool/`).
 - Fog cards over the whole frame lift the mids into lavender smudges — keep them low and in the pools.
+- Water at a true Fresnel (~0.02) reads as mud; at a lift of 6 too — the sky lifted ~25 times (pool.rs `Look.sky.a`), darker near the banks.
+- A light's reflection lands ~0.7 x its height toward the camera from its foot: a fire up the bank glints on mud — glinting lights on the water's lip or in it.
+- A sun under ~15 degrees turns every blade's shadow into a frame-wide streak (the marsh's reeds) — `NotShadowCaster` on blades and sedge.
+- Blades under ~1.5 cm wide alias into dark hair at the camera (a pixel is ~1 cm) — 3 to 6 cm, lighter albedo.
+- A wisp's 6 cm core and 0.6 m glow are dots at 960 px — a 1.3 m soft orb and a 3 m faint haze card about a 10 cm core.
+- `patch` is a reserved word in WGSL: the shader fails at run time with only an ERROR line in the run's log, the frame still saved — grep the run for ERROR before judging a still.
 - Effects sized as they feel read as nothing at 70 px a metre (motes under 0.07 m, banner tears) — size them at the game camera.
 - An attack held at the wrong moment reads as arms raised — a sheet of times first (below).
 

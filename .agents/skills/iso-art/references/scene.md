@@ -52,7 +52,15 @@ Measure every still (judging.md) and tune to the refs of the same kind of frame.
 - Fog: lit alpha-blended horizontal cards low over the ground with tattered noise, drifting on the scene's `WIND` and fading in and out, alpha at most about 0.34. It lifted the mids into lavender smudges at r3: keep it low and in the pools.
 - Dust motes in each fire's light, fireflies blinking by the trees and grassy edges: soft additive dots facing the camera. Under 0.07 m they do not show at 960 px.
 - Wind: a `StandardMaterial` extended with a vertex shader (and its prepass) bending blades by height in rolling gusts; cloth (a banner) on the same material, by how far down. Only a film shows it.
-- Water: an untested trap so far (traps.md); start from black water with a narrow streak of the fire's reflection.
+
+## Water (`spike/iso/src/pool.rs`, `shaders/pool.wesl`; the marsh and the forest's pond)
+
+At 55 degrees real water reflects 2% (Fresnel), so it is near black; what reads as water is what it mirrors. `pool.rs` draws it so: the lit face is dark with no specular (a glossy one under a point light is one flat lit disc), and the shader adds the mirror as emissive.
+- Mesh: `surface(lo, hi, step, level, ground)`, a grid at the level with each vertex's depth (level minus ground) in its second uv, triangles only where wet. `material(look)`, or `with_edge(look, edge)` for a margin; `plugin`; `Glint` on each point light to mirror (the brightest 6).
+- `Look`: `deep`/`shallow` the water's own colour and clearness; `sky` (nits, a: the lift over Fresnel) and `horizon` (nits, a: how deep the bank's dark reflection reaches); `wave` (wind xy, ripple steepness z: 0.05 shows at 960 px, 0.03 is flat); `look` (y the glint lobe, 600 about 3 degrees; z gain; w drip rings a m²). The marsh's dusk: sky (6, 10, 30) x 25, horizon (40, 18, 9), EV 7.5; at a lift of 6 water reads as mud.
+- `Edge` (all zero is the plain 6 cm margin): `fade` x the depth the water fades in over (0.3: a soft bank onto wet mud, not a road's cut edge), y how much the mirrored sky breaks into blots (0.8), z their size (6 m); `weed` duckweed's cover, reach (m deep), patch size, and w lily pads a m² of open shallows (0.06 to 0.45 m deep); `green` their albedo and a pad's radius (0.2 m: at 960 a pad is 6 to 10 px).
+- The margin is half the ground's: a band of wet black mud at the water line in the land's `cover` (mud weight 1 there darkens and glosses it in ground.wesl), reeds standing in the shallows (plants.rs grows them from 0.25 m deep).
+- Glints: a light's mirror image lands about 0.7 x its height toward the camera from its foot, so a glinting light stands on the water's lip or in it; `node ~/.cache/terra-review/iso-art/proj.mjs --focus x,y,z x,y,z...` projects world points to the 960x540 frame at the ARPG camera, so a light, a wisp or a prop is placed in frame before a render (the lantern sat on the bottom edge).
 
 ## Shooting and the film (on the render worker, embargoed machines build nothing)
 
