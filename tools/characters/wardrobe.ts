@@ -23,6 +23,8 @@
 // - **looks**: every look in every state of undress, composed by the game's own rule
 //   (`terra_walker::wardrobe::compose`, its tests run here): each slot filled or bare, every
 //   region drawn once, no piece twice, no pairing the matrix refuses.
+// - **neck**: our bare torso's neck edge against each piece that shows the head beside it,
+//   through the clips: gap and overlap within 1 mm, as their uncut body meets their head (neck.ts).
 // - **pairings**: every two worn pieces of a body's different slots measured (pairings.ts writes
 //   the rows; the game composes no refused one).
 //
@@ -36,6 +38,7 @@ import { fileURLToPath } from "node:url";
 import { bodiesData, buildSteps, gearData, gltfFiles, type Wardrobe, wardrobeData } from "./build_steps.ts";
 import { Glb, matrix, mmul, posed } from "./glb.ts";
 import { check, sources } from "./intact.ts";
+import { neckStage } from "./neck.ts";
 import { figures, type Pairing, pairs } from "./pairings.ts";
 import { privately, reshape, vendored } from "./vendored.ts";
 import { record, type StageResult } from "./record.ts";
@@ -180,7 +183,7 @@ if (import.meta.main) {
   const said: StageResult[] = [];
   const failures: string[] = [];
   const guard = [() => vendored(), () => privately(), () => reshape(buildSteps(bodiesData(ROOT), gearData()), Object.values(w.bodies).map((b) => b.pieces))];
-  for (const stage of [...guard, catalogue, pairings, files, intact, bound, looks]) {
+  for (const stage of [...guard, catalogue, pairings, files, intact, bound, neckStage, looks]) {
     const s = stage(w);
     // A line a stage (D388); a failing one's first five faults under it, all of them in the log.
     const more = s.faults.length > 5 ? [`… and ${s.faults.length - 5} more in ${LOG.slice(ROOT.length)}`] : [];

@@ -4,7 +4,7 @@
   "wardrobe": {
    "command": "node tools/characters/wardrobe.ts",
    "takes": "80 s, every core",
-   "owns": ["assets/models/character/", "art/characters/quaternius/", "tools/characters/wardrobe.ts", "tools/characters/vendored.ts", "tools/characters/theirs.py", "tools/characters/intact.ts", "tools/characters/pairings.ts", "tools/characters/build_steps.ts", "tools/blender/run.sh", "crates/terra_walker/src/wardrobe.rs"]
+   "owns": ["assets/models/character/", "art/characters/quaternius/", "tools/characters/wardrobe.ts", "tools/characters/vendored.ts", "tools/characters/theirs.py", "tools/characters/intact.ts", "tools/characters/pairings.ts", "tools/characters/neck.ts", "tools/characters/build_steps.ts", "tools/blender/run.sh", "crates/terra_walker/src/wardrobe.rs"]
   },
   "build": {
    "command": "tools/characters/build_bodies.sh --step wardrobe:male",
@@ -21,12 +21,19 @@
   { "id": "files", "check": "wardrobe", "stage": "files", "bar": "every piece's game file built" },
   { "id": "intact", "check": "wardrobe", "stage": "intact", "bar": "every mesh theirs as made (D599)" },
   { "id": "bound", "check": "wardrobe", "stage": "bound", "bar": "every joint of every piece on its body's skeleton" },
+  { "id": "neck", "check": "wardrobe", "stage": "neck", "bar": "our bare torso meets every head shown with it within 1 mm, gap and overlap, through the clips, as their uncut body meets their head (0 and 0; D600, neck.ts)" },
   { "id": "looks", "check": "wardrobe", "stage": "looks", "bar": "every look composed in every state of undress" },
   { "id": "build", "check": "build", "bar": "no failure but the known ones (rig, clips, gear, morphs: build_verdict.ts)", "known": [{ "match": "Sprint_Loop", "why": "the man's sprint skates 2.7/7.8 cm, known since char-switch j8" }] },
   { "id": "looks.hair", "live": "hair", "bar": "every look wears its person's hair (wardrobe.json looks' `pieces.hair`)" },
   { "id": "variants", "live": "figures", "bar": "hundreds of dressed figures a body, not millions (D182)", "within": [100, 100000] }
  ],
  "tasks": [
+  {
+   "what": "The neck: with the arms worn and the torso bare, our bare torso stops 125-181 mm short of their head's neck ring (247 mm in Crouch_Fwd_Loop), a hole, as cut_slots.py leaves the neck and collar to their UpperBody. A torso reaching the ring would lie twice under UpperBody (the bare arms). Recommended, on the desk as a design call (D600 names their UpperBody for the bare arms): cut the bare arms from their full body too (head, shoulders, arms, hands), the neck band to the torso, so both seams are twins (0 and 0)",
+   "files": ["tools/characters/cut_slots.py", "assets/models/character/wardrobe.json"],
+   "check": "node tools/characters/neck.ts",
+   "criterion": "neck"
+  },
   {
    "what": "The sheet: each look in the workbench (--attach), stills through cargo xtask gpu still, on the desk: which outfits and colourways belong (FOR REVIEW)",
    "files": ["crates/terra_sandbox/src/experiments/workbench/mod.rs", "assets/models/character/wardrobe.json"],
@@ -58,7 +65,7 @@
    "check": "cargo test -p terra_walker --lib wardrobe::"
   },
   {
-   "what": "Unproven checks (D632), the last two parts of rig_check's motion: its standing feet's gap is never measured (standing_gap stays 0 in rig_check.py; measure it, then plant feet off the ground) and its sink below the ground has no planted fault. A check gates only once a test plants a known fault and shows it caught; every other stage the status reads is proven: vendored, private, reshape (vendored.test.ts), intact (intact.test.ts), pairings (pairings.test.ts, a new poke refused), catalogue and looks (terra_walker wardrobe/tests.rs: a_catalogue_naming_what_it_lacks_is_refused, a_refused_pairing_is_never_composed_and_no_look_may_wear_one), the build's verdict (build_verdict.test.ts), files and bound (wardrobe.test.ts: a piece, its texture or the body's file gone; a bind pose 1 mm off, a joint the body has not), looks.hair and variants (status.test.ts: a look with no hair or a beard in its hair slot; every pairing refused, and nothing refused with the shoes thrice), rig_check's seven checks (motion by its bad edges) and gear_check (test_checks.py, Blender: each fault fails its own check, the mannequin re-exported passes all; char-faults-proof j1). Criteria has no row type for a proof, so it is a task",
+   "what": "Unproven checks (D632), the last two parts of rig_check's motion: its standing feet's gap is never measured (standing_gap stays 0 in rig_check.py; measure it, then plant feet off the ground) and its sink below the ground has no planted fault. A check gates only once a test plants a known fault and shows it caught; every other stage the status reads is proven: vendored, private, reshape (vendored.test.ts), intact (intact.test.ts), neck (neck.test.ts: a neck ring moved 4 mm, a torso run on under the head), pairings (pairings.test.ts, a new poke refused), catalogue and looks (terra_walker wardrobe/tests.rs: a_catalogue_naming_what_it_lacks_is_refused, a_refused_pairing_is_never_composed_and_no_look_may_wear_one), the build's verdict (build_verdict.test.ts), files and bound (wardrobe.test.ts: a piece, its texture or the body's file gone; a bind pose 1 mm off, a joint the body has not), looks.hair and variants (status.test.ts: a look with no hair or a beard in its hair slot; every pairing refused, and nothing refused with the shoes thrice), rig_check's seven checks (motion by its bad edges) and gear_check (test_checks.py, Blender: each fault fails its own check, the mannequin re-exported passes all; char-faults-proof j1). Criteria has no row type for a proof, so it is a task",
    "files": ["tools/characters/rig_check.py", "tools/characters/test_checks.py"],
    "check": "tools/blender/run.sh tools/characters/test_checks.py"
   }
