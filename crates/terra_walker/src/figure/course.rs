@@ -1,4 +1,4 @@
-//! The animation course (its scorecard, `cargo xtask anim`, and decision to come): the man's figure (male.glb, the game's own
+//! The animation course (D631; its scorecard `cargo xtask anim`, tools/anim): the man's figure (male.glb, the game's own
 //! clips, blends, sync groups, stride warping, foot lock and lift) posed headless with no GPU,
 //! driven through every transition the game's figure makes, and measured by numbers alone
 //! (`measure`): idle to jog and sprint and back, the speed changes between them, turns moving
@@ -90,7 +90,11 @@ fn course(set: &terra_motion::moves::MoveSet) -> Vec<Step> {
         tagged(go(2.0, 0.0, 0.0), "stop.sprint", "stop"),
         go(1.5, JOG, 0.0),
         tagged(go(2.0, SPRINT, 0.0), "jog.sprint", "gait"),
+        // A steady gait, measured over the whole stretch: a loop that skates where no
+        // transition hides it (the Sprint_Loop's, char-faults j3).
+        tagged(go(3.0, SPRINT, 0.0), "steady.sprint", "steady"),
         tagged(go(2.0, JOG, 0.0), "sprint.jog", "gait"),
+        tagged(go(3.0, JOG, 0.0), "steady.jog", "steady"),
         tagged(go(1.5, JOG, 90.0), "turn.jog.90", "turn"),
         tagged(go(1.5, JOG, 270.0), "turn.jog.180", "turn"),
         // A stop half a stride on from the one above: a stop's fade by its stride phase.
@@ -462,7 +466,11 @@ fn the_animation_course_measures_the_mans_transitions() {
     let still = (2.0 * FPS) as usize - 1;
     let idle = stance_of(&frames[still], ats[still].0, ats[still].1);
     for (name, family, from, end) in &tags {
-        let to = (*from + (WINDOW_S * FPS) as usize).min(*end);
+        // A steady stretch is its whole; a transition its first WINDOW_S.
+        let to = match *family {
+            "steady" => *end,
+            _ => (*from + (WINDOW_S * FPS) as usize).min(*end),
+        };
         let before = frames[from.saturating_sub(1)].clip.as_str();
         let after = frames[to - 1].clip.as_str();
         let (pop, joint, at_frame) = measure::pop(&kicks, &steady, &[before, after], (*from, to));
@@ -471,7 +479,13 @@ fn the_animation_course_measures_the_mans_transitions() {
         put(format!("pop.{family}"), pop);
         put(format!("slide.{family}"), slide);
         if *family != "fight" {
-            put(format!("glide.{family}"), glide);
+            // A start's is its root's speed against its clip's own (a distance-matched start
+            // plays its clip by the body's travel, Lyra's).
+            let id = match *family {
+                "start" => "start.root".to_string(),
+                _ => format!("glide.{family}"),
+            };
+            put(id, glide);
         }
         let mut extra = String::new();
         if *family == "stop" {
@@ -500,7 +514,7 @@ fn the_animation_course_measures_the_mans_transitions() {
             extra = format!("\trest {off:.3} m\tsettle {moved:.2} s");
         }
         println!(
-            "anim\t{name}\t{before} -> {after}\tpop {pop:.2} ({} at +{:.2} s)\tslide {:.1} cm\tglide {glide:.2} m/s{extra}",
+            "anim\t{name}\t{family}\t{before} -> {after}\tpop {pop:.2} ({} at +{:.2} s)\tslide {:.1} cm\tglide {glide:.2} m/s{extra}",
             JOINTS[joint],
             (at_frame - from) as f32 * dt,
             slide * 100.0,
@@ -521,7 +535,10 @@ fn the_animation_course_measures_the_mans_transitions() {
         }
     }
     for (clip, (p, j)) in &seams {
-        println!("anim\tseam\t{clip}\tpop {p:.2} ({})", JOINTS[*j]);
+        println!(
+            "anim\tseam.{clip}\tseam\t{clip}\tpop {p:.2} ({})",
+            JOINTS[*j]
+        );
     }
     let mut ids: Vec<_> = worst.into_iter().collect();
     ids.sort_by(|a, b| a.0.cmp(&b.0));

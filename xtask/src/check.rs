@@ -270,6 +270,10 @@ fn full() -> Vec<(Step, How)> {
         How::Command(command("node", &["tools/controller/scorecard.ts"])),
     ));
     stages.push((
+        Step::new("anim", Said::Printed, LOGS).rerun("cargo xtask anim"),
+        How::Command(command("node", &["tools/anim/scorecard.ts"])),
+    ));
+    stages.push((
         Step::new("docs", Said::Printed, LOGS).rerun("node tools/docs/docs.ts"),
         How::Command(command("node", &["tools/docs/docs.ts"])),
     ));

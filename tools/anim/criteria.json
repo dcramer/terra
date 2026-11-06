@@ -1,0 +1,251 @@
+{
+ "about": "What the figure's animation must get right through its transitions, a row a criterion (tools/anim/README.md, D631): what a player notices, its bar and source, measured by the animation course (terra_walker figure::course: the man's figure posed headless by the game's own clips, blends, sync groups, stride warping, foot lock and lift, driven as the mover moves him). `noticed` is how much a player notices it, 5 most; the scorecard ranks failing rows by it, then by how many bars out (its `next` line, the task list). A pop is a joint's change of angular velocity in a frame over the worst its clips do alone at full weight (floored at 60 deg/s), so 1 is as rough as the clips themselves; a slide a ball moving while down (within 2 cm of its lowest); a glide the body's speed against the speed its leg clips stride at (pace x rate x warp, weighted).",
+ "course": {
+  "crate": "terra_walker",
+  "test": "figure::course::the_animation_course_measures_the_mans_transitions"
+ },
+ "criteria": [
+  {
+   "id": "pop.fight",
+   "noticed": 5,
+   "notice": "a limb snaps going into or out of a fight move from the guard (the roll's arm at its first frame)",
+   "bar": { "at_most": 1.5 },
+   "unit": "x its clips' own worst",
+   "source": "Bollo, 'Inertialization: High-Performance Animation Transitions in Gears of War' (GDC 2018); UE5's Inertialization node: a transition adds no change of velocity the clips lack",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "slide.steady",
+   "noticed": 5,
+   "notice": "a foot skates along the ground in a steady jog or sprint (the Sprint_Loop skate, char-faults j3), over a whole 3 s stretch, not only a transition's window",
+   "bar": { "at_most": 0.02 },
+   "unit": "m",
+   "source": "tools/controller feet.sliding's bar (2 cm), D455's foot lock",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "glide.stop",
+   "noticed": 4,
+   "notice": "a stop's legs go on striding after the body has stood (the loop fading over 180 ms while the body stops in 0.15-0.2 s)",
+   "bar": { "at_most": 0.3 },
+   "unit": "m/s",
+   "source": "Lyra's distance-matched stops (UE5 Animation Locomotion Library, DistanceMatchToTarget); Paragon's planted-foot stops",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "start.root",
+   "noticed": 4,
+   "notice": "a start's feet stride slower or faster than the body sets off (the loop at once, where a start clip would match its root's travel to the body's)",
+   "bar": { "at_most": 0.3 },
+   "unit": "m/s",
+   "source": "Lyra's distance-matched starts (AdvanceTimeByDistanceMatching, play rate clamped 0.6-5)",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "pop.jump",
+   "noticed": 4,
+   "notice": "a limb snaps at a jump's take-off or landing (Jump_Loop cut in once airborne)",
+   "bar": { "at_most": 1.5 },
+   "unit": "x its clips' own worst",
+   "source": "Bollo GDC 2018 (inertialization)",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "pop.stop",
+   "noticed": 4,
+   "notice": "the head or a limb snaps as a jog or sprint stops",
+   "bar": { "at_most": 1.5 },
+   "unit": "x its clips' own worst",
+   "source": "Bollo GDC 2018 (inertialization)",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "slide.fight",
+   "noticed": 4,
+   "notice": "a foot skates in a fight move (the roll's)",
+   "bar": { "at_most": 0.02 },
+   "unit": "m",
+   "source": "tools/controller feet.sliding's bar (2 cm), D455",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "pop.start",
+   "noticed": 3,
+   "notice": "a limb snaps as the body sets off into a jog or sprint",
+   "bar": { "at_most": 1.5 },
+   "unit": "x its clips' own worst",
+   "source": "Bollo GDC 2018 (inertialization)",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "seam.loops",
+   "noticed": 3,
+   "notice": "a loop jerks where it wraps (Sprint_Loop's arm)",
+   "bar": { "at_most": 1.5 },
+   "unit": "x its clip's own worst",
+   "source": "ours: a loop's last frame runs into its first as any frame into the next",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "glide.steady",
+   "noticed": 3,
+   "notice": "a steady jog's or sprint's feet stride at another speed than the body goes (stride warping's leftover)",
+   "bar": { "at_most": 0.1 },
+   "unit": "m/s",
+   "source": "UE5 Stride Warping (Animation Warping plugin); tools/controller pace.match",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "glide.gait",
+   "noticed": 3,
+   "notice": "between jog and sprint the feet stride at another speed than the body goes",
+   "bar": { "at_most": 0.3 },
+   "unit": "m/s",
+   "source": "UE5 sync groups and stride warping",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "pop.gait",
+   "noticed": 3,
+   "notice": "a limb snaps between jog and sprint",
+   "bar": { "at_most": 1.5 },
+   "unit": "x its clips' own worst",
+   "source": "UE5 sync groups (markers); Bollo GDC 2018",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "pop.turn",
+   "noticed": 3,
+   "notice": "a limb snaps as the body turns moving or in place",
+   "bar": { "at_most": 1.5 },
+   "unit": "x its clips' own worst",
+   "source": "UE5 Orientation Warping; Bollo GDC 2018",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "stop.settle",
+   "noticed": 3,
+   "notice": "the feet go on shuffling after the body has stood",
+   "bar": { "at_most": 0.3 },
+   "unit": "s",
+   "source": "Paragon's and Lyra's stops: a stop clip ends planted; tools/controller stop.settle",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "glide.turn",
+   "noticed": 2,
+   "notice": "the feet stride at another speed than the body goes through a turn",
+   "bar": { "at_most": 0.3 },
+   "unit": "m/s",
+   "source": "UE5 Orientation Warping",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "glide.jump",
+   "noticed": 2,
+   "notice": "the feet stride at another speed than the body goes on a jump's ground frames",
+   "bar": { "at_most": 0.3 },
+   "unit": "m/s",
+   "source": "ours",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "slide.start",
+   "noticed": 3,
+   "notice": "a foot skates as the body sets off",
+   "bar": { "at_most": 0.02 },
+   "unit": "m",
+   "source": "tools/controller feet.sliding's bar (2 cm), D455",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "slide.stop",
+   "noticed": 3,
+   "notice": "a foot skates as the body stops",
+   "bar": { "at_most": 0.02 },
+   "unit": "m",
+   "source": "tools/controller feet.sliding's bar (2 cm), D455",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "slide.gait",
+   "noticed": 3,
+   "notice": "a foot skates between jog and sprint",
+   "bar": { "at_most": 0.02 },
+   "unit": "m",
+   "source": "tools/controller feet.sliding's bar (2 cm), D455",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "slide.turn",
+   "noticed": 3,
+   "notice": "a foot skates through a turn",
+   "bar": { "at_most": 0.02 },
+   "unit": "m",
+   "source": "tools/controller feet.sliding's bar (2 cm), D455",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "slide.jump",
+   "noticed": 3,
+   "notice": "a foot skates at a jump's take-off or landing",
+   "bar": { "at_most": 0.02 },
+   "unit": "m",
+   "source": "tools/controller feet.sliding's bar (2 cm), D455",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "stop.rest",
+   "noticed": 2,
+   "notice": "a stop's feet end apart from the idle's own stance",
+   "bar": { "at_most": 0.05 },
+   "unit": "m",
+   "source": "ours: a stop ends in the idle's stance",
+   "check": { "by": "course" },
+   "cost": "cheap",
+   "measurable": true
+  }
+ ]
+}
