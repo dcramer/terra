@@ -33,4 +33,4 @@ Each stage prints a line; Tripo's progress goes to `target/iso-art/NAME/<stage>.
 | triangles, textures | the kind's budget (`kinds.ts`): a dozen on screen from 15 to 20 m up |
 | height, on the ground | life size within 5%; the lowest point of the idle's first frame on y=0 |
 
-Read from the GLB in Node (`gltf.ts`: accessors, the node hierarchy posed by a clip, the skin's points), so a check needs no GPU. Looking at it in the iso spike is that spike's own command: this tool depends on no spike (D133).
+Read from the GLB in Node (`gltf.ts`: accessors, the node hierarchy posed by a clip, the skin's points), so a check needs no GPU. The checks are `check.ts`; what export does to Tripo's file (names, in place, cuts, loops, the root node) is `normalize.ts`; the ledgers and the credits read from Tripo's README are `ledger.ts`. The pipeline's choices are D628. Looking at it in the iso spike is that spike's own command: this tool depends on no spike (D133).

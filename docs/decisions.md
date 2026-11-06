@@ -46,6 +46,7 @@ What we are building, its tenets, scope and players.
 | [D589](decisions/D589.md) | The v0 milestone | Design | Developers | Decided | The next milestone is v0, the foundations of the engine… |
 | [D590](decisions/D590.md) | Beating the demo's boss imprints a mark on you | Design | Developers | Decided | In v0's demo (D589) the boss leaves no item… |
 | [D592](decisions/D592.md) | Characters are saved on the server | Design | Developers | Decided | A character's record is kept by the server it plays on… |
+| [D629](decisions/D629.md) | The iso experiment's camera follows the hero as an ARPG's does, or stays the spike's fixed Baldur's Gate II view | Design | — | Open | Two cameras for the 2.5D isometric experiment… |
 
 ## Worlds and realms
 
@@ -482,6 +483,7 @@ The look, models, bodies and gear, textures and audio.
 | [D611](decisions/D611.md) | Characters are composed per slot at run time from a wardrobe catalogue | Tech | Agent | Decided | A character on Quaternius's bodies… |
 | [D624](decisions/D624.md) | Leaves on the line from the third-person lens to the figure open over the figure alone | Tech | Agent | Decided | Every leaf card the foliage shaders draw… |
 | [D626](decisions/D626.md) | The clouds are lit by octaves of multiple scattering and shaped as domed towers, measured against photographs | Tech | Agent | Decided | Under D516 (the sky photographic) and D515… |
+| [D630](decisions/D630.md) | Iso characters keep main Terra's triangle budgets, or the iso camera's own | Design | — | Open | Main Terra's budgets (art-style.md) give a character… |
 
 ## Engine and code
 
@@ -687,6 +689,7 @@ Checks, developer tools, languages and the repository.
 | [D610](decisions/D610.md) | The play scenes are benched at each landing, a failure bisected unattended, and an A/B reads main's side from it | Tech | Agent | Decided | The perf row (tools/perf) benches lake-play… |
 | [D625](decisions/D625.md) | Character work starts from one status command over recorded results | Tech | Agent | Decided | What character work must hold and what is next is data… |
 | [D627](decisions/D627.md) | Token consumption is a constraint of how we work | Tech | Agent | Decided | Every agent knows its context and spend… |
+| [D628](decisions/D628.md) | The iso experiment's art comes from Tripo's own rig and preset clips, made game-ready in Node by one command a stage | Tech | Agent | Decided | For the 2.5D isometric experiment (tools/iso-art)… |
 
 ## Superseded and rejected
 
