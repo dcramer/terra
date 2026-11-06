@@ -414,15 +414,19 @@ export const BUDGETS: { pattern: RegExp; bytes: number; what: string; fix: strin
   { pattern: /^\.agents\/skills\/[^/]+\/SKILL\.md$/, bytes: 16_000, what: "read whole at a job's start", fix: "a short core: the loop, the rules, links to files beside it for the detail" },
   { pattern: /^docs\/v0-[^/]+\.md$/, bytes: 16_000, what: "a status page every job of its line reads", fix: "where it stands and what is next; the history is git's and docs/decisions-log.md's" },
   { pattern: /^tools\/[^/]+\/README\.md$/, bytes: 20_000, what: "a tool's guide, read by its jobs", fix: "what to run and what it says; the detail in a file beside it, linked" },
+  {
+    pattern: /^tools\/[^/]+\/(scripts|made-clips)\.md$/,
+    bytes: 40_000,
+    what: "a tool's reference, read by an entry's grep or a section, a slip into a whole read costing its all",
+    fix: "split it by stage into files beside it, each linked from the README; keep each entry one line or section, so a grep or a section read returns it whole",
+  },
 ];
 
 /**
  * Docs over their budget when this was written, each held to the size it had (it may only shrink)
  * until trimmed, then taken off this list (D627).
  */
-export const OVER_BUDGET: Record<string, number> = {
-  "tools/sandbox/README.md": 48_432,
-};
+export const OVER_BUDGET: Record<string, number> = {};
 
 /** The faults of a doc's size against its budget. */
 export function overBudget(file: string, bytes: number, over: Record<string, number> = OVER_BUDGET): string[] {

@@ -239,6 +239,8 @@ test("a doc agents read whole keeps to its size budget, and one held over it may
   assert.match(overBudget("AGENTS.md", 15_000, {})[0], /over its budget of 14\.0 KB .*D627.*do not raise/);
   assert.match(overBudget(".agents/skills/x/SKILL.md", 17_000, {})[0], /short core/);
   assert.deepEqual(overBudget("docs/fire.md", 90_000, {}), [], "a design doc read by its sections has no budget");
+  assert.match(overBudget("tools/x/scripts.md", 41_000, {})[0], /read by an entry's grep.*split it by stage/, "a tool's reference read by grep is capped");
+  assert.deepEqual(overBudget("tools/x/scripts.md", 39_000, {}), []);
   const held = { "docs/v0-x.md": 20_000 };
   assert.deepEqual(overBudget("docs/v0-x.md", 19_000, held), [], "shrinking, still over");
   assert.match(overBudget("docs/v0-x.md", 21_000, held)[0], /grown past the 20\.0 KB it is held to/);
