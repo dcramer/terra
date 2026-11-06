@@ -23,12 +23,15 @@ Read D631 (the methods, in order), D455 (the foot lock), D452 (the ratchet's rul
 5. **Confirm in play**: one still or film of the game's own frame for the `FOR REVIEW` line when the figure's look changed; the course scores the pose, not the camera.
 6. **Bank**: land on main. Two jobs without a gain on a row: stop, step back, hand off what was tried.
 
-## The task list (anim-blend j2, 2026-11-06)
+## The task list (anim-blend j5, 2026-11-06)
 
-1. `pop.fight` 13.6 (into.roll, upperarm_r at its first frame; out.roll 8.3): inertialize the act's blend (D631).
-2. `glide.stop` 2.73 m/s, `pop.stop` 3.74: play `Jog_Stop`/`Jog_Stop_R` (fight.glb) by distance on the planted foot (`terra_motion::distance`, `Markers::distance`); the glide measure then takes a distance-matched clip's root speed as its stride.
-3. `start.root` 1.61 m/s, `pop.start` 2.79: `Jog_Start` by distance.
-4. `pop.jump` 7.49 (Jump_Loop cut in at airborne 0.12 s, hand_l): inertialize, or a take-off clip.
-5. `into.guard`/`out.guard` pop 7.49 on hand_l at +0.00: a hold laid at once (`layer::lay`), not a clip.
-6. `seam.loops` 2.79 (Sprint_Loop's own wrap, upperarm_l): the clip's seam (the `character` skill).
-7. `slide.fight` 0.21 m (the roll's feet), `glide.gait` 0.79 m/s.
+Done: acts inertialized at their start (j3) and end (j5); the course on the world, so its foot lock works (j4). The foot lock's up is the body's place from the planet's centre (`feet.rs`): a test standing on a flat plane away from the origin has no foot lock (none does now).
+
+1. `pop.fight` 1.51 (into.finisher, Low_Guard -> Open_Slash, lowerarm_r at +0.02 s; into.block 1.37): an act into an act, already inertialized; read the clips' first frames.
+2. `pop.jump` 5.03 (jump.idle, Jump_Loop at airborne 0.12 s, upperarm_r): a take-off clip, or the jump inertialized.
+3. `stop.rest` 0.055 m, `stop.settle` 0.5 s: a stop's feet end where locked and the lock steps them to the idle's stance; distance matching the stop (next) should land them on it.
+4. `slide.turn` 0.034 m (turn.idle.180): orientation warping or a turn-in-place step.
+5. `glide.stop` 2.73 m/s, `pop.stop` 3.66: play `Jog_Stop`/`Jog_Stop_R` (fight.glb) by distance on the planted foot (`terra_motion::distance`, `Markers::distance`); the glide measure then takes a distance-matched clip's root speed as its stride.
+6. `start.root` 1.61 m/s, `pop.start` 2.69: `Jog_Start` by distance.
+7. `seam.loops` 2.77 (Sprint_Loop's own wrap, upperarm_l): the clip's seam (the `character` skill).
+8. `glide.gait` 0.79 m/s.
