@@ -12,6 +12,7 @@ mod nav;
 mod party;
 mod rest;
 mod rim;
+mod ruin;
 mod scene;
 mod smoke;
 mod terrain;
@@ -38,6 +39,8 @@ pub struct Args {
     pub zoom: f32,
     pub focus: Vec2,
     pub size: (u32, u32),
+    /// `--scene glade|ruin`: the party's glade (the default) or the ARPG's ruin (ruin/).
+    pub ruin: bool,
 }
 
 fn args() -> Args {
@@ -50,6 +53,7 @@ fn args() -> Args {
         zoom: 14.0,
         focus: Vec2::new(-1.0, 1.0),
         size: (1920, 1080),
+        ruin: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -58,6 +62,7 @@ fn args() -> Args {
             "--shot" => a.shot = Some(val().into()),
             "--frames" => a.frames = val().parse().unwrap(),
             "--demo" => a.demo = true,
+            "--scene" => a.ruin = val() == "ruin",
             "--demo-at" => a.demo_at = val().parse().unwrap(),
             "--zoom" => a.zoom = val().parse().unwrap(),
             "--hour" => {
@@ -92,7 +97,8 @@ fn main() {
             ..default()
         })
     };
-    App::new()
+    let mut app = App::new();
+    app
         // The spike's own models (the knight), beside the repository's assets.
         .register_asset_source(
             "spike",
@@ -109,34 +115,38 @@ fn main() {
             },
             ..default()
         }))
-        .add_plugins((
-            mipmaps::plugin,
-            terrain::plugin,
-            scene::plugin,
-            forest::plugin,
-            foliage::plugin,
-            party::plugin,
-            camera::plugin,
-            command::plugin,
-            ui::plugin,
-            rim::plugin,
-            water::plugin,
-            wildlife::plugin,
-            (motes::plugin, smoke::plugin),
-            camp::plugin,
-            rest::plugin,
-        ))
-        .add_systems(
-            PostStartup,
-            |mut gizmos: ResMut<GizmoConfigStore>, args: Res<Args>, mut commands: Commands| {
-                let (config, _) = gizmos.config_mut::<DefaultGizmoConfigGroup>();
-                config.line.width = 1.8;
-                config.depth_bias = -1.0;
-                commands.insert_resource(args.hour);
-            },
-        )
-        .add_systems(Last, shoot)
-        .run();
+        .add_systems(Last, shoot);
+    if args.ruin {
+        app.add_plugins((mipmaps::plugin, ruin::plugin)).run();
+        return;
+    }
+    app.add_plugins((
+        mipmaps::plugin,
+        terrain::plugin,
+        scene::plugin,
+        forest::plugin,
+        foliage::plugin,
+        party::plugin,
+        camera::plugin,
+        command::plugin,
+        ui::plugin,
+        rim::plugin,
+        water::plugin,
+        wildlife::plugin,
+        (motes::plugin, smoke::plugin),
+        camp::plugin,
+        rest::plugin,
+    ))
+    .add_systems(
+        PostStartup,
+        |mut gizmos: ResMut<GizmoConfigStore>, args: Res<Args>, mut commands: Commands| {
+            let (config, _) = gizmos.config_mut::<DefaultGizmoConfigGroup>();
+            config.line.width = 1.8;
+            config.depth_bias = -1.0;
+            commands.insert_resource(args.hour);
+        },
+    )
+    .run();
 }
 
 fn shoot(
