@@ -129,7 +129,7 @@ const blender = (script: string, args: string, keep: string) => `$blender $here/
 /** A look carried onto a body and pushed clear where its skin comes through in our clips, in three rounds, then checked. */
 function fitRun(base: string, body: string, item: string): string {
   const carry = blender("carry_gear.py", `"$out/${base}-game.glb" "$out/gear/${base}/${item}.glb" "$out/${body}-${item}.glb" "${body}"`, "PUSHED|Error");
-  const check = (fix: boolean) => blender("gear_check.py", `"$out/${body}-game.glb" "$out/${body}-${item}.glb"${fix ? " --fix" : ""}`, fix ? "^FIX|Error" : "^GEARCHECK|Error");
+  const check = (fix: boolean) => blender("gear_check.py", `"$out/${body}-game.glb" "$out/${body}-${item}.glb"${fix ? " --fix" : ""}`, fix ? "^FIX|Error" : "GEARCHECK|Error");
   return [`rm -f "$out/${body}-${item}-push.npz" "$out/${body}-${item}-uncover.json"`, carry, "for round in 1 2 3; do", `  ${check(true)}`, `  ${carry}`, "done", check(false)].join("\n");
 }
 

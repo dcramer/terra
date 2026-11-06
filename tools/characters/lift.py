@@ -5,7 +5,8 @@ floor. A thicker body playing them goes into the floor by however much thicker i
 offset the pelvis by body size; here, for each clip and each frame:
 
   1. the mannequin's lowest point is measured once, at the start of a build (this file run
-     on its own: `tools/blender/run.sh tools/characters/lift.py`);
+     on its own: `tools/blender/run.sh tools/characters/lift.py`), or by the first script
+     that needs it when the kept measure is missing or of another mannequin (`reference`);
   2. each body's lowest point is measured as the game skins it, and the lift it needs is how
      much deeper it goes than the mannequin, smoothed so it never pops;
   3. the base's own lift is baked into its clips' hips, as the twist step is (`bake`);
@@ -20,6 +21,7 @@ deeper than the mannequin plus 2 cm) holds for every shape.
 import hashlib
 import json
 import os
+import subprocess
 import sys
 
 import bpy
@@ -100,14 +102,27 @@ def measure_mannequin():
 
 
 def reference():
-    """The mannequin's lowest point at every frame of each game clip (measure_mannequin)."""
+    """The mannequin's lowest point at every frame of each game clip (measure_mannequin),
+    measured first by a Blender of its own when the kept one is missing (a fresh worktree) or
+    of another mannequin, since measuring here would empty the caller's scene."""
+    if fresh() is None:
+        run = subprocess.run([bpy.app.binary_path, "--background", "--factory-startup", "--python", os.path.abspath(__file__)],
+                             capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        said = [l for l in (run.stdout + run.stderr).splitlines() if l.startswith("LIFT") or "Error" in l]
+        print(*(said or [f"lift: measuring the mannequin exited {run.returncode}"]), sep="\n")
+    kept = fresh()
+    if kept is None:
+        raise SystemExit(f"lift: measuring the mannequin wrote no {CACHE} for {look.FIGURE}; run tools/blender/run.sh tools/characters/lift.py and read its error")
+    return {a: np.array(z) for a, z in kept["clips"].items()}
+
+
+def fresh():
+    """The kept measure, if it is of the mannequin as it is now."""
     if not os.path.exists(CACHE):
-        raise SystemExit(f"lift: no {CACHE}; run tools/blender/run.sh tools/characters/lift.py")
+        return None
     with open(CACHE) as f:
         kept = json.load(f)
-    if kept.get("stamp") != stamp():
-        raise SystemExit(f"lift: {CACHE} is of an older mannequin; run tools/blender/run.sh tools/characters/lift.py")
-    return {a: np.array(z) for a, z in kept["clips"].items()}
+    return kept if kept.get("stamp") == stamp() else None
 
 
 def smoothed(need):
@@ -142,6 +157,7 @@ def bake(arm, actions, lifts):
     up = (pb.bone.matrix_local.to_3x3().inverted() @ (arm.matrix_world.to_3x3().inverted() @ Vector((0, 0, 1)))).normalized()
     ad = arm.animation_data or arm.animation_data_create()
     keep = (ad.action, getattr(ad, "action_slot", None))
+    lifted = {}
     for action in actions:
         name = action.name.split(".")[0]
         lift = lifts.get(name)
@@ -159,7 +175,10 @@ def bake(arm, actions, lifts):
         for f, loc, h in zip(frames, at, lift):
             pb.location = loc + up * float(h)
             pb.keyframe_insert("location", frame=f, group=HIPS)
-        print("LIFT", name, f"up to {lift.max() * 100:.1f} cm")
+        lifted[name] = float(lift.max())
+    # A line for them all (D388): how many, and the most.
+    most = max(lifted.items(), key=lambda t: t[1], default=("none", 0.0))
+    print("LIFT", len(lifted), "clips' hips raised, most", f"{most[1] * 100:.1f} cm ({most[0]})")
     ad.action, slot = keep
     if slot is not None:
         ad.action_slot = slot

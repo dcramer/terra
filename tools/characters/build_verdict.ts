@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 /** What the build's own steps print when something failed. */
 export const FAILED: RegExp[] = [
-  /^(CLIPCHECK|GEARCHECK) .*"pass": false/, // a clip, or a look on a body
+  /^CLIPCHECK .*"pass": false/, // a clip (a look on a body that fails is gear_check.py's "✗ GEARCHECK", caught below)
   /^CLIPCHECK fail/,
   /^MORPH \S+ failed/, // a morph's job exited non-zero (build_bodies.sh step 3)
   /FLOATING/, // a rigid look resting on nothing (fit_gear.py)
@@ -56,11 +56,11 @@ export function stepVerdict(log: string, status = 0): string[] {
 /** build_item.sh's verdict on its item's steps' log: the look made, checked on every body and none over the bar, its game file written. */
 export function itemVerdict(log: string, bodies: number, status = 0): string[] {
   const lines = log.split("\n");
+  // gear_check.py's line a look (D388); its failures are among the ✗ lines already.
   const out = lines.filter((l) => /Error|^✗/.test(l)).map((l) => l.slice(0, 200));
-  const checked = lines.filter((l) => l.startsWith("GEARCHECK {"));
-  const over = checked.filter((l) => l.includes('"pass": false')).length;
+  const checked = lines.filter((l) => /^[✓✗] GEARCHECK /.test(l));
+  const over = checked.filter((l) => l.startsWith("✗")).length;
   if (checked.length !== bodies || over) out.unshift(`${checked.length} of ${bodies} bodies checked, ${over} over the bar`);
-  out.push(...lines.filter((l) => l.startsWith("GEARCHECK {") && l.includes('"pass": false')).map((l) => l.slice(0, 200)));
   if (!lines.some((l) => l.startsWith("CARRIED"))) out.push("its game file was not written: no CARRIED line");
   if (status !== 0) out.push(`a step failed (exit ${status})`);
   return out;

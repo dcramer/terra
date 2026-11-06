@@ -165,6 +165,25 @@ groups = {g.index: g.name for g in body.vertex_groups}
 bone_of = [groups.get(max(v.groups, key=lambda g: g.weight).group, "") if v.groups else ""
            for v in body.data.vertices]
 results = []
+# Each look's full report goes in a log of this run's own (runs for several bodies and looks
+# go at once in a build); the terminal gets a line a look (D388).
+stem = lambda i: os.path.splitext(os.path.basename(i))[0]
+LOG = os.path.join(look.ROOT, "target", "check", f"gear_check-{body_name}-{stem(items[0]) if len(items) == 1 else f'{len(items)}-looks'}.log")
+
+
+def said(r):
+    """A look's line: its verdict, its worst share through and of holes and where, against the bars."""
+    worst = max(r["clips"].items(), key=lambda t: t[1], default=("rest", r["at_rest"]))
+    hole = max(r["holes"].items(), key=lambda t: t[1], default=("none", 0.0))
+    through = max(worst[1], r["at_rest"])
+    line = (f"{'✓' if r['pass'] else '✗'} GEARCHECK {stem(r['item'])} on {r['body']}: through {through:.1%} "
+            f"({worst[0] if worst[1] >= r['at_rest'] else 'at rest'}; bar {LIMITS['through_share']:.0%}), holes {hole[1]:.1%} ({hole[0]}; bar {LIMITS['hole_share']:.0%})")
+    if not r["pass"]:
+        over = [c for c, v in r["clips"].items() if v > LIMITS["through_share"]] + [f"{c} (hole)" for c, v in r["holes"].items() if v > LIMITS["hole_share"]]
+        line += f"\n  over the bar in {', '.join(over[:6]) or 'the rest pose'}{' and more' if len(over) > 6 else ''}; skin through at {', '.join(list(r['where'])[:4]) or 'nowhere'}"
+    return line
+
+
 def uncover_path(item):
     return look.path(item[:-4] + "-uncover.json") if item.endswith(".glb") else None
 
@@ -301,7 +320,10 @@ for item in items:
         else:
             print("FIX", item, "nothing to push")
         np.savez(path, **rounds)
-    print("GEARCHECK", json.dumps(report))
+    print(said(report))
     results.append(report)
     bpy.data.objects.remove(piece)
-print("GEARCHECKS", sum(r["pass"] for r in results), "of", len(results), "pass")
+os.makedirs(os.path.dirname(LOG), exist_ok=True)
+with open(LOG, "w") as f:
+    f.writelines(f"GEARCHECK {json.dumps(r)}\n" for r in results)
+print("GEARCHECKS", sum(r["pass"] for r in results), "of", len(results), "pass; each look's report in", os.path.relpath(LOG, look.ROOT))

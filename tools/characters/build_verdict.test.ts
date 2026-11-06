@@ -16,13 +16,13 @@ const CLEAN = [
   'RIGCHECK {"file": "tools/characters/out/base-male.glb", "pass": true}',
   "== 2. its gear",
   "FIT small_pack touching 31%, nearest 0.2 cm ok",
-  'GEARCHECK {"item": "tools/characters/out/base-male-trousers.glb", "pass": true}',
+  "✓ GEARCHECK base-male-trousers on base-male: through 0.4% (Walk_Loop; bar 2%), holes 0.0% (none; bar 1%)",
   "GEARCHECKS 1 of 1 pass",
   "== 3. the morphs, side by side",
   "MORPH heavy fitted: mean 1.6 mm, 95% 11.3 mm, unmatched 4.0%",
   "GEARCHECKS 1 of 1 pass",
   "MORPH female fitted: mean 1.2 mm, 95% 5.0 mm, unmatched 1.8%",
-  'GEARCHECK {"item": "tools/characters/out/female-shift.glb", "body": "female", "pass": true}',
+  "✓ GEARCHECK female-shift on female: through 0.9% (Roll; bar 2%), holes 0.2% (Roll; bar 1%)",
   "GEARCHECKS 1 of 1 pass",
   "== 5. the game's files",
   "MORPH female target added; 79 joints and sockets move",
@@ -52,7 +52,7 @@ test("every failure a step prints fails the build", () => {
     ["Exception: plain exception", "Error: script failed, expr: 'import sys, runpy, bpy"],
     ["✗ assets/models/character/base.glb: Crouch_Fwd_Loop skates 8.2/6.4 cm a plant (over 6)"],
     // A look on the female, from her morph's log.
-    ['GEARCHECK {"item": "tools/characters/out/female-skirt.glb", "body": "female", "pass": false}'],
+    ["✗ GEARCHECK female-skirt on female: through 4.1% (Roll; bar 2%), holes 0.2% (Roll; bar 1%)"],
     // A body outside a real man's proportions (proportions.py, D593).
     ["PROPORTIONS fail base-male-game.glb: reach 1.68 m, below the 1st percentile's 1.75 m (a real man's 1.86 m). Every body ..."],
   ]) {

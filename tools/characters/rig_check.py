@@ -365,8 +365,27 @@ report["motion"]["sink_over_mannequin_m"] = round(sink_over, 3)
 report["motion"]["sink_over_at"] = sink_over_at
 ok["motion"] = moves_ok and sink_over <= LIMITS["sink_over_m"] and standing_gap <= LIMITS["foot_gap_m"]
 
+def said(result, path):
+    """The check as the terminal reads it (D388): a line, a failing check's numbers under it
+    (motion's worst five clips), the full report in the file named."""
+    name = os.path.basename(result["file"])
+    if result["pass"]:
+        return f"✓ RIGCHECK {name}: {len(result['checks'])} checks pass ({', '.join(result['checks'])}); report {path}"
+    failed = [c for c, good in result["checks"].items() if not good]
+    lines = [f"✗ RIGCHECK {name} fails {', '.join(failed)}; report {path}"]
+    for c in failed:
+        r = dict(result["report"].get(c, {}))
+        if c == "motion":
+            bad = sorted(((a, v) for a, v in r.pop("actions", {}).items() if not v["ok"]), key=lambda t: -t[1]["worst_bad_edge_share"])
+            r = {"clips over": "", **r}
+            r["clips over"] = ", ".join(f"{a} {v['worst_bad_edge_share']:.4f}/{v['limit']:.4f} pinch {v['pinched']}" for a, v in bad[:5]) + (f" and {len(bad) - 5} more" if len(bad) > 5 else "")
+        lines.append(f"  {c}: {json.dumps(r)}"[:240])
+    return "\n".join(lines)
+
+
 result = {"file": look.args()[0], "pass": all(ok.values()), "checks": ok, "report": report, "limits": LIMITS}
 os.makedirs(OUT, exist_ok=True)
-with open(os.path.join(OUT, f"rig-check-{os.path.splitext(os.path.basename(look.args()[0]))[0]}.json"), "w") as f:
+report_path = os.path.join(OUT, f"rig-check-{os.path.splitext(os.path.basename(look.args()[0]))[0]}.json")
+with open(report_path, "w") as f:
     json.dump(result, f, indent=2)
-print("RIGCHECK", json.dumps(result))
+print(said(result, os.path.relpath(report_path, look.ROOT)))

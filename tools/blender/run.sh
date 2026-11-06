@@ -77,8 +77,12 @@ set +e
 # worker sets vulkan, since over its Xvfb Blender's OpenGL is software (llvmpipe, ~20 s a frame).
 backend=()
 [[ -n "${TERRA_BLENDER_GPU_BACKEND:-}" ]] && backend=(--gpu-backend "$TERRA_BLENDER_GPU_BACKEND")
+# Blender's own chatter (the glTF importer's INFO lines, its banner and "Blender quit") is left
+# out, so a script's own lines read alone (D388); TERRA_VERBOSE=1 keeps it.
+quiet=(-e '^$' -e 'DeprecationWarning' -e 'use_nodes')
+[[ "${TERRA_VERBOSE:-}" == 1 ]] || quiet+=(-e '^[0-9:]* | INFO: ' -e '^Blender quit$' -e '^Blender [0-9.]* .*(hash ')
 "$BLENDER" --background ${backend[@]+"${backend[@]}"} "${open[@]}" --python-exit-code 1 --python-expr "$boot" -- ${args[@]+"${args[@]}"} </dev/null 2>&1 \
-  | grep -v -e '^$' -e 'DeprecationWarning' -e 'use_nodes'
+  | grep -v "${quiet[@]}"
 status=${PIPESTATUS[0]}
 # Said on stderr, past a caller's grep of the output: a script can fail printing nothing a
 # caller looks for (sys.exit, SystemExit's message), and build_bodies.sh's verdict reads this.
