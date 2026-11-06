@@ -134,12 +134,16 @@ pub fn edge() -> Edge {
     }
 }
 
-/// The moon in the water: a broad sheen of its cold light over the frame's top, a third of
-/// it glitter where the ripples tilt.
+/// The moon in the water: a broad sheen of its cold light about its mirror on the far
+/// channel, and its lane down the water toward the eye, three fifths of it glitter in 4 cm
+/// facets; the fire, the lantern and the wisps streak the same way (vr-pond-slash's pond).
 pub fn sheen() -> Sheen {
+    use super::light::{MOON, MOON_COLOUR, MOON_LUX};
     Sheen {
-        toward: super::light::MOON.extend(8.0),
-        colour: Vec4::new(10.0, 55.0, 130.0, 0.3),
+        toward: MOON.extend(8.0),
+        colour: Vec4::new(6.0, 33.0, 80.0, 0.3),
+        lane: Vec4::new(0.08, 0.03, 0.04, 0.6),
+        moon: (MOON_COLOUR * MOON_LUX).extend(1.0),
     }
 }
 

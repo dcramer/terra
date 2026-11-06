@@ -28,6 +28,8 @@ struct Edge {
 struct Sheen {
     toward: vec4<f32>,
     colour: vec4<f32>,
+    lane: vec4<f32>,
+    moon: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -132,6 +134,49 @@ fn pads(p: vec2<f32>, depth: f32) -> vec3<f32> {
     return vec3<f32>(cover, shade, smoothstep(0.75, 0.95, hash(id + 17.0)));
 }
 
+// The slope a facet needs to mirror `l` into the eye, in the face's frame, over the lane's
+// spreads: x along the line toward the eye, y across it; z the half vector's cosine.
+fn need(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>) -> vec3<f32> {
+    let h = normalize(l + v);
+    let flat_ = vec3<f32>(v.x, 0.0, v.z);
+    let toward = select(vec3<f32>(0.0, 0.0, 1.0), normalize(flat_), dot(flat_, flat_) > 1e-6);
+    let a = normalize(toward - n * dot(toward, n));
+    let c = cross(n, a);
+    let hn = max(dot(h, n), 0.05);
+    return vec3<f32>(dot(h, a) / hn / sheen.lane.x, dot(h, c) / hn / sheen.lane.y, hn);
+}
+
+// A light's streak on the rippled face: Beckmann's D over 4 cos_v, the radiance one lux of
+// it gives at a Fresnel of 1. The smooth lane the ripples average to (Cox and Munk's slope
+// spread, as Bruneton, Neyret and Holzschuch 2010 light the sea with), and a glitter of
+// facets each tilted its own way, in cells drifting downwind and reshuffled four times a
+// second, whose mean is the same lane (stochastic microfacets, Zirr and Kaplanyan 2016's
+// idea at its simplest): the lane breaks into sparkles as moonlit water does.
+fn streak(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, p: vec2<f32>, t: f32) -> f32 {
+    if dot(n, l) <= 0.0 {
+        return 0.0;
+    }
+    let s = need(n, v, l);
+    let norm = 1.0 / (PI * sheen.lane.x * sheen.lane.y * s.z * s.z * s.z * s.z);
+    let smooth_ = exp(-dot(s.xy, s.xy)) * norm;
+    var glitter = 0.0;
+    if sheen.lane.w > 0.0 {
+        // A facet's own lobe, k of the lane's spread; a round dot in its cell.
+        let k = 0.45;
+        let q = (p - pool.wave.xy * t * 0.15) / sheen.lane.z;
+        let id = floor(q);
+        let seed = id + floor(t * 4.0 + hash(id + 2.7) * 4.0) * 17.31;
+        let g = vec2<f32>(
+            hash(seed) + hash(seed + 1.3) + hash(seed + 2.9) - 1.5,
+            hash(seed + 4.1) + hash(seed + 5.7) + hash(seed + 6.2) - 1.5,
+        ) * 1.414;
+        let d = (s.xy - g) / k;
+        let dot_ = smoothstep(0.5, 0.25, length(fract(q) - 0.5));
+        glitter = exp(-dot(d, d)) * norm / (k * k) * dot_ * 2.0;
+    }
+    return mix(smooth_, glitter, sheen.lane.w) / (4.0 * max(dot(n, v), 0.05));
+}
+
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     var pbr_input = pbr_input_from_standard_material(in, is_front);
@@ -194,6 +239,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let lobe = mix(broad, glitter, sheen.colour.w);
         mirror += sheen.colour.rgb * lobe * fresnel * pool.sky.a * bank * mix(1.0, broken, 0.5);
     }
+    // The moon's lane: its own light off the ripples, long toward the eye, glittering.
+    let lane = sheen.lane.x > 0.0;
+    if lane && sheen.moon.w > 0.0 {
+        let l = normalize(sheen.toward.xyz);
+        mirror += sheen.moon.rgb * streak(n, v, l, p, t) * fresnel * sheen.moon.w;
+    }
     // Each light's reflection: its illuminance at the face times a narrow normalised lobe
     // about the mirror direction.
     let s = pool.look.y;
@@ -209,7 +260,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let fall = d2 / (at.w * at.w);
         let window = clamp(1.0 - fall * fall, 0.0, 1.0);
         let lux = c / (4.0 * PI * d2) * window * window;
-        let lobe = norm * pow(max(dot(r, l), 0.0), s);
+        var lobe = norm * pow(max(dot(r, l), 0.0), s);
+        if lane {
+            lobe = streak(n, v, l, p, t);
+        }
         mirror += lux * lobe * fresnel * pool.look.z;
     }
     pbr_input.material.emissive = vec4<f32>(mirror * (1.0 - float_), 1.0);

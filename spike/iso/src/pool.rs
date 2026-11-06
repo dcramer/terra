@@ -75,6 +75,15 @@ pub struct Sheen {
     pub toward: Vec4,
     /// Its radiance (nits, rgb), lifted as the sky is, and, w, the glitter's share (0..1).
     pub colour: Vec4,
+    /// Its lane, and every glinting light's streak (zero: the lights' round Phong lobe): the
+    /// ripples' slopes as an anisotropic Beckmann spread, x along the line from the face to
+    /// the eye and y across it (an art cheat: at 55 degrees down a true glitter path is
+    /// nearly round; drawn long toward the eye it reads as the moon's lane, as ARPGs paint
+    /// it); z the glitter's facet cell (m); w the glitter's share of the lane (0..1).
+    pub lane: Vec4,
+    /// The moon's illuminance on the water (lux, rgb: its colour times its lux) and, w, the
+    /// lane's gain over physical (0: no lane).
+    pub moon: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
