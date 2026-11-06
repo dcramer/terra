@@ -17,7 +17,8 @@ Reads art/gear/<item>/model.glb and its numbers, art/gear/<item>/fit.json (below
 tools/characters/out/gear/<body>/<item>.glb (look.GEAR_MADE), the item named as in the game's
 catalogue in lower case with `_` for spaces. A piece's turn, size and fit are found by
 looking at the model and then at the fitted result in the workbench; run it for every base
-body.
+body. `--textures=PIXELS` scales its maps to that budget, for a look that goes into the game as
+fitted here (a wardrobe body's gear, build_steps.ts `wardrobe-gear`).
 """
 
 import json
@@ -71,7 +72,7 @@ def data(name):
 # the seat.
 HANG_TILT_DEG = 8
 
-body_path, names = look.args()[0], look.args()[1:]
+body_path, names = look.args()[0], [a for a in look.args()[1:] if not a.startswith("--")]
 body_name = look.body_name(body_path)
 
 look.reset()
@@ -469,6 +470,9 @@ for name in names:
     print("FIT", name, f"touching {touching:.0%}, nearest {nearest * 100:.1f} cm",
           "ok" if rests else f"FLOATING: under {TOUCHING[how]:.0%} touching, or nothing within {RESTS_M * 100:.0f} cm")
     path = os.path.join(OUT, f"{name}.glb")
+    # The game's file at gear's texture budget when `--textures=PIXELS` asks (a wardrobe body's
+    # gear goes into the game as fitted here; the base's is carried by carry_gear.py first).
+    look.fit_textures(sys.argv)
     if socket:
         # Where a loose piece hangs from, before it moves: the middle of it, at the height it
         # hangs at (a quiver's mouth).

@@ -47,8 +47,9 @@ fn outfit_from_gear(
 
 /// Puts on each loaded body what its character wears, when that changes: the looks made on
 /// the model it stands on (`appearance::gear_for_model`), or on a wardrobe body (D611,
-/// Quaternius's man) the pieces the catalogue composes for it, a piece a slot, changing only
-/// the pieces that change. Gear made on another body is never drawn on it, though it is still
+/// Quaternius's man) the pieces the catalogue composes for it, a piece a slot, and what no piece
+/// of it stands for (a pack, a quiver) from its own gear folder, changing only the looks that
+/// change. Gear made on another body is never drawn on it, though it is still
 /// equipped and still counts.
 fn show(
     mut commands: Commands,
@@ -78,11 +79,24 @@ fn show(
             let worn: Vec<String> = outfit.0.iter().map(|c| c.item.clone()).collect();
             // Anyone with no equipment of their own (the town, the sparring partner) wears the
             // body's look whole until populations draw theirs; the player's follows its gear.
-            let files: Vec<String> = wardrobe()
+            let mut files: Vec<String> = wardrobe()
                 .compose(body, &at.look, equipped.then_some(worn.as_slice()))
                 .into_iter()
                 .filter_map(|piece| wardrobe().file(piece))
                 .collect();
+            // What he wears that no piece of his is the look of (a pack, a quiver): its look
+            // fitted on him, from his gear folder, tinted as worn.
+            let gear: Vec<(String, &Clothing)> = path
+                .as_deref()
+                .and_then(gear_for_model)
+                .into_iter()
+                .flat_map(|gear| {
+                    (outfit.0.iter())
+                        .filter(|c| !wardrobe().has_piece_for(body, &c.item))
+                        .map(move |c| (character::look_in(gear, &c.item), c))
+                })
+                .collect();
+            files.extend(gear.iter().map(|(file, _)| file.clone()));
             let mut kept = Vec::new();
             for (look, on, file) in &looks {
                 let file = file
@@ -97,11 +111,15 @@ fn show(
                 }
             }
             for file in files.into_iter().filter(|f| !kept.contains(f)) {
-                character::wear(
+                let tint = gear.iter().find(|(g, _)| *g == file).map(|(_, c)| &c.tint);
+                let look = character::wear(
                     &mut commands,
                     assets.load(GltfAssetLabel::Scene(0).from_asset(file)),
                     root,
                 );
+                if let Some(tint) = tint.filter(|tint| !tint.0.is_empty()) {
+                    commands.entity(look).insert(tint.clone());
+                }
             }
             continue;
         }

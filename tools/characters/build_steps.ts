@@ -329,6 +329,31 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
         ...after.map((t) => `node $here/${t} ${game}`),
       ].join("\n"),
     });
+    // His rigid gear (the packs, the quiver: no piece of theirs is one), fitted over his default
+    // look worn, as the game draws it on him: a figure of that look with his sockets and the
+    // fight's clips, fit_gear.py over its outside, each look into `<pieces>/gear/` (the game's
+    // bodies.json `gear`), its maps at gear's budget (D188). Their pieces untouched (D599).
+    const figure = `quaternius-${sex}-${body.look}`;
+    const gear = rigid.filter((r) => !Object.values(w.pieces).some((p) => p.body === name && p.item === r));
+    if (gear.length)
+      steps.push({
+        name: `wardrobe-gear:${name}`,
+        section: 5,
+        needs: ["base", "fight", ...(worn.some((p) => w.pieces[p].cut) ? [`wardrobe:${name}`] : [])],
+        inputs: [
+          ...py("export_character.py", "fit_gear.py"),
+          `${fight}.json`,
+          ...gear.flatMap((r) => [`art/gear/${r}`, ...(items.get(r)!.model ? [`art/gear/${items.get(r)!.model}`] : [])]),
+          ...new Set(worn.filter((p) => !w.pieces[p].cut).flatMap((p) => gltfFiles(w.pieces[p].source))),
+        ],
+        outputs: [`${OUT}/${figure}-game.glb`, ...gear.map((r) => `${OUT}/gear/${figure}/${r}.glb`), ...gear.map((r) => `assets/${body.pieces}/gear/${r}.glb`)],
+        run: [
+          blender("export_character.py", `${worn.map(source).join("+")} "$out/${figure}-game.glb" "--clips=$out/fight-mannequin.glb" --list=${fight}.json`, "^(SOCKETS|EXPORTED)|Error"),
+          blender("fit_gear.py", [`"$out/${figure}-game.glb"`, ...gear, "--textures=1024"].join(" "), "^FIT|FITTED|Error"),
+          `mkdir -p assets/${body.pieces}/gear`,
+          ...gear.map((r) => `cp "$out/gear/${figure}/${r}.glb" assets/${body.pieces}/gear/${r}.glb`),
+        ].join("\n"),
+      });
   }
   // The creatures (bodies.json `creatures`): each converted from its own rig as a creature's
   // (its hands and feet kept, its triangle budget), checked, its set's takes made onto a copy of

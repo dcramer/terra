@@ -108,12 +108,48 @@ fn gear_is_drawn_only_on_the_body_it_was_made_on() {
     );
     let man = Appearance::template("male").unwrap();
     assert_ne!(man.body().model, BASE, "a man stands on his own body");
-    assert_eq!(
+    assert_ne!(
         gear_for_model(&man.body().model),
-        None,
+        Some("models/gear"),
         "the old base's gear is not his"
     );
     assert_eq!(gear_for_model("models/elsewhere.glb"), None);
+}
+
+#[test]
+fn every_worn_item_has_a_look_made_on_each_wardrobe_body() {
+    // A wardrobe body (D611) shows a worn item as its piece, else as the look in its own gear
+    // folder fitted on him: an item with neither is equipped and never drawn on him.
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
+    let items = std::fs::read_to_string(format!("{root}/data/items.ron")).unwrap();
+    let worn: Vec<String> = items
+        .split("name: \"")
+        .skip(1)
+        .filter(|def| def.split("name: \"").next().unwrap().contains("worn:"))
+        .map(|def| crate::character::item_id(def.split('"').next().unwrap()))
+        .collect();
+    assert!(worn.len() >= 5, "the catalogue's worn items: {worn:?}");
+    for (name, files) in bodies() {
+        let Some(body) = &files.wardrobe else {
+            continue;
+        };
+        for item in &worn {
+            if crate::wardrobe::wardrobe().has_piece_for(body, item) {
+                continue;
+            }
+            let gear = gear_for_model(&files.model).unwrap_or_else(|| {
+                panic!(
+                    "{name} wears {item}, which no piece is: name his gear folder in bodies.json"
+                )
+            });
+            let file = crate::character::look_in(gear, item);
+            assert!(
+                std::path::Path::new(&format!("{root}/{file}")).exists(),
+                "{name} wears {item}, which no piece of his is, and {file} is missing: \
+                 build it with tools/characters/build_bodies.sh --step wardrobe-gear:{body}"
+            );
+        }
+    }
 }
 
 #[test]

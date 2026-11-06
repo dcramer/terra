@@ -171,6 +171,14 @@ impl Wardrobe {
         })
     }
 
+    /// Whether `body` has a piece that is the look of `item` (`character::item_id`): a worn item
+    /// it has none for (a pack, a quiver) is gear, drawn from the body's gear folder.
+    pub fn has_piece_for(&self, body: &str, item: &str) -> bool {
+        self.pieces
+            .values()
+            .any(|p| p.body == body && p.item.as_deref() == Some(item))
+    }
+
     /// The wardrobe body whose file is `model` (a path under `assets/`, with or without a `#`
     /// label), and its name.
     pub fn body_for_model(&self, model: &str) -> Option<(&str, &Body)> {
