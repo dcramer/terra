@@ -42,8 +42,9 @@ const POINTS: usize = 28;
 const BLADE: f32 = 0.95;
 const INNER: f32 = 0.3;
 const OUTER: f32 = 1.12;
-/// The light riding the edge, in lumens, a third of the way in from the tip.
-const EDGE_LM: f32 = 45_000.0;
+/// The light riding the edge, in lumens, a third of the way in from the tip. 45k with the
+/// bite's washed the ruin's floor round the blow (p95 0.20 against the refs' 0.13): 28k.
+const EDGE_LM: f32 = 28_000.0;
 /// The texture's scale to linear light: its hot edge is this bright (over bloom), its body
 /// about a tenth of it (an orange-red near 1, which the tonemapper keeps saturated).
 const GAIN: f32 = 10.0;

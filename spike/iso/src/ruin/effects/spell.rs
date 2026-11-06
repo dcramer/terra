@@ -34,10 +34,12 @@ const HALO: f32 = 0.45;
 /// The bolt's own light, in lumens, lighting the bodies it passes. Riding 2 m up it spread
 /// a quarter of the braziers' light evenly over 4 m of floor: a violet wash, no pool (the
 /// crop of blind-ruin6/a.png; all three judges: "the bolts light nothing").
-const BOLT_LM: f32 = 30_000.0;
+/// 30k, with its pool at 25k, washed the ruin's floor white about the fight (p95 0.20
+/// against the refs' 0.13, the judge): both cut, in the same ratio.
+const BOLT_LM: f32 = 18_000.0;
 /// So a second light rides under each bolt, `POOL_UP` over the floor: at 0.5 m its light
 /// falls to a fifth a metre out, a tight cold pool under the spell (d4-lightning).
-const POOL_LM: f32 = 25_000.0;
+const POOL_LM: f32 = 15_000.0;
 const POOL_UP: f32 = 0.5;
 /// The trails' widths at the bolt (m): the outer blue streak and the white one inside it.
 /// 0.11 and 0.035 were a hairline at 70 px a metre; as wide as the head, tapering to the tail.
@@ -45,7 +47,8 @@ const OUTER: f32 = 0.24;
 const INNER: f32 = 0.07;
 /// The impact's light at its height, in lumens, and how fast it dies (s).
 /// 40k dying in 0.09 s left a faint burst at the still's 0.08 s (the judges).
-const FLASH_LM: f32 = 150_000.0;
+/// 150k lit the floor a metre or two round the impact white in the ruin (p95 0.20): 90k.
+const FLASH_LM: f32 = 90_000.0;
 const FLASH_FALL: f32 = 0.15;
 /// The impact's star: its size at its height (m) and how long it lasts (s). A 1.5 m white
 /// star for 0.28 s hid the target (and in the forest the caster) in every biome's judge
@@ -57,8 +60,11 @@ const STAR_LIFE: f32 = 0.1;
 /// The shell: a ring card swelling from `SHELL.0` to `SHELL.1` m across over `SHELL_LIFE` s.
 const SHELL: (f32, f32) = (0.3, 1.7);
 const SHELL_LIFE: f32 = 0.26;
-/// The impact's light on the floor under it, and how fast it dies (s).
-const GLINT_LM: f32 = 70_000.0;
+/// The impact's light on the floor under it, and how fast it dies (s). 70k over 3.5 m
+/// washed the ruin's floor (its still's p95 0.20 against the refs' 0.13, the judge): halved,
+/// its reach cut to 2.5 m.
+const GLINT_LM: f32 = 35_000.0;
+const GLINT_RANGE: f32 = 2.5;
 const GLINT_FALL: f32 = 0.3;
 /// The frost mark under the impact: its size (m) and life (s).
 const MARK: f32 = 1.5;
@@ -182,7 +188,9 @@ fn spawn(
             PointLight {
                 color: Color::srgb(0.6, 0.75, 1.0),
                 intensity: 0.0,
-                range: 7.0,
+                // 7 m carried the flash across the whole court: the burst lights the bodies
+                // about it, the glint the floor.
+                range: 4.0,
                 radius: 0.2,
                 ..default()
             },
@@ -206,7 +214,7 @@ fn spawn(
             PointLight {
                 color: Color::srgb(0.35, 0.6, 1.0),
                 intensity: 0.0,
-                range: 3.5,
+                range: GLINT_RANGE,
                 radius: 0.1,
                 ..default()
             },

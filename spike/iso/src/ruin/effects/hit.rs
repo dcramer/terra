@@ -28,10 +28,15 @@ const STAR_LIFE: f32 = 0.12;
 /// The light at the bite (lumens) and how fast it dies (s): 25k over 0.06 s was spent by
 /// the still's 0.05 s and lit no ground (the judges: "the sword's sparks don't light the
 /// ground"). A second light half a metre over the floor under the bite pools on the
-/// ground, as the ARPGs fake an impact's light (spell.rs's pool, traps.md).
-const BITE_LM: f32 = 70_000.0;
+/// ground, as the ARPGs fake an impact's light (spell.rs's pool, traps.md). 70k with the
+/// slash's light washed the ruin's floor two metres round the blow (p95 0.20 against the
+/// refs' 0.13, the judge): 40k, the pool lighting the ground under the bite.
+const BITE_LM: f32 = 40_000.0;
 const BITE_FALL: f32 = 0.14;
-const POOL_LM: f32 = 45_000.0;
+/// 45k over 3.5 m washed the ruin's floor with the spell's glint (p95 0.20 against the
+/// refs' 0.13, the judge): halved, its reach cut to 2.5 m.
+const POOL_LM: f32 = 22_000.0;
+const POOL_RANGE: f32 = 2.5;
 const POOL_UP: f32 = 0.5;
 const POOL_FALL: f32 = 0.2;
 /// The warm scuff the blow leaves on the floor under the bite: its size (m) and life (s).
@@ -82,7 +87,7 @@ fn spawn(
         PointLight {
             color: Color::srgb(1.0, 0.62, 0.32),
             intensity: 0.0,
-            range: 3.5,
+            range: POOL_RANGE,
             radius: 0.1,
             ..default()
         },
