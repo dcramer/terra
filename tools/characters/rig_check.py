@@ -26,7 +26,8 @@ Checks:
                 weights (not only the same strongest bone, which flips where two bones
                 share a vertex about equally, as a limb and its twist bone do)
   motion        through every animation: how many edges stretch or crush badly, whether
-                the feet stay at the ground when standing, and nothing sinks below it
+                the lower foot stays on the ground in the standing clips (STANDING), and
+                nothing sinks below it deeper than the mannequin does
   pinch         through every animation: how much the ring of skin round each elbow, knee
                 and wrist shrinks, as an elbow does when a forearm's turn has nowhere to go
 """
@@ -69,10 +70,13 @@ LIMITS = {
     "bad_edge_share": 0.01,         # share of edges allowed to do either, in any frame
     "vs_mannequin": 3.5,            # or this many times the hand-rigged mannequin's share: set by eye on 2026-10-11, where a Tripo rig at 3.3x crouched cleanly
     "pinch": 0.2,                   # how much a ring of skin round an elbow, knee or wrist may shrink, in any frame
-    "foot_gap_m": 0.05,             # standing feet within this of the ground
+    "foot_gap_m": 0.05,             # the lower foot within this of the ground, in every frame of a standing clip
     "sink_over_m": 0.02,            # nothing below the ground by more than this deeper than the mannequin goes in the same clip
                                     # (a roll, a kneel and a fall touch the ground by design)
 }
+# The clips he stands in on both feet throughout: there the lower foot is on the ground in every
+# frame, so a body standing off it (lifted too far, or its soles not its lowest skin) shows.
+STANDING = ("Idle_Loop", "Idle_Talking_Loop", "Talk_Loop", "Sword_Idle")
 
 
 def load(path):
@@ -304,6 +308,8 @@ where = {}
 sink = 0.0
 sink_at = ""
 standing_gap = 0.0
+standing_at = "no standing clip played" if foot else "no skin driven mostly by a foot or ball bone"
+standing_seen = False
 depsgraph = bpy.context.evaluated_depsgraph_get()
 for name in ACTIONS:
     action = bpy.data.actions.get(name) or next((a for a in bpy.data.actions if a.name.startswith(name)), None)
@@ -334,6 +340,12 @@ for name in ACTIONS:
         if -cur[:, 2].min() > sink:
             low = int(np.argmin(cur[:, 2]))
             sink, sink_at = float(-cur[low, 2]), f"{name} {k}/8 {main_bone[low]}"
+        if name in STANDING and foot:
+            # The lower foot's lowest skin above the ground (below it is the sink's to judge).
+            gap = max(0.0, float(cur[foot, 2].min()))
+            if gap >= standing_gap:
+                standing_gap, standing_at = gap, f"{name} {k}/8"
+            standing_seen = True
         for ring, (near, rest) in rings.items():
             thin = 1.0 - ring_radius(cur[near]) / rest
             if thin > pinch.get(name, (0, ""))[0]:
@@ -341,7 +353,8 @@ for name in ACTIONS:
     motion[name] = {"worst_bad_edge_share": round(bad_max, 4), "sink_m": round(clip_sink, 3), "pinched": round(pinch.get(name, (0, ""))[0], 3), "pinched_at": pinch.get(name, (0, ""))[1]}
     worst_bad = max(worst_bad, bad_max)
 top = sorted(where.items(), key=lambda t: -t[1])[:6]
-report["motion"] = {"actions": motion, "worst_places": top, "sink_m": round(sink, 3), "sink_at": sink_at, "standing_foot_gap_m": round(standing_gap, 3)}
+report["motion"] = {"actions": motion, "worst_places": top, "sink_m": round(sink, 3), "sink_at": sink_at,
+                     "standing_foot_gap_m": round(standing_gap, 3) if standing_seen else None, "standing_foot_gap_at": standing_at}
 # Big moves crush some edges on any rig; judge each animation against the hand-rigged
 # mannequin's own share on the same frames (art/characters/rig-baseline.json, from checking the mannequin).
 # Rewritten only on purpose (--baseline, on the mannequin as the game skins it), as other
@@ -375,7 +388,7 @@ if RECORD:
     print("BASELINE written:", baseline_path)
 report["motion"]["sink_over_mannequin_m"] = round(sink_over, 3)
 report["motion"]["sink_over_at"] = sink_over_at
-ok["motion"] = moves_ok and sink_over <= LIMITS["sink_over_m"] and standing_gap <= LIMITS["foot_gap_m"]
+ok["motion"] = moves_ok and sink_over <= LIMITS["sink_over_m"] and standing_seen and standing_gap <= LIMITS["foot_gap_m"]
 
 def said(result, path):
     """The check as the terminal reads it (D388): a line, a failing check's numbers under it
