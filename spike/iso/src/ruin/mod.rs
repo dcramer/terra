@@ -3,12 +3,14 @@
 //! broken flagstone floor between fallen walls, lit by the moon and by braziers and torches.
 //! The glade (the default scene) shares only its helpers.
 
+mod beyond;
 mod blocks;
 mod camera;
 mod dress;
 pub mod effects;
 mod fight;
 mod fire;
+mod grass;
 mod ground;
 mod light;
 mod walls;
@@ -23,6 +25,8 @@ pub fn plugin(app: &mut App) {
             ground::spawn,
             walls::spawn,
             dress::spawn,
+            beyond::spawn,
+            grass::spawn,
             light::spawn,
             fire::spawn,
             fight::spawn,

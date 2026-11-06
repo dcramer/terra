@@ -58,6 +58,32 @@ pub fn spawn(
         23,
         |z| (0.9 + 0.6 * (z * 0.8).sin() + 0.3 * (z * 2.3).sin()).max(0.0),
     );
+    // The outer walls, further gone: behind the back wall, beyond the west, and an east
+    // stub, framing the court to the frame's edges.
+    wall(
+        &mut b,
+        &mut rng,
+        Vec2::new(-7.0, -10.4),
+        Vec2::new(11.0, -10.4),
+        31,
+        |x| (1.1 + 0.8 * (x * 0.4 + 2.0).sin() + 0.4 * (x * 1.3).sin()).max(0.0),
+    );
+    wall(
+        &mut b,
+        &mut rng,
+        Vec2::new(-12.8, -12.0),
+        Vec2::new(-12.8, -0.5),
+        37,
+        |z| (0.8 + 0.7 * (z * 0.6 + 1.0).sin() + 0.3 * (z * 1.9).sin()).max(0.0),
+    );
+    wall(
+        &mut b,
+        &mut rng,
+        Vec2::new(11.8, -6.5),
+        Vec2::new(11.8, 0.5),
+        41,
+        |z| (0.6 + 0.6 * (z * 0.9).sin()).max(0.0),
+    );
     // The pillars: round drums stacked, each turned a little on the last, the top broken.
     for (p, drums) in [(PILLARS[0], 6), (PILLARS[1], 3)] {
         let mut y = 0.0;
@@ -163,7 +189,9 @@ fn wall(b: &mut Blocks, rng: &mut Rng, a: Vec2, z: Vec2, seed: u32, top: impl Fn
             let s = len * i as f32 / n as f32;
             let c = a + d * s;
             let along = if d.x.abs() > d.y.abs() { c.x } else { c.y };
-            let jag = (noise(s * 0.9, 0) - 0.5) * 0.9 + (noise(s * 3.3, 1) - 0.5) * 0.35;
+            let jag = (noise(s * 0.9, 0) - 0.5) * 0.9
+                + (noise(s * 3.3, 1) - 0.5) * 0.6
+                + (noise(s * 8.0, 7) - 0.5) * 0.3;
             let h = (top(along) + jag).max(0.0);
             let half = |k: u32| THICK * 0.5 + (noise(s * 1.7, k) - 0.5) * 0.08;
             let (ta, tb) = (half(2), -half(3));
