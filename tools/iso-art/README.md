@@ -59,4 +59,4 @@ A re-export Tripo has cached takes 0.0 minutes: cost from the first.
 
 ## Reading a GLB
 
-Read from the GLB in Node (`gltf.ts`: accessors, the node hierarchy posed by a clip, the skin's points), so a check needs no GPU. The checks are `check.ts`; what export does to Tripo's file (names, in place, cuts, loops, the root node) is `normalize.ts`; the ledgers and the credits read from Tripo's README are `ledger.ts`. The pipeline's choices are D628. Looking at it in the iso spike is that spike's own command: this tool depends on no spike (D133).
+Read from the GLB in Node (`gltf.ts`: accessors, the node hierarchy posed by a clip, the skin's points), so a check needs no GPU. The checks are `check.ts`; what export does to Tripo's file (names, in place, cuts, loops, the root node) is `normalize.ts`; the ledgers and the credits read from Tripo's README are `ledger.ts`; the cut to budget in Blender, splicing the mesh back under the skeleton, is `decimate.ts`; the asset and clip sheets from the spike's asset view are `sheet.ts`. The pipeline's choices are D628. Looking at it in the iso spike is that spike's own command: this tool depends on no spike (D133).

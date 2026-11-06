@@ -20,6 +20,8 @@ tools/blender/run.sh path/to/script.py --open scene.blend [args...]
 
 **[pieces.py](pieces.py)** is what `scan.py` and `campfire.py` share: a mesh's triangles, welding it along its seams, and cutting it to a triangle budget with Blender's collapse decimation, which keeps its texture places so its scanned maps still fit.
 
+**[decimate.py](decimate.py)** cuts a model's meshes to a triangle budget for tools/iso-art's `decimate`, which splices the new mesh back under the original's skeleton, clips and textures: `tools/blender/run.sh tools/blender/decimate.py IN.glb OUT.glb BUDGET`.
+
 **[tips.py](tips.py)** finds where a modelled tree's leaves go, for a crown of cards grown on a modelled trunk (D235): `tools/blender/run.sh tools/blender/tips.py MODEL.glb OUT.ron [--from 0.5] [--clump 1.0]` measures how far each point is from the foot along the surface, gathers the points past `--from` of the longest path into clumps a `--clump` apart, each with the way its branch runs and a mass by side and height, and writes them as RON for `assets/data/trees`.
 
 **[trunk.py](trunk.py)** makes a modelled trunk ready for the game's own bark, which the lush forest lays on it from three sides (D264): `tools/blender/run.sh tools/blender/trunk.py MODEL.glb NEAR.glb FAR.glb [--near 20000] [--far 5000]` takes the trunk `tools/props` refined, faces it all outward, writes it subdivided once and cut to `--near` triangles for near the camera and cut to `--far` for beyond, smooth, with tangents, and with how open each vertex is to the sky (rays cast against the model) in its colour, without its textures. Run it on what `props refine` writes, the near file in its place.

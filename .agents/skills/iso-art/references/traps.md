@@ -9,6 +9,8 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 - `--in-place` keeps Tripo's `root` joint still while the pelvis walks off — `inPlace()` takes each chain joint's drift out.
 - The V3 rig's `root` joint sits on the ground above the pelvis and was read as a foot — feet are joints under the body joint.
 - The run is nearly two strides that do not meet (15 to 23%) — `loop()` cuts one stride and spreads the rest; read the ledger's "ends X% apart before closing", since `check` then reads 0.
+- The run's in-place loop played half a body's height ahead of its entity (cut from where Tripo's pelvis gathers speed) and leapt there at each switch from walk — `centre()` in export; `check`'s "run centred" fails a GLB exported before it.
+- A walk or run that hitches is not always its seam: Tripo's seams measured fine; measure the clip in Node (every joint, world space) before blaming the loop, and check the view's sampling.
 - A non-biped rig gets one walk preset: no idle, attack or death — plan its scene around walking, or use a repository animal and say so.
 - The month's 100 free images run out (a 403 "Insufficient credits") — concepts cost 10 to 20; try no other `--model` without the credits.
 - Tripo's file is about 1 unit tall and may lie turned (the wagon 45 degrees off X) — export scales by `--height`; turn a prop in the scene.
@@ -58,6 +60,7 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 ## Looking and context
 
 - A sheet of clip times: an uncommitted env-var hack (`KNIGHT_AT`) read in `fight.rs`, six shots at 1280x720 in one worker job, cropped and stacked with ffmpeg; remove the hack before committing.
+- A screenshot shows the pose set in its own frame (the animation applies in that frame's PostUpdate): every sheet before iso-art j31 was off by one, each strip frame the next shot's pose and each clip's last the next clip's first — set the next pose two frames after the shot (view.rs `act`), and suspect sampling when a strip's last frame looks wrong.
 - Look at stills at 960 or 640 wide, 1:1 crops only where you judge; two film frames tiled at 640 cost little.
 - A film's frames read darker than the 1920x1080 still — compare like with like.
 - Every job hit the 80% context hook at about 120k by its third shot — plan one look an effect, not a look a tweak, and land each checked step at once.
