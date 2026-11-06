@@ -7,6 +7,7 @@
 pub mod clearing;
 mod dress;
 mod fight;
+mod lawn;
 mod life;
 mod pond;
 
@@ -64,6 +65,7 @@ pub fn plugin(app: &mut App) {
             dress::plugin,
             pond::plugin,
             clearing::plugin,
+            lawn::plugin,
         ))
         .add_systems(Startup, (camera, fight::spawn))
         .add_systems(

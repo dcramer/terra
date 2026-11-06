@@ -88,6 +88,22 @@ impl Cards {
         normal: impl Fn(Vec3) -> Vec3,
         tint: [f32; 4],
     ) {
+        self.graded(c, a, b, cell, normal, tint, tint);
+    }
+
+    /// A card as `quad`'s, its tint `foot` at the cell's bottom and `tip` at its top: the
+    /// dark foot of a leaf in a clump (wood/lawn.rs).
+    #[allow(clippy::too_many_arguments)]
+    pub fn graded(
+        &mut self,
+        c: Vec3,
+        a: Vec3,
+        b: Vec3,
+        cell: Vec2,
+        normal: impl Fn(Vec3) -> Vec3,
+        foot: [f32; 4],
+        tip: [f32; 4],
+    ) {
         let base = self.pos.len() as u32;
         for (x, y) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)] {
             let p = c + a * (x - 0.5) + b * (y - 0.5);
@@ -98,7 +114,7 @@ impl Cards {
                 cell.x + inset + (0.25 - 2.0 * inset) * x,
                 cell.y + inset + (0.25 - 2.0 * inset) * (1.0 - y),
             ]);
-            self.col.push(tint);
+            self.col.push(if y > 0.5 { tip } else { foot });
             self.sway.push([y, if self.leaf { 1.0 } else { 0.0 }]);
         }
         self.idx
