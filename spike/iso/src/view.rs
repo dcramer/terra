@@ -279,20 +279,51 @@ fn step(
     }
     let Some(image) = offscreen else { return };
     state.held += 1;
-    if state.next < state.shots.len() {
-        if state.held == SETTLE {
+    if state.next >= state.shots.len() {
+        if state.held == 30 {
+            exit.write(AppExit::Success);
+        }
+        return;
+    }
+    match act(state.held) {
+        Act::Shoot => {
             let file = state.shots[state.next].file.clone();
             commands
                 .spawn(Screenshot::image(image.0.clone()))
                 .observe(save_to_disk(file));
+        }
+        Act::Pose => {
             state.next += 1;
             state.held = 0;
             if state.next < state.shots.len() {
                 pose(&mut state, &mut players);
             }
         }
-    } else if state.held == 30 {
-        exit.write(AppExit::Success);
+        Act::Hold => {}
+    }
+}
+
+/// Frames a shot's pose is kept after its screenshot is asked for. The screenshot is of the
+/// frame it is spawned in, whose PostUpdate applies the pose set in its Update: a pose set
+/// beside the screenshot is the one it shows, so every strip frame was the next shot's pose
+/// (each clip's last frame the next clip's first) until iso-art j31.
+const AFTER: u32 = 2;
+
+#[derive(Debug, PartialEq)]
+enum Act {
+    Hold,
+    Shoot,
+    Pose,
+}
+
+/// What the frame `held` frames into a shot does: settle, shoot, then set the next pose.
+fn act(held: u32) -> Act {
+    if held == SETTLE {
+        Act::Shoot
+    } else if held == SETTLE + AFTER {
+        Act::Pose
+    } else {
+        Act::Hold
     }
 }
 
@@ -398,5 +429,17 @@ mod tests {
         // A 1.8 m body seen 35 degrees off its side is about 1.5 m tall on screen.
         let tall = 1.8 * (90.0 - PITCH).to_radians().cos() * game_px;
         assert!(size.1 as f32 > tall && (size.1 as f32) < tall + 160.0, "{size:?} for {tall} px");
+    }
+
+    /// A shot shows its own pose: nothing sets the next pose in the frame its screenshot is
+    /// asked for, nor in the frame after; each shot is taken once, then posed past once.
+    #[test]
+    fn a_shot_is_taken_before_the_next_pose_is_set() {
+        let acts: Vec<Act> = (1..=SETTLE + AFTER).map(act).collect();
+        let shot = acts.iter().position(|a| *a == Act::Shoot).expect("a shot");
+        let posed = acts.iter().position(|a| *a == Act::Pose).expect("the next pose");
+        assert!(posed >= shot + 2, "the shot at frame {shot}, the next pose at {posed}");
+        assert_eq!(acts.iter().filter(|a| **a != Act::Hold).count(), 2);
+        assert_eq!(*acts.last().unwrap(), Act::Pose, "the held count resets on the pose");
     }
 }
