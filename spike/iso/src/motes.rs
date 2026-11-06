@@ -23,13 +23,13 @@ struct Firefly {
 
 /// A card that turns to face the camera.
 #[derive(Component)]
-struct Halo;
+pub struct Halo;
 
 #[derive(Component)]
-struct Tongue {
-    foot: Vec3,
-    seed: f32,
-    size: f32,
+pub struct Tongue {
+    pub foot: Vec3,
+    pub seed: f32,
+    pub size: f32,
 }
 
 #[derive(Component)]
@@ -201,7 +201,7 @@ fn rise(time: Res<Time>, land: Res<Land>, mut embers: Query<(&mut Ember, &mut Tr
 
 /// A flame's tongue, a card turned upright to the camera, swells and leans and sinks,
 /// never twice the same.
-fn lick(
+pub fn lick(
     time: Res<Time>,
     camera: Query<&GlobalTransform, With<crate::camera::MainCamera>>,
     mut tongues: Query<(&Tongue, &mut Transform)>,
@@ -225,7 +225,7 @@ fn lick(
 
 /// A flame's tongue: a teardrop, white-gold at its root, orange, then red at its edge and
 /// tip, fading to nothing.
-fn tongue_image() -> Image {
+pub fn tongue_image() -> Image {
     use bevy::asset::RenderAssetUsages;
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
     let (w, h) = (48u32, 96u32);
@@ -280,7 +280,7 @@ fn show(hour: Option<Res<Hour>>, mut flies: Query<&mut Visibility, With<Firefly>
 }
 
 /// The fire's halo faces the camera.
-fn face_halo(
+pub fn face_halo(
     camera: Query<&GlobalTransform, With<crate::camera::MainCamera>>,
     mut halos: Query<&mut Transform, With<Halo>>,
 ) {

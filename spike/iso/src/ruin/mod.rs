@@ -5,17 +5,28 @@
 
 mod blocks;
 mod camera;
+mod dress;
 pub mod effects;
 mod fight;
+mod fire;
 mod ground;
 mod light;
+mod walls;
 
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(
         Startup,
-        (camera::spawn, ground::spawn, light::spawn, fight::spawn),
+        (
+            camera::spawn,
+            ground::spawn,
+            walls::spawn,
+            dress::spawn,
+            light::spawn,
+            fire::spawn,
+            fight::spawn,
+        ),
     )
-    .add_plugins((fight::plugin, effects::plugin));
+    .add_plugins((fight::plugin, fire::plugin, effects::plugin));
 }

@@ -7,7 +7,7 @@ use bevy::prelude::*;
 
 /// The moon's light on the ground, in lux, and the sky's fill, in nits.
 pub const MOON_LUX: f32 = 250.0;
-pub const SKY_NITS: f32 = 12.0;
+pub const SKY_NITS: f32 = 5.0;
 
 pub fn spawn(mut commands: Commands) {
     commands.insert_resource(GlobalAmbientLight {

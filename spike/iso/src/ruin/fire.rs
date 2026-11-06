@@ -1,0 +1,294 @@
+//! The ruin's fires: two iron braziers flanking the fight, their light the scene's key, and
+//! torches on the back wall's face and a pillar, each a pool of warm light in the moonlit
+//! dark. The flames are the glade's (motes.rs): tongue cards licking up and falling back, a
+//! halo of lit air, embers rising; each light wavers as scene.rs's fire does.
+
+use super::walls::{BACK_Z, PILLARS, THICK};
+use crate::forest::Rng;
+use crate::motes::{Halo, Tongue, soft_image, tongue_image};
+use crate::scene::model;
+use bevy::prelude::*;
+
+/// The braziers' bowls, where their flames stand.
+pub const BRAZIERS: [Vec2; 2] = [Vec2::new(-2.6, 1.6), Vec2::new(4.4, -3.6)];
+/// A brazier's light, and a torch's, in lumens.
+pub const BRAZIER_LM: f32 = 60_000.0;
+pub const TORCH_LM: f32 = 15_000.0;
+const BOWL: f32 = 0.9;
+
+pub fn plugin(app: &mut App) {
+    app.add_systems(
+        Update,
+        (crate::motes::lick, crate::motes::face_halo, rise, flicker),
+    );
+}
+
+#[derive(Component)]
+struct Flicker {
+    lumens: f32,
+    seed: f32,
+}
+
+/// An ember rising off a fire from `base`.
+#[derive(Component)]
+struct Ember {
+    base: Vec3,
+    born: f32,
+    life: f32,
+    drift: Vec2,
+    seed: f32,
+}
+
+pub fn spawn(
+    mut commands: Commands,
+    asset: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let mut rng = Rng::new(0xb2a2_1e2);
+    let lit = |c: LinearRgba| StandardMaterial {
+        base_color: c.into(),
+        unlit: true,
+        alpha_mode: AlphaMode::Add,
+        ..default()
+    };
+    let parts = Parts {
+        card: meshes.add(Rectangle::new(1.0, 1.0)),
+        speck: meshes.add(Sphere::new(1.0).mesh().ico(1).unwrap()),
+        flame: materials.add(StandardMaterial {
+            base_color_texture: Some(images.add(tongue_image())),
+            alpha_mode: AlphaMode::Blend,
+            ..lit(LinearRgba::rgb(1.8, 1.8, 1.8))
+        }),
+        ember: materials.add(lit(LinearRgba::rgb(4.0, 1.1, 0.08))),
+        halo: {
+            let soft = images.add(soft_image());
+            materials.add(StandardMaterial {
+                base_color_texture: Some(soft),
+                ..lit(LinearRgba::rgb(0.16, 0.06, 0.012))
+            })
+        },
+    };
+    // The braziers: a dark iron bowl on three splayed legs, coals in it, a tall fire.
+    let iron = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.06, 0.055, 0.05),
+        perceptual_roughness: 0.55,
+        metallic: 0.9,
+        ..default()
+    });
+    let bowl = meshes.add(ConicalFrustum {
+        radius_top: 0.42,
+        radius_bottom: 0.2,
+        height: 0.28,
+    });
+    let leg = meshes.add(Cylinder::new(0.025, 1.0));
+    for p in BRAZIERS {
+        let at = Vec3::new(p.x, 0.0, p.y);
+        commands.spawn((
+            Mesh3d(bowl.clone()),
+            MeshMaterial3d(iron.clone()),
+            Transform::from_translation(at + Vec3::Y * (BOWL - 0.14)),
+            // The light stands over the bowl: its rim would throw a black ring round the foot.
+            bevy::light::NotShadowCaster,
+        ));
+        for i in 0..3 {
+            let a = i as f32 * std::f32::consts::TAU / 3.0 + 0.4;
+            let out = Vec3::new(a.cos(), 0.0, a.sin());
+            // From under the bowl's rim out and down to the floor.
+            let top = at + out * 0.22 + Vec3::Y * (BOWL - 0.2);
+            let foot = at + out * 0.42;
+            let mid = (top + foot) * 0.5;
+            let len = top.distance(foot);
+            commands.spawn((
+                Mesh3d(leg.clone()),
+                MeshMaterial3d(iron.clone()),
+                Transform::from_translation(mid)
+                    .with_rotation(Quat::from_rotation_arc(Vec3::Y, (top - foot).normalize()))
+                    .with_scale(Vec3::new(1.0, len, 1.0)),
+            ));
+        }
+        fire(
+            &mut commands,
+            &parts,
+            &mut rng,
+            at + Vec3::Y * BOWL,
+            0.28,
+            9,
+            (0.45, 0.7),
+        );
+        // Two lights: a near one casting soft shadows, a far one none (scene.rs's split).
+        for (share, range, shadows) in [(0.65, 10.0, true), (0.35, 22.0, false)] {
+            light(
+                &mut commands,
+                &mut rng,
+                at + Vec3::Y * (BOWL + 0.45),
+                BRAZIER_LM * share,
+                range,
+                shadows,
+                0.5,
+            );
+        }
+    }
+    // The torches: on the back wall's face either side of the breach, and on the tall pillar.
+    let face = BACK_Z + THICK * 0.5 + 0.08;
+    let torches = [
+        (Vec3::new(-6.2, 1.5, face), 0.0),
+        (Vec3::new(1.2, 1.5, face), 0.0),
+        (
+            Vec3::new(PILLARS[0].x - 0.48, 1.5, PILLARS[0].y),
+            -std::f32::consts::FRAC_PI_2,
+        ),
+    ];
+    for (at, yaw) in torches {
+        // The torch leans out from its bracket on the wall.
+        let lean = Quat::from_rotation_y(yaw) * Quat::from_rotation_x(0.35);
+        let t = model(&mut commands, &asset, "models/iso/torch.glb", at, 0.0, 1.0);
+        commands
+            .entity(t)
+            .insert(Transform::from_translation(at).with_rotation(lean));
+        let head = at + lean * Vec3::Y * 0.6;
+        fire(&mut commands, &parts, &mut rng, head, 0.05, 4, (0.32, 0.45));
+        light(
+            &mut commands,
+            &mut rng,
+            head + Vec3::Y * 0.25,
+            TORCH_LM,
+            9.0,
+            false,
+            0.1,
+        );
+    }
+}
+
+struct Parts {
+    card: Handle<Mesh>,
+    speck: Handle<Mesh>,
+    flame: Handle<StandardMaterial>,
+    ember: Handle<StandardMaterial>,
+    halo: Handle<StandardMaterial>,
+}
+
+/// A fire of `n` tongues over a bed `r` across at `at`, sized in `size`, with its halo and
+/// embers.
+fn fire(
+    commands: &mut Commands,
+    parts: &Parts,
+    rng: &mut Rng,
+    at: Vec3,
+    r: f32,
+    n: usize,
+    size: (f32, f32),
+) {
+    for i in 0..n {
+        let a = i as f32 * 2.4;
+        let rr = if i < 2 {
+            r * 0.15
+        } else {
+            rng.range(0.3, 1.0) * r
+        };
+        let foot = at + Vec3::new(a.cos() * rr, 0.0, a.sin() * rr);
+        commands.spawn((
+            Mesh3d(parts.card.clone()),
+            MeshMaterial3d(parts.flame.clone()),
+            Transform::from_translation(foot),
+            bevy::light::NotShadowCaster,
+            Tongue {
+                foot,
+                seed: rng.f() * 50.0,
+                size: if i < 2 {
+                    size.1 * 1.3
+                } else {
+                    rng.range(size.0, size.1)
+                },
+            },
+        ));
+    }
+    commands.spawn((
+        Mesh3d(parts.card.clone()),
+        MeshMaterial3d(parts.halo.clone()),
+        Transform::from_translation(at + Vec3::Y * size.1 * 0.35)
+            .with_scale(Vec3::splat(size.1 * 2.6)),
+        bevy::light::NotShadowCaster,
+        Halo,
+    ));
+    for i in 0..(n * 2) {
+        commands.spawn((
+            Mesh3d(parts.speck.clone()),
+            MeshMaterial3d(parts.ember.clone()),
+            Transform::from_xyz(0.0, -100.0, 0.0),
+            bevy::light::NotShadowCaster,
+            Ember {
+                base: at + Vec3::Y * 0.1,
+                born: -(i as f32) * 0.11,
+                life: rng.range(1.2, 2.4),
+                drift: Vec2::new(rng.range(-0.2, 0.2), rng.range(-0.2, 0.2)),
+                seed: rng.f() * 100.0,
+            },
+        ));
+    }
+}
+
+fn light(
+    commands: &mut Commands,
+    rng: &mut Rng,
+    at: Vec3,
+    lumens: f32,
+    range: f32,
+    shadows: bool,
+    radius: f32,
+) {
+    commands.spawn((
+        PointLight {
+            color: Color::srgb(1.0, 0.55, 0.22),
+            intensity: lumens,
+            range,
+            radius,
+            shadow_maps_enabled: shadows,
+            soft_shadows_enabled: shadows,
+            ..default()
+        },
+        Transform::from_translation(at),
+        Flicker {
+            lumens,
+            seed: rng.f() * 40.0,
+        },
+    ));
+}
+
+/// Embers rise off their fire, drift on the air, shrink and die, and are born again.
+fn rise(time: Res<Time>, mut embers: Query<(&mut Ember, &mut Transform)>) {
+    let t = time.elapsed_secs();
+    for (mut e, mut tr) in &mut embers {
+        let mut age = t - e.born;
+        if age > e.life {
+            e.born = t;
+            e.seed += 1.37;
+            age = 0.0;
+        }
+        if age < 0.0 {
+            continue;
+        }
+        let k = age / e.life;
+        let swirl =
+            Vec3::new((age * 4.0 + e.seed).sin(), 0.0, (age * 3.3 + e.seed).cos()) * 0.12 * k;
+        let start = Vec3::new((e.seed * 7.1).sin(), 0.0, (e.seed * 3.7).cos()) * 0.15;
+        tr.translation = e.base
+            + start
+            + Vec3::new(e.drift.x + 0.2, 0.0, e.drift.y + 0.1) * age
+            + Vec3::Y * (1.0 * age - 0.1 * age * age)
+            + swirl;
+        tr.scale = Vec3::splat(0.02 * (1.0 - k).powf(0.8));
+    }
+}
+
+/// Flames waver (scene.rs's pattern).
+fn flicker(time: Res<Time>, mut lights: Query<(&Flicker, &mut PointLight)>) {
+    let t = time.elapsed_secs();
+    for (f, mut light) in &mut lights {
+        let w = (t * 13.0 + f.seed).sin() * 0.06
+            + (t * 7.3 + f.seed * 2.1).sin() * 0.08
+            + (t * 23.0 + f.seed * 0.7).sin() * 0.04;
+        light.intensity = f.lumens * (1.0 + w);
+    }
+}
