@@ -12,7 +12,8 @@
 //!
 //! Use: `pool::plugin`; a mesh from `surface` over the water's area at its level, its
 //! depth carried per vertex; `material(look)`, or `with_edge(look, edge)` for a soft bank,
-//! duckweed and lily pads and a broken sky (`Edge`); `Glint` on the point lights to mirror.
+//! duckweed and lily pads and a broken sky (`Edge`), `with_sheen` for a moon's sheen
+//! (`Sheen`); `Glint` on the point lights to mirror.
 
 use bevy::asset::{RenderAssetUsages, embedded_asset};
 use bevy::diagnostic::FrameCount;
@@ -64,12 +65,26 @@ pub struct Edge {
     pub green: Vec4,
 }
 
+/// A moon (or a low sun) the water mirrors as a broad sheen over much of the frame, the
+/// ripples breaking a sharper glitter out of it (vr-pond-slash's moonlit pond). All zero (the
+/// default) mirrors none.
+#[derive(Clone, Copy, Debug, Default, Reflect, ShaderType)]
+pub struct Sheen {
+    /// The direction toward it (xyz) and, w, how broad the sheen is (a Phong exponent: 8
+    /// spreads it from the top of an ARPG frame to the middle).
+    pub toward: Vec4,
+    /// Its radiance (nits, rgb), lifted as the sky is, and, w, the glitter's share (0..1).
+    pub colour: Vec4,
+}
+
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
 pub struct PoolExt {
     #[uniform(100)]
     pub look: Look,
     #[uniform(101)]
     pub edge: Edge,
+    #[uniform(102)]
+    pub sheen: Sheen,
 }
 
 const SHADER: &str = "embedded://iso/shaders/pool.wesl";
@@ -97,6 +112,11 @@ pub fn material(look: Look) -> PoolMaterial {
 
 /// The water's material with a margin of its own: a soft bank, duckweed and lily pads.
 pub fn with_edge(look: Look, edge: Edge) -> PoolMaterial {
+    with_sheen(look, edge, Sheen::default())
+}
+
+/// The water's material with its margin and a moon's sheen on it.
+pub fn with_sheen(look: Look, edge: Edge, sheen: Sheen) -> PoolMaterial {
     ExtendedMaterial {
         base: StandardMaterial {
             base_color: Color::linear_rgb(look.deep.x, look.deep.y, look.deep.z),
@@ -105,7 +125,7 @@ pub fn with_edge(look: Look, edge: Edge) -> PoolMaterial {
             alpha_mode: AlphaMode::Blend,
             ..default()
         },
-        extension: PoolExt { look, edge },
+        extension: PoolExt { look, edge, sheen },
     }
 }
 

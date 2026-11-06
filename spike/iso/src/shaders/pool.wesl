@@ -25,10 +25,17 @@ struct Edge {
     green: vec4<f32>,
 }
 
+struct Sheen {
+    toward: vec4<f32>,
+    colour: vec4<f32>,
+}
+
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> pool: Look;
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
 var<uniform> edge: Edge;
+@group(constants::MATERIAL_BIND_GROUP) @binding(102)
+var<uniform> sheen: Sheen;
 
 const PI: f32 = 3.14159265;
 
@@ -177,6 +184,16 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let blot = noise(p * cloud + vec2<f32>(gx, gz) * 0.3) * 0.65 + noise(p * cloud * 2.7 + 9.0) * 0.35;
     let broken = mix(1.0, mix(0.2, 1.6, smoothstep(0.25, 0.75, blot)), edge.fade.y);
     var mirror = sky * fresnel * pool.sky.a * bank * broken;
+    // The moon's sheen: a broad lobe about its mirror direction, darkened by the bank as the
+    // sky is and only half broken by the blots, and a sharper glitter the ripples tilt out
+    // of it.
+    if sheen.toward.w > 0.0 {
+        let c = max(dot(r, normalize(sheen.toward.xyz)), 0.0);
+        let broad = pow(c, sheen.toward.w);
+        let glitter = pow(c, sheen.toward.w * 12.0) * 3.0;
+        let lobe = mix(broad, glitter, sheen.colour.w);
+        mirror += sheen.colour.rgb * lobe * fresnel * pool.sky.a * bank * mix(1.0, broken, 0.5);
+    }
     // Each light's reflection: its illuminance at the face times a narrow normalised lobe
     // about the mirror direction.
     let s = pool.look.y;

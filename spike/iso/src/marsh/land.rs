@@ -4,7 +4,7 @@
 //! water's face over them (pool.rs).
 
 use super::{KNIGHT, LEVEL};
-use crate::pool::{self, Edge, Look, PoolMaterial};
+use crate::pool::{self, Edge, Look, PoolMaterial, Sheen};
 use crate::terrain::{GroundMaterial, Land, fbm, ground_material, smooth};
 use bevy::prelude::*;
 
@@ -66,14 +66,16 @@ fn cover(p: Vec2, _n: Vec3, h: f32) -> ([f32; 4], [f32; 2], [f32; 2]) {
     )
 }
 
-/// The water's look at dusk: near black, the violet sky high and the sunset's glow low in
-/// it, the fires' and wisps' streaks.
+/// The water's look by moonrise: a saturated deep blue sky in it (vr-pond-slash's water is
+/// sRGB 1, 41, 86: no red, a violet sky read as lilac paint, iso-art j24), darker toward the
+/// banks over half a metre of depth, the moon's sheen (`sheen`) and the fires' and wisps'
+/// streaks.
 pub fn look() -> Look {
     Look {
-        deep: Vec4::new(0.004, 0.006, 0.007, 0.35),
-        shallow: Vec4::new(0.02, 0.018, 0.012, 0.45),
-        sky: Vec4::new(6.0, 10.0, 30.0, 25.0),
-        horizon: Vec4::new(40.0, 18.0, 9.0, 0.4),
+        deep: Vec4::new(0.002, 0.005, 0.009, 0.35),
+        shallow: Vec4::new(0.015, 0.016, 0.012, 0.45),
+        sky: Vec4::new(0.8, 6.0, 26.0, 25.0),
+        horizon: Vec4::new(5.0, 11.0, 22.0, 0.5),
         wave: Vec4::new(super::WIND.x, super::WIND.y, 0.05, 0.0),
         look: Vec4::new(0.0, 600.0, 1.0, 0.3),
         lights: default(),
@@ -81,13 +83,23 @@ pub fn look() -> Look {
 }
 
 /// The margin: the water fading in over 30 cm of depth onto the wet mud, the sky broken
-/// into blots about 6 m across, duckweed matting the shallows to 25 cm deep and a lily pad
-/// to every 2 m² of open shallows.
+/// into blots about 6 m across, duckweed in dark clumps (not a band: an even mat along the
+/// water line read as a pale green rim, iso-art j24) and nearly a lily pad a m² of open
+/// shallows.
 pub fn edge() -> Edge {
     Edge {
         fade: Vec4::new(0.3, 0.8, 6.0, 0.0),
-        weed: Vec4::new(1.0, 0.25, 1.6, 0.5),
-        green: Vec4::new(0.07, 0.13, 0.025, 0.2),
+        weed: Vec4::new(0.6, 0.2, 2.4, 0.9),
+        green: Vec4::new(0.035, 0.07, 0.018, 0.24),
+    }
+}
+
+/// The moon in the water: a broad sheen of its cold light over the frame's top, a third of
+/// it glitter where the ripples tilt.
+pub fn sheen() -> Sheen {
+    Sheen {
+        toward: super::light::MOON.extend(8.0),
+        colour: Vec4::new(14.0, 50.0, 110.0, 0.3),
     }
 }
 
@@ -112,7 +124,7 @@ fn spawn(
     );
     commands.spawn((
         Mesh3d(meshes.add(face)),
-        MeshMaterial3d(pools.add(pool::with_edge(look(), edge()))),
+        MeshMaterial3d(pools.add(pool::with_sheen(look(), edge(), sheen()))),
         bevy::light::NotShadowCaster,
     ));
 }
