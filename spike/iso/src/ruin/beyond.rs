@@ -3,7 +3,7 @@
 //! and (walls.rs) the fragments of the outer walls, so the frame fills as the refs' do and
 //! frames the fight, never a margin of bare earth.
 
-use super::ground::{TOP, paved};
+use super::ground::{PAVED_X, PAVED_Z, TOP, paved};
 use crate::forest::Rng;
 use crate::scene::model;
 use bevy::prelude::*;
@@ -36,9 +36,24 @@ const CLUSTERS: [(Vec2, f32, usize, usize, f32); 9] = [
 
 /// Dead trees at the frame's edges, beside dress.rs's two.
 const TREES: [(&str, Vec2, f32, f32); 3] = [
-    ("models/iso/dead-tree-b.glb", Vec2::new(-14.5, -2.5), 250.0, 0.9),
-    ("models/iso/dead-tree-a.glb", Vec2::new(8.0, -12.0), 100.0, 1.1),
-    ("models/iso/dead-tree-a.glb", Vec2::new(14.5, 1.0), 300.0, 0.8),
+    (
+        "models/iso/dead-tree-b.glb",
+        Vec2::new(-14.5, -2.5),
+        250.0,
+        0.9,
+    ),
+    (
+        "models/iso/dead-tree-a.glb",
+        Vec2::new(8.0, -12.0),
+        100.0,
+        1.1,
+    ),
+    (
+        "models/iso/dead-tree-a.glb",
+        Vec2::new(14.5, 1.0),
+        300.0,
+        0.8,
+    ),
 ];
 
 pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
@@ -51,7 +66,14 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
             let sunk = -0.12 * size;
             let path = format!("models/nature/{name}.glb");
             let yaw = rng.range(0.0, std::f32::consts::TAU);
-            model(&mut commands, &asset, &path, p.extend(sunk).xzy(), yaw, size);
+            model(
+                &mut commands,
+                &asset,
+                &path,
+                p.extend(sunk).xzy(),
+                yaw,
+                size,
+            );
         };
         for _ in 0..big {
             put(&BIG, scale * rng.range(0.7, 1.1), spread * 0.4, &mut rng);
@@ -67,7 +89,11 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
     let mut strewn = 0;
     while strewn < 40 {
         let p = Vec2::new(rng.range(-16.0, 16.0), rng.range(-13.0, 8.0));
-        if paved(p) > 0.5 {
+        // Not in the court's holes or at the pool: the Rock_Moss set is untextured (flat
+        // grey in its file), and one by the pool read as "an untextured cream lump" (judge
+        // 2026-11-06); litter.rs's rubble lies there instead.
+        let court = (PAVED_X.0..PAVED_X.1).contains(&p.x) && (PAVED_Z.0..PAVED_Z.1).contains(&p.y);
+        if paved(p) > 0.5 || court {
             continue;
         }
         strewn += 1;
@@ -75,7 +101,14 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
         let path = format!("models/nature/{name}.glb");
         let yaw = rng.range(0.0, std::f32::consts::TAU);
         let size = rng.range(0.1, 0.3);
-        model(&mut commands, &asset, &path, Vec3::new(p.x, -0.03, p.y), yaw, size);
+        model(
+            &mut commands,
+            &asset,
+            &path,
+            Vec3::new(p.x, -0.03, p.y),
+            yaw,
+            size,
+        );
     }
     for (path, at, yaw, scale) in TREES {
         model(
