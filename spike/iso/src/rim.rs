@@ -43,6 +43,18 @@ struct Canopy(Handle<Image>);
 #[derive(Component)]
 pub struct Shade;
 
+/// A fighter (not an `Actor`) that takes the rim too. Its materials are swapped some
+/// frames after its model is in, once the ruin's hit (effects/hit.rs) has found the
+/// `StandardMaterial`s it flashes; the flash is then copied onto the swapped ones
+/// (`mirror`), so the fighter both rims and flashes.
+#[derive(Component, Default)]
+pub struct Fighter {
+    frames: u32,
+}
+
+/// How many frames a fighter's model is in before its materials are swapped.
+const FIGHTER_WAIT: u32 = 8;
+
 impl MaterialExtension for RimExt {
     fn fragment_shader() -> ShaderRef {
         "embedded://iso/shaders/rim.wesl".into()
@@ -53,8 +65,9 @@ pub fn plugin(app: &mut App) {
     embedded_asset!(app, "shaders/rim.wesl");
     app.add_plugins(MaterialPlugin::<RimMaterial>::default())
         .init_resource::<Swapped>()
+        .init_resource::<Mirrored>()
         .add_systems(Startup, canopy_map)
-        .add_systems(Update, (swap, tint).chain());
+        .add_systems(Update, (swap, fighters, tint, mirror).chain());
 }
 
 fn canopy_map(
@@ -128,33 +141,115 @@ fn swap(
             None if parents.iter_ancestors(e).any(|a| shaded.contains(a)) => (Vec3::ONE, false),
             None => continue,
         };
-        let key = (mat.id(), tint.to_array().map(f32::to_bits), rimmed);
-        let handle = match swapped.0.get(&key) {
-            Some(h) => h.clone(),
-            None => {
-                let Some(base) = standard.get(&mat.0) else {
-                    continue;
-                };
-                let mut base = base.clone();
-                let c = base.base_color.to_linear();
-                base.base_color =
-                    LinearRgba::new(c.red * tint.x, c.green * tint.y, c.blue * tint.z, c.alpha)
-                        .into();
-                let h = rims.add(ExtendedMaterial {
-                    base,
-                    extension: RimExt {
-                        rim: if rimmed { rim } else { LinearRgba::NONE },
-                        canopy: canopy.0.clone(),
-                    },
-                });
-                swapped.0.insert(key, h.clone());
-                h
-            }
+        let rim = if rimmed { rim } else { LinearRgba::NONE };
+        let Some(handle) = rimmed_as(&mut swapped, &standard, &mut rims, &canopy, mat, tint, rim)
+        else {
+            continue;
         };
         commands
             .entity(e)
             .remove::<MeshMaterial3d<StandardMaterial>>()
             .insert(MeshMaterial3d(handle));
+    }
+}
+
+/// The swapped material for `mat` tinted by `tint` with `rim`, made the first time.
+fn rimmed_as(
+    swapped: &mut Swapped,
+    standard: &Assets<StandardMaterial>,
+    rims: &mut Assets<RimMaterial>,
+    canopy: &Canopy,
+    mat: &MeshMaterial3d<StandardMaterial>,
+    tint: Vec3,
+    rim: LinearRgba,
+) -> Option<Handle<RimMaterial>> {
+    let key = (mat.id(), tint.to_array().map(f32::to_bits), rim != LinearRgba::NONE);
+    if let Some(h) = swapped.0.get(&key) {
+        return Some(h.clone());
+    }
+    let mut base = standard.get(&mat.0)?.clone();
+    let c = base.base_color.to_linear();
+    base.base_color =
+        LinearRgba::new(c.red * tint.x, c.green * tint.y, c.blue * tint.z, c.alpha).into();
+    let h = rims.add(ExtendedMaterial {
+        base,
+        extension: RimExt {
+            rim,
+            canopy: canopy.0.clone(),
+        },
+    });
+    swapped.0.insert(key, h.clone());
+    Some(h)
+}
+
+/// The fighters' materials swapped once their models have been in for `FIGHTER_WAIT`
+/// frames, each remembered beside its original for `mirror`.
+#[allow(clippy::too_many_arguments)]
+fn fighters(
+    mut commands: Commands,
+    mut fighters: Query<(Entity, &mut Fighter)>,
+    children: Query<&Children>,
+    skins: Query<&MeshMaterial3d<StandardMaterial>>,
+    standard: Res<Assets<StandardMaterial>>,
+    mut rims: ResMut<Assets<RimMaterial>>,
+    mut swapped: ResMut<Swapped>,
+    mut mirrored: ResMut<Mirrored>,
+    hour: Option<Res<Hour>>,
+    canopy: Res<Canopy>,
+) {
+    let rim = rim_for(hour.map_or(Hour::Dusk, |h| *h));
+    for (body, mut f) in &mut fighters {
+        if f.frames > FIGHTER_WAIT {
+            continue;
+        }
+        if !children.iter_descendants(body).any(|e| skins.contains(e)) {
+            continue;
+        }
+        f.frames += 1;
+        if f.frames <= FIGHTER_WAIT {
+            continue;
+        }
+        for e in children.iter_descendants(body) {
+            let Ok(mat) = skins.get(e) else { continue };
+            let Some(h) =
+                rimmed_as(&mut swapped, &standard, &mut rims, &canopy, mat, Vec3::ONE, rim)
+            else {
+                continue;
+            };
+            if !mirrored.0.iter().any(|(_, r)| *r == h) {
+                mirrored.0.push((mat.0.clone(), h.clone()));
+            }
+            commands
+                .entity(e)
+                .remove::<MeshMaterial3d<StandardMaterial>>()
+                .insert(MeshMaterial3d(h));
+        }
+    }
+}
+
+/// The fighters' originals beside their swapped materials.
+#[derive(Resource, Default)]
+struct Mirrored(Vec<(Handle<StandardMaterial>, Handle<RimMaterial>)>);
+
+/// Copies the hit flash (effects/hit.rs sets the original's emission) onto the swapped
+/// material, touching it only when it changed.
+fn mirror(
+    mirrored: Res<Mirrored>,
+    standard: Res<Assets<StandardMaterial>>,
+    mut rims: ResMut<Assets<RimMaterial>>,
+) {
+    for (from, to) in &mirrored.0 {
+        let (Some(a), Some(b)) = (standard.get(from), rims.get(to)) else {
+            continue;
+        };
+        if a.emissive == b.base.emissive && a.emissive_texture == b.base.emissive_texture {
+            continue;
+        }
+        let (e, tex) = (a.emissive, a.emissive_texture.clone());
+        if let Some(mut m) = rims.get_mut(to) {
+            m.base.emissive = e;
+            m.base.emissive_texture = tex;
+        }
     }
 }
 
