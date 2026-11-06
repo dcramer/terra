@@ -37,6 +37,7 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 - `patch` is a reserved word in WGSL: the shader fails at run time with only an ERROR line in the run's log, the frame still saved — grep the run for ERROR before judging a still.
 - Effects sized as they feel read as nothing at 70 px a metre (motes under 0.07 m, banner tears) — size them at the game camera.
 - A 0.7 m soft halo over a 0.13 m core reads as a soft blue blob in every biome's judge — a 0.04 m core drawn out along the flight, a 0.3 m dim halo, a thin white ribbon inside the coloured trail, and a hard star card (kit::star) for the impact, not a swelling disc; a 4k lm bolt light lights no floor beside 60k to 140k lm braziers — about 30k.
+- A spell's light riding 2 m up lights an even wash, not a pool (2 m out it still gives 0.35x, and beside warm pools its blue greys to violet) — a second short-range light about 0.5 m over the floor under the effect (under 10% a metre out), as the ARPGs fake it with a light or a glow decal.
 - An attack held at the wrong moment reads as arms raised — a sheet of times first (below).
 
 ## The worker and the guard
@@ -58,4 +59,5 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 - Look at stills at 960 or 640 wide, 1:1 crops only where you judge; two film frames tiled at 640 cost little.
 - A film's frames read darker than the 1920x1080 still — compare like with like.
 - Every job hit the 80% context hook at about 120k by its third shot — plan one look an effect, not a look a tweak, and land each checked step at once.
+- Three verdicts, the code and three 960 stills cost a helper about 120k before its first edit — brief a helper on one task with its diagnosis, not five.
 - Sample a ref's and a still's colours by box (ffmpeg to raw rgb24 at 960x540, a mean a box in node) before tuning a hue: the eye called the marsh's water blue while it measured violet grey.

@@ -46,6 +46,7 @@ Measure every still (judging.md) and tune to the refs of the same kind of frame.
 - Spell: a bolt is a core sphere, a glow card, a ribbon trail rebuilt each frame and its own light; the impact a swelling flash, sparks and a light dying in 0.09 s. Judge r3 wanted a hard white core, a rough trail, a pool of its colour on the ground.
 - Hit: sparks, a flash card about 0.6 m, a light for 0.06 s, the creature's emissive (emissive texture = its albedo, strength under 1: a flat emissive over 1 turns it into a pink silhouette) white then red then off over 0.17 s, a flinch about its feet, and hit-stop: both clips at speed 0 for 80 ms.
 - Every effect has a light, a bright core over bloom, and fades rather than pops.
+- Marks on the ground (scorch, frost): Bevy 0.20's `ForwardDecal` works at the ARPG camera unchanged (its SSAO already needs the `DepthPrepass` a decal reads), on uneven ground too.
 
 ## Ambient and living nature (`ambient/`)
 
