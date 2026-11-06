@@ -20,19 +20,24 @@
       "note": "scaled 0.952, turned 0 deg"
     },
     "check": {
-      "at": "2026-11-06T08:48:53.618Z",
+      "at": "2026-11-06T10:06:57.659Z",
       "credits": 0,
       "minutes": 0.00008333333333333333,
-      "passed": 3,
+      "passed": 4,
       "of": 4,
-      "failed": [
-        "triangles"
-      ],
+      "failed": [],
       "clips": {},
       "speeds": {},
-      "triangles": 4777,
-      "height": 0.95,
-      "note": "passed 3 of 4"
+      "triangles": 2376,
+      "height": 0.951,
+      "note": "passed 4 of 4"
+    },
+    "decimate": {
+      "at": "2026-11-06T10:06:46.665Z",
+      "credits": 0,
+      "minutes": 0.00025,
+      "triangles": 2376,
+      "note": "4777 to 2376 triangles (budget 2400), Blender's collapse on the mesh alone, skeleton and clips kept; bounds within 0.06%"
     }
   },
   "name": "sword",
