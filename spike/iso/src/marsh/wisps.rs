@@ -11,18 +11,20 @@ use crate::pool::Glint;
 use crate::ruin::effects::kit::{Cam, Clock, glow};
 use bevy::prelude::*;
 
-/// The wisps' homes (x, z), height over the water and how far they drift.
+/// The wisps' homes (x, z), each over a water's margin so its light pools on the mud and
+/// reeds as well as glinting, their height over the water and how far they drift.
 const HOMES: [Vec2; 4] = [
-    Vec2::new(-5.6, 3.4),
-    Vec2::new(1.0, 3.2),
-    Vec2::new(-3.0, -5.6),
-    Vec2::new(4.0, -4.6),
+    Vec2::new(-5.6, 1.4),
+    Vec2::new(1.0, 2.7),
+    Vec2::new(-4.6, -3.6),
+    Vec2::new(4.0, -3.5),
 ];
-const HIGH: f32 = 0.7;
+const HIGH: f32 = 0.5;
 const DRIFT: f32 = 0.6;
-/// A wisp's colour (linear, over 1 drives the bloom), light (lumens) and beat (s).
+/// A wisp's colour (linear, over 1 drives the bloom), light (lumens) and beat (s): low and
+/// bright enough to lay a faint pool on the bank and the reeds under it.
 const COLD: LinearRgba = LinearRgba::rgb(2.2, 6.0, 5.0);
-const WISP_LM: f32 = 2500.0;
+const WISP_LM: f32 = 4000.0;
 const BEAT: f32 = 6.0;
 /// Midge clouds, the specks in each, and their size (m: under 0.05 they vanish at 960 px).
 const CLOUDS: usize = 5;
@@ -63,12 +65,13 @@ fn spawn(
 ) {
     let soft = images.add(soft_image());
     let card = meshes.add(Rectangle::new(1.0, 1.0));
-    let core = meshes.add(Sphere::new(0.1));
-    let hot = materials.add(glow(COLD * 3.0, None));
-    // A soft orb about the core and a faint wide haze in the damp air about that: at 960 px
-    // a bare core is a dot (iso-art j19).
-    let orb = (meshes.add(Rectangle::new(1.3, 1.3)), materials.add(glow(COLD * 0.4, Some(soft.clone()))));
-    let haze = (meshes.add(Rectangle::new(3.2, 3.2)), materials.add(glow(COLD * 0.05, Some(soft.clone()))));
+    let core = meshes.add(Sphere::new(0.07));
+    let hot = materials.add(glow(COLD * 6.0, None));
+    // A small glow tight about a hot core, and a faint haze in the damp air about that: a
+    // bare core is a dot at 960 px (iso-art j19), but a 1.3 m orb read as 70 px of lens
+    // bokeh, not a light (blind-marsh3).
+    let orb = (meshes.add(Rectangle::new(0.5, 0.5)), materials.add(glow(COLD * 0.9, Some(soft.clone()))));
+    let haze = (meshes.add(Rectangle::new(1.4, 1.4)), materials.add(glow(COLD * 0.04, Some(soft.clone()))));
     for (i, h) in HOMES.iter().enumerate() {
         let home = h.extend(LEVEL + HIGH).xzy();
         let phase = i as f32 * 1.7;
