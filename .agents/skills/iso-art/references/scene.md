@@ -57,6 +57,7 @@ Measure every still (judging.md) and tune to the refs of the same kind of frame.
 ## Ambient and living nature (`ambient/`)
 
 - A wisp (marsh/wisps.rs): a 0.07 m core at 6x its colour, a 0.5 m glow card (a 1.3 m one reads as 70 px of lens bokeh), 0.5 m over a water's margin at 4,000 lm so its pool falls on the bank as well as glinting.
+- A lamp (marsh/dress.rs's lantern): no glow card (a 0.7 m one read as "a bloom ball with no readable post", "a sprite"); a crisp flame (a sphere scaled 0.025 x 0.06, emissive 12, 6, 1.8) just before an emissive box (0.15 x 0.2 x 0.15, 2.2, 1.0, 0.3) inside Lantern.glb's glass, hung 0.6 m under the end of a crossarm on a round pole (`Cylinder`, `with_generated_tangents` for `scene::material`'s rough_wood): at 960 the frame and pole read as a lantern, not a ball of light.
 - Fog: lit alpha-blended horizontal cards low over the ground with tattered noise, drifting on the scene's `WIND` and fading in and out, alpha at most about 0.34. It lifted the mids into lavender smudges at r3: keep it low and in the pools.
 - Dust motes in each fire's light, fireflies blinking by the trees and grassy edges: soft additive dots facing the camera. Under 0.07 m they do not show at 960 px.
 - Wind: a `StandardMaterial` extended with a vertex shader (and its prepass) bending blades by height in rolling gusts; cloth (a banner) on the same material, by how far down. Only a film shows it.

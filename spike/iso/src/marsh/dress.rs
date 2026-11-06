@@ -1,7 +1,8 @@
 //! What stands in the marsh: dead trees in the water at the frame's edges, mossy rocks,
 //! stumps and logs half sunk along the banks, a camp fire on the knight's bank (its flames
 //! the ruin's flipbook, found by its `Halo` card) and a lantern on a post in the mere,
-//! both flickering and mirrored in the water (`pool::Glint`).
+//! both flickering and mirrored in the water (`pool::Glint`); the lantern hangs from a
+//! crossarm on a round pole, a crisp flame in its lit glass.
 
 use super::land::shape;
 use crate::motes::{Halo, soft_image};
@@ -20,8 +21,21 @@ const FIRE_LM: f32 = 90_000.0;
 /// falls 1.3 m toward the camera into open water, and the lamp stands well inside the frame:
 /// in the near channel it sat on the frame's bottom edge), and its light.
 pub const LANTERN: Vec2 = Vec2::new(6.0, -1.0);
-const POST: f32 = 1.8;
+/// The pole's length (sunk `SUNK` into the mud), its crossarm's way (toward the screen's
+/// left) and reach, and how far under the arm the lamp's foot hangs (Lantern.glb is 0.53 m
+/// tall, its origin at its foot, its glass from 0.06 to 0.30 m up).
+const POST: f32 = 2.2;
+const SUNK: f32 = 0.2;
+const ARM: Vec3 = Vec3::new(-0.94, 0.0, 0.342);
+const ARM_LONG: f32 = 0.6;
+const HANG: f32 = 0.6;
 const LANTERN_LM: f32 = 20_000.0;
+
+/// Where the lamp's foot hangs: under the crossarm's end.
+fn lamp() -> Vec3 {
+    let foot = LANTERN.extend(shape(LANTERN) - SUNK).xzy();
+    foot + Vec3::Y * (POST - 0.1 - HANG) + ARM * ARM_LONG
+}
 
 /// Model, place, yaw (degrees), scale, how far sunk (m).
 const PROPS: [(&str, Vec2, f32, f32, f32); 20] = [
@@ -106,38 +120,51 @@ fn spawn(
         },
         Glint,
     ));
-    // The lantern on its post: a dark stake, the lamp hung at its top, a warm glow card.
-    let foot = LANTERN.extend(shape(LANTERN)).xzy();
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.09, POST, 0.09))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.07, 0.05, 0.035),
-            perceptual_roughness: 0.9,
-            ..default()
-        })),
-        Transform::from_translation(foot + Vec3::Y * (POST * 0.5 - 0.2))
-            .with_rotation(Quat::from_rotation_z(0.06)),
+    // The lantern on its pole: a round post of rough wood with a crossarm toward the
+    // screen's left, the lamp hung from the arm's end, a crisp flame in its lit glass (a
+    // 0.7 m soft glow card here read as "a bloom ball with no readable post", "a sprite").
+    let foot = LANTERN.extend(shape(LANTERN) - SUNK).xzy();
+    let wood = materials.add(crate::scene::material(
+        &asset,
+        "rough_wood",
+        Color::srgb(0.55, 0.45, 0.36),
     ));
-    let lamp = foot + Vec3::Y * (POST - 0.2);
-    model(&mut commands, &asset, "models/props/Lantern.glb", lamp, 0.3, 1.0);
-    // Its flame, a hot core over the bloom (no `Halo`: that would light a flipbook fire).
+    let mut rod = |r: f32, long: f32| {
+        meshes.add(
+            Mesh::from(Cylinder::new(r, long))
+                .with_generated_tangents()
+                .expect("a cylinder has normals and UVs"),
+        )
+    };
+    let (pole, arm) = (rod(0.06, POST), rod(0.035, ARM_LONG + 0.1));
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.05))),
-        MeshMaterial3d(materials.add(glow(LinearRgba::rgb(9.0, 4.5, 1.4), None))),
-        Transform::from_translation(lamp + Vec3::Y * 0.22),
+        Mesh3d(pole),
+        MeshMaterial3d(wood.clone()),
+        Transform::from_translation(foot + Vec3::Y * POST * 0.5),
+    ));
+    let top = foot + Vec3::Y * (POST - 0.1);
+    commands.spawn((
+        Mesh3d(arm),
+        MeshMaterial3d(wood),
+        Transform::from_translation(top + ARM * ARM_LONG * 0.5)
+            .with_rotation(Quat::from_rotation_arc(Vec3::Y, ARM)),
+    ));
+    let lamp = lamp();
+    model(&mut commands, &asset, "models/props/Lantern.glb", lamp, 0.3, 1.0);
+    // The lit housing inside the glass, and the flame just before it toward the eye (no
+    // `Halo`: that would light a flipbook fire).
+    let eye = crate::ruin::camera::offset().normalize();
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(0.15, 0.2, 0.15))),
+        MeshMaterial3d(materials.add(glow(LinearRgba::rgb(2.2, 1.0, 0.3), None))),
+        Transform::from_translation(lamp + Vec3::Y * 0.18),
         bevy::light::NotShadowCaster,
     ));
-    // The glass's glow, a soft card turned to the fixed camera and set a little toward it so
-    // the lamp's frame does not hide it (the flame alone reads as a dark box at 960 px).
-    let eye = crate::ruin::camera::offset().normalize();
-    let at = lamp + Vec3::Y * 0.2 + eye * 0.25;
     commands.spawn((
-        Mesh3d(meshes.add(Rectangle::new(0.7, 0.7))),
-        MeshMaterial3d(materials.add(glow(
-            LinearRgba::rgb(1.6, 0.75, 0.25),
-            Some(images.add(soft_image())),
-        ))),
-        Transform::from_translation(at).looking_at(at - eye, Vec3::Y),
+        Mesh3d(meshes.add(Sphere::new(1.0))),
+        MeshMaterial3d(materials.add(glow(LinearRgba::rgb(12.0, 6.0, 1.8), None))),
+        Transform::from_translation(lamp + Vec3::Y * 0.17 + eye * 0.08)
+            .with_scale(Vec3::new(0.025, 0.06, 0.025)),
         bevy::light::NotShadowCaster,
     ));
     commands.spawn((
@@ -149,7 +176,7 @@ fn spawn(
             shadow_maps_enabled: false,
             ..default()
         },
-        Transform::from_translation(lamp + Vec3::Y * 0.25),
+        Transform::from_translation(lamp + Vec3::Y * 0.17 + eye * 0.1),
         Flicker {
             lm: LANTERN_LM,
             seed: 7.0,
@@ -172,10 +199,25 @@ mod tests {
         assert!(near, "no water within a metre toward the camera of the fire");
         let d = shape(LANTERN) - LEVEL;
         assert!((-0.5..-0.05).contains(&d), "the post's foot is {d} under the face");
-        // Its mirror image, 0.7 of the lamp's height toward the camera, is on open water.
+        // Its mirror image, 0.7 of the flame's height toward the camera from under the lamp
+        // (hung from the crossarm), is on open water.
         let eye = crate::ruin::camera::offset();
-        let image = LANTERN + Vec2::new(eye.x, eye.z).normalize() * 0.7 * POST;
+        let flame = lamp() + Vec3::Y * 0.17;
+        let under = Vec2::new(flame.x, flame.z);
+        let image = under + Vec2::new(eye.x, eye.z).normalize() * 0.7 * (flame.y - LEVEL);
         assert!(shape(image) < LEVEL - 0.1, "the lantern glints on the bank at {image}");
+    }
+
+    /// The lamp hangs clear of the pole and the water: under the crossarm's end, a reach
+    /// from the pole, its foot well over the face.
+    #[test]
+    fn the_lamp_hangs_from_the_crossarm_over_the_water() {
+        let l = lamp();
+        let reach = Vec2::new(l.x, l.z).distance(LANTERN);
+        assert!(reach > 0.4, "the lamp hangs {reach} m from the pole, in its post");
+        assert!(l.y - LEVEL > 0.8, "the lamp's foot is {} m over the water", l.y - LEVEL);
+        let top = shape(LANTERN) - SUNK + POST;
+        assert!(l.y + 0.53 < top, "the lamp stands over the pole's top");
     }
 }
 
