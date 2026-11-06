@@ -2,7 +2,7 @@
 //! second winding up its own blow, the tree monster fallen dead before him. Each body plays
 //! one clip from a fixed time (the ruin's `Pose`), held there in a still.
 
-use super::{FOE, KNIGHT, TARGET};
+use super::{FOE, KNIGHT, SECOND};
 use crate::ruin::fight::Pose;
 use crate::scene::model;
 use crate::terrain::shape;
@@ -15,14 +15,14 @@ const CAST: [(&str, &str, f32, bool, Vec2, Vec2); 4] = [
     // The bark the blow bites, raising its arms.
     ("treant-a", "attack", 0.5, false, FOE, KNIGHT),
     // The bolts' mark, swinging at him from the wood's side.
-    ("treant-b", "attack", 0.9, false, TARGET, KNIGHT),
+    ("treant-b", "attack", 0.9, false, SECOND, KNIGHT),
     // One already down at his feet, toward the camera.
     (
         "tree-monster",
         "death",
         2.9,
         true,
-        Vec2::new(2.4, 7.4),
+        Vec2::new(3.4, 8.4),
         Vec2::new(6.0, 4.0),
     ),
 ];
@@ -40,11 +40,14 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
             d.x.atan2(d.y),
             1.0,
         );
-        commands.entity(body).insert(Pose {
-            gltf: asset.load(path),
-            clip,
-            at,
-            once,
-        });
+        commands.entity(body).insert((
+            crate::rim::Fighter::default(),
+            Pose {
+                gltf: asset.load(path),
+                clip,
+                at,
+                once,
+            },
+        ));
     }
 }

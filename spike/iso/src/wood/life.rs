@@ -7,7 +7,7 @@ use crate::forest::Rng;
 use crate::party::{Actor, creature};
 use crate::ruin::effects::kit::{Cam, glow};
 use crate::terrain::shape;
-use crate::wildlife::{CHAFFINCH, MOOSE, SPARROW};
+use crate::wildlife::{BOAR, CHAFFINCH, FOX, MOOSE, SPARROW};
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
@@ -15,15 +15,24 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (roam, drift));
 }
 
-/// The moose's beat along the far bank: it walks to each in turn, then back.
+/// The moose's beat along the pond's north bank, in the frame's upper right: it walks to
+/// each in turn, then back (j11's beat from x 12 to 20.5 was off the frame's edge).
 const BEAT: [Vec2; 3] = [
-    Vec2::new(12.0, -1.0),
-    Vec2::new(16.5, -0.5),
-    Vec2::new(20.5, 0.5),
+    Vec2::new(8.0, -1.5),
+    Vec2::new(10.5, -1.5),
+    Vec2::new(12.5, -1.0),
 ];
-/// The finches' crossing, from the wood west of the camp to the wood past the pond, and
-/// how high over the land they fly.
-const CROSS: (Vec2, Vec2) = (Vec2::new(-8.0, 9.0), Vec2::new(18.0, -6.0));
+/// The repository's own beasts on beats of their own (not the Tripo pipeline's): a fox
+/// trotting the grass below the fight, a boar along the wood's edge west of the camp.
+const FOX_BEAT: [Vec2; 3] = [
+    Vec2::new(-1.5, 9.0),
+    Vec2::new(1.0, 9.8),
+    Vec2::new(3.0, 10.4),
+];
+const BOAR_BEAT: [Vec2; 2] = [Vec2::new(-3.0, 4.0), Vec2::new(-2.5, 7.5)];
+/// The finches' crossing, from the wood west of the camp over the fight to the wood past
+/// the pond's north bank (about 3 s across the frame), and how high over the land.
+const CROSS: (Vec2, Vec2) = (Vec2::new(-3.0, 9.0), Vec2::new(11.0, -2.0));
 const HIGH: f32 = 4.5;
 /// Specks of pollen and midges about the fight, and how far from its middle they keep.
 const SPECKS: usize = 90;
@@ -64,6 +73,20 @@ fn spawn(
         back: false,
         fly: false,
     });
+    for (model, beat, walk, height, radius) in [
+        (FOX, &FOX_BEAT[..], 0.9, 0.6, 0.25),
+        (BOAR, &BOAR_BEAT[..], 0.8, 0.9, 0.45),
+    ] {
+        let mut beast = Actor::new(model, walk, walk, height, radius);
+        beast.path.push_back(beat[1]);
+        let e = creature(&mut commands, &asset, beast, beat[0], 0.0, 1.0);
+        commands.entity(e).insert(Roam {
+            beat: beat.to_vec(),
+            next: 1,
+            back: false,
+            fly: false,
+        });
+    }
     let dir = (CROSS.1 - CROSS.0).normalize();
     let side = dir.perp();
     for i in 0..5 {
@@ -158,8 +181,10 @@ mod tests {
     /// The moose's beat and the finches' crossing keep out of the pond, on dry land.
     #[test]
     fn the_moose_walks_dry_land() {
-        for p in BEAT {
+        for p in BEAT.into_iter().chain(FOX_BEAT).chain(BOAR_BEAT) {
             assert!(crate::terrain::pond(p) < -0.05, "{p} is in the pond");
+            let fire = p.distance(crate::scene::FIRE);
+            assert!(fire > 2.5, "{p} is {fire} m from the camp fire");
         }
     }
 }
