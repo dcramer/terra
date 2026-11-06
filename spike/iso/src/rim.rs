@@ -141,11 +141,20 @@ fn canopy_map(
 #[derive(Component, Clone, Copy)]
 pub struct Tint(pub Vec3);
 
-/// What a swapped material is: shaded only, an actor's rim, a fighter's rim.
+/// A dark hide (the forest's moose): an actor whose sky sheen is the fighters' 1%, not
+/// glTF's 4%. Under the oaks a 4% sheen and the haze turned its coat the shaded ground's
+/// blue-grey whatever its `Tint` (iso-art j47: on the mask's core, not its bloomed halo
+/// that j38 measured, untinted dL* -4.3 and blue-grey; tinted at this sheen -5.2, brown).
+#[derive(Component)]
+pub struct Hide;
+
+/// What a swapped material is: shaded only, an actor's rim, a hide's (an actor's rim at a
+/// fighter's sheen), a fighter's rim.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Kind {
     Shade,
     Actor,
+    Hide,
     Fighter,
 }
 
@@ -195,7 +204,7 @@ fn swap(
         Added<MeshMaterial3d<StandardMaterial>>,
     >,
     parents: Query<&ChildOf>,
-    actors: Query<Option<&Tint>, With<Actor>>,
+    actors: Query<(Option<&Tint>, Has<Hide>), With<Actor>>,
     shaded: Query<(), With<Shade>>,
     standard: Res<Assets<StandardMaterial>>,
     mut rims: ResMut<Assets<RimMaterial>>,
@@ -206,13 +215,16 @@ fn swap(
     let rim = rim_for(hour.map_or(Hour::Dusk, |h| *h));
     for (e, mat) in &added {
         let (tint, kind) = match parents.iter_ancestors(e).find_map(|a| actors.get(a).ok()) {
-            Some(tint) => (tint.map_or(Vec3::ONE, |t| t.0), Kind::Actor),
+            Some((tint, hide)) => (
+                tint.map_or(Vec3::ONE, |t| t.0),
+                if hide { Kind::Hide } else { Kind::Actor },
+            ),
             None if parents.iter_ancestors(e).any(|a| shaded.contains(a)) => {
                 (Vec3::ONE, Kind::Shade)
             }
             None => continue,
         };
-        let rim = if kind == Kind::Actor {
+        let rim = if matches!(kind, Kind::Actor | Kind::Hide) {
             rim
         } else {
             LinearRgba::NONE
@@ -258,7 +270,7 @@ fn rimmed_as(
     let c = base.base_color.to_linear();
     base.base_color =
         LinearRgba::new(c.red * tint.x, c.green * tint.y, c.blue * tint.z, c.alpha).into();
-    if kind == Kind::Fighter {
+    if matches!(kind, Kind::Fighter | Kind::Hide) {
         base.reflectance = FIGHTER_REFLECTANCE;
     }
     let h = rims.add(ExtendedMaterial {
@@ -369,7 +381,7 @@ fn tint(hour: Option<Res<Hour>>, swapped: Res<Swapped>, mut rims: ResMut<Assets<
     for ((.., kind), h) in &swapped.0 {
         let rim = match kind {
             Kind::Shade => continue,
-            Kind::Actor => rim_for(*hour),
+            Kind::Actor | Kind::Hide => rim_for(*hour),
             Kind::Fighter => fighter_rim(Some(*hour)),
         };
         if let Some(mut m) = rims.get_mut(h) {

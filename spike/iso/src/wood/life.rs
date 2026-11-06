@@ -16,12 +16,18 @@ pub fn plugin(app: &mut App) {
 }
 
 /// The moose's beat along the pond's north bank, in the frame's upper right: it walks to
-/// each in turn, then back (j11's beat from x 12 to 20.5 was off the frame's edge).
+/// each in turn, then back (j11's beat from x 12 to 20.5 was off the frame's edge). Down
+/// the bank toward the water, clear of the oak's leaves: at z -1.5 two thirds of it hid
+/// behind them (8,400 px to 18,000 here at 1080, iso-art j47); past x 11 it meets the
+/// frame's edge.
 const BEAT: [Vec2; 3] = [
-    Vec2::new(8.0, -1.5),
-    Vec2::new(10.5, -1.5),
-    Vec2::new(12.5, -1.0),
+    Vec2::new(8.0, 0.2),
+    Vec2::new(9.3, 0.5),
+    Vec2::new(10.4, 0.9),
 ];
+/// The moose's hide: a dark brown (Tripo's coat is a pale grey-brown) at a fighter's sheen
+/// (rim::Hide); in the bank's shade it stood at the ground's value and hue.
+const HIDE: Vec3 = Vec3::new(0.55, 0.38, 0.25);
 /// The repository's own beasts on beats of their own (not the Tripo pipeline's): a fox
 /// trotting the grass below the fight, a boar along the wood's edge west of the camp.
 const FOX_BEAT: [Vec2; 3] = [
@@ -67,12 +73,16 @@ fn spawn(
     let mut moose = Actor::new(MOOSE, 1.45, 1.45, 2.2, 0.8);
     moose.path.push_back(BEAT[1]);
     let e = creature(&mut commands, &asset, moose, BEAT[0], 0.0, 1.0);
-    commands.entity(e).insert(Roam {
-        beat: BEAT.to_vec(),
-        next: 1,
-        back: false,
-        fly: false,
-    });
+    commands.entity(e).insert((
+        Roam {
+            beat: BEAT.to_vec(),
+            next: 1,
+            back: false,
+            fly: false,
+        },
+        crate::rim::Tint(HIDE),
+        crate::rim::Hide,
+    ));
     for (model, beat, walk, height, radius) in [
         (FOX, &FOX_BEAT[..], 0.9, 0.6, 0.25),
         (BOAR, &BOAR_BEAT[..], 0.8, 0.9, 0.45),
@@ -185,6 +195,20 @@ mod tests {
             assert!(crate::terrain::pond(p) < -0.05, "{p} is in the pond");
             let fire = p.distance(crate::scene::FIRE);
             assert!(fire > 2.5, "{p} is {fire} m from the camp fire");
+        }
+    }
+
+    /// No fern or stone stands in the moose's way, nor within half a metre of it.
+    #[test]
+    fn the_bank_is_clear_along_the_beat() {
+        for w in BEAT.windows(2) {
+            for k in 0..=20 {
+                let p = w[0].lerp(w[1], k as f32 / 20.0);
+                for side in [-0.5, 0.0, 0.5] {
+                    let q = p + Vec2::new(0.0, side);
+                    assert!(!super::super::dress::free(q), "a plant may stand at {q}");
+                }
+            }
         }
     }
 }

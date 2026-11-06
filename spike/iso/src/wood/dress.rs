@@ -43,7 +43,7 @@ pub fn plugin(app: &mut App) {
 pub fn free(p: Vec2) -> bool {
     let cast = [super::KNIGHT, super::FOE, super::TARGET, super::SECOND];
     terrain::pond(p) < -0.15
-        && !(p.x > 7.0 && p.x < 13.5 && (p.y + 1.3).abs() < 1.0)
+        && !(p.x > 7.0 && p.x < 11.5 && (p.y - 0.5).abs() < 1.0)
         && cast.iter().all(|c| c.distance(p) > 1.8)
         && OAKS.iter().all(|(o, ..)| o.distance(p) > 0.9)
         && p.distance(crate::scene::FIRE) > 3.0
