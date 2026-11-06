@@ -52,7 +52,8 @@ pub struct Args {
     /// `--film N` with `--shot dir/f.jpg`: N frames from `--frames` on, at a fixed 30 per
     /// second of game time, saved as dir/f-0000.jpg on; clips play rather than hold.
     pub film: u32,
-    /// `--asset NAME` with `--shot dir/NAME.png`: the asset view (view.rs), one asset alone.
+    /// `--asset NAME` with `--shot dir/NAME.png`: the asset view (view.rs), one asset alone;
+    /// with `--film N`, N frames of its walk and run as the game plays them, dir/NAME-f0000.jpg on.
     pub asset: Option<String>,
 }
 

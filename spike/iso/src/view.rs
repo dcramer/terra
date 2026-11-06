@@ -149,6 +149,7 @@ fn step(
     subject: Query<Entity, With<Subject>>,
     children: Query<&Children>,
     mut players: Query<&mut AnimationPlayer>,
+    mut transitions: Query<&mut AnimationTransitions>,
     parts: Parts,
     offscreen: Option<Res<Offscreen>>,
     mut exit: MessageWriter<AppExit>,
@@ -279,6 +280,11 @@ fn step(
     }
     let Some(image) = offscreen else { return };
     state.held += 1;
+    if args.film > 0 {
+        let (p, t) = (&mut players, &mut transitions);
+        film(&mut state, &args, &image, &mut commands, p, t, &mut exit);
+        return;
+    }
     if state.next >= state.shots.len() {
         if state.held == 30 {
             exit.write(AppExit::Success);
@@ -324,6 +330,88 @@ fn act(held: u32) -> Act {
         Act::Pose
     } else {
         Act::Hold
+    }
+}
+
+/// The gaits the film plays, by the clips' names.
+#[derive(Debug, PartialEq, Clone, Copy)]
+enum Gait {
+    Walk,
+    Run,
+}
+
+/// Each gait's loops in a turn of the film: walk three times, then run three times, again.
+const LAPS: f32 = 3.0;
+/// The game's crossfade between gaits (party.rs `gait`).
+const FADE: std::time::Duration = std::time::Duration::from_millis(220);
+
+/// The gait the film switches to at frame `n`, a turn being `walk` frames of walk then `run`
+/// of run (`run` 0 when the asset has no run); none between switches.
+fn switch(n: u32, walk: u32, run: u32) -> Option<Gait> {
+    let turn = walk + run;
+    if turn == 0 {
+        return (n == 0).then_some(Gait::Walk);
+    }
+    match n % turn {
+        0 => Some(Gait::Walk),
+        p if p == walk && run > 0 => Some(Gait::Run),
+        _ => None,
+    }
+}
+
+/// `--film N` with `--asset`: the walk and run played as the game plays them (repeat at speed
+/// 1, the game's crossfade at each switch, game time at 30 frames a second), each frame saved
+/// as `NAME-f<nnnn>.jpg` beside `--shot`, so a loop's seam and the switch from walk to run
+/// can be seen to hold (iso-art j31). The walk's first pose is held while the frame settles.
+#[allow(clippy::too_many_arguments)]
+fn film(
+    state: &mut State,
+    args: &Args,
+    image: &Offscreen,
+    commands: &mut Commands,
+    players: &mut Query<&mut AnimationPlayer>,
+    transitions: &mut Query<&mut AnimationTransitions>,
+    exit: &mut MessageWriter<AppExit>,
+) {
+    let find = |gait: &str| {
+        let clip = state.clips.iter().find(|c| c.0.to_lowercase().contains(gait));
+        clip.map(|c| (c.1, c.2))
+    };
+    let (Some(walk), run) = (find("walk"), find("run")) else {
+        panic!("--film with --asset plays the walk and run, and {:?} has no walk", args.asset);
+    };
+    let Some(p) = state.player else { return };
+    let frames = |secs: f32| (LAPS * secs * crate::FILM_FPS as f32).round() as u32;
+    let (walk_n, run_n) = (frames(walk.0), run.map_or(0, |r| frames(r.0)));
+    let (Ok(mut player), Ok(mut fades)) = (players.get_mut(p), transitions.get_mut(p)) else {
+        // Its transitions go on once, and are there the next frame.
+        commands.entity(p).insert(AnimationTransitions::new());
+        return;
+    };
+    if state.held < SETTLE {
+        if fades.get_main_animation().is_none() {
+            player.stop_all();
+            let zero = std::time::Duration::ZERO;
+            fades.play(&mut player, walk.1, zero).repeat().set_speed(0.0);
+        }
+        return;
+    }
+    let n = state.held - SETTLE;
+    match (n, switch(n, walk_n, run_n), run) {
+        (0, _, _) => _ = player.animation_mut(walk.1).map(|a| a.set_speed(1.0)),
+        (_, Some(Gait::Walk), _) => _ = fades.play(&mut player, walk.1, FADE).repeat(),
+        (_, Some(Gait::Run), Some(run)) => _ = fades.play(&mut player, run.1, FADE).repeat(),
+        _ => {}
+    }
+    if n < args.film {
+        let shot = args.shot.clone().unwrap();
+        let stem = shot.file_stem().and_then(|s| s.to_str()).unwrap_or("asset");
+        let file = shot.with_file_name(format!("{stem}-f{n:04}.jpg"));
+        commands
+            .spawn(Screenshot::image(image.0.clone()))
+            .observe(save_to_disk(file));
+    } else if n == args.film + 30 {
+        exit.write(AppExit::Success);
     }
 }
 
@@ -441,5 +529,17 @@ mod tests {
         assert!(posed >= shot + 2, "the shot at frame {shot}, the next pose at {posed}");
         assert_eq!(acts.iter().filter(|a| **a != Act::Hold).count(), 2);
         assert_eq!(*acts.last().unwrap(), Act::Pose, "the held count resets on the pose");
+    }
+
+    /// The film walks three laps, runs three, then walks again; an asset with no run walks.
+    #[test]
+    fn the_film_switches_at_each_turn() {
+        let (walk, run) = (210, 57);
+        let at: Vec<(u32, Gait)> = (0..2 * (walk + run))
+            .filter_map(|n| switch(n, walk, run).map(|g| (n, g)))
+            .collect();
+        let want = [(0, Gait::Walk), (walk, Gait::Run), (walk + run, Gait::Walk), (2 * walk + run, Gait::Run)];
+        assert_eq!(at, want);
+        assert_eq!((0..500).filter_map(|n| switch(n, walk, 0)).count(), 3, "walk again each turn");
     }
 }
