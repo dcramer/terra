@@ -29,24 +29,23 @@
       "note": "idle walk run attack death"
     },
     "export": {
-      "at": "2026-11-06T07:02:15.363Z",
+      "at": "2026-11-06T07:07:48.453Z",
       "credits": 0,
-      "minutes": 0.7661666666666667,
+      "minutes": 0.0122,
       "files": [
         "assets/models/iso/tree-monster.glb"
       ],
       "scale": 3.3477,
       "turn": 0,
-      "note": "scaled 3.348, turned 0 deg, in place walk run, cut attack"
+      "note": "scaled 3.348, turned 0 deg, in place walk run, cut attack, looped run on 0.41-1.04 s (ends 5.6% apart before closing)"
     },
     "check": {
-      "at": "2026-11-06T07:02:19.574Z",
+      "at": "2026-11-06T07:07:51.916Z",
       "credits": 0,
-      "minutes": 0.0023333333333333335,
-      "passed": 23,
+      "minutes": 0.0022833333333333334,
+      "passed": 24,
       "of": 25,
       "failed": [
-        "run loops",
         "triangles"
       ],
       "clips": {
@@ -54,15 +53,15 @@
         "idle": 15.33,
         "attack": 2,
         "death": 3,
-        "run": 1.25
+        "run": 0.63
       },
       "speeds": {
         "walk": 1.31,
-        "run": 4.85
+        "run": 4.91
       },
       "triangles": 29040,
       "height": 3.2,
-      "note": "passed 23 of 25"
+      "note": "passed 24 of 25"
     }
   },
   "name": "tree-monster",

@@ -12,7 +12,7 @@ import { type Glb, clips, pixelSize, readGlb, sample, writeGlb } from "./gltf.ts
 import { type Ctx, ROOT, conceptPrompt, main, parseOutput } from "./iso-art.ts";
 import { clipsFor } from "./kinds.ts";
 import { readAsset, readmeCost, statusTable, writeAsset } from "./ledger.ts";
-import { cut, inPlace, place, renameClips } from "./normalize.ts";
+import { cut, inPlace, loop, place, renameClips } from "./normalize.ts";
 
 const README = readFileSync(join(ROOT, "tools", "tripo", "README.md"), "utf8");
 const GUIDE = readFileSync(join(ROOT, "docs", "art-style.md"), "utf8");
@@ -153,6 +153,37 @@ test("export cuts a clip to its window, keeping the poses in it", () => {
   const cutClip = clips(readGlb(writeGlb(glb))).find((c) => c.name === "attack")!;
   assert.equal(cutClip.duration, 2);
   for (const t of [0, 0.7, 1.5, 2]) assert.deepEqual(sample(cutClip.channels[0], t).map((v) => v.toFixed(5)), sample(original.channels[0], t + 0.5).map((v) => v.toFixed(5)), `at ${t} s`);
+});
+
+// A run as Tripo's came (2026-11-05): 0.8 s holding one and a half strides of 0.5 s, so its
+// ends are a half stride apart, each foot where the other was.
+const STRIDE = 0.5;
+const keys = Array.from({ length: 49 }, (_, k) => k / 60);
+const foot = (x: number, phase: number) => keys.map((t) => {
+  const a = (2 * Math.PI * t) / STRIDE + phase;
+  return [x, -1 + 0.15 * Math.max(0, Math.sin(a)), 0.4 * Math.cos(a)];
+});
+const RUN: [string, any[]] = ["run", [[2, "translation", keys, foot(0.1, 0)], [3, "translation", keys, foot(-0.1, Math.PI)]]];
+
+test("export cuts a run to the stride whose ends meet and closes it, and keeps a clip that loops whole", () => {
+  const turn = (deg: number) => [0, Math.sin((deg * Math.PI) / 360), 0, Math.cos((deg * Math.PI) / 360)];
+  // The head turns 10 degrees over the walk and does not come back: no joint moves for it, so
+  // the walk is one cycle, but its last key is not its first.
+  const glb = walker([IDLE, ["walk", [footL, footR, [4, "rotation", [0, 1], [turn(0), turn(10)]]]], RUN]);
+  const before = measure(glb).clips.run.motion!;
+  assert.ok(before.gap > 0.3, `the run's ends are a half stride apart: ${before.gap}`);
+  const looped = Object.fromEntries(loop(glb, clipsFor("biped")).map((l) => [l.name, l]));
+  assert.ok(Math.abs(looped.run.to - looped.run.from - STRIDE) < 0.01, `one stride: ${looped.run.from}-${looped.run.to}`);
+  assert.ok(looped.run.gap < 0.01, `its ends meet: ${looped.run.gap}`);
+  assert.deepEqual([looped.walk.from, looped.walk.to], [0, 1], "the walk stays whole");
+  const after = readGlb(writeGlb(glb));
+  const m = measure(after);
+  assert.ok(Math.abs(m.clips.run.seconds - STRIDE) < 0.01 && m.clips.run.motion!.gap < 0.001, `run ${m.clips.run.seconds} s, gap ${m.clips.run.motion!.gap}`);
+  const head = clips(after).find((c) => c.name === "walk")!.channels[2];
+  assert.ok(head.values.at(-1)!.every((v, c) => Math.abs(v - head.values[0][c]) < 1e-6), `the head turns back: ${head.values.at(-1)}`);
+  // A clip with no cycle in it, the head rising 1 m a second, is left for `check` to fail.
+  const rising = walker([["run", [[4, "translation", [0, 1], [[0, 0.8, 0], [0, 1.8, 0]]]]]]);
+  assert.deepEqual(loop(rising, clipsFor("biped")), []);
 });
 
 test("the checks name what is missing and pass what is right", () => {

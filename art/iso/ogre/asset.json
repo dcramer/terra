@@ -29,40 +29,39 @@
       "note": "idle walk run attack death"
     },
     "export": {
-      "at": "2026-11-06T07:01:28.581Z",
+      "at": "2026-11-06T07:07:45.984Z",
       "credits": 0,
-      "minutes": 0.89925,
+      "minutes": 0.011483333333333333,
       "files": [
         "assets/models/iso/ogre.glb"
       ],
       "scale": 2.8558,
-      "turn": 0,
-      "note": "scaled 2.856, turned 0 deg, in place walk run, cut attack"
+      "turn": -1,
+      "note": "scaled 2.856, turned -1 deg, in place walk run, cut attack, looped run on 0.41-1.05 s (ends 4.2% apart before closing)"
     },
     "check": {
-      "at": "2026-11-06T07:02:19.313Z",
+      "at": "2026-11-06T07:07:51.650Z",
       "credits": 0,
-      "minutes": 0.00215,
-      "passed": 23,
+      "minutes": 0.0021333333333333334,
+      "passed": 24,
       "of": 25,
       "failed": [
-        "run loops",
         "triangles"
       ],
       "clips": {
         "idle": 15.33,
         "death": 3,
         "attack": 2,
-        "run": 1.25,
+        "run": 0.64,
         "walk": 2.33
       },
       "speeds": {
-        "walk": 1.57,
-        "run": 5.61
+        "walk": 1.58,
+        "run": 5.66
       },
       "triangles": 28551,
       "height": 2.8,
-      "note": "passed 23 of 25"
+      "note": "passed 24 of 25"
     }
   },
   "name": "ogre",
