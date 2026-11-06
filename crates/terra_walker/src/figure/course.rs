@@ -488,13 +488,12 @@ fn the_animation_course_measures_the_mans_transitions() {
                 .find(|&i| frames[i].speed < STOPPED_MPS)
                 .unwrap_or(*end);
             let moved = (stood.max(*from + 1)..*end)
-                .filter(|&i| {
+                .rfind(|&i| {
                     (0..2).any(|f| {
                         let d = frames[i].balls[f] - frames[i - 1].balls[f];
                         Vec2::new(d.x, d.z).length() > MOVED_M
                     })
                 })
-                .last()
                 .map_or(0.0, |i| (i - stood) as f32 * dt);
             put("stop.rest".into(), off);
             put("stop.settle".into(), moved);

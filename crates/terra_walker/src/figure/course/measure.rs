@@ -128,10 +128,10 @@ pub fn pop(
 /// flat ground the course stands on, its up `Y`).
 pub fn slide(frames: &[Frame], lowest: [f32; 2], (from, to): (usize, usize)) -> f32 {
     let mut worst: f32 = 0.0;
-    for foot in 0..2 {
+    for (foot, low) in lowest.iter().enumerate() {
         let mut stay = 0.0;
         for i in from.max(1)..to.min(frames.len()) {
-            let down = |f: &Frame| !f.aloft && f.balls[foot].y < lowest[foot] + DOWN_M;
+            let down = |f: &Frame| !f.aloft && f.balls[foot].y < low + DOWN_M;
             if down(&frames[i]) && down(&frames[i - 1]) {
                 let d = frames[i].balls[foot] - frames[i - 1].balls[foot];
                 stay += Vec3::new(d.x, 0.0, d.z).length();
