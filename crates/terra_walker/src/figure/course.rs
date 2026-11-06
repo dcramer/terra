@@ -483,10 +483,11 @@ fn stance_of(frame: &Frame, at: Vec3, facing: Vec3) -> [Vec2; 2] {
         .map(|b| Vec2::new((b - at).dot(right), (b - at).dot(facing)))
 }
 
-/// A transition's frames for `cargo xtask anim --trace <name>` (the log keeps them all): a
-/// line a frame of its time in, the clip and how far into it, the feet's lock curves and its
-/// three worst joints' pops (`measure::pop` of that frame alone), so a row's worst is read as
-/// a curve without a rebuild to print one.
+/// A transition's frames for `cargo xtask anim --trace <name>` (the log keeps them all), over
+/// its whole step: a line a frame of its time in, the clip and how far into it, the feet's lock
+/// curves, the body's speed, how far each ball moved over the ground that frame (the stop's
+/// settle and a slide read from it) and its three worst joints' pops (`measure::pop` of that
+/// frame alone), so a row's worst is read as a curve without a rebuild to print one.
 fn trace(
     name: &str,
     frames: &[Frame],
@@ -511,8 +512,13 @@ fn trace(
             .map(|(p, j)| format!("{} {p:.2}", JOINTS[*j]))
             .collect();
         let f = &frames[i];
+        let moved = (0..2).map(|b| {
+            let d = f.balls[b] - frames[i.saturating_sub(1)].balls[b];
+            Vec2::new(d.x, d.z).length() * 100.0
+        });
+        let moved: Vec<String> = moved.map(|cm| format!("{cm:.1}")).collect();
         println!(
-            "trace\t{name}\t+{:.3}\t{} {:.3}{}\tlock {:.2} {:.2}\tspeed {:.2}\t{}",
+            "trace\t{name}\t+{:.3}\t{} {:.3}{}\tlock {:.2} {:.2}\tspeed {:.2}\tballs {} cm\t{}",
             (i - from) as f32 / FPS,
             f.clip,
             f.seek,
@@ -520,6 +526,7 @@ fn trace(
             f.lock[0],
             f.lock[1],
             f.speed,
+            moved.join(" "),
             worst.join(", "),
         );
     }
@@ -606,7 +613,7 @@ fn the_animation_course_measures_the_mans_transitions() {
             &kicks,
             &steady,
             &[before, after],
-            (*from, to),
+            (*from, *end),
         );
     }
     // Each loop's seams: the frames it wraps, against its own steady state.
