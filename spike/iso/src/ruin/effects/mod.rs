@@ -1,11 +1,14 @@
 //! The fight's effects, made as the ARPGs make theirs (research/2026-11-05-iso-arpg-art-pipeline.md):
 //! emissive cores over bloom, flipbook flames, ribbon trails, spark streaks, and a light in
 //! every big effect. kit.rs holds what they share (the clock, bursts of sparks, textures);
-//! flame.rs the fires, spell.rs the hero's bolts, hit.rs his blow on the ogre.
+//! flame.rs the fires, spell.rs the hero's bolts, hit.rs his blow on the ogre, slash.rs his
+//! sword's trail through the chop, mark.rs the marks both leave on the ground.
 
 mod flame;
 mod hit;
 pub mod kit;
+mod mark;
+mod slash;
 mod spell;
 
 use bevy::prelude::*;
@@ -47,6 +50,12 @@ impl Stage {
     pub fn bark(&self) -> Vec3 {
         Vec3::new(self.target.x, self.floor + 1.5, self.target.y)
     }
+    /// The ground under `p`: the scene's land where it has one (the forest, the marsh), else
+    /// the stage's floor (the ruin's paving).
+    pub fn ground(&self, land: Option<&crate::terrain::Land>, p: Vec2) -> Vec3 {
+        let y = land.map_or(self.floor, |l| l.height(p));
+        Vec3::new(p.x, y, p.y)
+    }
 }
 
 /// Where the hero's blow meets the ogre.
@@ -55,7 +64,7 @@ pub struct Strike;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Stage>()
-        .add_plugins((kit::plugin, flame::plugin, spell::plugin, hit::plugin))
+        .add_plugins((kit::plugin, flame::plugin, spell::plugin, hit::plugin, slash::plugin, mark::plugin))
         .add_systems(Startup, |mut commands: Commands, stage: Res<Stage>| {
             commands.spawn((Strike, Transform::from_translation(stage.strike())));
         });

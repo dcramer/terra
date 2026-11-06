@@ -20,9 +20,23 @@ const STOP: f32 = 0.08;
 const FLINCH: f32 = 0.15;
 const RISE: f32 = 0.05;
 const FALL: f32 = 0.16;
-/// The star flash at the bite: its size (m) and life (s).
-const STAR: f32 = 1.0;
-const STAR_LIFE: f32 = 0.14;
+/// The star flash at the bite: its size (m) and life (s). A metre of white star hid the
+/// blow's bite in all three biomes (the lead's judges, 2026-11-06); the slash (slash.rs)
+/// carries the blow now, the star a small hot glint at the bite.
+const STAR: f32 = 0.5;
+const STAR_LIFE: f32 = 0.12;
+/// The light at the bite (lumens) and how fast it dies (s): 25k over 0.06 s was spent by
+/// the still's 0.05 s and lit no ground (the judges: "the sword's sparks don't light the
+/// ground"). A second light half a metre over the floor under the bite pools on the
+/// ground, as the ARPGs fake an impact's light (spell.rs's pool, traps.md).
+const BITE_LM: f32 = 70_000.0;
+const BITE_FALL: f32 = 0.14;
+const POOL_LM: f32 = 45_000.0;
+const POOL_UP: f32 = 0.5;
+const POOL_FALL: f32 = 0.2;
+/// The warm scuff the blow leaves on the floor under the bite: its size (m) and life (s).
+const MARK: f32 = 1.4;
+const MARK_LIFE: f32 = 0.7;
 
 #[derive(Resource, Default)]
 struct Hit {
@@ -39,7 +53,9 @@ struct Hit {
 enum Part {
     Flash(Handle<StandardMaterial>),
     Light,
+    Pool,
     Burst,
+    Mark,
 }
 
 pub fn plugin(app: &mut App) {
@@ -56,9 +72,35 @@ fn spawn(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    mut decals: ResMut<Assets<super::mark::Decal>>,
+    land: Option<Res<crate::terrain::Land>>,
     stage: Res<Stage>,
 ) {
     let strike = stage.strike();
+    let ground = stage.ground(land.as_deref(), strike.xz());
+    commands.spawn((
+        PointLight {
+            color: Color::srgb(1.0, 0.62, 0.32),
+            intensity: 0.0,
+            range: 3.5,
+            radius: 0.1,
+            ..default()
+        },
+        Transform::from_translation(ground + Vec3::Y * POOL_UP),
+        Part::Pool,
+    ));
+    let scuff = images.add(super::mark::mark_image());
+    let mark = super::mark::mark(
+        &mut commands,
+        &mut decals,
+        &scuff,
+        ground,
+        MARK,
+        MARK_LIFE,
+        LinearRgba::rgb(4.0, 1.3, 0.25),
+        LinearRgba::new(0.04, 0.03, 0.025, 0.55),
+    );
+    commands.entity(mark).insert(Part::Mark);
     let mut rng = Rng::new(0x41771);
     let star = images.add(super::kit::star_image());
     let flash = materials.add(glow(LinearRgba::rgb(9.0, 6.5, 4.0), Some(star)));
@@ -86,7 +128,8 @@ fn spawn(
     let out = (stage.foe - stage.knight).normalize().extend(0.0).xzy() + Vec3::Y * 0.45;
     let streak = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
     let spark = materials.add(glow(LinearRgba::rgb(14.0, 6.5, 1.6), None));
-    sparks(&mut commands, burst, &streak, &spark, &mut rng, 30, out, 0.8, (4.0, 10.0), 0.018);
+    // 30 streaks 1.8 cm thick read as a tiny spark star (the judges): more, thicker.
+    sparks(&mut commands, burst, &streak, &spark, &mut rng, 44, out, 0.8, (4.0, 11.0), 0.032);
 }
 
 /// Finds the knight and the ogre by where they stand, and the ogre's materials once its
@@ -202,13 +245,19 @@ fn show(
     clock: Res<Clock>,
     cam: Res<Cam>,
     hit: Res<Hit>,
-    mut parts: Query<(&Part, Option<&mut Transform>, Option<&mut PointLight>, Option<&mut Burst>)>,
+    mut parts: Query<(
+        &Part,
+        Option<&mut Transform>,
+        Option<&mut PointLight>,
+        Option<&mut Burst>,
+        Option<&mut super::mark::Mark>,
+    )>,
     mut bodies: Query<&mut Transform, (With<WorldAssetRoot>, Without<Part>)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     stage: Res<Stage>,
 ) {
     let a = if clock.still { STILL_AGE } else { clock.t - hit.at };
-    for (part, tr, light, burst) in &mut parts {
+    for (part, tr, light, burst, mark) in &mut parts {
         match part {
             Part::Flash(m) => {
                 // A hard star where the blade bites (kit::star), full at once and gone in
@@ -224,9 +273,13 @@ fn show(
                 }
             }
             Part::Light => {
-                light.unwrap().intensity = if a >= 0.0 { 25_000.0 * (-a / 0.06).exp() } else { 0.0 };
+                light.unwrap().intensity = if a >= 0.0 { BITE_LM * (-a / BITE_FALL).exp() } else { 0.0 };
+            }
+            Part::Pool => {
+                light.unwrap().intensity = if a >= 0.0 { POOL_LM * (-a / POOL_FALL).exp() } else { 0.0 };
             }
             Part::Burst => burst.unwrap().age = a,
+            Part::Mark => mark.unwrap().age = a,
         }
     }
     let Some(ogre) = hit.ogre else { return };

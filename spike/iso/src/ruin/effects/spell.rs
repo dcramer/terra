@@ -8,7 +8,8 @@
 //! first bolt has just struck and the other two are in the air.
 
 use super::Stage;
-use super::kit::{Burst, Cam, Clock, glow, sparks, star_image};
+use super::kit::{Burst, Cam, Clock, glow, image, smooth, sparks, star_image};
+use super::mark::{Mark, mark, mark_image};
 use crate::forest::Rng;
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
@@ -23,12 +24,13 @@ const BOLTS: usize = 3;
 /// The still's moment in the volley: bolt 0 struck 0.08 s ago, 1 and 2 in the air.
 const STILL: f32 = 0.58;
 /// How far behind a bolt its trail reaches, in the flight's share.
-const TAIL: f32 = 0.35;
+/// 0.35 left "thin streaks with no trail" (the lead's judges, 2026-11-06): longer.
+const TAIL: f32 = 0.5;
 const TRAIL_POINTS: usize = 16;
 /// The core's radius and how far it is drawn out along the flight, the halo's size (m).
-const CORE: f32 = 0.055;
-const CORE_LENGTH: f32 = 0.24;
-const HALO: f32 = 0.38;
+const CORE: f32 = 0.075;
+const CORE_LENGTH: f32 = 0.36;
+const HALO: f32 = 0.45;
 /// The bolt's own light, in lumens, lighting the bodies it passes. Riding 2 m up it spread
 /// a quarter of the braziers' light evenly over 4 m of floor: a violet wash, no pool (the
 /// crop of blind-ruin6/a.png; all three judges: "the bolts light nothing").
@@ -38,15 +40,29 @@ const BOLT_LM: f32 = 30_000.0;
 const POOL_LM: f32 = 25_000.0;
 const POOL_UP: f32 = 0.5;
 /// The trails' widths at the bolt (m): the outer blue streak and the white one inside it.
-const OUTER: f32 = 0.11;
-const INNER: f32 = 0.035;
+/// 0.11 and 0.035 were a hairline at 70 px a metre; as wide as the head, tapering to the tail.
+const OUTER: f32 = 0.24;
+const INNER: f32 = 0.07;
 /// The impact's light at its height, in lumens, and how fast it dies (s).
 /// 40k dying in 0.09 s left a faint burst at the still's 0.08 s (the judges).
 const FLASH_LM: f32 = 150_000.0;
 const FLASH_FALL: f32 = 0.15;
-/// The impact's star: its size at its height (m) and how long it lasts (s).
-const STAR: f32 = 1.5;
-const STAR_LIFE: f32 = 0.28;
+/// The impact's star: its size at its height (m) and how long it lasts (s). A 1.5 m white
+/// star for 0.28 s hid the target (and in the forest the caster) in every biome's judge
+/// (2026-11-06): now a small blue glint gone in a tenth, the impact carried by the shell,
+/// the sparks, the light and the mark, as Diablo IV's and Path of Exile 2's impacts are
+/// built (a hot flash a few frames long, an expanding shell, debris, a light, a decal).
+const STAR: f32 = 0.6;
+const STAR_LIFE: f32 = 0.1;
+/// The shell: a ring card swelling from `SHELL.0` to `SHELL.1` m across over `SHELL_LIFE` s.
+const SHELL: (f32, f32) = (0.3, 1.7);
+const SHELL_LIFE: f32 = 0.26;
+/// The impact's light on the floor under it, and how fast it dies (s).
+const GLINT_LM: f32 = 70_000.0;
+const GLINT_FALL: f32 = 0.3;
+/// The frost mark under the impact: its size (m) and life (s).
+const MARK: f32 = 1.5;
+const MARK_LIFE: f32 = 1.6;
 
 #[derive(Component)]
 enum Part {
@@ -56,6 +72,9 @@ enum Part {
     Pool,
     Trail(Handle<Mesh>, f32),
     Flash(Handle<StandardMaterial>),
+    Shell(Handle<StandardMaterial>),
+    Glint,
+    Mark,
     Bang,
 }
 
@@ -92,12 +111,16 @@ fn spawn(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    mut decals: ResMut<Assets<super::mark::Decal>>,
+    land: Option<Res<crate::terrain::Land>>,
     stage: Res<Stage>,
 ) {
     let stage = &*stage;
     let mut rng = Rng::new(0x5be11);
     let soft = images.add(crate::motes::soft_image());
     let star = images.add(star_image());
+    let ring = images.add(shell_image());
+    let frost = images.add(mark_image());
     let ball = meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap());
     let card = meshes.add(Rectangle::new(1.0, 1.0));
     let streak = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
@@ -108,8 +131,8 @@ fn spawn(
         cull_mode: None,
         ..glow(c, None)
     };
-    let outer = materials.add(ribbon_of(LinearRgba::rgb(0.5, 1.3, 4.5)));
-    let inner = materials.add(ribbon_of(LinearRgba::rgb(4.0, 6.0, 11.0)));
+    let outer = materials.add(ribbon_of(LinearRgba::rgb(0.9, 2.2, 8.0)));
+    let inner = materials.add(ribbon_of(LinearRgba::rgb(6.0, 9.0, 16.0)));
     let spark = materials.add(glow(LinearRgba::rgb(8.0, 12.0, 24.0), None));
     let off = Transform::from_scale(Vec3::ZERO);
     for i in 0..BOLTS {
@@ -169,8 +192,56 @@ fn spawn(
         let at = path(stage, i, 1.0);
         let burst = commands.spawn((Burst { at, age: -1.0 }, Bolt(i, Part::Bang))).id();
         let back = (stage.hero() - stage.bark()).normalize() + Vec3::Y * 0.6;
-        sparks(&mut commands, burst, &streak, &spark, &mut rng, 20, back, 0.9, (3.0, 8.0), 0.014);
+        sparks(&mut commands, burst, &streak, &spark, &mut rng, 30, back, 0.9, (3.0, 9.0), 0.026);
+        let shell = materials.add(glow(LinearRgba::rgb(1.2, 2.6, 8.0), Some(ring.clone())));
+        commands.spawn((
+            Mesh3d(card.clone()),
+            MeshMaterial3d(shell.clone()),
+            off,
+            bevy::light::NotShadowCaster,
+            Bolt(i, Part::Shell(shell)),
+        ));
+        let ground = stage.ground(land.as_deref(), at.xz());
+        commands.spawn((
+            PointLight {
+                color: Color::srgb(0.35, 0.6, 1.0),
+                intensity: 0.0,
+                range: 3.5,
+                radius: 0.1,
+                ..default()
+            },
+            Transform::from_translation(ground + Vec3::Y * POOL_UP),
+            Bolt(i, Part::Glint),
+        ));
+        let m = mark(
+            &mut commands,
+            &mut decals,
+            &frost,
+            ground,
+            MARK,
+            MARK_LIFE,
+            LinearRgba::rgb(0.9, 2.2, 6.5),
+            LinearRgba::new(0.03, 0.045, 0.07, 0.75),
+        );
+        commands.entity(m).insert(Bolt(i, Part::Mark));
     }
+}
+
+/// The impact's shell as a white texture, its brightness in the alpha: a sphere's edge as a
+/// card draws it, bright at the rim and faint inside, gone outside.
+fn shell_image() -> Image {
+    let n = 128;
+    image(n, n, |x, y| {
+        let p = (Vec2::new(x as f32, y as f32) + 0.5) / n as f32 * 2.0 - 1.0;
+        [1.0, 1.0, 1.0, shell(p.length())]
+    })
+}
+
+/// The shell's brightness at `r` of its radius.
+fn shell(r: f32) -> f32 {
+    let rim = (-((r - 0.86) / 0.07).powi(2)).exp();
+    let inside = 0.25 * (r / 0.86).powi(4) * (1.0 - smooth(0.86, 0.9, r));
+    (rim + inside).min(1.0)
 }
 
 /// A ribbon `width` wide at the bolt through `points` (tail first) facing the camera at
@@ -189,7 +260,8 @@ fn ribbon(points: &[Vec3], eye: Vec3, width: f32) -> Mesh {
         let w = width * k.powf(0.7);
         pos.push((p + side * w * 0.5).to_array());
         pos.push((p - side * w * 0.5).to_array());
-        let a = k * k * k;
+        // k cubed left the trail's back half invisible: fading slower, it reads as a trail.
+        let a = k.powf(1.6);
         col.extend([[1.0, 1.0, 1.0, a]; 2]);
         if j + 1 < n {
             let b = (j * 2) as u32;
@@ -212,6 +284,7 @@ fn fly(
         Option<&mut Transform>,
         Option<&mut PointLight>,
         Option<&mut Burst>,
+        Option<&mut Mark>,
     )>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -219,7 +292,7 @@ fn fly(
 ) {
     let stage = &*stage;
     let p = if clock.still { STILL } else { clock.t.rem_euclid(PERIOD) };
-    for (Bolt(i, part), tr, light, burst) in &mut parts {
+    for (Bolt(i, part), tr, light, burst, mark) in &mut parts {
         let (s, struck) = flight(*i, p);
         let flying = (0.0..1.0).contains(&s);
         let head = path(stage, *i,s.clamp(0.0, 1.0));
@@ -271,9 +344,27 @@ fn fly(
                 tr.scale = Vec3::splat(if on { STAR * (1.0 - 0.35 * k) } else { 0.0 });
                 if let Some(mut m) = materials.get_mut(mat) {
                     let f = (1.0 - k).powf(1.5);
-                    m.base_color = LinearRgba::rgb(12.0 * f, 16.0 * f, 28.0 * f).into();
+                    m.base_color = LinearRgba::rgb(4.0 * f, 7.0 * f, 18.0 * f).into();
                 }
             }
+            Part::Shell(mat) => {
+                let mut tr = tr.unwrap();
+                let k = (struck / SHELL_LIFE).clamp(0.0, 1.0);
+                let on = (0.0..SHELL_LIFE).contains(&struck);
+                tr.translation = path(stage, *i, 1.0);
+                tr.rotation = cam.rot;
+                let grow = 1.0 - (1.0 - k) * (1.0 - k);
+                tr.scale = Vec3::splat(if on { SHELL.0 + (SHELL.1 - SHELL.0) * grow } else { 0.0 });
+                if let Some(mut m) = materials.get_mut(mat) {
+                    let f = (1.0 - k).powf(1.3);
+                    m.base_color = LinearRgba::rgb(1.2 * f, 2.6 * f, 8.0 * f).into();
+                }
+            }
+            Part::Glint => {
+                light.unwrap().intensity =
+                    if struck >= 0.0 { GLINT_LM * (-struck / GLINT_FALL).exp() } else { 0.0 };
+            }
+            Part::Mark => mark.unwrap().age = struck,
             Part::Bang => {
                 if let Some(mut light) = light {
                     light.intensity = if struck >= 0.0 {
