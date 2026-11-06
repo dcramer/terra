@@ -7,9 +7,13 @@
 use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 
-/// The moon on the ground, in lux, and the sky's fill, in nits.
-pub const MOON_LUX: f32 = 1100.0;
-pub const SKY_NITS: f32 = 22.0;
+/// The moon on the ground, in lux, and the sky's fill, in nits: raised with their colours'
+/// turn bluer (iso-art j49) so each lights as brightly as before (luminance 1100 x 0.48 and
+/// 22 x 0.25 of their sRGB 0.6, 0.72, 1 and 0.35, 0.5, 1).
+pub const MOON_LUX: f32 = 1420.0;
+pub const SKY_NITS: f32 = 34.0;
+/// The sky fill's colour (sRGB): cold against the fires' amber, as V Rising's marsh.
+const SKY: Color = Color::srgb(0.22, 0.36, 1.0);
 /// Toward the moon: 42 degrees up behind the fight, left of the camera's line, so its
 /// mirror falls on the far channel's left reach a seventh down the frame, a fifth of the
 /// frame left of the caster, and its lane runs down the water toward the eye clear of the
@@ -17,8 +21,9 @@ pub const SKY_NITS: f32 = 22.0;
 /// blind-marsh6; 10 degrees to the right it lay behind the caster and the bolts lost their
 /// contrast, the judge 2026-11-06).
 pub const MOON: Vec3 = Vec3::new(-0.492, 0.670, -0.556);
-/// Its light's colour (linear rgb, the key's and the lane's: sRGB 0.6, 0.72, 1).
-pub const MOON_COLOUR: Vec3 = Vec3::new(0.319, 0.477, 1.0);
+/// Its light's colour (linear rgb, the key's and the lane's: sRGB 0.49, 0.64, 1; was 0.6,
+/// 0.72, 1 to iso-art j48).
+pub const MOON_COLOUR: Vec3 = Vec3::new(0.2, 0.37, 1.0);
 
 /// The marsh's ground fog: thin, cold and low, so it does not grey the deep blue water and
 /// the fight (the default's grey cards cut the frame's saturation, iso-art j24).
@@ -39,7 +44,7 @@ pub fn plugin(app: &mut App) {
 
 fn spawn(mut commands: Commands) {
     commands.insert_resource(GlobalAmbientLight {
-        color: Color::srgb(0.35, 0.5, 1.0),
+        color: SKY,
         brightness: SKY_NITS,
         ..default()
     });
