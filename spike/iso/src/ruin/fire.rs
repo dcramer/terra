@@ -18,6 +18,33 @@ pub const BRAZIER_LM: f32 = 140_000.0;
 pub const TORCH_LM: f32 = 25_000.0;
 const BOWL: f32 = 0.9;
 
+/// The braziers' and torches' sparks and smoke (flame.rs draws them): a few embers a second
+/// off each, 7 cm hot streaks (under 7 cm a mote does not show at 960 px, scene.md) thrown
+/// 1.5 to 3 m up and off on the night's wind; and a thin column of smoke, 25 cm across at
+/// the flame's tip and a metre and a half at its top 3 m up, warm where the fire lights it
+/// from below, leaning on the wind. A column darker than the floor did not show (ruin-r16:
+/// it rises off the pool over the night's black flags), so it is a dim grey over the floor.
+pub fn plume() -> crate::ruin::effects::Plume {
+    let wind = super::ambient::WIND * 0.36;
+    crate::ruin::effects::Plume {
+        embers: 18.0,
+        spark: 0.07,
+        streak: (0.07, 0.24),
+        trail: 0.12,
+        rise: (1.2, 2.0),
+        life: (1.8, 3.2),
+        puffs: 26.0,
+        smoke_life: (4.5, 6.0),
+        wide: (0.36, 1.8),
+        climb: 0.55,
+        alpha: 0.48,
+        lit: Vec3::new(0.42, 0.17, 0.05),
+        dark: Vec3::new(0.05, 0.045, 0.045),
+        cool: 0.55,
+        wind,
+    }
+}
+
 pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,

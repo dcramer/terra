@@ -26,6 +26,7 @@ use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(light::fog())
+        .insert_resource(fire::plume())
         .add_systems(
             Startup,
             (

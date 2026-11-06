@@ -13,6 +13,8 @@ mod spell;
 
 use bevy::prelude::*;
 
+pub use flame::Plume;
+
 /// Where the fight stands, for the effects to aim at and find the bodies by: the hero, the
 /// foe his blow lands on, the foe his bolts fly at (each a place on the floor), and the
 /// floor's height. The ruin's is the default (fight.rs's CAST); another scene inserts its

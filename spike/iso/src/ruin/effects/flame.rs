@@ -63,8 +63,62 @@ struct Puff {
     seed: f32,
 }
 
+/// How a scene's fires spark and smoke. The default is as the fires stood (the marsh's camp
+/// fire keeps it); the ruin inserts its braziers' (ruin/fire.rs's `plume`) before the plugin.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct Plume {
+    /// Embers a fire for each metre of its flame's size.
+    pub embers: f32,
+    /// An ember's width (m), and its streak's least and most length (m) and how many seconds
+    /// of its motion the streak spans.
+    pub spark: f32,
+    pub streak: (f32, f32),
+    pub trail: f32,
+    /// How fast an ember is thrown up (m/s x size / 0.7), and how long it lives (s).
+    pub rise: (f32, f32),
+    pub life: (f32, f32),
+    /// Smoke puffs a fire for each metre of size, and how long each lives (s).
+    pub puffs: f32,
+    pub smoke_life: (f32, f32),
+    /// A puff's width at birth and what it grows by over its life (x size), how fast it
+    /// climbs (m/s x size / 0.7) and its most alpha.
+    pub wide: (f32, f32),
+    pub climb: f32,
+    pub alpha: f32,
+    /// The smoke low, lit by its fire, and its own colour above (linear, unlit: not exposed).
+    pub lit: Vec3,
+    pub dark: Vec3,
+    /// How far through its life a puff has climbed out of the fire's light (0..1).
+    pub cool: f32,
+    /// The air the smoke leans on (x, z, m/s); embers drift on it as they slow.
+    pub wind: Vec2,
+}
+
+impl Default for Plume {
+    fn default() -> Self {
+        Plume {
+            embers: 30.0,
+            spark: 0.035,
+            streak: (0.03, 0.09),
+            trail: 0.05,
+            rise: (0.9, 1.6),
+            life: (1.4, 2.8),
+            puffs: 13.0,
+            smoke_life: (3.5, 5.0),
+            wide: (0.45, 2.6),
+            climb: 0.55,
+            alpha: 0.6,
+            lit: Vec3::new(0.34, 0.15, 0.06),
+            dark: Vec3::new(0.035, 0.035, 0.04),
+            cool: 0.35,
+            wind: Vec2::new(0.32, 0.14),
+        }
+    }
+}
+
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, book)
+    app.init_resource::<Plume>()
+        .add_systems(Startup, book)
         .add_systems(PostStartup, spawn.after(super::kit::Found))
         .add_systems(Update, (flip, core, embers, smoke));
 }
@@ -152,6 +206,7 @@ fn spawn(
     mut commands: Commands,
     fires: Res<Fires>,
     book: Res<Book>,
+    plume: Res<Plume>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
@@ -192,7 +247,7 @@ fn spawn(
                 seed: rng.f() * 30.0,
             },
         ));
-        for _ in 0..(size * 30.0) as usize {
+        for _ in 0..(size * plume.embers) as usize {
             commands.spawn((
                 Mesh3d(streak.clone()),
                 MeshMaterial3d(ember_mat.clone()),
@@ -200,14 +255,17 @@ fn spawn(
                 bevy::light::NotShadowCaster,
                 Ember {
                     foot: at + Vec3::Y * size * 0.3,
-                    life: rng.range(1.4, 2.8),
+                    life: rng.range(plume.life.0, plume.life.1),
                     phase: rng.range(0.0, 3.0),
                     seed: rng.f() * 100.0,
-                    rise: rng.range(0.9, 1.6) * size / 0.7,
+                    rise: rng.range(plume.rise.0, plume.rise.1) * size / 0.7,
                 },
             ));
         }
-        for i in 0..(size * 13.0) as usize {
+        let puffs = (size * plume.puffs) as usize;
+        // Born evenly through the longest life, so the column is unbroken.
+        let gap = plume.smoke_life.1 / puffs.max(1) as f32;
+        for i in 0..puffs {
             commands.spawn((
                 Mesh3d(card.clone()),
                 MeshMaterial3d(materials.add(StandardMaterial {
@@ -222,8 +280,8 @@ fn spawn(
                 Puff {
                     foot: at + Vec3::Y * tall * 0.75,
                     size,
-                    life: rng.range(3.5, 5.0),
-                    phase: i as f32 * 0.55 + rng.range(0.0, 0.3),
+                    life: rng.range(plume.smoke_life.0, plume.smoke_life.1),
+                    phase: i as f32 * gap + rng.range(0.0, 0.3),
                     seed: rng.f() * 10.0,
                 },
             ));
@@ -276,53 +334,69 @@ fn core(clock: Res<Clock>, cam: Res<Cam>, mut cores: Query<(&Core, &mut Transfor
 
 /// Where an ember is `a` seconds up: thrown up on the hot air, slowing, swirling, off on the
 /// wind.
-fn ember_at(e: &Ember, a: f32) -> Vec3 {
+fn ember_at(e: &Ember, wind: Vec2, a: f32) -> Vec3 {
     let s = e.seed;
     let start = Vec3::new((s * 7.1).sin(), 0.0, (s * 3.7).cos()) * 0.12;
     let swirl = Vec3::new((a * 3.0 + s).sin(), 0.0, (a * 2.3 + s * 1.7).cos()) * 0.18 * a;
     e.foot
         + start
         + swirl
-        + Vec3::new(0.28, 0.0, 0.12) * a * a
+        + Vec3::new(wind.x, 0.0, wind.y) * 0.875 * a * a
         + Vec3::Y * e.rise * (a - 0.18 * a * a)
 }
 
-fn embers(clock: Res<Clock>, mut embers: Query<(&Ember, &mut Transform)>) {
+/// An ember `a` seconds up: where it is, and its width and streak's length, fading as it
+/// dies (`blink` its flicker, 0.5 to 1).
+fn ember_shape(e: &Ember, plume: &Plume, a: f32, blink: f32) -> (Vec3, Vec3, f32, f32) {
+    let p = ember_at(e, plume.wind, a);
+    let v = (p - ember_at(e, plume.wind, (a - 0.03).max(0.0))) / 0.03;
+    let k = 1.0 - a / e.life;
+    let w = plume.spark * k.powf(0.6) * blink;
+    let long = (v.length() * plume.trail).clamp(plume.streak.0, plume.streak.1) * k;
+    (p, v, w, long)
+}
+
+fn embers(clock: Res<Clock>, plume: Res<Plume>, mut embers: Query<(&Ember, &mut Transform)>) {
     let t = clock.t;
     for (e, mut tr) in &mut embers {
         let a = (t + e.phase).rem_euclid(e.life);
-        let p = ember_at(e, a);
-        let v = (p - ember_at(e, (a - 0.03).max(0.0))) / 0.03;
-        let k = 1.0 - a / e.life;
         let blink = 0.75 + 0.25 * (t * 23.0 + e.seed).sin();
-        let w = 0.035 * k.powf(0.6) * blink;
+        let (p, v, w, long) = ember_shape(e, &plume, a, blink);
         tr.translation = p;
         tr.rotation = Quat::from_rotation_arc(Vec3::Z, v.normalize_or(Vec3::Y));
-        tr.scale = Vec3::new(w, w, (v.length() * 0.05).clamp(0.03, 0.09) * k);
+        tr.scale = Vec3::new(w, w, long);
     }
+}
+
+/// A puff `a` seconds old: where it is, its width, and its colour and alpha (linear).
+fn puff_at(p: &Puff, plume: &Plume, a: f32) -> (Vec3, f32, Vec3, f32) {
+    let k = a / p.life;
+    let wide = p.size * (plume.wide.0 + plume.wide.1 * k);
+    let at = p.foot
+        + Vec3::Y * (plume.climb * a * p.size / 0.7)
+        + Vec3::new(plume.wind.x, 0.0, plume.wind.y) * a
+        + Vec3::new((a + p.seed).sin(), 0.0, (a * 0.7 + p.seed).cos()) * 0.08 * a;
+    let colour = plume.lit.lerp(plume.dark, smooth(0.0, plume.cool, k));
+    let alpha = plume.alpha * smooth(0.0, 0.12, k) * (1.0 - k).powf(1.5);
+    (at, wide, colour, alpha)
 }
 
 fn smoke(
     clock: Res<Clock>,
     cam: Res<Cam>,
+    plume: Res<Plume>,
     mut puffs: Query<(&Puff, &mut Transform, &MeshMaterial3d<StandardMaterial>)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let t = clock.t;
     for (p, mut tr, mat) in &mut puffs {
         let a = (t + p.phase).rem_euclid(p.life);
-        let k = a / p.life;
-        let wide = p.size * (0.45 + 2.6 * k);
-        tr.translation = p.foot
-            + Vec3::Y * (0.55 * a * p.size / 0.7)
-            + Vec3::new(0.32, 0.0, 0.14) * a
-            + Vec3::new((a + p.seed).sin(), 0.0, (a * 0.7 + p.seed).cos()) * 0.08 * a;
+        let (at, wide, c, alpha) = puff_at(p, &plume, a);
+        tr.translation = at;
         tr.rotation = cam.rot * Quat::from_rotation_z(p.seed + a * 0.25);
         tr.scale = Vec3::new(wide, wide, 1.0);
-        let warm = Vec3::new(0.34, 0.15, 0.06).lerp(Vec3::new(0.035, 0.035, 0.04), smooth(0.0, 0.35, k));
-        let alpha = 0.6 * smooth(0.0, 0.12, k) * (1.0 - k).powf(1.5);
         if let Some(mut m) = materials.get_mut(&mat.0) {
-            m.base_color = Color::linear_rgba(warm.x, warm.y, warm.z, alpha);
+            m.base_color = Color::linear_rgba(c.x, c.y, c.z, alpha);
         }
     }
 }
@@ -343,6 +417,43 @@ mod tests {
         // Across the card, less of the tip burns than of the root.
         let cover = |v: f32| (0..32).map(|i| flame(&b, &f, &s, i as f32 / 32.0, v, 0.3)[3]).sum::<f32>();
         assert!(cover(0.92) < 0.5 * cover(0.2), "{} {}", cover(0.92), cover(0.2));
+    }
+
+    /// The ruin's braziers smoke and spark where the camera sees it: each ember at least the
+    /// 7 cm that shows at 960 px while young, rising and drifting downwind as it dims; the
+    /// smoke a column climbing over 2.5 m, leaning downwind, narrow at the flame and wider
+    /// above, warm low and dark high.
+    #[test]
+    fn the_ruins_braziers_smoke_and_spark_downwind() {
+        let plume = crate::ruin::fire::plume();
+        let wind = Vec3::new(plume.wind.x, 0.0, plume.wind.y).normalize();
+        let size = 0.7;
+        let e = Ember {
+            foot: Vec3::ZERO,
+            life: plume.life.0,
+            phase: 0.0,
+            seed: 3.0,
+            rise: plume.rise.0 * size / 0.7,
+        };
+        let (_, _, young, long) = ember_shape(&e, &plume, 0.1, 1.0);
+        assert!(young >= 0.065 && long >= young, "young ember {young} x {long} m");
+        let (p, _, old, _) = ember_shape(&e, &plume, e.life * 0.95, 1.0);
+        assert!(p.y > 1.2 && p.dot(wind) > 0.3, "the ember ends at {p}");
+        assert!(old < 0.4 * young, "the ember fades: {old} of {young}");
+        let puff = Puff {
+            foot: Vec3::ZERO,
+            size,
+            life: plume.smoke_life.1,
+            phase: 0.0,
+            seed: 1.0,
+        };
+        let (low, w0, c0, a0) = puff_at(&puff, &plume, puff.life * 0.15);
+        let (high, w1, c1, _) = puff_at(&puff, &plume, puff.life * 0.85);
+        assert!(high.y - low.y > 2.0 && high.y > 2.5, "the column climbs {low} to {high}");
+        assert!((high - low).dot(wind) > 0.8, "the column leans downwind: {low} to {high}");
+        assert!(w0 < 0.6 && w1 > 2.0 * w0, "narrow low, wider high: {w0} to {w1} m");
+        assert!(c0.x > 4.0 * c1.x && c0.x > c0.z * 3.0, "warm low {c0}, dark high {c1}");
+        assert!(a0 > 0.25, "the smoke shows low: alpha {a0}");
     }
 
     /// The book plays on and wraps.
