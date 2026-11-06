@@ -15,7 +15,9 @@ Checks:
                 skeleton's do; one without a child the same way as in our skeleton. Judged
                 on a rig with twist bones (twist.py turns them about +Y); Quaternius's
                 skeleton has none and stays as made (D599), so it is reported, not judged
-  weights       every vertex weighted, at most 4 bones each, weights summing to 1
+  weights       every vertex weighted to our skeleton's bones alone (not the exporter's
+                neutral_bone, which takes a vertex left unweighted), at most 4 bones each,
+                weights summing to 1
   seams         copies of a vertex split at a texture seam carry the same weights, or the
                 seam opens into a gap as the body moves
   reach         no vertex driven mostly by a bone far from it when another is much nearer
@@ -145,6 +147,11 @@ else:
 # Weights.
 groups = {g.index: g.name for g in body.vertex_groups}
 bones = {b.name: b for b in arm.data.bones}
+# Our skeleton's bones, the mannequin's and the twist bones convert_rig.py adds. A weight to any
+# other bone drives the vertex from outside it: Blender's glTF exporter binds a vertex with no
+# weights to a `neutral_bone` of its own, so an unweighted vertex arrives weighted to that.
+ours = set(ref_parents) | {n for n, _ in twist.names()}
+outside_at = {}
 mw = body.matrix_world
 height = max((mw @ v.co).z for v in body.data.vertices) - min((mw @ v.co).z for v in body.data.vertices)
 unweighted = over = bad_sum = far = 0
@@ -166,6 +173,10 @@ def bone_distance(p, b):
 main_bone = []
 for v in body.data.vertices:
     ws = [(groups[g.group], g.weight) for g in v.groups if g.weight > 0.001 and groups.get(g.group) in bones]
+    for name, _ in ws:
+        if name not in ours:
+            outside_at[name] = outside_at.get(name, 0) + 1
+    ws = [(name, w) for name, w in ws if name in ours]
     if not ws:
         unweighted += 1
         main_bone.append(None)
@@ -185,8 +196,9 @@ for v in body.data.vertices:
             far += 1
             far_at[name] = far_at.get(name, 0) + 1
 n = len(body.data.vertices)
-report["weights"] = {"vertices": n, "unweighted": unweighted, "over_4_bones": over, "not_summing_to_1": bad_sum}
-ok["weights"] = unweighted == 0 and over == 0
+report["weights"] = {"vertices": n, "unweighted": unweighted, "over_4_bones": over, "not_summing_to_1": bad_sum,
+                     "outside_skeleton": dict(sorted(outside_at.items(), key=lambda t: -t[1]))}
+ok["weights"] = unweighted == 0 and over == 0 and not outside_at
 report["weights"]["note"] = "sums are normalised on export" if bad_sum else ""
 report["reach"] = {"far_share": round(far / n, 4), "at": dict(sorted(far_at.items(), key=lambda t: -t[1])[:4])}
 ok["reach"] = far / n <= LIMITS["reach_fail_share"]
