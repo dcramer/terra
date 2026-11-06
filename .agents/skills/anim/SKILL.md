@@ -11,7 +11,7 @@ Read D631 (the methods, in order), D455 (the foot lock), D452 (the ratchet's rul
 
 - `cargo xtask anim`: the animation course (`crates/terra_walker/src/figure/course.rs`, an ignored test run in release, seconds once built), a line a criterion of `tools/anim/criteria.json`, held to `tools/anim/baseline.tsv`; its last lines name the failing row to take next (most `noticed`, then most bars out) and that row's worst transition: its clips, the joint and when.
 - Every transition's line is in `target/anim/scorecard.log` (`anim<TAB>name<TAB>family<TAB>from -> to<TAB>pop ...`). Read the row's lines there, never the whole log.
-- A number may never get worse; a trade is raised in the same commit, `cargo xtask anim --raise "<why>"`. Never hand-edit or lower the baseline (nightly's, D414; not wired into `cargo xtask nightly` yet: next steps).
+- A number may never get worse; a trade is raised in the same commit, `cargo xtask anim --raise "<why>"`. Never hand-edit or lower the baseline: `cargo xtask nightly`'s anim stage lowers it (D414), so a gain is banked the night after it lands; the push hook refuses a row raised without its why.
 - The course: steps in `course()` (a transition is a `tagged` step and its family), the measures in `course/measure.rs` (unit-tested). A new criterion is a family or measure the test prints and a row of `criteria.json`. Never change a step or a measure to make a blend pass; a measure found wrong is fixed with a unit test that shows it.
 
 ## The loop, one job

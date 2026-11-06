@@ -17,12 +17,16 @@ pub(crate) const COMBAT: &str = "tools/combat/baseline.tsv";
 /// The controller scorecard's baseline (D457): id, value, why.
 pub(crate) const CONTROLLER: &str = "tools/controller/baseline.tsv";
 
+/// The animation scorecard's baseline (D631): id, value, why.
+pub(crate) const ANIM: &str = "tools/anim/baseline.tsv";
+
 /// Whether a file, from the root, is a ratchet's baseline: a file of the artifacts folder, the
 /// size baseline or a scorecard's baseline.
 pub(crate) fn is_baseline(file: &str) -> bool {
     file == SIZES
         || file == COMBAT
         || file == CONTROLLER
+        || file == ANIM
         || file
             .strip_prefix(ARTIFACTS)
             .is_some_and(|rest| rest.starts_with('/'))
@@ -96,12 +100,14 @@ fn refused_rows(file: &str, old: &str, new: &str) -> Vec<String> {
     refused
 }
 
-/// The command that raises a baseline's rows with a why (D414, D452, D457).
+/// The command that raises a baseline's rows with a why (D414, D452, D457, D631).
 fn raise_command(file: &str) -> &'static str {
     if file == COMBAT {
         "cargo xtask combat --raise \"<why>\""
     } else if file == CONTROLLER {
         "cargo xtask controller --raise \"<why>\""
+    } else if file == ANIM {
+        "cargo xtask anim --raise \"<why>\""
     } else if file.starts_with(&format!("{ARTIFACTS}/fuzz/")) {
         "cargo xtask fuzz --raise \"<why>\""
     } else {
@@ -180,6 +186,9 @@ mod tests {
         let refused = refused_rows(CONTROLLER, old, &added);
         assert_eq!(refused.len(), 1, "{refused:?}");
         assert!(refused[0].contains("cargo xtask controller --raise"));
+        let refused = refused_rows(ANIM, old, &by_hand);
+        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert!(refused[0].contains("cargo xtask anim --raise"));
         let lowered = old.replace("\t3\t", "\t2\t");
         assert!(refused_rows(COMBAT, old, &lowered).is_empty());
     }

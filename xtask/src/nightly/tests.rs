@@ -17,8 +17,8 @@ fn every_stage_holds_in_its_probe_and_lowers_only_in_the_run() {
     }
     let lowering = STAGES.iter().filter(|s| s.run.contains(&"--lower")).count();
     assert_eq!(
-        lowering, 6,
-        "artifacts quick and full, fuzz, sizes, combat and controller lower"
+        lowering, 7,
+        "artifacts quick and full, fuzz, sizes, combat, controller and anim lower"
     );
 }
 
@@ -83,6 +83,12 @@ fn a_lowering_holds_on_a_moved_main_only_where_nothing_it_measured_changed() {
     let walked: BTreeSet<String> = ["tools/controller/criteria.json".to_string()].into();
     assert_eq!(holds(CONTROLLER, &walked, false), Holds::Rescore);
     assert_eq!(holds(COMBAT, &walked, false), Holds::Keep);
+    // The animation course's by what it poses: a clip or its own baseline, not the
+    // controller's tools.
+    assert_eq!(holds(ANIM, &clip, false), Holds::Rescore);
+    assert_eq!(holds(ANIM, &walked, false), Holds::Keep);
+    let banked: BTreeSet<String> = [ANIM.to_string()].into();
+    assert_eq!(holds(ANIM, &banked, false), Holds::Rescore);
 }
 
 /// A git command in a test's own repository, which must pass.

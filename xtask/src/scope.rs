@@ -193,6 +193,22 @@ pub(crate) const CONTROLLER: &[&str] = &[
     "tools/scorecard/",
 ];
 
+/// What the animation scorecard reads (D631, tools/anim): the course and the figure it poses
+/// (terra_walker's figure, its clips, the foot lock, distance and stride of terra_motion,
+/// the world's loading it stands on), the mover's numbers and the sword set it drives, and the
+/// scorecard's own tools. A change here is measured again before a lowering of its baseline is
+/// carried.
+pub(crate) const ANIM: &[&str] = &[
+    "crates/terra_motion/src/",
+    "crates/terra_walker/src/",
+    "crates/terra_world/src/",
+    "assets/data/movers.ron",
+    "assets/data/moves/",
+    "assets/models/character/",
+    "tools/anim/",
+    "tools/scorecard/",
+];
+
 /// What a change touches.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Scope {

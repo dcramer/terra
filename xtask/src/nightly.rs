@@ -2,9 +2,9 @@
 //! In its own worktree, `.git/terra-nightly/src`, detached at origin/main, it runs what no hook
 //! runs whole: clippy and every test of the workspace, the slow ones too, the kit checker, the
 //! artifacts ratchet quick and over every scene, fuzz over seeds 0 to 200, the size ratchet, the
-//! combat and controller scorecards (D452, D457; the controller's bench, and the duel's and
-//! the filmed course's rows from a clean film of main, too) and the docs check after rendering
-//! their indexes.
+//! combat, controller and animation scorecards (D452, D457, D631; the controller's bench, and
+//! the duel's and the filmed course's rows from a clean film of main, too) and the docs check
+//! after rendering their indexes.
 //!
 //! When every stage passes it is the one place a baseline is lowered (D414): what fell, and an
 //! index that was stale, is committed alone and pushed to main from this machine, with the
@@ -14,7 +14,7 @@
 //! what happened. `TERRA_NIGHTLY=0`
 //! turns it off. `--probe` is bisect's: one stage at the commit checked out.
 
-use crate::baselines::{self, ARTIFACTS, COMBAT, CONTROLLER, SIZES};
+use crate::baselines::{self, ANIM, ARTIFACTS, COMBAT, CONTROLLER, SIZES};
 use crate::check::niced;
 use crate::stage::{self, Said, Step};
 use crate::worktrees::{git, git_output};
@@ -30,7 +30,7 @@ pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "nightly",
         takes: "",
-        does: "the full run on origin/main (D411), scheduled as continuous's first check: every test, the kits, the artifacts ratchet over every scene, fuzz over seeds 0 to 200, sizes, the combat and controller scorecards and docs, in its own worktree; lowers the baselines to what it measured and pushes that alone, or bisects a failure to its first bad commit; .git/terra-nightly/report.txt. TERRA_NIGHTLY=0 turns it off",
+        does: "the full run on origin/main (D411), scheduled as continuous's first check: every test, the kits, the artifacts ratchet over every scene, fuzz over seeds 0 to 200, sizes, the combat, controller and animation scorecards and docs, in its own worktree; lowers the baselines to what it measured and pushes that alone, or bisects a failure to its first bad commit; .git/terra-nightly/report.txt. TERRA_NIGHTLY=0 turns it off",
         group: "Play and check",
         run: nightly,
     },
@@ -105,6 +105,7 @@ const KITS: &[&str] = &[
 const SIZES_HOLD: &[&str] = &["cargo", "xtask", "sizes"];
 const COMBAT_HOLD: &[&str] = &["node", "tools/combat/scorecard.ts"];
 const CONTROLLER_HOLD: &[&str] = &["node", "tools/controller/scorecard.ts"];
+const ANIM_HOLD: &[&str] = &["node", "tools/anim/scorecard.ts"];
 const RENDER: &[&str] = &["node", "tools/docs/docs.ts", "--render"];
 const DOCS: &[&str] = &["node", "tools/docs/docs.ts"];
 const ARTIFACTS_BUILD: &[&str] = &[
@@ -215,6 +216,15 @@ const STAGES: &[Stage] = &[
             "--filmed",
         ],
         hold: CONTROLLER_HOLD,
+    },
+    Stage {
+        name: "anim",
+        said: Said::Printed,
+        build: &[],
+        // The animation course, deterministic and headless (D631): a run lowers what fell, so
+        // a job's gain is banked here and never by its own --lower (D414).
+        run: &["node", "tools/anim/scorecard.ts", "--lower"],
+        hold: ANIM_HOLD,
     },
     Stage {
         name: "docs rendered",
@@ -564,19 +574,15 @@ enum Holds {
 /// Whether a file a run lowered at one commit still holds on a later main: an artifacts or
 /// fuzz baseline only if nothing building's check reads changed in between (`building`, as
 /// the check's own scoping decides) and the file itself did not; a scorecard's baseline as it
-/// was only if nothing the scorecard reads (`scope::COMBAT`, `scope::CONTROLLER`, the baseline
-/// among them) changed, else scored again there, as its stage takes a minute or two.
+/// was only if nothing the scorecard reads (`scope::COMBAT`, `scope::CONTROLLER`,
+/// `scope::ANIM`, the baseline among them) changed, else scored again there, as its stage
+/// takes a minute or two.
 fn holds(path: &str, since: &BTreeSet<String>, building: bool) -> Holds {
     if path == SIZES {
         Holds::Merge
     } else if !baselines::is_baseline(path) {
         Holds::Render
-    } else if path == COMBAT || path == CONTROLLER {
-        let reads = if path == COMBAT {
-            scope::COMBAT
-        } else {
-            scope::CONTROLLER
-        };
+    } else if let Some(reads) = scorecard_reads(path) {
         let read = since.iter().any(|f| reads.iter().any(|p| f.starts_with(p)));
         if read { Holds::Rescore } else { Holds::Keep }
     } else if building || since.contains(path) {
@@ -584,6 +590,21 @@ fn holds(path: &str, since: &BTreeSet<String>, building: bool) -> Holds {
     } else {
         Holds::Keep
     }
+}
+
+/// The scorecards' baselines: the file, its stage and what the scorecard reads.
+const SCORECARDS: &[(&str, &str, &[&str])] = &[
+    (COMBAT, "combat", scope::COMBAT),
+    (CONTROLLER, "controller", scope::CONTROLLER),
+    (ANIM, "anim", scope::ANIM),
+];
+
+/// What the scorecard whose baseline is `path` reads, if it is one.
+fn scorecard_reads(path: &str) -> Option<&'static [&'static str]> {
+    SCORECARDS
+        .iter()
+        .find(|(file, _, _)| *file == path)
+        .map(|(_, _, reads)| *reads)
 }
 
 /// Whether a change touches what building's checks read, as `cargo xtask check` decides
@@ -618,14 +639,15 @@ fn lowered(src: &Path) -> Vec<String> {
 /// A scorecard's stage run again in the run's worktree, for a baseline it lowers
 /// (`Holds::Rescore`); whether it passed.
 fn rescore(src: &Path, logs: &Path, path: &str) -> bool {
-    let name = if path == COMBAT {
-        "combat"
-    } else {
-        "controller"
+    let Some((_, name, _)) = SCORECARDS.iter().find(|(file, _, _)| *file == path) else {
+        return false;
     };
-    STAGES.iter().find(|s| s.name == name).is_some_and(|stage| {
-        Step::new(&format!("{name} again"), stage.said, logs).run(command(stage.run, src))
-    })
+    STAGES
+        .iter()
+        .find(|s| s.name == *name)
+        .is_some_and(|stage| {
+            Step::new(&format!("{name} again"), stage.said, logs).run(command(stage.run, src))
+        })
 }
 
 /// Commits what the run lowered and pushes it to main, carrying it onto a main that moved
@@ -784,6 +806,7 @@ fn kinds(changed: &[String]) -> String {
         (SIZES, "the size baseline"),
         (COMBAT, "the combat baseline"),
         (CONTROLLER, "the controller baseline"),
+        (ANIM, "the animation baseline"),
     ];
     let named: Vec<&str> = named
         .into_iter()
