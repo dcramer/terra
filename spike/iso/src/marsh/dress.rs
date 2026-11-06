@@ -38,7 +38,7 @@ fn lamp() -> Vec3 {
 }
 
 /// Model, place, yaw (degrees), scale, how far sunk (m).
-const PROPS: [(&str, Vec2, f32, f32, f32); 20] = [
+pub const PROPS: [(&str, Vec2, f32, f32, f32); 20] = [
     // Stones at the path's edges and standing in the shallows, breaking the water's line.
     ("models/nature/forest/mossy_rock_b_2.glb", Vec2::new(3.3, -1.7), 60.0, 0.2, 0.04),
     ("models/nature/forest/mossy_rock_a_3.glb", Vec2::new(-1.8, -1.7), 200.0, 0.16, 0.03),

@@ -199,12 +199,39 @@ fn spawn(
             .iter()
             .map(|&(at, scale, yaw)| Spot { at, scale, yaw }),
     );
+    let all = clumps(&land, &trees);
+    draw(
+        &mut commands,
+        &asset,
+        &land,
+        &mut meshes,
+        &mut materials,
+        &mut mats,
+        &all,
+        0x1a_3e6,
+    );
+}
+
+/// Spawns `clumps` as two meshes of cards on the tree crowns' atlas (the leaves fluttering,
+/// the tufts and flowers bending), each card's turn drawn from `seed`: the forest's lawn and
+/// the marsh's (marsh/lawn.rs).
+#[allow(clippy::too_many_arguments)]
+pub fn draw(
+    commands: &mut Commands,
+    asset: &AssetServer,
+    land: &Land,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<crate::foliage::FoliageMaterial>,
+    mats: &mut crate::foliage::Mats,
+    clumps: &[Clump],
+    seed: u32,
+) {
     let mut leaves = Cards::default();
     leaves.leaf = true;
     let mut stems = Cards::default();
-    let mut rng = Rng::new(0x1a_3e6);
-    for c in clumps(&land, &trees) {
-        build(&c, &land, &mut rng, &mut leaves, &mut stems);
+    let mut rng = Rng::new(seed);
+    for c in clumps {
+        build(c, land, &mut rng, &mut leaves, &mut stems);
     }
     // The tree crowns' cards' material, its leaves fluttering a little and its stems bending.
     let cards = StandardMaterial {
@@ -216,9 +243,8 @@ fn spawn(
         diffuse_transmission: 0.15,
         ..default()
     };
-    let flutter =
-        crate::foliage::material(&mut materials, &mut mats, cards.clone(), 0.0, 0.01, false);
-    let bend = crate::foliage::material(&mut materials, &mut mats, cards, 0.05, 0.0, false);
+    let flutter = crate::foliage::material(materials, mats, cards.clone(), 0.0, 0.01, false);
+    let bend = crate::foliage::material(materials, mats, cards, 0.05, 0.0, false);
     for (mesh, material) in [(leaves.mesh(), flutter), (stems.mesh(), bend)] {
         commands.spawn((
             Mesh3d(meshes.add(mesh)),

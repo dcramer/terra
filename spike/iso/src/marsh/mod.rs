@@ -10,6 +10,7 @@
 mod dress;
 mod fight;
 mod land;
+mod lawn;
 mod life;
 mod light;
 mod lips;
@@ -60,6 +61,8 @@ pub fn plugin(app: &mut App) {
             crate::ruin::ambient::dust::plugin,
             crate::ruin::ambient::grass::plugin,
         ))
+        // The ground's clumps, on the forest's foliage material.
+        .add_plugins((crate::foliage::plugin, lawn::plugin))
         .add_systems(Startup, camera)
         .add_systems(Update, crate::motes::face_halo);
 }

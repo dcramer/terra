@@ -7,7 +7,7 @@
 pub mod clearing;
 mod dress;
 mod fight;
-mod lawn;
+pub mod lawn;
 mod life;
 mod pond;
 
