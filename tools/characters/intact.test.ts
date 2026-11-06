@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Glb } from "./glb.ts";
-import { check, pieces, type Piece, sources, THEIRS } from "./intact.ts";
+import { check, pieces, type Piece, said, sources, THEIRS } from "./intact.ts";
 
 const srcs = sources();
 const LEGS = join(THEIRS, "modular-outfits-fantasy/Male_Ranger_Legs.gltf");
@@ -133,4 +133,23 @@ test("their UpperBody under another name is a cut of their FullBody", () => {
   const r = check([{ ...up, node: "Bare_Upper", mesh: "Bare_Upper" }], srcs);
   assert.ok(r.ok, r.lines.join("; "));
   assert.match(r.cuts[0] ?? "", /^Bare_Upper \(8,056 of their 12,128 triangles of RegularMale, universal-base-characters\/Regular_Male_FullBody\.gltf\)/);
+});
+
+test("the terminal gets a line a file, a failure's first five faults, the rest in the log (D388)", () => {
+  const ok = said("x.glb", check(legs(), srcs));
+  assert.match(ok.line, /^✓ intact: x\.glb: 1 of their pieces as made$/);
+  const p = legs();
+  for (let i = 0; i < 4; i++) p[0].uvs[0][2 * (7 + i)] += 0.01;
+  p[0].pos[3 * 20] += 0.01;
+  p[0].weights[42].clear();
+  const n = p[0].nrm!;
+  [n[30], n[31], n[32]] = [n[31], n[32], n[30]];
+  [p[0].tris[1], p[0].tris[2]] = [p[0].tris[2], p[0].tris[1]];
+  const r = check(p, srcs);
+  const bad = said("x.glb", r);
+  assert.ok(r.lines.length > 5, `the planted faults make more than five lines: ${r.lines.join("; ")}`);
+  assert.equal(bad.line.split("\n").length, 7, bad.line);
+  assert.match(bad.line, /^✗ intact: x\.glb\n/);
+  assert.match(bad.line, /more lines in the log$/);
+  for (const l of r.lines) assert.ok(bad.log.includes(l), "every fault in the log");
 });

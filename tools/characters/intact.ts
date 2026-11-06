@@ -21,8 +21,8 @@
 //
 // Node 22.18 or later; no dependencies.
 
-import { readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Glb } from "./glb.ts";
 
@@ -359,6 +359,19 @@ export function check(out: Glb | Piece[], srcs: Piece[], t: Tolerance = TOLERANC
 /** A position to a tenth of a millimetre, as a key. */
 const cell = (pos: Float64Array, i: number) => `${Math.round(pos[3 * i] * 1e4)},${Math.round(pos[3 * i + 1] * 1e4)},${Math.round(pos[3 * i + 2] * 1e4)}`;
 
+/** Where the full report goes: the terminal gets a line a file (D388). */
+export const LOG = fileURLToPath(new URL("../../target/check/intact.log", import.meta.url));
+
+/** A file's report as said: one line for the terminal (a failure's first five faults under
+ *  it), and every piece by name for the log. */
+export function said(f: string, r: Report): { line: string; log: string } {
+  const counts = [r.theirs.length && `${r.theirs.length} of their pieces as made`, r.cuts.length && `${r.cuts.length} exact cuts of theirs`, r.ours.length && `${r.ours.length} of ours`].filter(Boolean).join(", ");
+  const log = [`${r.ok ? "✓" : "✗"} ${f}`, ...r.lines.map((l) => `  ${l}`), ...r.theirs.map((p) => `  theirs as made: ${p}`), ...r.cuts.map((c) => `  cut: ${c}`), ...r.ours.map((p) => `  ours, not checked: ${p}`)].join("\n");
+  if (r.ok) return { line: r.theirs.length || r.cuts.length ? `✓ intact: ${f}: ${counts}` : `· intact: ${f}: none of their pieces${counts ? ` (${counts})` : ""}`, log };
+  const more = r.lines.length > 5 ? [`... ${r.lines.length - 5} more lines in the log`] : [];
+  return { line: `✗ intact: ${f}\n  ${[...r.lines.slice(0, 5), ...more].join("\n  ")}`, log };
+}
+
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const from: string[] = [];
@@ -370,20 +383,18 @@ if (import.meta.main) {
   }
   const srcs = sources(from.length ? from : [THEIRS]);
   let failed = false;
+  const log: string[] = [];
   for (const f of outs) {
-    const r = check(new Glb(f), srcs);
-    const list = (xs: string[]) => (xs.length > 6 ? `${xs.slice(0, 6).join(", ")}, ...` : xs.join(", "));
-    const ours = r.ours.length ? `; ${r.ours.length} of ours not checked (${list(r.ours)})` : "";
-    const said = [r.theirs.length && `keeps ${r.theirs.length} of their pieces as made (${r.theirs.join(", ")})`, r.cuts.length && `has ${r.cuts.length} exact cuts of theirs: ${r.cuts.join(", ")}`].filter(Boolean).join("; ");
-    if (r.ok) console.log(said ? `✓ intact: ${f} ${said}${ours}` : `· intact: ${f} has none of their pieces${ours}`);
-    else {
-      failed = true;
-      console.log(`✗ intact: ${f}\n  ${r.lines.join("\n  ")}`);
-    }
+    const s = said(f, check(new Glb(f), srcs));
+    failed ||= s.line.startsWith("✗");
+    console.log(s.line);
+    log.push(s.log);
   }
+  mkdirSync(dirname(LOG), { recursive: true });
+  writeFileSync(LOG, `${log.join("\n")}\n`);
   if (failed)
     console.log(
-      "Their parts stay as made (D599): fix the step that wrote the file so it carries their piece unchanged (a separate output, a new piece of ours beside it), never by loosening the tolerance or editing art/characters/quaternius/. A piece of ours must not take their name.",
+      `Their parts stay as made (D599): fix the step that wrote the file so it carries their piece unchanged (a separate output, a new piece of ours beside it), never by loosening the tolerance or editing art/characters/quaternius/. A piece of ours must not take their name. Every piece: ${relative(process.cwd(), LOG)}`,
     );
   process.exit(failed ? 1 : 0);
 }
