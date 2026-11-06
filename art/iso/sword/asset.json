@@ -1,0 +1,44 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-10-17T16:54:21.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "d7c0d997-3957-4096-a8c9-990c203dc647",
+      "note": "v3.0-20250812"
+    },
+    "export": {
+      "at": "2026-11-06T08:48:50.297Z",
+      "credits": 0,
+      "minutes": 0.15743333333333334,
+      "files": [
+        "assets/models/iso/sword.glb"
+      ],
+      "scale": 0.9519,
+      "turn": 0,
+      "note": "scaled 0.952, turned 0 deg"
+    },
+    "check": {
+      "at": "2026-11-06T08:48:53.618Z",
+      "credits": 0,
+      "minutes": 0.00008333333333333333,
+      "passed": 3,
+      "of": 4,
+      "failed": [
+        "triangles"
+      ],
+      "clips": {},
+      "speeds": {},
+      "triangles": 4777,
+      "height": 0.95,
+      "note": "passed 3 of 4"
+    }
+  },
+  "name": "sword",
+  "kind": "prop",
+  "height": 0.95,
+  "theme": "ruin knight",
+  "description": "A one-handed medieval arming sword, steel blade, cross guard, leather grip, held by the knight",
+  "project": "d7c0d997-3957-4096-a8c9-990c203dc647"
+}
