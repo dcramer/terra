@@ -32,7 +32,8 @@ pub struct RimExt {
     /// x: how much of the rim the canopy leaves (0 dims it as the sky's fill, 1 keeps it
     /// whole: a fighter's rim is the ARPGs' lift, not the sky's light, iso-art j28).
     /// y, z: a fighter's hard band, whole where the surface faces the view under y (the
-    /// cosine), gone over z; z zero is the fresnel of power `rim.a` (the party's).
+    /// cosine), gone over z; z zero is the fresnel of power `rim.a` (the party's). w: the
+    /// band's share on this body (`Fighter::rim`).
     #[uniform(103)]
     pub lift: Vec4,
 }
@@ -54,23 +55,29 @@ pub struct Shade;
 /// model is in, once the ruin's hit (effects/hit.rs) has found the `StandardMaterial`s it
 /// flashes; the flash is then copied onto the swapped ones (`mirror`), so the fighter
 /// both rims and flashes. Its rim is the fighters' own (`fighter_rim`), stronger than the
-/// party's, and `value` darkens its albedo where its coat is the floor's tone.
+/// party's, and `value` darkens its albedo where its coat is the floor's tone; `rim`
+/// scales its band (a leafy crown's every leaf edge takes it, so it frosts).
 #[derive(Component)]
 pub struct Fighter {
     frames: u32,
     value: f32,
+    rim: f32,
 }
 
 impl Default for Fighter {
     fn default() -> Self {
-        Self::valued(1.0)
+        Self::valued(1.0, 1.0)
     }
 }
 
 impl Fighter {
-    /// A fighter whose albedo is scaled by `value`.
-    pub fn valued(value: f32) -> Self {
-        Self { frames: 0, value }
+    /// A fighter whose albedo is scaled by `value` and its rim by `rim`.
+    pub fn valued(value: f32, rim: f32) -> Self {
+        Self {
+            frames: 0,
+            value,
+            rim,
+        }
     }
 }
 
@@ -174,7 +181,8 @@ fn lift(kind: Kind) -> Vec4 {
         // The band from 66 to 83 degrees off the view: on a round body seen from above,
         // the outer tenth of its radius, 2 to 3 px at 70 px a figure (iso-art j30; at 73
         // degrees Tripo's coarse normals barely reached it and it did not read).
-        Kind::Fighter => Vec4::new(0.8, 0.12, 0.4, 0.0),
+        // w: the body's share of it (`Fighter::rim`).
+        Kind::Fighter => Vec4::new(0.8, 0.12, 0.4, 1.0),
         _ => Vec4::ZERO,
     }
 }
@@ -297,8 +305,14 @@ fn fighters(
             ) else {
                 continue;
             };
-            if !mirrored.0.iter().any(|(_, r)| *r == h) {
-                mirrored.0.push((mat.0.clone(), h.clone()));
+            // The body's own share of the band (the swap key holds its value, one body's).
+            if let Some(mut m) = rims.get_mut(&h)
+                && m.extension.lift.w != f.rim
+            {
+                m.extension.lift.w = f.rim;
+            }
+            if !mirrored.0.iter().any(|(_, r, _)| *r == h) {
+                mirrored.0.push((mat.0.clone(), h.clone(), f.value));
             }
             commands
                 .entity(e)
@@ -308,25 +322,30 @@ fn fighters(
     }
 }
 
-/// The fighters' originals beside their swapped materials.
+/// The fighters' originals beside their swapped materials and the body's value.
 #[derive(Resource, Default)]
-struct Mirrored(Vec<(Handle<StandardMaterial>, Handle<RimMaterial>)>);
+struct Mirrored(Vec<(Handle<StandardMaterial>, Handle<RimMaterial>, f32)>);
 
 /// Copies the hit flash (effects/hit.rs sets the original's emission) onto the swapped
-/// material, touching it only when it changed.
+/// material, touching it only when it changed. Scaled by the body's value: the flash
+/// lights the base colour's texture, which the value's tint of the base colour does not
+/// reach, so a darkened body flashed at its pale raw coat (the ogre milky, the forest's
+/// treant at the rocks' value: a still stands mid-flash, iso-art j30).
 fn mirror(
     mirrored: Res<Mirrored>,
     standard: Res<Assets<StandardMaterial>>,
     mut rims: ResMut<Assets<RimMaterial>>,
 ) {
-    for (from, to) in &mirrored.0 {
+    for (from, to, value) in &mirrored.0 {
         let (Some(a), Some(b)) = (standard.get(from), rims.get(to)) else {
             continue;
         };
-        if a.emissive == b.base.emissive && a.emissive_texture == b.base.emissive_texture {
+        let c = a.emissive;
+        let e = LinearRgba::new(c.red * value, c.green * value, c.blue * value, c.alpha);
+        if e == b.base.emissive && a.emissive_texture == b.base.emissive_texture {
             continue;
         }
-        let (e, tex) = (a.emissive, a.emissive_texture.clone());
+        let tex = a.emissive_texture.clone();
         if let Some(mut m) = rims.get_mut(to) {
             m.base.emissive = e;
             m.base.emissive_texture = tex;
@@ -347,6 +366,37 @@ fn tint(hour: Option<Res<Hour>>, swapped: Res<Swapped>, mut rims: ResMut<Assets<
         };
         if let Some(mut m) = rims.get_mut(h) {
             m.extension.rim = rim;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A darkened fighter's hit flash is darkened with it, so it never shows the pale raw
+    /// coat the value hides; the swapped material follows the flash as it changes.
+    #[test]
+    fn the_flash_on_a_darkened_body_is_darkened_with_it() {
+        let mut app = App::new();
+        let mut standard = Assets::<StandardMaterial>::default();
+        let mut rims = Assets::<RimMaterial>::default();
+        let from = standard.add(StandardMaterial::default());
+        let to = rims.add(ExtendedMaterial {
+            base: StandardMaterial::default(),
+            extension: RimExt::default(),
+        });
+        app.insert_resource(standard)
+            .insert_resource(rims)
+            .insert_resource(Mirrored(vec![(from.clone(), to.clone(), 0.5)]))
+            .add_systems(Update, mirror);
+        for flash in [0.6, 0.2] {
+            let mut standard = app.world_mut().resource_mut::<Assets<StandardMaterial>>();
+            standard.get_mut(&from).unwrap().emissive = LinearRgba::rgb(flash, flash, flash);
+            app.update();
+            let rims = app.world().resource::<Assets<RimMaterial>>();
+            let e = rims.get(&to).unwrap().base.emissive;
+            assert!((e.red - flash * 0.5).abs() < 1e-6, "flash {flash}: swapped {e:?}");
         }
     }
 }

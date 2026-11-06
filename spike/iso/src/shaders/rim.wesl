@@ -38,7 +38,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // upper outline, never a top (at the ARPG's 55 degrees a normal over about 0.6 up
         // faces the camera; a canopy's leaves are all such) nor an underside.
         let sky = smoothstep(-0.35, 0.1, n.y) * (1.0 - smoothstep(0.5, 0.8, n.y));
-        edge = (1.0 - smoothstep(lift.y, lift.z, facing)) * sky;
+        edge = (1.0 - smoothstep(lift.y, lift.z, facing)) * sky * lift.w;
     } else {
         // Brighter where the edge faces up, as a sky's light would.
         let up = 0.55 + 0.45 * clamp(n.y, 0.0, 1.0);
