@@ -40,14 +40,12 @@
       "note": "scaled 2.856, turned -1 deg, in place walk run, cut attack, looped run on 0.41-1.05 s (ends 4.2% apart before closing), centred run (body 58% of height off)"
     },
     "check": {
-      "at": "2026-11-06T10:55:00.609Z",
+      "at": "2026-11-06T12:14:16.279Z",
       "credits": 0,
-      "minutes": 0.0019166666666666666,
-      "passed": 29,
+      "minutes": 0.0018333333333333333,
+      "passed": 30,
       "of": 30,
-      "failed": [
-        "triangles"
-      ],
+      "failed": [],
       "clips": {
         "idle": 15.33,
         "death": 3,
@@ -59,9 +57,16 @@
         "walk": 1.58,
         "run": 5.66
       },
-      "triangles": 28551,
+      "triangles": 23692,
       "height": 2.8,
-      "note": "passed 29 of 30"
+      "note": "passed 30 of 30"
+    },
+    "decimate": {
+      "at": "2026-11-06T12:14:16.060Z",
+      "credits": 0,
+      "minutes": 0.00345,
+      "triangles": 23692,
+      "note": "28551 to 23692 triangles (budget 24000), Blender's collapse on the mesh alone, skeleton and clips kept; bounds within 0.00%"
     }
   },
   "name": "ogre",
