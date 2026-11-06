@@ -13,7 +13,8 @@
 //! Use: `pool::plugin`; a mesh from `surface` over the water's area at its level, its
 //! depth carried per vertex; `material(look)`, or `with_edge(look, edge)` for a soft bank,
 //! duckweed and lily pads and a broken sky (`Edge`), `with_sheen` for a moon's sheen
-//! (`Sheen`); `Glint` on the point lights to mirror.
+//! (`Sheen`), `with_body` for clear water by day (`Body`); `Glint` on the point lights to
+//! mirror.
 
 use bevy::asset::{RenderAssetUsages, embedded_asset};
 use bevy::diagnostic::FrameCount;
@@ -86,6 +87,20 @@ pub struct Sheen {
     pub moon: Vec4,
 }
 
+/// Clear water by day (the forest's pond against le-river-beam's river): the bed showing
+/// through the deep, and the breeze's fine ripples the sun's glitter breaks into many small
+/// sharp glints. All zero (the default) is the dark still water of the marsh and the ruin.
+#[derive(Clone, Copy, Debug, Default, Reflect, ShaderType)]
+pub struct Body {
+    /// The fine ripples: x their height (m, 0: none), y their wavelength (m), z the size of
+    /// the calm and ruffled patches that break the glitter up (m), w how calm the calm ones
+    /// are (0..1).
+    pub ripple: Vec4,
+    /// x: the deep's opacity (0: 0.97, near black); the bed shows through the rest, and the
+    /// mirror is added over it undimmed.
+    pub clear: Vec4,
+}
+
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
 pub struct PoolExt {
     #[uniform(100)]
@@ -94,6 +109,8 @@ pub struct PoolExt {
     pub edge: Edge,
     #[uniform(102)]
     pub sheen: Sheen,
+    #[uniform(103)]
+    pub body: Body,
 }
 
 const SHADER: &str = "embedded://iso/shaders/pool.wesl";
@@ -126,6 +143,11 @@ pub fn with_edge(look: Look, edge: Edge) -> PoolMaterial {
 
 /// The water's material with its margin and a moon's sheen on it.
 pub fn with_sheen(look: Look, edge: Edge, sheen: Sheen) -> PoolMaterial {
+    with_body(look, edge, sheen, Body::default())
+}
+
+/// The water's material, clear by day with fine ripples (`Body`).
+pub fn with_body(look: Look, edge: Edge, sheen: Sheen, body: Body) -> PoolMaterial {
     ExtendedMaterial {
         base: StandardMaterial {
             base_color: Color::linear_rgb(look.deep.x, look.deep.y, look.deep.z),
@@ -134,7 +156,12 @@ pub fn with_sheen(look: Look, edge: Edge, sheen: Sheen) -> PoolMaterial {
             alpha_mode: AlphaMode::Blend,
             ..default()
         },
-        extension: PoolExt { look, edge, sheen },
+        extension: PoolExt {
+            look,
+            edge,
+            sheen,
+            body,
+        },
     }
 }
 

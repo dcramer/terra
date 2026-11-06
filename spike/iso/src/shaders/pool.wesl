@@ -36,8 +36,15 @@ struct Sheen {
 var<uniform> pool: Look;
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
 var<uniform> edge: Edge;
+struct Body {
+    ripple: vec4<f32>,
+    clear: vec4<f32>,
+}
+
 @group(constants::MATERIAL_BIND_GROUP) @binding(102)
 var<uniform> sheen: Sheen;
+@group(constants::MATERIAL_BIND_GROUP) @binding(103)
+var<uniform> body: Body;
 
 const PI: f32 = 3.14159265;
 
@@ -91,8 +98,27 @@ fn rings(p: vec2<f32>, t: f32) -> f32 {
     return h * 0.004;
 }
 
+// The breeze's fine ripples by day (Body): two scales a golden ratio apart, each turned its
+// own way and drifting its own speed, so their sum never repeats and no lattice shows; in
+// calm and ruffled patches (cat's paws) a broad noise lays over them, so the sun's glitter
+// is many small sharp glints in drifts, not one even field.
+fn fine(p: vec2<f32>, t: f32) -> f32 {
+    let f = 1.0 / max(body.ripple.y, 0.01);
+    let w = pool.wave.xy;
+    let a = mat2x2<f32>(0.825, 0.565, -0.565, 0.825);
+    let b = mat2x2<f32>(-0.416, 0.909, -0.909, -0.416);
+    let h = noise(a * (p * f) + w * t * 2.1) + noise(b * (p * f * 1.618) - w.yx * t * 3.4 + 7.3) * 0.6;
+    let s = 1.0 / max(body.ripple.z, 0.1);
+    let paws = smoothstep(0.3, 0.7, noise(p * s - w * t * 0.2) * 0.7 + noise(p * s * 2.43 + 3.7) * 0.3);
+    return h * mix(1.0 - body.ripple.w, 1.0, paws) * body.ripple.x;
+}
+
 fn height(p: vec2<f32>, t: f32) -> f32 {
-    return wind(p, t) * pool.wave.z + rings(p, t);
+    var h = wind(p, t) * pool.wave.z + rings(p, t);
+    if body.ripple.x > 0.0 {
+        h += fine(p, t);
+    }
+    return h;
 }
 
 // Duckweed matting the margin: how much covers a point, in patches broken grain by grain
@@ -184,7 +210,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let depth = in.uv_b.x;
     let t = pool.wave.w;
 
-    let e = 0.02;
+    // The slope's step: a small share of the fine ripples' wavelength where there are any.
+    let e = select(0.02, min(0.02, body.ripple.y * 0.08), body.ripple.x > 0.0);
     let h = height(p, t);
     let gx = (height(p + vec2<f32>(e, 0.0), t) - h) / e;
     let gz = (height(p + vec2<f32>(0.0, e), t) - h) / e;
@@ -204,7 +231,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let k = smoothstep(0.0, pool.deep.a, depth);
     let colour = mix(pool.shallow.rgb, pool.deep.rgb, k);
     let fade = select(0.06, edge.fade.x, edge.fade.x > 0.0);
-    let alpha = smoothstep(-0.02, fade, depth) * mix(1.0 - pool.shallow.a, 0.97, k);
+    // How much the water hides of the bed: near black in the deep, or clear (Body).
+    let opaque = mix(1.0 - pool.shallow.a, select(0.97, body.clear.x, body.clear.x > 0.0), k);
+    let alpha = smoothstep(-0.02, fade, depth) * opaque;
     let grain = 0.7 + 0.6 * hash(floor(p * 70.0) + 3.0);
     let weed_c = edge.green.rgb * grain;
     let pad_c = mix(edge.green.rgb * vec3<f32>(0.7, 0.95, 0.7), vec3<f32>(0.09, 0.07, 0.02), pad.z) * pad.y;
@@ -265,6 +294,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             lobe = streak(n, v, l, p, t);
         }
         mirror += lux * lobe * fresnel * pool.look.z;
+    }
+    // Clear water: what it mirrors lies over the bed it shows, not dimmed by the blend.
+    if body.clear.x > 0.0 {
+        mirror /= max(mix(opaque, 1.0, float_), 0.05);
     }
     pbr_input.material.emissive = vec4<f32>(mirror * (1.0 - float_), 1.0);
 

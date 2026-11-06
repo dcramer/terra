@@ -13,12 +13,13 @@ use bevy::prelude::*;
 /// Where on the water the sun's glitter lies: the visible pond's middle, the frame's lower
 /// right (px 785,472 of 960x540).
 pub const GLITTER: Vec2 = Vec2::new(11.0, 6.0);
-/// How far up the camera's mirrored ray the glint light stands (m): far, so the glitter is a
-/// patch the ripples break, as the sun's is, not one sharp point.
-const SUN_AWAY: f32 = 40.0;
+/// How far up the camera's mirrored ray the glint light stands (m): far, as the sun is, so
+/// the glitter spreads over the whole pond and only the ripples choose where it glints (at
+/// 40 m it was one patch of blobs round its mirror).
+const SUN_AWAY: f32 = 400.0;
 /// The glint light's lumens: about 800 lux at the water, a white-hot glitter core of about 5
 /// linear at EV 8 through the lobe (pool.rs: s = 600, Fresnel about 0.02).
-const SUN_LUMENS: f32 = 16.0e6;
+const SUN_LUMENS: f32 = 1.6e9;
 /// A layer no camera renders, so the glint light lights nothing.
 const UNSEEN: usize = 9;
 
@@ -28,19 +29,32 @@ pub fn plugin(app: &mut App) {
         .add_systems(PostStartup, hide_glade_water);
 }
 
-/// The water by day: dark, the sky's band its colour, a breeze's ripples. At r4 the glint's
-/// broad lobe (600) over gentle ripples (0.04) drew one round dappled spotlight on a grey
-/// slab (judge forest-r4); a tight lobe at twice the gain over steeper ripples breaks it
-/// into small sharp sparkles, and a greener, clearer shallow tints the edge.
+/// The water by day, as le-river-beam's river: clear and green over its bed, the canopy's
+/// green in its mirror, the sun's glitter many small sharp glints. At r4 the glint's broad
+/// lobe (600) over gentle ripples (0.04) drew one round dappled spotlight on a grey slab
+/// (judge forest-r4); at r8 the sky's blue over a near-black deep read milky, and smooth
+/// ripples under a near glint light drew big white blobs in a repeating patch (the lead's
+/// judge, 2026-11-06). So the broad ripples are gentle, the fine ones (`body`) make the
+/// glints, and the glint light stands far, as the sun does.
 pub fn look() -> Look {
     Look {
-        deep: Vec4::new(0.004, 0.009, 0.010, 0.6),
-        shallow: Vec4::new(0.05, 0.07, 0.045, 0.8),
-        sky: Vec4::new(420.0, 560.0, 820.0, 1.0),
-        horizon: Vec4::new(700.0, 760.0, 820.0, 0.6),
-        wave: Vec4::new(0.86, 0.5, 0.07, 0.0),
+        deep: Vec4::new(0.04, 0.05, 0.024, 0.6),
+        shallow: Vec4::new(0.05, 0.07, 0.035, 0.8),
+        sky: Vec4::new(170.0, 190.0, 110.0, 1.8),
+        horizon: Vec4::new(90.0, 110.0, 70.0, 0.6),
+        wave: Vec4::new(0.86, 0.5, 0.03, 0.0),
         look: Vec4::new(0.0, 4_000.0, 2.0, 0.15),
         lights: default(),
+    }
+}
+
+/// Clear by day: the deep hides about four fifths of the bed; the breeze's fine ripples,
+/// 11 cm long, ruffled in 3 m cat's paws (le-river-beam's glints are 2 px, 3,200 a
+/// megapixel; these 3 px, 3,700: forest-r9).
+pub fn body() -> pool::Body {
+    pool::Body {
+        ripple: Vec4::new(0.0094, 0.106, 3.0, 0.7),
+        clear: Vec4::new(0.78, 0.0, 0.0, 0.0),
     }
 }
 
@@ -71,7 +85,7 @@ fn spawn(
     let face = pool::surface(POND - half, POND + half, 0.25, WATER, |p| land.height(p));
     commands.spawn((
         Mesh3d(meshes.add(face)),
-        MeshMaterial3d(pools.add(pool::with_edge(look(), edge()))),
+        MeshMaterial3d(pools.add(pool::with_body(look(), edge(), default(), body()))),
         bevy::light::NotShadowCaster,
     ));
     let focus = super::FOCUS
@@ -82,7 +96,7 @@ fn spawn(
         PointLight {
             color: Color::srgb(1.0, 0.95, 0.86),
             intensity: SUN_LUMENS,
-            range: 200.0,
+            range: 2_000.0,
             shadow_maps_enabled: false,
             ..default()
         },
