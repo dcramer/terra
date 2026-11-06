@@ -7,7 +7,27 @@ use crate::scene::model;
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins(super::held::plugin).add_systems(Update, pose);
+    app.add_plugins(super::held::plugin)
+        .add_systems(Update, (cast, pose));
+}
+
+/// Every body the fight poses, in every scene that stages it (the ruin, the forest, the
+/// marsh), takes the fighters' rim (rim.rs; the scene adds `rim::plugin`), so it lifts off
+/// the ground as the ARPGs' bodies do: the three biome judges found the fighters lost in
+/// it (iso-art j28).
+fn cast(mut commands: Commands, posed: Query<(Entity, &Pose), Added<Pose>>) {
+    for (body, pose) in &posed {
+        let name = pose.gltf.path().map(|p| p.to_string()).unwrap_or_default();
+        commands
+            .entity(body)
+            .insert(crate::rim::Fighter::valued(value(&name)));
+    }
+}
+
+/// How much a body's albedo is scaled: the ogre's beige coat is the floor's tone in every
+/// scene (the judges' gap), so it stands darker; the rest as they come.
+fn value(path: &str) -> f32 {
+    if path.contains("ogre") { 0.5 } else { 1.0 }
 }
 
 /// A body's clip and where in it to stand.
@@ -145,5 +165,28 @@ fn pose(
             .entity(player)
             .insert(AnimationGraphHandle(graphs.add(graph)));
         commands.entity(body).insert(Posed);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every body the fight poses takes the fighters' rim, in whichever scene stages it.
+    #[test]
+    fn every_posed_body_is_a_fighter() {
+        let mut app = App::new();
+        app.add_systems(Update, cast);
+        let body = app
+            .world_mut()
+            .spawn(Pose {
+                gltf: Handle::default(),
+                clip: "walk",
+                at: 0.0,
+                once: false,
+            })
+            .id();
+        app.update();
+        assert!(app.world().get::<crate::rim::Fighter>(body).is_some());
     }
 }

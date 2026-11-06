@@ -154,12 +154,14 @@ fn main() {
         return;
     }
     if args.ruin {
-        app.add_plugins((mipmaps::plugin, ruin::plugin)).run();
+        app.add_plugins((mipmaps::plugin, rim::plugin, ruin::plugin))
+            .run();
         return;
     }
     if args.marsh {
         // The glade's ground material, then the marsh's own land over it.
-        app.add_plugins((mipmaps::plugin, terrain::plugin, marsh::plugin)).run();
+        app.add_plugins((mipmaps::plugin, terrain::plugin, rim::plugin, marsh::plugin))
+            .run();
         return;
     }
     if args.forest {

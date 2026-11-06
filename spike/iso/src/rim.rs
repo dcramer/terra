@@ -29,6 +29,10 @@ pub struct RimExt {
     #[texture(101)]
     #[sampler(102)]
     pub canopy: Handle<Image>,
+    /// x: how much of the rim the canopy leaves (0 dims it as the sky's fill, 1 keeps it
+    /// whole: a fighter's rim is the ARPGs' lift, not the sky's light, iso-art j28).
+    #[uniform(103)]
+    pub lift: Vec4,
 }
 
 /// The canopy map's width in metres, about the world's middle.
@@ -43,13 +47,29 @@ struct Canopy(Handle<Image>);
 #[derive(Component)]
 pub struct Shade;
 
-/// A fighter (not an `Actor`) that takes the rim too. Its materials are swapped some
-/// frames after its model is in, once the ruin's hit (effects/hit.rs) has found the
-/// `StandardMaterial`s it flashes; the flash is then copied onto the swapped ones
-/// (`mirror`), so the fighter both rims and flashes.
-#[derive(Component, Default)]
+/// A fighter (not an `Actor`) that takes the rim too: every body the ruin's fight poses,
+/// in every scene (ruin::fight's `cast`). Its materials are swapped some frames after its
+/// model is in, once the ruin's hit (effects/hit.rs) has found the `StandardMaterial`s it
+/// flashes; the flash is then copied onto the swapped ones (`mirror`), so the fighter
+/// both rims and flashes. Its rim is the fighters' own (`fighter_rim`), stronger than the
+/// party's, and `value` darkens its albedo where its coat is the floor's tone.
+#[derive(Component)]
 pub struct Fighter {
     frames: u32,
+    value: f32,
+}
+
+impl Default for Fighter {
+    fn default() -> Self {
+        Self::valued(1.0)
+    }
+}
+
+impl Fighter {
+    /// A fighter whose albedo is scaled by `value`.
+    pub fn valued(value: f32) -> Self {
+        Self { frames: 0, value }
+    }
 }
 
 /// How many frames a fighter's model is in before its materials are swapped.
@@ -70,20 +90,26 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (swap, fighters, tint, mirror).chain());
 }
 
+/// The canopy map: the glade's and the forest's oaks over their land; all open in the
+/// ruin (no land) and the marsh (its own land, not the forest's trees).
 fn canopy_map(
     mut commands: Commands,
-    land: Res<crate::terrain::Land>,
+    land: Option<Res<crate::terrain::Land>>,
+    args: Res<crate::Args>,
     mut images: ResMut<Assets<Image>>,
 ) {
     use bevy::asset::RenderAssetUsages;
     use bevy::image::ImageSampler;
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-    let trees = crate::forest::tree_spots(&land);
+    let wooded = land.filter(|_| !args.ruin && !args.marsh);
+    let trees = wooded.as_ref().map(|l| crate::forest::tree_spots(l));
     let mut data = Vec::with_capacity((TEXELS * TEXELS) as usize);
     for y in 0..TEXELS {
         for x in 0..TEXELS {
             let p = (Vec2::new(x as f32, y as f32) + 0.5) / TEXELS as f32 - 0.5;
-            let c = crate::scene::canopy(p * SPAN, &trees);
+            let c = trees
+                .as_ref()
+                .map_or(1.0, |t| crate::scene::canopy(p * SPAN, t));
             data.push((c.clamp(0.0, 1.0) * 255.0) as u8);
         }
     }
@@ -106,8 +132,16 @@ fn canopy_map(
 #[derive(Component, Clone, Copy)]
 pub struct Tint(pub Vec3);
 
+/// What a swapped material is: shaded only, an actor's rim, a fighter's rim.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum Kind {
+    Shade,
+    Actor,
+    Fighter,
+}
+
 #[derive(Resource, Default)]
-struct Swapped(HashMap<(AssetId<StandardMaterial>, [u32; 3], bool), Handle<RimMaterial>>);
+struct Swapped(HashMap<(AssetId<StandardMaterial>, [u32; 3], Kind), Handle<RimMaterial>>);
 
 /// The rim for the hour: faint by day, the sky's blue at dusk and by night.
 fn rim_for(hour: Hour) -> LinearRgba {
@@ -115,6 +149,28 @@ fn rim_for(hour: Hour) -> LinearRgba {
         Hour::Day => LinearRgba::new(0.10, 0.10, 0.09, 3.6),
         Hour::Dusk => LinearRgba::new(0.08, 0.09, 0.13, 3.4),
         Hour::Night => LinearRgba::new(0.07, 0.10, 0.22, 3.2),
+    }
+}
+
+/// The fighters' rim: the ARPGs' cold lift on every body against the warm local lights
+/// (Diablo IV's and Last Epoch's night frames), blue-white, about 5 times the party's, so
+/// it reads as an edge at 70 px a figure. A power of 3.4: at 2.5 the ARPG camera's
+/// downward view grazes so much of a hunched body that the whole ogre frosted over
+/// instead of edging (iso-art j28's first still). With no hour (the ruin, the marsh) it
+/// is the night's.
+fn fighter_rim(hour: Option<Hour>) -> LinearRgba {
+    match hour.unwrap_or(Hour::Night) {
+        Hour::Day => LinearRgba::new(0.42, 0.48, 0.58, 3.4),
+        Hour::Dusk => LinearRgba::new(0.45, 0.56, 0.95, 3.4),
+        Hour::Night => LinearRgba::new(0.50, 0.68, 1.25, 3.4),
+    }
+}
+
+/// The rim the canopy leaves on each kind (`RimExt::lift`).
+fn lift(kind: Kind) -> Vec4 {
+    match kind {
+        Kind::Fighter => Vec4::new(0.8, 0.0, 0.0, 0.0),
+        _ => Vec4::ZERO,
     }
 }
 
@@ -136,14 +192,27 @@ fn swap(
 ) {
     let rim = rim_for(hour.map_or(Hour::Dusk, |h| *h));
     for (e, mat) in &added {
-        let (tint, rimmed) = match parents.iter_ancestors(e).find_map(|a| actors.get(a).ok()) {
-            Some(tint) => (tint.map_or(Vec3::ONE, |t| t.0), true),
-            None if parents.iter_ancestors(e).any(|a| shaded.contains(a)) => (Vec3::ONE, false),
+        let (tint, kind) = match parents.iter_ancestors(e).find_map(|a| actors.get(a).ok()) {
+            Some(tint) => (tint.map_or(Vec3::ONE, |t| t.0), Kind::Actor),
+            None if parents.iter_ancestors(e).any(|a| shaded.contains(a)) => {
+                (Vec3::ONE, Kind::Shade)
+            }
             None => continue,
         };
-        let rim = if rimmed { rim } else { LinearRgba::NONE };
-        let Some(handle) = rimmed_as(&mut swapped, &standard, &mut rims, &canopy, mat, tint, rim)
-        else {
+        let rim = if kind == Kind::Actor {
+            rim
+        } else {
+            LinearRgba::NONE
+        };
+        let Some(handle) = rimmed_as(
+            &mut swapped,
+            &standard,
+            &mut rims,
+            &canopy,
+            mat,
+            tint,
+            (kind, rim),
+        ) else {
             continue;
         };
         commands
@@ -161,9 +230,9 @@ fn rimmed_as(
     canopy: &Canopy,
     mat: &MeshMaterial3d<StandardMaterial>,
     tint: Vec3,
-    rim: LinearRgba,
+    (kind, rim): (Kind, LinearRgba),
 ) -> Option<Handle<RimMaterial>> {
-    let key = (mat.id(), tint.to_array().map(f32::to_bits), rim != LinearRgba::NONE);
+    let key = (mat.id(), tint.to_array().map(f32::to_bits), kind);
     if let Some(h) = swapped.0.get(&key) {
         return Some(h.clone());
     }
@@ -176,6 +245,7 @@ fn rimmed_as(
         extension: RimExt {
             rim,
             canopy: canopy.0.clone(),
+            lift: lift(kind),
         },
     });
     swapped.0.insert(key, h.clone());
@@ -197,7 +267,7 @@ fn fighters(
     hour: Option<Res<Hour>>,
     canopy: Res<Canopy>,
 ) {
-    let rim = rim_for(hour.map_or(Hour::Dusk, |h| *h));
+    let rim = fighter_rim(hour.map(|h| *h));
     for (body, mut f) in &mut fighters {
         if f.frames > FIGHTER_WAIT {
             continue;
@@ -211,9 +281,15 @@ fn fighters(
         }
         for e in children.iter_descendants(body) {
             let Ok(mat) = skins.get(e) else { continue };
-            let Some(h) =
-                rimmed_as(&mut swapped, &standard, &mut rims, &canopy, mat, Vec3::ONE, rim)
-            else {
+            let Some(h) = rimmed_as(
+                &mut swapped,
+                &standard,
+                &mut rims,
+                &canopy,
+                mat,
+                Vec3::splat(f.value),
+                (Kind::Fighter, rim),
+            ) else {
                 continue;
             };
             if !mirrored.0.iter().any(|(_, r)| *r == h) {
@@ -258,11 +334,12 @@ fn tint(hour: Option<Res<Hour>>, swapped: Res<Swapped>, mut rims: ResMut<Assets<
     if !hour.is_changed() {
         return;
     }
-    let rim = rim_for(*hour);
-    for ((.., rimmed), h) in &swapped.0 {
-        if !rimmed {
-            continue;
-        }
+    for ((.., kind), h) in &swapped.0 {
+        let rim = match kind {
+            Kind::Shade => continue,
+            Kind::Actor => rim_for(*hour),
+            Kind::Fighter => fighter_rim(Some(*hour)),
+        };
         if let Some(mut m) = rims.get_mut(h) {
             m.extension.rim = rim;
         }
