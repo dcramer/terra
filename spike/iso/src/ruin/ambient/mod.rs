@@ -1,9 +1,13 @@
 //! The ruin's air and ground between the blows, as the ARPGs fill theirs (Diablo IV's
-//! haze, V Rising's fog, embers and dust in the light pools, wind in the grass, water with
-//! the fire in it): fog.rs low fog in drifts. Each moves on the effects' clock, so a still
-//! is one moment and a film plays.
+//! haze, V Rising's fog, embers and dust in the light pools, wind in the grass): fog.rs low
+//! fog in drifts, dust.rs motes in the firelight and fireflies, grass.rs the wind in the
+//! dead grass (and its material for cloth), banner.rs a torn banner on the wind. Each moves
+//! on the effects' clock, so a still is one moment and a film plays.
 
+mod banner;
+mod dust;
 mod fog;
+mod grass;
 
 use bevy::prelude::*;
 
@@ -11,5 +15,10 @@ use bevy::prelude::*;
 pub const WIND: Vec2 = Vec2::new(0.86, 0.5);
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins(fog::plugin);
+    app.add_plugins((
+        fog::plugin,
+        dust::plugin,
+        grass::plugin,
+        banner::plugin,
+    ));
 }
