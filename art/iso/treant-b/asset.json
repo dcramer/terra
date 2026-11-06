@@ -40,14 +40,12 @@
       "note": "scaled 2.085, turned 0 deg, in place walk run, cut attack, looped run on 0.41-1.04 s (ends 5.7% apart before closing), centred run (body 53% of height off)"
     },
     "check": {
-      "at": "2026-11-06T10:55:03.463Z",
+      "at": "2026-11-06T12:14:17.900Z",
       "credits": 0,
-      "minutes": 0.0019666666666666665,
-      "passed": 29,
+      "minutes": 0.00175,
+      "passed": 30,
       "of": 30,
-      "failed": [
-        "triangles"
-      ],
+      "failed": [],
       "clips": {
         "idle": 15.33,
         "walk": 2.33,
@@ -59,9 +57,16 @@
         "walk": 0.9,
         "run": 3.11
       },
-      "triangles": 27550,
+      "triangles": 23690,
       "height": 2,
-      "note": "passed 29 of 30"
+      "note": "passed 30 of 30"
+    },
+    "decimate": {
+      "at": "2026-11-06T12:14:17.686Z",
+      "credits": 0,
+      "minutes": 0.0037333333333333333,
+      "triangles": 23690,
+      "note": "27550 to 23690 triangles (budget 24000), Blender's collapse on the mesh alone, skeleton and clips kept; bounds within 0.02%"
     }
   },
   "name": "treant-b",
