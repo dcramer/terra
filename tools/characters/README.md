@@ -5,12 +5,12 @@ The asset pipeline for bodies and what they wear and hold (D115, D128, D316): Bl
 Run everything from the repository root. Blender scripts run headless through [tools/blender/run.sh](../blender/README.md); paths given to them are relative to the root. What a script writes and we do not keep goes to `tools/characters/out/`, which is ignored.
 
 - **Where it stands**: `cargo xtask characters` (`status.ts`, D625), in 40 lines from recorded results, running no check; each check records its result with `record.ts`.
-- **Every script**, its arguments, what it reads and writes and what it says: [scripts.md](scripts.md), a row a script. Read the row of the script you run, never the whole file.
+- **Every script**, its arguments, what it reads and writes and what it says: [scripts.md](scripts.md), a row a script. Read the row of the script you run, `grep -n "^| \`motion.ts" tools/characters/scripts.md`, never the whole file.
 - **The clips we make** (Kimodo, Uthana, keyed and derived clips, `art/animation/made.json`): [Made clips](#made-clips).
 
 ## Made clips
 
-How Kimodo is set up and how each kind of made clip is made: [made-clips.md](made-clips.md).
+How Kimodo is set up and how each kind of made clip is made: [made-clips.md](made-clips.md), a section a kind. Read the section of the kind you make (`grep -n "^## " tools/characters/made-clips.md` lists them), never the whole file.
 
 ## Everything into the game
 
