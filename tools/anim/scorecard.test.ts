@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { type Criterion, judge } from "../scorecard/ratchet.ts";
-import { CRITERIA, courseValues, ranked, worstLine } from "./scorecard.ts";
+import { CRITERIA, courseValues, ranked, traceLines, worstLine } from "./scorecard.ts";
 
 const row = (id: string, noticed: number, at_most: number): Criterion => ({ id, noticed, notice: id, bar: { at_most }, unit: "", source: "", check: { by: "course" }, cost: "cheap", measurable: true });
 
@@ -47,4 +47,9 @@ test("a row's worst transition is the one of its family with the largest number"
   assert.match(worstLine(out, "pop.fight")!, /^into\.roll/);
   assert.match(worstLine(out, "seam.loops")!, /Sprint_Loop/);
   assert.equal(worstLine(out, "stop.rest"), undefined);
+});
+
+test("a transition's trace is its own lines, its name dropped, and not a longer name's", () => {
+  const out = ["trace\tinto.slash\t+0.000\tOpen_Slash 0.000", "trace\tinto.slash.2\t+0.000\tx", "anim\tinto.slash\tfight"].join("\n");
+  assert.deepEqual(traceLines(out, "into.slash"), ["+0.000  Open_Slash 0.000"]);
 });

@@ -7,6 +7,7 @@ cargo xtask anim                   # every criterion, a line each, held to basel
 cargo xtask anim --json out.json   # the results also as JSON
 cargo xtask anim --raise "<why>"   # write the rows that got worse with the why, in the change's commit; new rows as their first number
 cargo xtask anim --lower           # write the rows that got better (nightly's, D414)
+cargo xtask anim --trace jump.idle # also a transition's frames: clip, seek, locks, speed, worst 3 joints' pops
 node --test tools/anim/scorecard.test.ts
 ```
 

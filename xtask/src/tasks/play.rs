@@ -110,7 +110,7 @@ pub(crate) const TASKS: &[Task] = &[
     },
     Task {
         name: "anim",
-        takes: "[--json FILE] [--raise \"<why>\" | --lower]",
+        takes: "[--json FILE] [--raise \"<why>\" | --lower] [--trace NAME]",
         does: "the figure's animation scorecard: every criterion of tools/anim/criteria.json (the animation course of terra_walker figure::course: the man's figure posed headless through every transition it makes, pops, slides and glides against its clips' own), a line each, held to tools/anim/baseline.tsv, and the failing row to work on next: worse fails unless raised with its why, --lower is nightly's (D631, D414)",
         group: "Play and check",
         run: |args| node("tools/anim/scorecard.ts", args),

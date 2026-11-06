@@ -483,6 +483,48 @@ fn stance_of(frame: &Frame, at: Vec3, facing: Vec3) -> [Vec2; 2] {
         .map(|b| Vec2::new((b - at).dot(right), (b - at).dot(facing)))
 }
 
+/// A transition's frames for `cargo xtask anim --trace <name>` (the log keeps them all): a
+/// line a frame of its time in, the clip and how far into it, the feet's lock curves and its
+/// three worst joints' pops (`measure::pop` of that frame alone), so a row's worst is read as
+/// a curve without a rebuild to print one.
+fn trace(
+    name: &str,
+    frames: &[Frame],
+    kicks: &[Vec<f32>],
+    steady: &std::collections::HashMap<String, Vec<f32>>,
+    clips: &[&str],
+    (from, to): (usize, usize),
+) {
+    for i in from..to {
+        let mut joints: Vec<(f32, usize)> = (0..JOINTS.len())
+            .map(|j| {
+                let own = clips
+                    .iter()
+                    .filter_map(|c| steady.get(*c).map(|s| s[j]))
+                    .fold(measure::FLOOR_DEG_S, f32::max);
+                (kicks[i][j] / own, j)
+            })
+            .collect();
+        joints.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let worst: Vec<String> = joints[..3]
+            .iter()
+            .map(|(p, j)| format!("{} {p:.2}", JOINTS[*j]))
+            .collect();
+        let f = &frames[i];
+        println!(
+            "trace\t{name}\t+{:.3}\t{} {:.3}{}\tlock {:.2} {:.2}\tspeed {:.2}\t{}",
+            (i - from) as f32 / FPS,
+            f.clip,
+            f.seek,
+            if f.solo.is_some() { "" } else { " (blend)" },
+            f.lock[0],
+            f.lock[1],
+            f.speed,
+            worst.join(", "),
+        );
+    }
+}
+
 /// The man driven through every transition the game's figure makes, each scored by its worst
 /// pop, slide and glide against its clips' own steady state, a stop by where its feet end
 /// against the idle's stance and how long after the body they settle, and each loop's seam;
@@ -557,6 +599,14 @@ fn the_animation_course_measures_the_mans_transitions() {
             JOINTS[joint],
             (at_frame - from) as f32 * dt,
             slide * 100.0,
+        );
+        trace(
+            name,
+            &frames,
+            &kicks,
+            &steady,
+            &[before, after],
+            (*from, to),
         );
     }
     // Each loop's seams: the frames it wraps, against its own steady state.

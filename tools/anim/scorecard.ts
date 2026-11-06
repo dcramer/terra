@@ -11,6 +11,8 @@
 //                                       first number)
 //   cargo xtask anim --lower            write the rows that got better (nightly's, D414)
 //   cargo xtask anim --first ID,...     write held rows again as first numbers
+//   cargo xtask anim --trace NAME       also a transition's frames (into.finisher): a line a
+//                                       frame of its clip, seek, locks, speed, worst 3 joints
 //
 // What cargo printed (each transition's `anim` line: its clips, worst joint and when) goes to
 // target/anim/scorecard.log. Node 22.18 or later; no dependencies.
@@ -65,7 +67,13 @@ export function worstLine(out: string, id: string): string | undefined {
 
 function main() {
   const { values: opt } = parseArgs({
-    options: { json: { type: "string" }, raise: { type: "string" }, lower: { type: "boolean", default: false }, first: { type: "string" } },
+    options: {
+      json: { type: "string" },
+      raise: { type: "string" },
+      lower: { type: "boolean", default: false },
+      first: { type: "string" },
+      trace: { type: "string" },
+    },
   });
   if (opt.raise !== undefined && !opt.raise.trim()) throw new Error("--raise needs its why");
   const file: { course: { crate: string; test: string }; criteria: Criterion[] } = JSON.parse(readFileSync(CRITERIA, "utf8"));
@@ -81,7 +89,12 @@ function main() {
   const out = (r.stdout ?? "") + (r.stderr ?? "");
   writeFileSync(log, `scorecard.ts ${process.argv.slice(2).join(" ")}\n\n$ cargo ${args.join(" ")}\n${out}`);
   const values = courseValues(out);
-  if (r.status !== 0) console.log(`✗ the animation course failed (cargo exit ${r.status}): read target/anim/scorecard.log from the end`);
+  if (r.status !== 0) {
+    // No row has a number: its first error alone, not a line a row (D388).
+    const first = out.split("\n").find((l) => /^error|panicked at/.test(l));
+    console.log(`✗ the animation course failed (cargo exit ${r.status}), no row measured: ${first?.trim() ?? "no error line"}; read target/anim/scorecard.log`);
+    process.exit(1);
+  }
 
   const results = criteria.map((c) => judge(c, values.get(c.id), held.get(c.id)));
   finish({
@@ -105,6 +118,19 @@ function main() {
     const worst = worstLine(out, next.c.id);
     if (worst) console.log(`  worst: ${worst}`);
   }
+  if (opt.trace) {
+    const lines = traceLines(out, opt.trace);
+    if (!lines.length) console.log(`✗ no transition ${opt.trace} on the course: the names are the anim lines' second field in target/anim/scorecard.log`);
+    for (const l of lines) console.log(l);
+  }
+}
+
+/// A transition's `trace` lines from the course's output, its name dropped.
+export function traceLines(out: string, name: string): string[] {
+  return out
+    .split("\n")
+    .filter((l) => l.startsWith(`trace\t${name}\t`))
+    .map((l) => l.split("\t").slice(2).join("  "));
 }
 
 if (import.meta.main) main();
