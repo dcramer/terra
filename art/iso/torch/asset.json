@@ -20,17 +20,19 @@
       "note": "scaled 0.612, turned 0 deg"
     },
     "check": {
-      "at": "2026-11-06T06:56:37.494Z",
+      "at": "2026-11-06T07:11:11.389Z",
       "credits": 0,
-      "minutes": 0.0001,
-      "passed": 4,
+      "minutes": 0.00008333333333333333,
+      "passed": 3,
       "of": 4,
-      "failed": [],
+      "failed": [
+        "triangles"
+      ],
       "clips": {},
       "speeds": {},
       "triangles": 4621,
       "height": 0.6,
-      "note": "passed 4 of 4"
+      "note": "passed 3 of 4"
     }
   },
   "name": "torch",

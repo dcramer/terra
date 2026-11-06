@@ -5,7 +5,7 @@
 
 import { triangles } from "../tripo/glb.ts";
 import { type Clip, type Glb, type Vec3, bounds, clips, imageSizes, origin, points, pose } from "./gltf.ts";
-import { type Kind, SPECS, clipsFor } from "./kinds.ts";
+import { type Kind, SPECS, budget, clipsFor } from "./kinds.ts";
 
 export type Result = { check: string; ok: boolean; value: string; want: string; why: string };
 
@@ -88,7 +88,8 @@ export function motion(glb: Glb, clip: Clip, sk: Skeleton): Motion {
   };
 }
 
-export type Measures = { height: number; ground: number; triangles: number; textures: number[]; clips: Record<string, { seconds: number; motion?: Motion }> };
+/** `width` and `depth` are the standing pose's (the idle's first frame), across X and Z. */
+export type Measures = { height: number; width: number; depth: number; ground: number; triangles: number; textures: number[]; clips: Record<string, { seconds: number; motion?: Motion }> };
 
 export function measure(glb: Glb): Measures {
   const all = clips(glb);
@@ -98,6 +99,8 @@ export function measure(glb: Glb): Measures {
   const standing = idle ? bounds(points(glb, pose(glb.doc, idle, 0))) : rest;
   const out: Measures = {
     height: rest.max[1] - rest.min[1],
+    width: standing.max[0] - standing.min[0],
+    depth: standing.max[2] - standing.min[2],
     ground: standing.min[1],
     triangles: triangles(glb.doc),
     textures: imageSizes(glb).map((s) => Math.max(s.width, s.height)),
@@ -132,7 +135,8 @@ export function check(m: Measures, kind: Kind, rigType: string | undefined, heig
   const walk = m.clips.walk?.motion, run = m.clips.run?.motion;
   if (walk && run) add("run faster than walk", run.speed > walk.speed * 1.3, `${f(run.speed)} vs ${f(walk.speed)} m/s`, "run over 1.3x walk", "two gaits the player can tell apart");
 
-  add("triangles", m.triangles <= spec.triangles, String(m.triangles), `at most ${spec.triangles}`, "a dozen on screen at once from the iso camera; over it, `tripo.ts retopo PROJECT --faces N` (10 credits)");
+  const most = budget(kind, m);
+  add("triangles", m.triangles <= most, String(m.triangles), `at most ${most} (${most < spec.triangles ? "one a pixel of its box at the closest camera" : `the ${kind} cap`})`, `past it triangles are under a pixel or over the ${kind}'s share of the frame (kinds.ts, budget); decimate it in Blender to ${most} (free, the models skill) or \`tripo.ts retopo PROJECT --faces ${Math.floor(most / 2)}\` (10 credits, quads)`);
   const big = Math.max(0, ...m.textures);
   add("textures", big > 0 && big <= spec.texture, m.textures.length ? `${m.textures.length}, largest ${big}` : "none", `largest at most ${spec.texture}`, "a figure 100-200 px tall on screen needs no more; `export` asks Tripo for this size");
   add("height", m.height >= spec.height[0] && m.height <= spec.height[1] && (!height || Math.abs(m.height / height - 1) < 0.05), `${f(m.height)} m`, height ? `${height} m (within 5%)` : `${spec.height[0]}-${spec.height[1]} m`, "life size (D110), so it stands right beside the others and the camera frames it");

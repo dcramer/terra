@@ -20,17 +20,19 @@
       "note": "scaled 0.197, turned 0 deg"
     },
     "check": {
-      "at": "2026-11-06T06:56:47.246Z",
+      "at": "2026-11-06T07:11:11.632Z",
       "credits": 0,
-      "minutes": 0.0001,
-      "passed": 4,
+      "minutes": 0.00011666666666666667,
+      "passed": 3,
       "of": 4,
-      "failed": [],
+      "failed": [
+        "triangles"
+      ],
       "clips": {},
       "speeds": {},
       "triangles": 7786,
       "height": 0.17,
-      "note": "passed 4 of 4"
+      "note": "passed 3 of 4"
     }
   },
   "name": "skull",

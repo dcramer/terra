@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { check, measure, skeleton } from "./check.ts";
 import { type Glb, clips, pixelSize, readGlb, sample, writeGlb } from "./gltf.ts";
 import { type Ctx, ROOT, conceptPrompt, main, parseOutput } from "./iso-art.ts";
-import { clipsFor } from "./kinds.ts";
+import { budget, clipsFor } from "./kinds.ts";
 import { readAsset, readmeCost, statusTable, writeAsset } from "./ledger.ts";
 import { cut, inPlace, loop, place, renameClips } from "./normalize.ts";
 
@@ -196,6 +196,15 @@ test("the checks name what is missing and pass what is right", () => {
   // A quadruped gets the one walk Tripo has for it.
   assert.deepEqual(clipsFor("quadruped").map((c) => c.preset), ["walk"]);
   assert.deepEqual(clipsFor("serpentine").map((c) => c.preset), ["march"]);
+});
+
+test("a budget is a triangle a pixel of the box at the closest camera, between a floor and the kind's cap", () => {
+  // The hero is 1.85 m at 0.2 of 1080 pixels: 216 pixels, so a 1.85 m square is 216 squared.
+  assert.equal(budget("prop", { height: 1.85, width: 1.85, depth: 0.1 }), 8000, "216 squared is over a prop's cap");
+  assert.equal(budget("scenery", { height: 1.85, width: 1.85, depth: 0.1 }), 20_000, "216 squared is over scenery's cap");
+  assert.equal(budget("hero", { height: 1.85, width: 0.5, depth: 0.4 }), Math.round((216 * 216 * 0.5) / 1.85 / 100) * 100, "a hero by its front");
+  assert.equal(budget("creature", { height: 0.3, width: 0.6, depth: 1.2 }), Math.round((216 * 216 * 0.72) / 1.85 / 1.85 / 100) * 100, "a low long body by its top");
+  assert.equal(budget("prop", { height: 0.17, width: 0.15, depth: 0.2 }), 1000, "a skull keeps the floor");
 });
 
 test("texture sizes are read from PNG and JPEG headers", () => {

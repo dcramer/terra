@@ -20,23 +20,21 @@
       "note": "scaled 6.115, turned 0 deg"
     },
     "check": {
-      "at": "2026-11-06T06:56:37.822Z",
+      "at": "2026-11-06T07:11:11.999Z",
       "credits": 0,
-      "minutes": 0.00018333333333333334,
-      "passed": 3,
+      "minutes": 0.00016666666666666666,
+      "passed": 4,
       "of": 4,
-      "failed": [
-        "triangles"
-      ],
+      "failed": [],
       "clips": {},
       "speeds": {},
       "triangles": 19096,
       "height": 6,
-      "note": "passed 3 of 4"
+      "note": "passed 4 of 4"
     }
   },
   "name": "dead-tree-b",
-  "kind": "prop",
+  "kind": "scenery",
   "height": 6,
   "theme": "a dark-fantasy ruin at night",
   "description": "a dead tree",

@@ -94,7 +94,7 @@ export function concept(ctx: Ctx, name: string, opts: { kind?: string; theme?: s
   const theme = opts.theme ?? prior?.theme;
   const desc = description ?? prior?.description;
   if (!theme || !desc) throw new Error(`concept needs --theme TEXT and a "DESCRIPTION" of the subject (what it is, what it is made of), nothing about style: the style guide's paragraph is added`);
-  const body = kind === "prop" ? undefined : ((opts.body ?? prior?.body ?? SPECS[kind].body) as Body);
+  const body = !SPECS[kind].body ? undefined : ((opts.body ?? prior?.body ?? SPECS[kind].body) as Body);
   if (body && body !== "biped" && body !== "other") throw new Error(`--body is biped (Tripo's humanoid rig) or other (a creature rigged as its shape reads)`);
   const height = opts.height ? Number(opts.height) : (prior?.height ?? SPECS[kind].defaultHeight);
   if (!height) throw new Error(`a ${kind} needs --height METRES, its real height, so export can make it life size (D110)`);
@@ -213,7 +213,7 @@ export function adopt(ctx: Ctx, name: string, project: string, opts: { kind?: st
   }
   const shown = ctx.tripo(["show", pid], log).out;
   const rigType: string | undefined = shown.rig?.status === "success" ? shown.rig.type : undefined;
-  const body = kind === "prop" ? undefined : rigType ? (rigType === "biped" ? "biped" : "other") : ((opts.body ?? SPECS[kind].body) as Body);
+  const body = !SPECS[kind].body ? undefined : rigType ? (rigType === "biped" ? "biped" : "other") : ((opts.body ?? SPECS[kind].body) as Body);
   const a: Asset = {
     ...(prior ?? { stages: {} }),
     name, kind, body, height,

@@ -3,8 +3,8 @@
 // (docs/art-style.md's are for a first-person view): an iso camera 15 to 20 m up shows a figure
 // 100 to 200 pixels tall, a dozen of them at once (the decision the README names says why).
 
-export type Kind = "hero" | "creature" | "npc" | "prop";
-export const KINDS: Kind[] = ["hero", "creature", "npc", "prop"];
+export type Kind = "hero" | "creature" | "npc" | "prop" | "scenery";
+export const KINDS: Kind[] = ["hero", "creature", "npc", "prop", "scenery"];
 
 /** The body a rigged asset has: Tripo's humanoid rig (`biped`) or what its auto-rig reads in
  * the shape (`quadruped`, `hexapod`, `octopod`, `serpentine`, `aquatic`, `avian`…). */
@@ -13,7 +13,8 @@ export type Body = "biped" | "other";
 export type KindSpec = {
   /** Whether it is rigged and animated, and as what by default. */
   body?: Body;
-  /** Triangles in the exported file, at most. */
+  /** Triangles in the exported file, at most, whatever its size: the kind's share of the
+   * frame (see `budget`). */
   triangles: number;
   /** A texture's side in pixels, at most, and what `export` asks Tripo for. */
   texture: number;
@@ -26,8 +27,32 @@ export const SPECS: Record<Kind, KindSpec> = {
   hero: { body: "biped", triangles: 24_000, texture: 2048, height: [1.5, 2.2], defaultHeight: 1.85 },
   npc: { body: "biped", triangles: 16_000, texture: 1024, height: [1.3, 2.1], defaultHeight: 1.75 },
   creature: { body: "other", triangles: 24_000, texture: 2048, height: [0.2, 8] },
-  prop: { triangles: 8_000, texture: 1024, height: [0.05, 10] },
+  prop: { triangles: 8_000, texture: 1024, height: [0.05, 3] },
+  // Trees, ruins, wagons' worth of set piece taller than a figure: the largest things on screen
+  // (a 7 m tree is 800 px tall at the closest camera), a dozen in view.
+  scenery: { triangles: 20_000, texture: 2048, height: [3, 30] },
 };
+
+/** Pixels a metre at the closest game camera: the hero, 1.85 m, at most 0.20 of a 1080-pixel
+ * frame, the most the 14 store frames of shipped iso ARPGs showed
+ * (research/2026-11-05-iso-arpg-art-pipeline.md). */
+export const PX_PER_M = (1080 * 0.2) / 1.85;
+/** The fewest triangles a budget comes to, so a small thing keeps its shape. */
+const FLOOR = 1_000;
+
+/** Triangles an asset of this kind and size may have: one a pixel of its box at the closest
+ * camera (the larger of its front, height by width, and its top, width by depth, as the camera
+ * looks down on it), and at most the kind's cap. About half a box is covered and half the
+ * triangles face away, so this is one visible triangle a covered pixel: past it triangles are
+ * under a pixel, which the GPU shades in 2x2 quads several times over without a pixel more of
+ * shape (Unreal's quad overdraw view; the cost Nanite was made for). The caps are each kind's
+ * share of about a million triangles a frame at 1080p, by how many are on screen at once:
+ * four heroes at 24k, a dozen creatures at 24k, eight NPCs at 16k, forty props at 8k, a dozen
+ * pieces of scenery at 20k (an estimate for a bench of the ruin scene to confirm, D185). */
+export function budget(kind: Kind, box: { height: number; width: number; depth: number }): number {
+  const area = Math.max(box.height * box.width, box.width * box.depth);
+  return Math.min(SPECS[kind].triangles, Math.max(FLOOR, Math.round((area * PX_PER_M * PX_PER_M) / 100) * 100));
+}
 
 /** A clip the game asks for by our name, the Tripo preset it is made from, and what it must be.
  * Tripo's presets for its V3 rig (developers.tripo3d.com, animations-retarget, 2026-11-05):
@@ -67,7 +92,7 @@ export function isoPart(kind: Kind, body: Body | undefined): string {
   const whole = "The whole subject from head to foot, seen straight from the front at eye level, as a model sheet.";
   const above = "Its shapes read from above at a distance: a clear outline, big simple masses on the head, shoulders and back, light and dark parts set against each other, no thin parts that vanish.";
   const gear = "Everything it wears and carries is part of the one figure and fixed to it: armour and clothes close to the body, a weapon held firmly in a hand or sheathed, a shield strapped on, nothing loose, floating or hanging free.";
-  if (kind === "prop") return `${whole.replace(" from head to foot", "")} Its shapes read from above at a distance: a clear outline and big simple masses, no thin parts that vanish.`;
+  if (!SPECS[kind].body) return `${whole.replace(" from head to foot", "")} Its shapes read from above at a distance: a clear outline and big simple masses, no thin parts that vanish.`;
   const posed = body === "biped"
     ? "Standing in a T-pose for rigging: arms straight out to the sides, hands open, legs straight and a little apart, feet flat, nothing touching between the arms and the body."
     : "Standing square on all its feet in a neutral pose for rigging, legs straight and apart, mouth closed, tail and limbs clear of the body.";

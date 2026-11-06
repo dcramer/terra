@@ -40,9 +40,9 @@
       "note": "scaled 3.348, turned 0 deg, in place walk run, cut attack, looped run on 0.41-1.04 s (ends 5.6% apart before closing)"
     },
     "check": {
-      "at": "2026-11-06T07:07:51.916Z",
+      "at": "2026-11-06T07:11:11.251Z",
       "credits": 0,
-      "minutes": 0.0022833333333333334,
+      "minutes": 0.002266666666666667,
       "passed": 24,
       "of": 25,
       "failed": [
