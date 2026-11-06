@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { Glb, type Pose, posed } from "./glb.ts";
 import type { Piece } from "./intact.ts";
-import { cover, Grid, inPlace, layered, retargeted, skinned, topEdge } from "./layers.ts";
+import { cover, type Frame, Grid, inPlace, layered, retargeted, type Run, said, skinned, topEdge } from "./layers.ts";
 
 const I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
@@ -127,4 +127,22 @@ test("a travelling clip played in place leaves no skin weighted to the root behi
   assert.equal(f.uncovered, 0);
   // Only the ground plane is carried: the root keeps its height.
   assert.deepEqual(inPlace(away(), rest).get("root")!.t, [2, 0, 0.5]);
+});
+
+test("the terminal's line fails a planted poke-through and names its clip, the numbers in the log (D388)", () => {
+  const rest = wear(tube(0.1, 0.2, 0.6), tube(0.12, 0.3, 0.8));
+  const run = (poked: Frame): Run => {
+    const clips = new Map([["Walk", { poke: rest.worst, open: rest.uncovered }], ["Swing", { poke: poked.worst, open: poked.uncovered }]]);
+    return { rest, worst: { ...poked, clip: "Swing", t: 0.5 }, open: { ...rest, clip: "rest", t: 0 }, frames: 24, poked: poked.poking ? 1 : 0, holed: 0, clips };
+  };
+  const ok = said("coat over shirt", run(rest));
+  assert.ok(ok.ok);
+  assert.equal(ok.line.split("\n").length, 1);
+  assert.match(ok.line, /^✓ layers: coat over shirt: /);
+  // The planted fault: a fuller shirt in one clip, 3 cm through the coat.
+  const bad = said("coat over shirt", run(wear(tube(0.15, 0.2, 0.6), tube(0.12, 0.3, 0.8))));
+  assert.ok(!bad.ok);
+  assert.equal(bad.line.split("\n").length, 1);
+  assert.match(bad.line, /^✗ layers: coat over shirt: 1 of 2 clips .*: Swing 30\/32/);
+  assert.match(bad.log, /worst 30\.0 mm, 224 vertices past 2 mm, Swing@0\.50/);
 });

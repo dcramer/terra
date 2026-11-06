@@ -18,6 +18,8 @@
 //
 // Node 22.18 or later; no dependencies.
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Clip, Glb, matrix, mmul, type Pose, posed, qinv, qmul, rot, type V3 } from "./glb.ts";
 import { type Piece, pieces } from "./intact.ts";
@@ -374,6 +376,31 @@ export function measure(outerFile: string, innerFile: string, clipsFile = MANNEQ
   return run;
 }
 
+/** Where the full numbers go: the terminal gets one line (D388). */
+export const LOG = fileURLToPath(new URL("../../target/check/layers.log", import.meta.url));
+/** A clip is bad when the inner pokes through past this, or the top edge opens past rest. */
+export const BAD_POKE_M = 0.005;
+
+/** A run as said: the terminal's line (pass when no clip pokes past 5 mm or opens the top edge
+ *  more than at rest, else the worst five clips) and the log's full numbers. `where` names a
+ *  vertex of the inner piece. */
+export function said(what: string, r: Run, where: (i: number) => string = String): { ok: boolean; line: string; log: string } {
+  const mm = (m: number) => `${(m * 1000).toFixed(1)} mm`;
+  const bad = [...r.clips].filter(([, c]) => c.poke > BAD_POKE_M || c.open > r.rest.uncovered).sort((a, b) => b[1].poke - a[1].poke);
+  const clip = ([n, c]: [string, { poke: number; open: number }]) => `${n} ${(c.poke * 1000).toFixed(0)}/${c.open}`;
+  const log = [
+    `${what}: at rest poke ${mm(r.rest.worst)}, top edge uncovered ${r.rest.uncovered}/${r.rest.edge}`,
+    `  through ${r.frames} frames of ${r.clips.size} clips: poke-through past 2 mm in ${r.poked} (worst ${mm(r.worst.worst)}, ${r.worst.poking} vertices past 2 mm, ${r.worst.clip}@${r.worst.t.toFixed(2)}), top edge more uncovered than at rest in ${r.holed} (worst ${r.open.uncovered}/${r.open.edge}, ${r.open.clip}@${r.open.t.toFixed(2)})`,
+    ...(r.rest.at >= 0 ? [`  worst at rest at ${where(r.rest.at)}`] : []),
+    ...(r.worst.at >= 0 ? [`  worst in the clips at ${where(r.worst.at)}`] : []),
+    `  clips past 5 mm or opening the top edge (worst poke mm/top-edge vertices uncovered): ${bad.map(clip).join(", ") || "none"}; the other ${r.clips.size - bad.length} clean`,
+  ].join("\n");
+  const rest = `at rest ${mm(r.rest.worst)}, top edge ${r.rest.uncovered}/${r.rest.edge} open`;
+  if (!bad.length) return { ok: true, line: `✓ layers: ${what}: ${rest}; ${r.clips.size} clips within 5 mm, worst ${mm(r.worst.worst)} (${r.worst.clip})`, log };
+  const more = bad.length > 5 ? `, and ${bad.length - 5} more` : "";
+  return { ok: false, line: `✗ layers: ${what}: ${bad.length} of ${r.clips.size} clips poke past 5 mm or open the top edge (poke mm/edge open): ${bad.slice(0, 5).map(clip).join(", ")}${more}; ${rest}`, log };
+}
+
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const opt = (k: string) => (args.includes(k) ? args.splice(args.indexOf(k), 2)[1] : undefined);
@@ -385,20 +412,15 @@ if (import.meta.main) {
   }
   const r = measure(args[0], args[1], clips, frames);
   const name = (f: string) => f.split("/").pop()!.replace(/\.gltf$|\.glb$/, "");
-  const mm = (m: number) => `${(m * 1000).toFixed(1)} mm`;
   // Where the worst pokes are, on the inner piece at rest (glTF's axes: y up, z forward).
   const { inner } = pair(args[0], args[1], clips);
   const where = (i: number) => {
     const [bone] = [...inner.weights[i]].reduce((a, b) => (b[1] > a[1] ? b : a), ["", -1]);
     return `${bone} (${[0, 1, 2].map((c) => inner.pos[3 * i + c].toFixed(3)).join(", ")})`;
   };
-  if (r.rest.at >= 0) console.log(`  worst at rest at ${where(r.rest.at)}`);
-  if (r.worst.at >= 0) console.log(`  worst in the clips at ${where(r.worst.at)}`);
-  console.log(
-    `${name(args[0])} over ${name(args[1])}: at rest poke ${mm(r.rest.worst)}, top edge uncovered ${r.rest.uncovered}/${r.rest.edge}; ` +
-      `through ${r.frames} frames of ${r.clips.size} clips: poke-through past 2 mm in ${r.poked} (worst ${mm(r.worst.worst)}, ${r.worst.poking} vertices past 2 mm, ${r.worst.clip}@${r.worst.t.toFixed(2)}), ` +
-      `top edge more uncovered than at rest in ${r.holed} (worst ${r.open.uncovered}/${r.open.edge}, ${r.open.clip}@${r.open.t.toFixed(2)})`,
-  );
-  const bad = [...r.clips].filter(([, c]) => c.poke > 0.005 || c.open > r.rest.uncovered).sort((a, b) => b[1].poke - a[1].poke);
-  console.log(`  clips past 5 mm or opening the top edge (worst poke mm/top-edge vertices uncovered): ${bad.map(([n, c]) => `${n} ${(c.poke * 1000).toFixed(0)}/${c.open}`).join(", ") || "none"}; the other ${r.clips.size - bad.length} clean`);
+  const s = said(`${name(args[0])} over ${name(args[1])}`, r, where);
+  mkdirSync(dirname(LOG), { recursive: true });
+  writeFileSync(LOG, `${s.log}\n`);
+  console.log(`${s.line}${s.ok ? "" : `; the numbers: ${relative(process.cwd(), LOG)}`}`);
+  process.exit(s.ok ? 0 : 1);
 }
