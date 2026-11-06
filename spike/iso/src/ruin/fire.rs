@@ -12,8 +12,8 @@ use bevy::prelude::*;
 /// The braziers' bowls, where their flames stand.
 pub const BRAZIERS: [Vec2; 2] = [Vec2::new(-2.6, 1.6), Vec2::new(4.4, -3.6)];
 /// A brazier's light, and a torch's, in lumens.
-pub const BRAZIER_LM: f32 = 60_000.0;
-pub const TORCH_LM: f32 = 15_000.0;
+pub const BRAZIER_LM: f32 = 140_000.0;
+pub const TORCH_LM: f32 = 25_000.0;
 const BOWL: f32 = 0.9;
 
 pub fn plugin(app: &mut App) {
@@ -83,8 +83,10 @@ pub fn spawn(
         height: 0.28,
     });
     let leg = meshes.add(Cylinder::new(0.025, 1.0));
+    let bed = Coals::new(&mut meshes, &mut materials, &mut images);
     for p in BRAZIERS {
         let at = Vec3::new(p.x, 0.0, p.y);
+        bed.spawn(&mut commands, &mut rng, at + Vec3::Y * BOWL);
         commands.spawn((
             Mesh3d(bowl.clone()),
             MeshMaterial3d(iron.clone()),
@@ -117,18 +119,17 @@ pub fn spawn(
             9,
             (0.45, 0.7),
         );
-        // Two lights: a near one casting soft shadows, a far one none (scene.rs's split).
-        for (share, range, shadows) in [(0.65, 10.0, true), (0.35, 22.0, false)] {
-            light(
-                &mut commands,
-                &mut rng,
-                at + Vec3::Y * (BOWL + 0.45),
-                BRAZIER_LM * share,
-                range,
-                shadows,
-                0.5,
-            );
-        }
+        // One light casting soft shadows, cut off at 8 m: a tight hot pool with the dark
+        // between the fires, as the ARPGs' night frames have (no far light's even wash).
+        light(
+            &mut commands,
+            &mut rng,
+            at + Vec3::Y * (BOWL + 0.45),
+            BRAZIER_LM,
+            8.0,
+            true,
+            0.5,
+        );
     }
     // The torches: on the back wall's face either side of the breach, and on the tall pillar.
     let face = BACK_Z + THICK * 0.5 + 0.08;
@@ -154,10 +155,85 @@ pub fn spawn(
             &mut rng,
             head + Vec3::Y * 0.25,
             TORCH_LM,
-            9.0,
+            6.0,
             false,
             0.1,
         );
+    }
+}
+
+/// A brazier's bed of coals, seen from above as the ARPGs' braziers are: a heap of dark
+/// lumps, the ones deep in the fire glowing orange to yellow and the crusted ones at the
+/// rim dull red, over a soft glow that fills the bowl, so the bowl reads as burning even
+/// where the flame cards are thin.
+struct Coals {
+    lump: Handle<Mesh>,
+    glow: Handle<Mesh>,
+    /// From the crust's dull red to the heart's yellow.
+    heat: [Handle<StandardMaterial>; 4],
+    haze: Handle<StandardMaterial>,
+}
+
+impl Coals {
+    fn new(
+        meshes: &mut Assets<Mesh>,
+        materials: &mut Assets<StandardMaterial>,
+        images: &mut Assets<Image>,
+    ) -> Self {
+        let hot = |e: LinearRgba| StandardMaterial {
+            base_color: Color::srgb(0.03, 0.025, 0.02),
+            perceptual_roughness: 0.9,
+            emissive: e,
+            ..default()
+        };
+        Coals {
+            lump: meshes.add(Sphere::new(1.0).mesh().ico(1).unwrap()),
+            glow: meshes.add(Circle::new(1.0)),
+            heat: [
+                LinearRgba::rgb(0.12, 0.015, 0.0),
+                LinearRgba::rgb(0.6, 0.09, 0.005),
+                LinearRgba::rgb(2.0, 0.45, 0.04),
+                LinearRgba::rgb(4.5, 1.8, 0.35),
+            ]
+            .map(|e| materials.add(hot(e))),
+            haze: materials.add(StandardMaterial {
+                base_color: LinearRgba::rgb(1.4, 0.36, 0.04).into(),
+                base_color_texture: Some(images.add(soft_image())),
+                unlit: true,
+                alpha_mode: AlphaMode::Add,
+                ..default()
+            }),
+        }
+    }
+
+    /// The bed in a bowl whose rim is at `top`, 0.42 m across the rim.
+    fn spawn(&self, commands: &mut Commands, rng: &mut Rng, top: Vec3) {
+        commands.spawn((
+            Mesh3d(self.glow.clone()),
+            MeshMaterial3d(self.haze.clone()),
+            Transform::from_translation(top + Vec3::Y * 0.012)
+                .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
+                .with_scale(Vec3::splat(0.5)),
+            bevy::light::NotShadowCaster,
+        ));
+        for _ in 0..34 {
+            // Heaped to the middle: the heart higher and hotter, the rim's lumps crusted.
+            let r = 0.37 * rng.f().sqrt();
+            let a = rng.f() * std::f32::consts::TAU;
+            let k = 1.0 - r / 0.37;
+            let heat = ((k * 2.6 + rng.range(-0.6, 1.0)).round() as usize).min(3);
+            let s = rng.range(0.035, 0.07);
+            commands.spawn((
+                Mesh3d(self.lump.clone()),
+                MeshMaterial3d(self.heat[heat].clone()),
+                Transform::from_translation(
+                    top + Vec3::new(a.cos() * r, 0.01 + 0.06 * k, a.sin() * r),
+                )
+                .with_rotation(Quat::from_rotation_y(rng.f() * 6.0) * Quat::from_rotation_x(rng.f()))
+                .with_scale(Vec3::new(s * rng.range(0.9, 1.4), s * 0.6, s)),
+                bevy::light::NotShadowCaster,
+            ));
+        }
     }
 }
 

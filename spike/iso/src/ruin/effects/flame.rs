@@ -164,8 +164,8 @@ fn spawn(
     let core_mat = materials.add(glow(LinearRgba::rgb(5.0, 3.4, 1.5), Some(soft.clone())));
     let ember_mat = materials.add(glow(LinearRgba::rgb(9.0, 2.6, 0.4), None));
     for &(at, size) in &fires.0 {
-        // The flame stands taller than fire.rs's tongues: a brazier's a metre, a torch's 0.65.
-        let tall = size * 1.5;
+        // The flame stands taller than fire.rs's tongues: a brazier's 1.3 m, a torch's 0.85.
+        let tall = size * 1.95;
         for (i, (dx, k)) in [(0.0, 1.0), (-0.3, 0.72), (0.32, 0.66)].iter().enumerate() {
             commands.spawn((
                 Mesh3d(card.clone()),
@@ -295,7 +295,7 @@ fn embers(clock: Res<Clock>, mut embers: Query<(&Ember, &mut Transform)>) {
         let v = (p - ember_at(e, (a - 0.03).max(0.0))) / 0.03;
         let k = 1.0 - a / e.life;
         let blink = 0.75 + 0.25 * (t * 23.0 + e.seed).sin();
-        let w = 0.022 * k.powf(0.6) * blink;
+        let w = 0.035 * k.powf(0.6) * blink;
         tr.translation = p;
         tr.rotation = Quat::from_rotation_arc(Vec3::Z, v.normalize_or(Vec3::Y));
         tr.scale = Vec3::new(w, w, (v.length() * 0.05).clamp(0.03, 0.09) * k);
@@ -319,8 +319,8 @@ fn smoke(
             + Vec3::new((a + p.seed).sin(), 0.0, (a * 0.7 + p.seed).cos()) * 0.08 * a;
         tr.rotation = cam.rot * Quat::from_rotation_z(p.seed + a * 0.25);
         tr.scale = Vec3::new(wide, wide, 1.0);
-        let warm = Vec3::new(0.34, 0.15, 0.06).lerp(Vec3::new(0.05, 0.05, 0.056), smooth(0.0, 0.35, k));
-        let alpha = 0.42 * smooth(0.0, 0.12, k) * (1.0 - k).powf(1.5);
+        let warm = Vec3::new(0.34, 0.15, 0.06).lerp(Vec3::new(0.035, 0.035, 0.04), smooth(0.0, 0.35, k));
+        let alpha = 0.6 * smooth(0.0, 0.12, k) * (1.0 - k).powf(1.5);
         if let Some(mut m) = materials.get_mut(&mat.0) {
             m.base_color = Color::linear_rgba(warm.x, warm.y, warm.z, alpha);
         }

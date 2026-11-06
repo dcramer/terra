@@ -6,8 +6,8 @@ use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 
 /// The moon's light on the ground, in lux, and the sky's fill, in nits.
-pub const MOON_LUX: f32 = 250.0;
-pub const SKY_NITS: f32 = 5.0;
+pub const MOON_LUX: f32 = 190.0;
+pub const SKY_NITS: f32 = 1.5;
 
 pub fn spawn(mut commands: Commands) {
     commands.insert_resource(GlobalAmbientLight {
@@ -20,7 +20,7 @@ pub fn spawn(mut commands: Commands) {
     let from = Vec3::new(-az.sin() * el.cos(), el.sin(), -az.cos().abs() * el.cos());
     commands.spawn((
         DirectionalLight {
-            color: Color::srgb(0.55, 0.65, 1.0),
+            color: Color::srgb(0.45, 0.6, 1.0),
             illuminance: MOON_LUX,
             shadow_maps_enabled: true,
             soft_shadow_size: Some(1.0),
