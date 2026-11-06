@@ -26,27 +26,34 @@ const STILL: f32 = 0.58;
 const TAIL: f32 = 0.35;
 const TRAIL_POINTS: usize = 16;
 /// The core's radius and how far it is drawn out along the flight, the halo's size (m).
-const CORE: f32 = 0.04;
-const CORE_LENGTH: f32 = 0.17;
-const HALO: f32 = 0.3;
-/// The bolt's own light, in lumens: enough for a blue pool on the floor 1.5 m under it
-/// beside the braziers' 60k to 140k (a quarter of their illuminance).
+const CORE: f32 = 0.055;
+const CORE_LENGTH: f32 = 0.24;
+const HALO: f32 = 0.38;
+/// The bolt's own light, in lumens, lighting the bodies it passes. Riding 2 m up it spread
+/// a quarter of the braziers' light evenly over 4 m of floor: a violet wash, no pool (the
+/// crop of blind-ruin6/a.png; all three judges: "the bolts light nothing").
 const BOLT_LM: f32 = 30_000.0;
+/// So a second light rides under each bolt, `POOL_UP` over the floor: at 0.5 m its light
+/// falls to a fifth a metre out, a tight cold pool under the spell (d4-lightning).
+const POOL_LM: f32 = 25_000.0;
+const POOL_UP: f32 = 0.5;
 /// The trails' widths at the bolt (m): the outer blue streak and the white one inside it.
 const OUTER: f32 = 0.11;
 const INNER: f32 = 0.035;
 /// The impact's light at its height, in lumens, and how fast it dies (s).
-const FLASH_LM: f32 = 40_000.0;
-const FLASH_FALL: f32 = 0.09;
+/// 40k dying in 0.09 s left a faint burst at the still's 0.08 s (the judges).
+const FLASH_LM: f32 = 150_000.0;
+const FLASH_FALL: f32 = 0.15;
 /// The impact's star: its size at its height (m) and how long it lasts (s).
-const STAR: f32 = 1.2;
-const STAR_LIFE: f32 = 0.2;
+const STAR: f32 = 1.5;
+const STAR_LIFE: f32 = 0.28;
 
 #[derive(Component)]
 enum Part {
     Core,
     Glow,
     Light,
+    Pool,
     Trail(Handle<Mesh>, f32),
     Flash(Handle<StandardMaterial>),
     Bang,
@@ -94,8 +101,8 @@ fn spawn(
     let ball = meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap());
     let card = meshes.add(Rectangle::new(1.0, 1.0));
     let streak = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
-    let core = materials.add(glow(LinearRgba::rgb(24.0, 26.0, 30.0), None));
-    let halo = materials.add(glow(LinearRgba::rgb(0.25, 0.6, 2.4), Some(soft.clone())));
+    let core = materials.add(glow(LinearRgba::rgb(32.0, 36.0, 44.0), None));
+    let halo = materials.add(glow(LinearRgba::rgb(0.35, 0.85, 3.4), Some(soft.clone())));
     let ribbon_of = |c: LinearRgba| StandardMaterial {
         double_sided: true,
         cull_mode: None,
@@ -118,6 +125,17 @@ fn spawn(
             },
             Transform::default(),
             Bolt(i, Part::Light),
+        ));
+        commands.spawn((
+            PointLight {
+                color: Color::srgb(0.3, 0.55, 1.0),
+                intensity: 0.0,
+                range: 2.6,
+                radius: 0.05,
+                ..default()
+            },
+            Transform::default(),
+            Bolt(i, Part::Pool),
         ));
         for (material, width) in [(&outer, OUTER), (&inner, INNER)] {
             let mesh = meshes.add(ribbon(&[], Vec3::ZERO, width));
@@ -224,6 +242,10 @@ fn fly(
                 tr.unwrap().translation = head;
                 light.unwrap().intensity = if flying { BOLT_LM } else { 0.0 };
             }
+            Part::Pool => {
+                tr.unwrap().translation = Vec3::new(head.x, stage.floor + POOL_UP, head.z);
+                light.unwrap().intensity = if flying { POOL_LM } else { 0.0 };
+            }
             Part::Trail(mesh, width) => {
                 let tail = (s - TAIL).max(0.0);
                 let tip = s.min(1.0);
@@ -249,7 +271,7 @@ fn fly(
                 tr.scale = Vec3::splat(if on { STAR * (1.0 - 0.35 * k) } else { 0.0 });
                 if let Some(mut m) = materials.get_mut(mat) {
                     let f = (1.0 - k).powf(1.5);
-                    m.base_color = LinearRgba::rgb(6.0 * f, 8.0 * f, 14.0 * f).into();
+                    m.base_color = LinearRgba::rgb(12.0 * f, 16.0 * f, 28.0 * f).into();
                 }
             }
             Part::Bang => {
@@ -279,6 +301,18 @@ mod tests {
         let f: Vec<_> = (0..BOLTS).map(|i| flight(i, STILL)).collect();
         assert!((0.0..0.2).contains(&f[0].1), "bolt 0 struck {} s ago", f[0].1);
         assert!(f[1].0 > f[2].0 && f[2].0 > 0.1 && f[1].0 < 1.0);
+    }
+
+    /// The pool under a bolt outshines the bolt's own light on the floor by far, and falls
+    /// to under a quarter a metre out, so it reads as a pool, not a wash.
+    #[test]
+    fn the_pool_under_a_bolt_is_tight_and_bright() {
+        let st = Stage::default();
+        let high = (0..=10).map(|j| path(&st, 1, j as f32 / 10.0).y - st.floor).fold(9.0, f32::min);
+        let under = POOL_LM / (POOL_UP * POOL_UP);
+        assert!(under > 4.0 * BOLT_LM / (high * high), "pool {under} vs bolt at {high} m");
+        let out = POOL_LM * POOL_UP / (1.0 + POOL_UP * POOL_UP).powf(1.5);
+        assert!(out < 0.25 * under, "a metre out the pool is {out} of {under}");
     }
 
     /// Each bolt leaves the hero and ends at the target, above the floor all the way.
