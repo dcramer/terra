@@ -103,7 +103,7 @@ fn pose(
         let (graph, node) = AnimationGraph::from_clip(clip.clone());
         let mut p = players.get_mut(player).unwrap();
         let playing = p.play(node).repeat().seek_to(pose.at);
-        if args.shot.is_some() {
+        if args.shot.is_some() && args.film == 0 {
             playing.set_speed(0.0);
         }
         commands

@@ -41,7 +41,13 @@ pub struct Args {
     pub size: (u32, u32),
     /// `--scene glade|ruin`: the party's glade (the default) or the ARPG's ruin (ruin/).
     pub ruin: bool,
+    /// `--film N` with `--shot dir/f.jpg`: N frames from `--frames` on, at a fixed 30 per
+    /// second of game time, saved as dir/f-0000.jpg on; clips play rather than hold.
+    pub film: u32,
 }
+
+/// A film's frame rate in game time, whatever the machine draws.
+pub const FILM_FPS: f64 = 30.0;
 
 fn args() -> Args {
     let mut a = Args {
@@ -54,6 +60,7 @@ fn args() -> Args {
         focus: Vec2::new(-1.0, 1.0),
         size: (1920, 1080),
         ruin: false,
+        film: 0,
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -61,6 +68,7 @@ fn args() -> Args {
         match flag.as_str() {
             "--shot" => a.shot = Some(val().into()),
             "--frames" => a.frames = val().parse().unwrap(),
+            "--film" => a.film = val().parse().unwrap(),
             "--demo" => a.demo = true,
             "--scene" => a.ruin = val() == "ruin",
             "--demo-at" => a.demo_at = val().parse().unwrap(),
@@ -116,6 +124,11 @@ fn main() {
             ..default()
         }))
         .add_systems(Last, shoot);
+    if args.film > 0 {
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs_f64(1.0 / FILM_FPS),
+        ));
+    }
     if args.ruin {
         app.add_plugins((mipmaps::plugin, ruin::plugin)).run();
         return;
@@ -159,12 +172,20 @@ fn shoot(
     let (Some(path), Some(image)) = (&args.shot, offscreen) else {
         return;
     };
-    if frame.0 == args.frames {
+    let n = frame.0.wrapping_sub(args.frames);
+    if args.film > 0 && n < args.film {
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("f");
+        let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("jpg");
+        let file = path.with_file_name(format!("{stem}-{n:04}.{ext}"));
+        commands
+            .spawn(Screenshot::image(image.0.clone()))
+            .observe(save_to_disk(file));
+    } else if args.film == 0 && frame.0 == args.frames {
         commands
             .spawn(Screenshot::image(image.0.clone()))
             .observe(save_to_disk(path.clone()));
     }
-    if frame.0 == args.frames + 30 {
+    if frame.0 == args.frames + args.film + 30 {
         exit.write(AppExit::Success);
     }
 }
