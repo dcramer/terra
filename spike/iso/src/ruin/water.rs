@@ -42,11 +42,20 @@ pub fn pool(p: Vec2) -> f32 {
 /// How wet the flags are at `p` under the puddles (0..1). A puddle is wet stone drawn by
 /// the flags' own material (flags.wesl: darker, near-mirror smooth, a sharp water line), not
 /// a film of water over them: the film's mirrored sky drew them as violet ovals (judge r8).
+///
+/// It rides the paving's vertices, 20 cm apart, so its water line drawn there ran in straight
+/// strokes (the judge's "straight lit edge"): here only the puddle's broad shape, its ramp
+/// wide (half the blob's bank, not a fifth) and with no detail finer than the grid, and
+/// flags.wesl draws the line per pixel across that ramp.
 pub fn puddled(p: Vec2) -> f32 {
     PUDDLES
         .iter()
         .enumerate()
-        .map(|(k, d)| blob(p, *d, 341 + 2 * k as u32))
+        .map(|(k, &(at, half, _))| {
+            let q = (p - at) / half;
+            let ragged = (fbm(p * 1.3, 341 + 2 * k as u32) - 0.5) * 0.7;
+            super::ground::smooth(1.0, 0.5, q.length() + ragged)
+        })
         .fold(0.0, f32::max)
 }
 
