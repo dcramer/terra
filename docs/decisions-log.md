@@ -1238,3 +1238,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-06**: D627 amended (by the agent, pipeline-docs j2): a tool's reference beside its README (`scripts.md`, `made-clips.md`) is read by an entry's grep or a section, never whole, and capped at 40 KB by the docs check; the four docs held over budget are trimmed and none is held over.
 - **2026-11-06**: D631 amended (by the agent, pipeline-docs j2): says what is built (inertialization, the course on the world, the foot lock's heading), the distance-matched stop on its branch waiting on the brake call, and what is not built yet.
 - **2026-11-06**: D632 decided (by the agent, pipeline-docs j2): a check gates only once a test plants a known fault and shows the check catches it; until then its number is a reading, not a pass.
+- 2026-11-06 D632: the Why quotes the developer.
