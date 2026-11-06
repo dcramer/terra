@@ -7,6 +7,7 @@
 
 import bevy_pbr::render::{
     mesh_functions,
+    utils::interleaved_gradient_noise,
     view_transformations::position_world_to_clip,
 };
 
@@ -25,7 +26,8 @@ import bevy_pbr::render::{
 struct Foliage {
     // xz: the wind's direction, z: how far a blade's tip bends (m), w: the time (s).
     wind: vec4<f32>,
-    // x: how far a leaf card flutters (m), y: 1 to cut the hole, z: its radius (m).
+    // x: how far a leaf card flutters (m), y: 1 to cut the hole, z: its radius (m), w: the
+    // frame (0..64), turning the hole's dither.
     leaf: vec4<f32>,
     right: vec4<f32>,
     up: vec4<f32>,
@@ -73,16 +75,11 @@ fn sway(world: vec3<f32>, root: vec3<f32>, w: vec2<f32>) -> vec3<f32> {
     return d;
 }
 
-/// Ordered dither, 4 by 4.
-fn bayer(p: vec2<f32>) -> f32 {
-    let x = u32(p.x) % 4u;
-    let y = u32(p.y) % 4u;
-    let m = array<f32, 16>(0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
-    return (m[y * 4u + x] + 0.5) / 16.0;
-}
-
 /// Cuts the hole: a fragment before one of the party, near them on the screen, is dropped
-/// through a dither that thins to nothing at the hole's middle.
+/// through a dither that thins to nothing at the hole's middle. The dither is interleaved
+/// gradient noise (Jimenez 2014, Bevy's `utils::interleaved_gradient_noise`) turned each
+/// frame (`leaf.w`), as Unreal's DitherTemporalAA: TAA averages it to a smooth fade, where a
+/// fixed 4 by 4 Bayer matrix showed as a checker at 1:1 (the forest's roots, iso-art j39).
 fn cut(world: vec3<f32>, frag: vec2<f32>) {
     if foliage.leaf.y < 0.5 {
         return;
@@ -100,7 +97,7 @@ fn cut(world: vec3<f32>, frag: vec2<f32>) {
         let f = (1.0 - smoothstep(r * 0.72, r, s)) * smoothstep(0.4, 1.4, before);
         fade = max(fade, f);
     }
-    if fade > bayer(frag) {
+    if fade > interleaved_gradient_noise(frag, u32(foliage.leaf.w)) {
         discard;
     }
 }

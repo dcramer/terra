@@ -98,6 +98,7 @@ fn breathe(
     camera: Query<&GlobalTransform, With<MainCamera>>,
     party: Query<&GlobalTransform, Or<(With<Member>, With<Seen>)>>,
     land: Res<crate::terrain::Land>,
+    frames: Res<bevy::diagnostic::FrameCount>,
 ) {
     let Ok(cam) = camera.single() else {
         return;
@@ -118,6 +119,8 @@ fn breathe(
             f.up = cam.up().extend(0.0);
             f.forward = cam.forward().extend(0.0);
             f.party = at;
+            // The frame, for the hole's dither to turn each frame and TAA to average.
+            f.leaf.w = (frames.0 % 64) as f32;
         }
     }
 }
