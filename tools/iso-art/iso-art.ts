@@ -11,10 +11,11 @@ import { parseArgs } from "node:util";
 import { stylePrompt } from "../props/props.ts";
 import { check, measure, printResults } from "./check.ts";
 import { readGlb, writeGlb } from "./gltf.ts";
-import { type Body, KINDS, type Kind, SPECS, clipsFor, isoPart } from "./kinds.ts";
+import { type Body, KINDS, type Kind, SPECS, budget, clipsFor, isoPart } from "./kinds.ts";
 import { type Asset, type Stage, type StageRecord, allAssets, assetDir, readAsset, readmeCost, statusTable, writeAsset } from "./ledger.ts";
 import { cut, inPlace, loop, place, renameClips } from "./normalize.ts";
 import { DIR, assetSheet, clipSheet } from "./sheet.ts";
+import { blenderCut, splice } from "./decimate.ts";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TRIPO = join(ROOT, "tools", "tripo", "tripo.ts");
@@ -168,6 +169,30 @@ export function exportAsset(ctx: Ctx, name: string): void {
   record(ctx, a, "export", { credits: r.out.credits ?? 0, minutes: r.minutes, files: [relative(ctx.root, out)], scale: Number(placed.scale.toFixed(4)), turn: Math.round(placed.turn), note: did });
 }
 
+/** Cuts the exported GLB's mesh to its budget (decimate.ts): by Blender here, or from `file`, a
+ * cut tools/blender/decimate.py made elsewhere of this same GLB. Run after every `export`. */
+export function decimateAsset(ctx: Ctx, name: string, file?: string): void {
+  const a = readAsset(ctx.root, name);
+  const path = assetFile(ctx.root, name);
+  if (!existsSync(path)) throw new Error(`${relative(ctx.root, path)} is missing: run \`export ${name}\` first`);
+  const start = Date.now();
+  const glb = readGlb(readFileSync(path));
+  const most = budget(a.kind, measure(glb));
+  const tris = measure(glb).triangles;
+  if (tris <= most && !file) {
+    ctx.print(`✓ ${name} is ${tris} triangles, within its ${most}: nothing to cut`);
+    return;
+  }
+  const cutFile = file ?? join(ctx.root, "target", "iso-art", name, "decimated.glb");
+  if (!file) {
+    mkdirSync(dirname(cutFile), { recursive: true });
+    blenderCut(ctx.root, path, cutFile, most);
+  }
+  const s = splice(glb, readGlb(readFileSync(cutFile)));
+  writeFileSync(path, writeGlb(glb));
+  record(ctx, a, "decimate", { credits: 0, minutes: (Date.now() - start) / 60000, triangles: s.after, note: `${s.before} to ${s.after} triangles (budget ${most}), Blender's collapse on the mesh alone, skeleton and clips kept; bounds within ${(s.drift * 100).toFixed(2)}%` });
+}
+
 export function checkAsset(ctx: Ctx, name: string, file?: string): boolean {
   const a = readAsset(ctx.root, name);
   const path = file ?? assetFile(ctx.root, name);
@@ -240,6 +265,8 @@ const USAGE = `usage: node tools/iso-art/iso-art.ts <stage> NAME …
   rig NAME               Tripo's auto-rig, humanoid or as its shape reads (20 credits)
   animate NAME           the kind's preset clips (free)
   export NAME            the GLB with its clips, life size, facing +Z, on y=0, to assets/models/iso/NAME.glb (free)
+  decimate NAME [FILE]   the GLB's mesh cut to its budget by Blender (or FILE, tools/blender/decimate.py's
+                         cut of it made elsewhere), skeleton and clips kept; after every export (free)
   check NAME [FILE]      what can be checked without a GPU; exits 1 if any check fails
   adopt NAME PROJECT --kind K [--height M] [--theme T] ["DESCRIPTION"]
                          takes an existing Tripo project in at the step it has reached
@@ -277,6 +304,7 @@ export function main(argv: string[], ctx: Ctx): number {
     case "rig": rig(ctx, name); return 0;
     case "animate": animate(ctx, name); return 0;
     case "export": exportAsset(ctx, name); return 0;
+    case "decimate": decimateAsset(ctx, name, third); return 0;
     case "check": return checkAsset(ctx, name, third) ? 0 : 1;
     case "adopt":
       if (!third) throw new Error(`adopt needs the Tripo PROJECT (its id, a prefix \`node tools/tripo/tripo.ts list\` shows, or its Studio URL)`);

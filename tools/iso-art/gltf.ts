@@ -191,6 +191,67 @@ export function addAccessor(glb: Glb, rows: number[][], type: "SCALAR" | "VEC3" 
   return doc.accessors.length - 1;
 }
 
+type Typed = Float32Array | Uint8Array | Uint16Array | Uint32Array;
+const TYPE_OF = new Map<Function, number>([[Float32Array, 5126], [Uint8Array, 5121], [Uint16Array, 5123], [Uint32Array, 5125]]);
+
+/** Appends a typed array to the binary chunk as a new accessor of `type` (its component type
+ * the array's), with the extra fields given (a POSITION's min and max, a view's target). */
+export function addTyped(glb: Glb, data: Typed, type: "SCALAR" | "VEC2" | "VEC3" | "VEC4", extra: { min?: number[]; max?: number[]; target?: number } = {}): number {
+  const { doc } = glb;
+  const start = glb.bin.length + ((4 - (glb.bin.length % 4)) % 4);
+  const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  glb.bin = Buffer.concat([glb.bin, Buffer.alloc(start - glb.bin.length), bytes]);
+  doc.buffers ??= [{ byteLength: 0 }];
+  doc.buffers[0].byteLength = glb.bin.length;
+  doc.bufferViews ??= [];
+  doc.bufferViews.push({ buffer: 0, byteOffset: start, byteLength: bytes.length, ...(extra.target ? { target: extra.target } : {}) });
+  doc.accessors ??= [];
+  doc.accessors.push({ bufferView: doc.bufferViews.length - 1, componentType: TYPE_OF.get(data.constructor)!, count: data.length / WIDTH[type], type, ...(extra.min ? { min: extra.min, max: extra.max } : {}) });
+  return doc.accessors.length - 1;
+}
+
+/** Drops the accessors and buffer views nothing refers to any more (a mesh or clip replaced) and
+ * packs the binary chunk anew, each view on 4 bytes. One buffer, the GLB's, as Tripo writes. */
+export function compact(glb: Glb): void {
+  const { doc } = glb;
+  if ((doc.buffers ?? []).length > 1) throw new Error("compact takes a GLB of one buffer");
+  const refs = <T>(keep: number[], seen: Map<number, number>) => (i: T): T => {
+    if (typeof i !== "number") return i;
+    if (!seen.has(i)) { seen.set(i, keep.length); keep.push(i); }
+    return seen.get(i)! as T;
+  };
+  const keep: number[] = [];
+  const ref = refs<number | undefined>(keep, new Map());
+  for (const m of doc.meshes ?? []) for (const p of m.primitives) {
+    for (const k of Object.keys(p.attributes)) p.attributes[k] = ref(p.attributes[k]);
+    p.indices = ref(p.indices);
+    for (const t of p.targets ?? []) for (const k of Object.keys(t)) t[k] = ref(t[k]);
+  }
+  for (const s of doc.skins ?? []) s.inverseBindMatrices = ref(s.inverseBindMatrices);
+  for (const a of doc.animations ?? []) for (const s of a.samplers) [s.input, s.output] = [ref(s.input), ref(s.output)];
+  doc.accessors = keep.map((i) => doc.accessors[i]);
+  const views: number[] = [];
+  const view = refs<number | undefined>(views, new Map());
+  for (const a of doc.accessors) {
+    if (a.sparse) throw new Error("compact does not take sparse accessors");
+    a.bufferView = view(a.bufferView);
+  }
+  for (const im of doc.images ?? []) im.bufferView = view(im.bufferView);
+  const parts: Buffer[] = [];
+  let at = 0;
+  doc.bufferViews = views.map((i) => {
+    const v = doc.bufferViews[i];
+    const pad = (4 - (at % 4)) % 4;
+    parts.push(Buffer.alloc(pad), glb.bin.subarray(v.byteOffset ?? 0, (v.byteOffset ?? 0) + v.byteLength));
+    at += pad;
+    const out = { ...v, byteOffset: at };
+    at += v.byteLength;
+    return out;
+  });
+  glb.bin = Buffer.concat(parts);
+  if (doc.buffers?.length) doc.buffers[0].byteLength = glb.bin.length;
+}
+
 /** Replaces the keys of `anim.channels[i]`'s sampler, as new accessors (the old stay unread). */
 export function writeChannel(glb: Glb, anim: any, i: number, times: number[], values: number[][]): void {
   const s = anim.samplers[anim.channels[i].sampler];
