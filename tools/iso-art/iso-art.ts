@@ -14,6 +14,7 @@ import { readGlb, writeGlb } from "./gltf.ts";
 import { type Body, KINDS, type Kind, SPECS, clipsFor, isoPart } from "./kinds.ts";
 import { type Asset, type Stage, type StageRecord, allAssets, assetDir, readAsset, readmeCost, statusTable, writeAsset } from "./ledger.ts";
 import { cut, inPlace, loop, place, renameClips } from "./normalize.ts";
+import { DIR, assetSheet, clipSheet } from "./sheet.ts";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TRIPO = join(ROOT, "tools", "tripo", "tripo.ts");
@@ -243,6 +244,8 @@ const USAGE = `usage: node tools/iso-art/iso-art.ts <stage> NAME …
   adopt NAME PROJECT --kind K [--height M] [--theme T] ["DESCRIPTION"]
                          takes an existing Tripo project in at the step it has reached
   status                 every asset's stages and costs
+  sheet [--dir DIR]      DIR/sheet.png and DIR/clips.png from the asset view's DIR/views
+                         (default ~/.cache/terra-review/iso-art; sheet.ts)
 
 Credits are tools/tripo/README.md's; a spending stage checks the balance first.`;
 
@@ -250,12 +253,18 @@ export function main(argv: string[], ctx: Ctx): number {
   const { values: v, positionals: p } = parseArgs({
     args: argv,
     allowPositionals: true,
-    options: { kind: { type: "string" }, theme: { type: "string" }, body: { type: "string" }, height: { type: "string" }, standard: { type: "boolean" }, help: { type: "boolean", short: "h" } },
+    options: { kind: { type: "string" }, theme: { type: "string" }, body: { type: "string" }, height: { type: "string" }, standard: { type: "boolean" }, dir: { type: "string" }, help: { type: "boolean", short: "h" } },
   });
   const [stage, name, third] = p;
   if (!stage || v.help) {
     ctx.print(USAGE);
     return stage ? 0 : 2;
+  }
+  if (stage === "sheet") {
+    const dir = v.dir ?? DIR;
+    ctx.print(`✓ ${assetSheet(ctx.root, dir, join(dir, "sheet.png"))}`);
+    ctx.print(`✓ ${clipSheet(ctx.root, dir, join(dir, "clips.png"))}`);
+    return 0;
   }
   if (stage === "status") {
     ctx.print(statusTable(allAssets(ctx.root)));
