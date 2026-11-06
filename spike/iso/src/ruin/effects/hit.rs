@@ -83,7 +83,7 @@ fn spawn(
     let out = (OGRE - KNIGHT).normalize().extend(0.0).xzy() + Vec3::Y * 0.45;
     let streak = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
     let spark = materials.add(glow(LinearRgba::rgb(14.0, 6.5, 1.6), None));
-    sparks(&mut commands, burst, &streak, &spark, &mut rng, 26, out, 0.8, (4.0, 10.0), 0.018);
+    sparks(&mut commands, burst, &streak, &spark, &mut rng, 26, out, 0.8, (4.0, 10.0), 0.03);
 }
 
 /// Finds the knight and the ogre by where they stand, and the ogre's materials once its
@@ -180,12 +180,15 @@ fn flinch(a: f32) -> f32 {
 }
 
 /// The hit flash's emissive at `a`: white, then red, then gone, in a sixth of a second.
+/// Partial, as the ARPGs' hit flash is: it multiplies the creature's own albedo (its
+/// emissive texture is its base colour's, `show`) and stays under it, so the hide's
+/// pattern and the light's shading still read through it rather than a flat silhouette.
 fn flash(a: f32) -> LinearRgba {
     if !(0.0..0.17).contains(&a) {
         return LinearRgba::BLACK;
     }
-    let white = Vec3::splat(1.6);
-    let red = Vec3::new(1.5, 0.08, 0.05);
+    let white = Vec3::splat(0.55);
+    let red = Vec3::new(0.7, 0.05, 0.03);
     let c = white.lerp(red, super::kit::smooth(0.02, 0.07, a))
         * (1.0 - super::kit::smooth(0.07, 0.17, a));
     LinearRgba::rgb(c.x, c.y, c.z)
@@ -207,7 +210,7 @@ fn show(
                 let mut tr = tr.unwrap();
                 tr.translation = STRIKE;
                 tr.rotation = cam.rot;
-                tr.scale = Vec3::splat(if a < 0.12 { 1.1 * (1.0 - k * k) + 0.2 } else { 0.0 });
+                tr.scale = Vec3::splat(if a < 0.12 { 0.5 * (1.0 - k * k) + 0.1 } else { 0.0 });
                 if let Some(mut m) = materials.get_mut(m) {
                     let f = 1.0 - k;
                     m.base_color = LinearRgba::rgb(6.0 * f, 4.0 * f, 3.0 * f).into();
@@ -233,6 +236,9 @@ fn show(
             && let Some(mut m) = materials.get_mut(h)
         {
             m.emissive = e;
+            if m.emissive_texture.is_none() {
+                m.emissive_texture = m.base_color_texture.clone();
+            }
         }
     }
 }
@@ -249,12 +255,17 @@ mod tests {
         assert!(flinch(0.6) < 0.06);
     }
 
-    /// The flash starts white, turns red, and is gone in under two tenths.
+    /// The flash starts white, turns red, and is gone in under two tenths; it is partial
+    /// throughout, never adding more than the albedo it multiplies, so shading survives.
     #[test]
     fn flash_goes_white_red_out() {
         let w = flash(0.01);
         let r = flash(0.09);
-        assert!(w.green > 1.0 && w.red > 1.0, "{w:?}");
+        assert!(w.green > 0.3 && w.green > 0.8 * w.red, "{w:?}");
+        for i in 0..20 {
+            let c = flash(i as f32 * 0.01);
+            assert!(c.red < 1.0 && c.green < 1.0 && c.blue < 1.0, "{c:?} at {i}0 ms");
+        }
         assert!(r.red > 4.0 * r.green && r.red > 0.2, "{r:?}");
         assert_eq!(flash(0.2), LinearRgba::BLACK);
     }
