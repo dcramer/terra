@@ -471,6 +471,7 @@ fn record(
         stride: if weight > 0.0 { pushed / weight } else { 0.0 },
         aloft: mover.height > 0.0,
         lock,
+        feet: kept.states(),
     }
 }
 
@@ -485,15 +486,16 @@ fn stance_of(frame: &Frame, at: Vec3, facing: Vec3) -> [Vec2; 2] {
 
 /// A transition's frames for `cargo xtask anim --trace <name>` (the log keeps them all), over
 /// its whole step: a line a frame of its time in, the clip and how far into it, the feet's lock
-/// curves, the body's speed, how far each ball moved over the ground that frame (the stop's
-/// settle and a slide read from it) and its three worst joints' pops (`measure::pop` of that
-/// frame alone), so a row's worst is read as a curve without a rebuild to print one.
+/// curves and how the lock keeps each (planted, stepping, free...), the body's speed, how far each ball moved over the ground that frame (`*` where it
+/// stood planted, so the slide counts it: the stop's settle and a slide read from it) and its
+/// three worst joints' pops (`measure::pop` of that frame alone), so a row's worst is read as a
+/// curve without a rebuild to print one.
 fn trace(
     name: &str,
     frames: &[Frame],
     kicks: &[Vec<f32>],
     steady: &std::collections::HashMap<String, Vec<f32>>,
-    clips: &[&str],
+    (clips, stand): (&[&str], [f32; 2]),
     (from, to): (usize, usize),
 ) {
     for i in from..to {
@@ -512,19 +514,25 @@ fn trace(
             .map(|(p, j)| format!("{} {p:.2}", JOINTS[*j]))
             .collect();
         let f = &frames[i];
-        let moved = (0..2).map(|b| {
-            let d = f.balls[b] - frames[i.saturating_sub(1)].balls[b];
-            Vec2::new(d.x, d.z).length() * 100.0
-        });
-        let moved: Vec<String> = moved.map(|cm| format!("{cm:.1}")).collect();
+        let was = &frames[i.saturating_sub(1)];
+        let moved: Vec<String> = (0..2)
+            .map(|b| {
+                let d = f.balls[b] - was.balls[b];
+                let cm = Vec2::new(d.x, d.z).length() * 100.0;
+                let slid = measure::planted(f, b, stand[b]) && measure::planted(was, b, stand[b]);
+                format!("{cm:.1}{}", if slid { "*" } else { "" })
+            })
+            .collect();
         println!(
-            "trace\t{name}\t+{:.3}\t{} {:.3}{}\tlock {:.2} {:.2}\tspeed {:.2}\tballs {} cm\t{}",
+            "trace\t{name}\t+{:.3}\t{} {:.3}{}\tlock {:.2} {:.2} {}/{}\tspeed {:.2}\tballs {} cm\t{}",
             (i - from) as f32 / FPS,
             f.clip,
             f.seek,
             if f.solo.is_some() { "" } else { " (blend)" },
             f.lock[0],
             f.lock[1],
+            f.feet[0],
+            f.feet[1],
             f.speed,
             moved.join(" "),
             worst.join(", "),
@@ -612,7 +620,7 @@ fn the_animation_course_measures_the_mans_transitions() {
             &frames,
             &kicks,
             &steady,
-            &[before, after],
+            (&[before, after], stand),
             (*from, *end),
         );
     }

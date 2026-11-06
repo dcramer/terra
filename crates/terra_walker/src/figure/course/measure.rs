@@ -44,6 +44,9 @@ pub struct Frame {
     /// Each foot's lock curve over the clips coming in (`feet::Kept::locks`, the contact their
     /// files bake, ALS's FootLock curves): 1 where the clips have the foot planted.
     pub lock: [f32; 2],
+    /// How the foot lock keeps each foot (`feet::Kept::states`: planted, stepping, free...),
+    /// for the trace's reader.
+    pub feet: [&'static str; 2],
 }
 
 /// Each frame's change of angular velocity, a joint each, deg/s (0 for the first two frames).
@@ -140,12 +143,8 @@ pub fn pop(
 /// ground, its up `Y`; a foot rolling off as its curve ramps down is a release, not counted.
 pub fn slide(frames: &[Frame], stand: [f32; 2], (from, to): (usize, usize)) -> f32 {
     let mut worst: f32 = 0.0;
-    for (foot, stand) in stand.iter().enumerate() {
-        let planted = |f: &Frame| {
-            !f.aloft
-                && f.lock[foot] >= terra_motion::feet::FULL
-                && f.balls[foot].y <= stand + DOWN_M
-        };
+    for (foot, &stand) in stand.iter().enumerate() {
+        let planted = |f: &Frame| planted(f, foot, stand);
         let mut stay = 0.0;
         for i in from.max(1)..to.min(frames.len()) {
             if planted(&frames[i]) && planted(&frames[i - 1]) {
@@ -158,6 +157,12 @@ pub fn slide(frames: &[Frame], stand: [f32; 2], (from, to): (usize, usize)) -> f
         }
     }
     worst
+}
+
+/// Whether ball `foot` stands planted in frame `f` (`slide`'s plant): its clips have it locked
+/// and it is within DOWN_M of its standing height `stand`.
+pub fn planted(f: &Frame, foot: usize, stand: f32) -> bool {
+    !f.aloft && f.lock[foot] >= terra_motion::feet::FULL && f.balls[foot].y <= stand + DOWN_M
 }
 
 /// The worst gap between the body's speed and its feet's over frames `from..to` on the
@@ -190,6 +195,7 @@ mod tests {
                 stride: 0.0,
                 aloft: false,
                 lock: [1.0; 2],
+                feet: ["planted"; 2],
             })
             .collect()
     }
