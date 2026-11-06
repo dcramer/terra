@@ -28,7 +28,8 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | Doc | What it covers |
 |---|---|
 | [vision.md](vision.md) | What we are building (D187), the pitch, pillars, our inspirations, tone, non-goals, and how the scope is reached. |
-| [v0-goals.md](v0-goals.md) | Decided (D589): the next milestone, the engine's foundations with one thin demo on top: the session that proves v0, the demo arc, what is out of it, the three seams that come first, the tracks that run side by side with what each has, needs and is done by, the budgets, their order, and what is left for later. |
+| [v0-goals.md](v0-goals.md) | Decided (D589): the next milestone, the engine's foundations with one thin demo on top: the session that proves v0, the demo arc, what is out of it, the three seams that come first, the tracks that run side by side, the budgets, their order, and what is left for later. |
+| [v0-tracks.md](v0-tracks.md) | v0's tracks (D589), a section each: what it has, what it needs and when it is done. |
 | [v0-characters.md](v0-characters.md) | v0's people: where the switch to Quaternius's bodies stands (D599), the licences of the packs bought, where it stands, and the next jobs in v0's order. |
 | [gameplay.md](gameplay.md) | **The game's design, and the source of truth for it** (D89): a living world, after Enshrouded and *He Who Fights With Monsters*; what goes on in the realms, the loops, factions and settlements, holding ground, no hand-holding. Links a page per system, below. |
 | [lore.md](lore.md) | The foundational lore: how the universe works, from *He Who Fights With Monsters*'s world-building, written in our own words. The basis for every system. |
