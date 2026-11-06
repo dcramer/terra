@@ -7,7 +7,7 @@ use crate::scene::model;
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, pose);
+    app.add_plugins(super::held::plugin).add_systems(Update, pose);
 }
 
 /// A body's clip and where in it to stand.
