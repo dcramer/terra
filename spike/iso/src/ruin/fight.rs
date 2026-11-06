@@ -25,18 +25,23 @@ fn cast(mut commands: Commands, posed: Query<(Entity, &Pose), Added<Pose>>) {
     }
 }
 
-/// How much a body's albedo and rim are scaled. The ogre's beige coat is the floor's tone
-/// in every scene (the judges' gap), so it stands darker; the pale treant stood at the
-/// forest's rocks' value and blew out white under the marsh's frost (iso-art j30's
-/// judges). The tree monster's crown is all leaf edges, each of which takes the band, so
-/// it frosts: a share of it. The rest as they come.
+/// How much a body's albedo and rim are scaled, so each stands darker than the ground
+/// beside it as the ARPGs' creatures do (their crops: refs/creatures.json). Tripo's bark
+/// and hide are the ground's value: in the forest's sun the tree creatures stood 5 to 10
+/// L* lighter than the dirt about them (the judges' "pale, at the rocks' value"). Measured
+/// on a magenta mask of each body against a 10 px ring of ground (iso-art j34), these
+/// take them to 5 to 10 L* darker; with the fighters' duller specular (rim.rs `FIGHTER_
+/// REFLECTANCE`). The tree monster's crown is all leaf edges, each of which takes the
+/// band, so it frosts: a share of it. The rest as they come.
 fn value(path: &str) -> (f32, f32) {
     if path.contains("ogre") {
         (0.5, 1.0)
     } else if path.contains("treant-a") {
-        (0.55, 1.0)
+        (0.2, 1.0)
+    } else if path.contains("treant-b") {
+        (0.35, 1.0)
     } else if path.contains("tree-monster") {
-        (1.0, 0.35)
+        (0.35, 0.35)
     } else {
         (1.0, 1.0)
     }

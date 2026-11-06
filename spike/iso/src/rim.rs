@@ -235,6 +235,11 @@ fn swap(
     }
 }
 
+/// A fighter's specular (Bevy's 0.5 is glTF's dielectric 4%): on Tripo's dark bark and
+/// hide a colourless sky sheen at 4% lifted a body 4 to 5 L* toward grey whatever its
+/// albedo (forest by day, iso-art j34); at 0.15 (about 1%) the albedo's value step reads.
+const FIGHTER_REFLECTANCE: f32 = 0.15;
+
 /// The swapped material for `mat` tinted by `tint` with `rim`, made the first time.
 fn rimmed_as(
     swapped: &mut Swapped,
@@ -253,6 +258,9 @@ fn rimmed_as(
     let c = base.base_color.to_linear();
     base.base_color =
         LinearRgba::new(c.red * tint.x, c.green * tint.y, c.blue * tint.z, c.alpha).into();
+    if kind == Kind::Fighter {
+        base.reflectance = FIGHTER_REFLECTANCE;
+    }
     let h = rims.add(ExtendedMaterial {
         base,
         extension: RimExt {
