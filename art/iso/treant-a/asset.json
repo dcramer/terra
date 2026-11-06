@@ -29,22 +29,22 @@
       "note": "idle walk run attack death"
     },
     "export": {
-      "at": "2026-11-06T07:59:40.632Z",
+      "at": "2026-11-06T10:54:48.242Z",
       "credits": 0,
-      "minutes": 0.8424333333333334,
+      "minutes": 0.016866666666666665,
       "files": [
         "assets/models/iso/treant-a.glb"
       ],
       "scale": 2.6573,
       "turn": 180,
-      "note": "scaled 2.657, turned 180 deg, in place walk run, cut attack, looped run on 0.41-1.04 s (ends 4.4% apart before closing)"
+      "note": "scaled 2.657, turned 180 deg, in place walk run, cut attack, looped run on 0.41-1.04 s (ends 4.4% apart before closing), centred run (body 41% of height off)"
     },
     "check": {
-      "at": "2026-11-06T08:00:48.791Z",
+      "at": "2026-11-06T10:55:02.503Z",
       "credits": 0,
-      "minutes": 0.0015166666666666666,
-      "passed": 24,
-      "of": 25,
+      "minutes": 0.0018333333333333333,
+      "passed": 29,
+      "of": 30,
       "failed": [
         "triangles"
       ],
@@ -61,7 +61,7 @@
       },
       "triangles": 28916,
       "height": 2.6,
-      "note": "passed 24 of 25"
+      "note": "passed 29 of 30"
     }
   },
   "name": "treant-a",

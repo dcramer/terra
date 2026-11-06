@@ -30,22 +30,22 @@
       "note": "idle walk run attack hit death"
     },
     "export": {
-      "at": "2026-11-06T07:07:40.902Z",
+      "at": "2026-11-06T10:54:39.114Z",
       "credits": 0,
-      "minutes": 0.010983333333333333,
+      "minutes": 0.04056666666666667,
       "files": [
         "assets/models/iso/knight.glb"
       ],
       "scale": 1.8897,
       "turn": 0,
-      "note": "scaled 1.890, turned 0 deg, in place walk run, cut attack, looped run on 0.41-1.04 s (ends 3.7% apart before closing)"
+      "note": "scaled 1.890, turned 0 deg, in place walk run, cut attack, looped run on 0.41-1.04 s (ends 3.7% apart before closing), centred run (body 56% of height off)"
     },
     "check": {
-      "at": "2026-11-06T07:11:10.753Z",
+      "at": "2026-11-06T10:54:57.788Z",
       "credits": 0,
-      "minutes": 0.0017833333333333334,
-      "passed": 25,
-      "of": 25,
+      "minutes": 0.0019666666666666665,
+      "passed": 30,
+      "of": 30,
       "failed": [],
       "clips": {
         "idle": 15.33,
@@ -60,7 +60,7 @@
       },
       "triangles": 9638,
       "height": 1.85,
-      "note": "passed 25 of 25"
+      "note": "passed 30 of 30"
     }
   },
   "name": "knight",

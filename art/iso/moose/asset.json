@@ -25,9 +25,9 @@
       "note": "walk"
     },
     "export": {
-      "at": "2026-11-06T08:00:42.097Z",
+      "at": "2026-11-06T10:54:52.110Z",
       "credits": 0,
-      "minutes": 0.22768333333333332,
+      "minutes": 0.016466666666666668,
       "files": [
         "assets/models/iso/moose.glb"
       ],
@@ -36,11 +36,11 @@
       "note": "scaled 2.438, turned 90 deg, in place walk, looped walk on 1.12-1.98 s (ends 0.0% apart before closing)"
     },
     "check": {
-      "at": "2026-11-06T08:00:49.111Z",
+      "at": "2026-11-06T10:55:04.209Z",
       "credits": 0,
-      "minutes": 0.00031666666666666665,
-      "passed": 10,
-      "of": 10,
+      "minutes": 0.0003333333333333333,
+      "passed": 12,
+      "of": 12,
       "failed": [],
       "clips": {
         "walk": 0.87
@@ -50,7 +50,7 @@
       },
       "triangles": 9976,
       "height": 2.2,
-      "note": "passed 10 of 10"
+      "note": "passed 12 of 12"
     }
   },
   "name": "moose",
