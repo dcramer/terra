@@ -253,18 +253,22 @@ fn shades_the_fight(trunk: Vec2, scale: f32) -> bool {
     MIDDLE.distance(a + ab * k) < BREAK
 }
 
-/// The sun break: the crowns that shade the fight cast no shadow.
+/// The sun break: the oaks that shade the fight cast no shadow, crown, trunk and boughs (with
+/// the crowns alone cast out, the boughs' long shadow still lay over the knight: j27's
+/// second still).
 fn sun_break(
     mut commands: Commands,
-    crowns: Query<(Entity, &ChildOf), With<Crown>>,
-    roots: Query<&Transform>,
+    crowns: Query<&ChildOf, With<Crown>>,
+    roots: Query<(&Transform, &Children)>,
 ) {
-    for (e, parent) in &crowns {
-        let Ok(t) = roots.get(parent.parent()) else {
+    for parent in &crowns {
+        let Ok((t, parts)) = roots.get(parent.parent()) else {
             continue;
         };
         if shades_the_fight(t.translation.xz(), t.scale.x) {
-            commands.entity(e).insert(bevy::light::NotShadowCaster);
+            for e in parts.to_vec() {
+                commands.entity(e).insert(bevy::light::NotShadowCaster);
+            }
         }
     }
 }
