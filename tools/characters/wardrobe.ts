@@ -2,7 +2,11 @@
 // The wardrobe check (D611): every body, piece and look of the catalogue
 // (assets/models/character/wardrobe.json) as the game loads them, a line a stage (D388).
 //
-//   node tools/characters/wardrobe.ts
+//   node tools/characters/wardrobe.ts [--build]
+//
+// --build first adds an outfit just vendored: its rows drafted into the catalogue (draft_rows.ts;
+// name each drafted look's items after), each body's build step, the new pieces' pairings
+// (pairings.ts --new), then the stages below.
 //
 // - **vendored**, **private**, **reshape**: the guard on their parts (D599, vendored.ts): every
 //   file of theirs as shipped, by SHA256SUMS and the private repository's manifest, and no
@@ -24,8 +28,9 @@
 //
 // Node 22.18 or later; no dependencies. Exits 1 on any failure, its details under the stage.
 
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { draft, OUTFITS, withDraft } from "./draft_rows.ts";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bodiesData, buildSteps, gearData, gltfFiles, type Wardrobe, wardrobeData } from "./build_steps.ts";
@@ -147,9 +152,27 @@ function looks(w: Wardrobe): Stage {
   }
 }
 
+/** --build, before the stages: rows drafted for their newly vendored pieces (draft_rows.ts), each
+ *  body's build step, then the new pieces' pairings measured; a line each. */
+function build() {
+  const at = join(ROOT, "assets", "models", "character", "wardrobe.json");
+  const text = readFileSync(at, "utf8");
+  const d = draft(JSON.parse(text), readdirSync(join(ROOT, OUTFITS)));
+  if (d.pieces.length || d.looks.length) writeFileSync(at, withDraft(text, d));
+  writeFileSync(LOG, d.skipped.map((s) => `drafted no row for ${s}\n`).join(""), { flag: "a" });
+  console.log(`✓ drafted ${d.pieces.length} piece rows and ${d.looks.length} looks into wardrobe.json${d.looks.length ? " (each look's about says what to name)" : ""}; ${d.skipped.length} files left out, why in ${LOG.slice(ROOT.length)}`);
+  const run = (what: string, cmd: string, args: string[]) => {
+    const r = spawnSync(cmd, args, { cwd: ROOT, stdio: "inherit" });
+    if (r.status !== 0) console.log(`✗ ${what} exited ${r.status}: its lines above; the build's known faults are in cargo xtask characters`);
+  };
+  for (const body of Object.keys(wardrobeData(ROOT).bodies)) run(`the build of wardrobe:${body}`, "tools/characters/build_bodies.sh", ["--step", `wardrobe:${body}`]);
+  run("pairings.ts --new", process.execPath, ["tools/characters/pairings.ts", "--new"]);
+}
+
 if (import.meta.main) {
   mkdirSync(dirname(LOG), { recursive: true });
   writeFileSync(LOG, "");
+  if (process.argv.includes("--build")) build();
   const w = wardrobeData(ROOT);
   let failed = false;
   const said: StageResult[] = [];
