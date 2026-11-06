@@ -12,6 +12,7 @@ mod fight;
 mod land;
 mod life;
 mod light;
+mod lips;
 mod plants;
 mod wisps;
 
@@ -51,6 +52,7 @@ pub fn plugin(app: &mut App) {
             light::plugin,
             fight::plugin,
             plants::plugin,
+            lips::plugin,
             wisps::plugin,
             life::plugin,
             // The ruin's low fog, firelit dust and fireflies, and its wind material.

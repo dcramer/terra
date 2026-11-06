@@ -75,11 +75,28 @@ fn puddle(p: Vec2) -> f32 {
     path(p) * smooth(0.58, 0.7, fbm(p * 0.9, 43)) * smooth(1.2, 1.8, feet) * 0.34
 }
 
-/// The land's height: hummocks on the banks, shelving into the waters, the path's puddles.
+/// The land's height: hummocks on the banks, shelving into the waters, the path's puddles,
+/// with a mud shelf at the water's line.
 pub fn shape(p: Vec2) -> f32 {
     let bank = BANK + 0.18 * (fbm(p * 0.3, 11) - 0.5) + 0.08 * (fbm(p * 1.1, 13) - 0.5);
     let s = smooth(0.0, 0.6, wet(p));
-    bank * (1.0 - s) + DEEP * s - puddle(p)
+    shelf(bank * (1.0 - s) + DEEP * s - puddle(p))
+}
+
+/// The mud shelf: heights within `SHELF.y` of `SHELF.x` (just under the face) pressed
+/// toward it, half as steep at its middle, so the bank runs out into a broad lip of
+/// shallows and wet mud for the stones, roots and reeds to stand in, not one cut line
+/// (the judge, iso-art j35). Unchanged outside the band, monotone and smooth: the slope
+/// is 1 - 0.25 (cos(pi d / w) + cos(2 pi d / w)), 0.5 at the middle, 1 at the band's ends.
+const SHELF: Vec2 = Vec2::new(-0.03, 0.12);
+pub fn shelf(h: f32) -> f32 {
+    let (c, w) = (SHELF.x, SHELF.y);
+    let d = h - c;
+    if d.abs() >= w {
+        return h;
+    }
+    let x = std::f32::consts::PI * d / w;
+    h - 0.25 * w / std::f32::consts::PI * (x.sin() + 0.5 * (2.0 * x).sin())
 }
 
 /// Each vertex's layers, in broad zones a few metres across so the ground is not one even
@@ -185,6 +202,25 @@ mod tests {
         }
         for p in [Vec2::new(0.0, near(0.0)), Vec2::new(-2.0, far(-2.0)), MERE] {
             assert!(shape(p) < LEVEL - 0.25, "{p} is not open water: {}", shape(p));
+        }
+    }
+
+    /// The shelf flattens the bank at the water's line and keeps it rising: half as steep
+    /// at the line, never falling, the heights outside the band untouched.
+    #[test]
+    fn the_shelf_flattens_the_water_line_and_keeps_the_bank_rising() {
+        let (c, w) = (SHELF.x, SHELF.y);
+        let e = 1e-3;
+        let mid = (shelf(c + e) - shelf(c - e)) / (2.0 * e);
+        assert!((mid - 0.5).abs() < 0.02, "the shelf's slope at its middle is {mid}");
+        let mut last = shelf(c - w - 0.1);
+        for k in 1..=400 {
+            let h = c - w - 0.1 + k as f32 * (2.0 * w + 0.2) / 400.0;
+            assert!(shelf(h) >= last, "the shelf falls at {h}");
+            last = shelf(h);
+        }
+        for h in [c - w - 0.01, c + w + 0.01, 0.3, -0.6] {
+            assert_eq!(shelf(h), h, "the shelf moves {h}");
         }
     }
 
