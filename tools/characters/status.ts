@@ -75,9 +75,10 @@ export type Row = { id: string; mark: "✓" | "✗" | "?"; said: string; bar: st
 /** What a live criterion reads from the catalogue. */
 export function live(kind: string, w: Wardrobe): { ok: boolean; said: string; n?: number } {
   if (kind === "hair") {
-    // A look's hair is its piece of the hair slot, as the game composes it.
+    // A look's hair is its piece of the hair slot, as the game composes it: a piece of the
+    // catalogue made for that slot (a beard or a name the catalogue lacks is no hair).
     const looks = Object.values(w.looks) as { pieces: Record<string, string> }[];
-    const with_ = looks.filter((l) => l.pieces.hair).length;
+    const with_ = looks.filter((l) => w.pieces[l.pieces.hair]?.slot === "hair").length;
     return { ok: with_ === looks.length, said: `${with_} of ${looks.length} looks wear hair` };
   }
   if (kind === "figures") {

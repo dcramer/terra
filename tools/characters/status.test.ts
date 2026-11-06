@@ -8,6 +8,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { type Criteria, criteria, format, freshness, type Git, rows, where } from "./status.ts";
 import { record, type Record, records } from "./record.ts";
+import { type Wardrobe, wardrobeData } from "./build_steps.ts";
+import type { Pairing } from "./pairings.ts";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const NOW = Date.parse("2026-11-05T12:00:00Z");
@@ -116,4 +118,38 @@ test("a record is kept per machine, newest first, the last 20", () => {
   assert.deepEqual(r[0].failures, ["f24"]);
   assert.match(r[0].commit, /^[0-9a-f]{40}$/);
   delete process.env.TERRA_CHARACTER_RECORDS;
+});
+
+// The live readings on the catalogue as it is, and each with a planted fault it must catch (D632).
+type Look = Wardrobe["looks"][string];
+const W = () => wardrobeData(ROOT) as Wardrobe & { pairings: Pairing[] };
+const LIVE = criteria(ROOT).criteria.filter((k) => k.live);
+const mark = (w: Wardrobe, id: string) => rows({ ...C, criteria: LIVE.filter((k) => k.id === id) }, {}, w)[0];
+
+test("looks.hair: every look wears hair; one without, or with a beard in its hair slot, fails", () => {
+  assert.equal(mark(W(), "looks.hair").mark, "✓");
+  const faults = [(l: Look) => delete l.pieces.hair, (l: Look) => (l.pieces.hair = "male_beard_full")];
+  for (const fault of faults) {
+    const w = W();
+    fault(w.looks.ranger);
+    const n = Object.keys(w.looks).length;
+    const r = mark(w, "looks.hair");
+    assert.equal(r.mark, "✗");
+    assert.equal(r.said, `${n - 1} of ${n} looks wear hair`);
+  }
+});
+
+test("variants: the catalogue's figures within the bar; none (every pairing refused) or too many (nothing refused, the shoes thrice) fail", () => {
+  assert.equal(mark(W(), "variants").mark, "✓");
+  const none = W();
+  for (const r of none.pairings) r.verdict = "refused";
+  assert.equal(mark(none, "variants").mark, "✗");
+  assert.match(mark(none, "variants").said, /^male 0 figures/);
+  const many = W();
+  many.pairings = many.pairings.filter((r) => r.verdict !== "refused");
+  // Nothing refused, and every pair of shoes in three colours of their own: three times as many.
+  for (const [name, p] of Object.entries(many.pieces)) for (let k = 1; k < 3 && p.slot === "feet"; k++) many.pieces[`${name}_${k}`] = p;
+  const r = mark(many, "variants");
+  assert.equal(r.mark, "✗");
+  assert.ok(Number(r.said.split(" ")[1]) > 100000, r.said);
 });
