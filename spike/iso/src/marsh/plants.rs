@@ -14,7 +14,7 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 
 /// Reed clumps tried, and sedge tufts tried (most fall where they do not grow).
-const CLUMPS: usize = 1400;
+const CLUMPS: usize = 2800;
 const TUFTS: usize = 2600;
 /// The span planted (x, z): the frame and a margin.
 const LO: Vec2 = Vec2::new(-15.0, -12.0);
@@ -119,7 +119,7 @@ fn spawn(
     let mut reeds = Blades::default();
     for _ in 0..CLUMPS {
         let c = Vec2::new(rng.range(LO.x, HI.x), rng.range(LO.y, HI.y));
-        if !edge(c) || clear(c) || crate::terrain::fbm(c * 0.35, 91) < 0.45 {
+        if !edge(c) || clear(c) || crate::terrain::fbm(c * 0.35, 91) < 0.36 {
             continue;
         }
         for _ in 0..(12 + (rng.f() * 22.0) as usize) {
