@@ -138,6 +138,7 @@ Needs, death, the body, the map and options.
 | [D523](decisions/D523.md) | At the water's edge: wading slows, a swimmer climbs out, breath is shown | Design | Developers | Decided | Wading slows the walk linearly with depth to 60% of a… |
 | [D528](decisions/D528.md) | A runner stops in about two steps | Design | Developers | Decided | A body decelerates at about 15 m/s² (was 40)… |
 | [D579](decisions/D579.md) | The game's title screen and its worlds | Design | Developers | Decided | The game opens on a title screen of its own… |
+| [D633](decisions/D633.md) | A man brakes at 17 m/s², the stiffest two-step stop the distance-matched stop plays clean | Tech | Agent | Decided | D528's "about 15 m/s²" is set at 17… |
 
 ## Items and crafting
 

@@ -56,6 +56,11 @@ pub struct Motion {
     pub swimming: bool,
     /// The mouth under water (`mover::Body::under`): a swimmer's stroke is a dive's.
     pub under: bool,
+    /// How far the body goes along the ground before it stands, m, while it brakes to a stop
+    /// on the ground with nothing asked (Lyra's predicted stopping distance, its acceleration
+    /// none): the figure plays its stop by it (`figure::stop`, distance matching). None
+    /// otherwise.
+    pub stopping: Option<f32>,
 }
 
 impl Motion {
@@ -69,6 +74,7 @@ impl Motion {
             facing,
             swimming: false,
             under: false,
+            stopping: None,
         }
     }
 }

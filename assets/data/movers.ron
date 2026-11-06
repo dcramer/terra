@@ -78,7 +78,7 @@
         sprint: 6.0,
         swim: 2.0,
         accel: 30.0,
-        decel: 40.0,
+        decel: 17.0, // D528's two-step stop, the number D633's sweep
         swim_accel: 8.0,
         air_control: 0.3,
         turn_deg_s: 720.0,

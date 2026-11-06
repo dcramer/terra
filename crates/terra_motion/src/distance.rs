@@ -23,7 +23,33 @@ pub const CRUISE_SHARE: f32 = 0.9;
 /// Speeds are read over this many samples.
 const SPAN: usize = 6;
 
+/// How far a body going `speed` along the ground goes before it stands, braking at `decel`
+/// (its kind's, m/s²): the mover brakes at a constant rate, so v²/2a (Lyra's
+/// `PredictGroundMovementStopLocation`, its braking constant).
+pub fn stopping_distance(speed: f32, decel: f32) -> f32 {
+    if decel <= 0.0 {
+        return 0.0;
+    }
+    speed * speed / (2.0 * decel)
+}
+
 impl Markers {
+    /// The clip's root speed along its way `t` seconds in, m/s in its units at its own rate:
+    /// how fast the ground its planted feet stand on passes under a travelling clip played in
+    /// place (its stride's pace, as a loop's `pace` is); none for a clip that stands.
+    pub fn root_speed(&self, t: f32) -> f32 {
+        if !self.travels() {
+            return 0.0;
+        }
+        // Centred over SPAN samples, so a braking clip's speed is its own at `t`, not ahead.
+        let half = SPAN as f32 / 2.0 / self.rate;
+        let (from, to) = ((t - half).max(0.0), (t + half).min(self.length_s));
+        if to <= from {
+            return 0.0;
+        }
+        ((self.travelled(to) - self.travelled(from)) / (to - from)).max(0.0)
+    }
+
     /// Whether the clip keeps its root motion and has a distance curve.
     pub fn travels(&self) -> bool {
         self.distance.len() > 1
@@ -349,5 +375,27 @@ mod tests {
         let clip = Markers::default();
         assert!(!clip.travels());
         assert_eq!(clip.travelled(0.3), 0.0);
+        assert_eq!(clip.root_speed(0.3), 0.0);
+    }
+
+    /// The stop's speed is the derivative of d = 2t - t^2, 2 - 2t, wherever it is read.
+    #[test]
+    fn a_travelling_clips_root_speed_is_its_distances_rate_of_change() {
+        let clip = stop();
+        for t in [0.2, 0.5, 0.8] {
+            let speed = clip.root_speed(t);
+            assert!((speed - (2.0 - 2.0 * t)).abs() < 0.01, "{t}: {speed}");
+        }
+        assert!(clip.root_speed(1.5) < 1e-6, "it stands after its stop");
+    }
+
+    /// A body braking at a constant rate from v stands after v/a seconds, having gone the
+    /// mean speed v/2 that long.
+    #[test]
+    fn a_stopping_distance_is_the_mean_speed_over_the_brakes_time() {
+        let (v, a) = (6.0, 40.0);
+        let d = stopping_distance(v, a);
+        assert!((d - v / 2.0 * (v / a)).abs() < 1e-6, "{d}");
+        assert_eq!(stopping_distance(v, 0.0), 0.0);
     }
 }

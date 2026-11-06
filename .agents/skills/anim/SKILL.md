@@ -29,7 +29,9 @@ Done: acts inertialized at their start (j3) and end (j5); every change but a str
 
 j9: a lock's step lands headed as over its landing (slide.turn 0.004); the trace shows each foot's lock state and stars a counted slide.
 
-1. `glide.stop` 2.73 m/s, `pop.stop` 2.31, `stop.settle` 0.667 s: the distance-matched stop is built (branch `anim-stop-cap`, the j10 handoff's cap table) and waits on the mover's brake (the developer's anim-stop-brake): its pop is about 0.55 x its play rate², the rate about sqrt(brake / 6.7 m/s²).
+anim-stop j1: the distance-matched stop on main at D633's 17 m/s² brake (glide.stop 0.54 m/s, stop.rest 0.004).
+
+1. `pop.stop` 1.90, `stop.settle` 0.667 s: the pop's floor (about 1.85 at any brake 10-20 m/s² and any rate cap) is the sprint stop's first frame, upperarm_l as Sprint_Loop changes into Jog_Stop (`--trace stop.sprint`), and stop.jog.half's spine_01; settle is the clip running on after the body stands. A brake of 18 or more drags a foot 10-13 cm (slide.stop); the anim-stop j1 handoff has the sweep.
 4. `start.root` 1.35 m/s, `pop.start` 2.69: `Jog_Start` by distance.
 5. `seam.loops` 2.77 (Sprint_Loop's own wrap, upperarm_l): the clip's seam (the `character` skill).
 6. `glide.gait` 0.79 m/s.

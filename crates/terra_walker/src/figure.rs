@@ -57,6 +57,8 @@ enum Doing {
     Swim(crate::swim::Swim),
     /// Playing what a layer above asked (`Acting`).
     Acting,
+    /// A jog or sprint's distance-matched stop (`stop`), on the right foot planted last or not.
+    Stop(bool),
 }
 
 impl Doing {
@@ -75,6 +77,7 @@ impl Doing {
             Doing::Guard => "Sword_Idle",
             Doing::Swim(swim) => swim.clip(),
             Doing::Acting => "Fight_Guard",
+            Doing::Stop(right) => stop::clip(right),
         }
     }
 
@@ -90,7 +93,7 @@ impl Doing {
     fn once(self) -> bool {
         matches!(
             self,
-            Doing::Use | Doing::Down | Doing::Attack | Doing::Flinch | Doing::Roll
+            Doing::Use | Doing::Down | Doing::Attack | Doing::Flinch | Doing::Roll | Doing::Stop(_)
         )
     }
 }
@@ -320,6 +323,12 @@ pub fn plugin(app: &mut App) {
             // After the clips advance, so a swing takes its loop's seek time this frame.
             mix.after(bevy::animation::advance_animations)
                 .before(bevy::animation::animate_targets),
+        )
+        .add_systems(
+            PostUpdate,
+            stop::root_lock
+                .after(bevy::animation::animate_targets)
+                .before(crate::inertia::advance),
         );
 }
 
@@ -518,6 +527,15 @@ fn animate(
             Some(_) => Doing::Acting,
             None => doing(velocity.length(), motion.airborne, stance, downed, swim),
         };
+        let size = crate::pace::size(place, own);
+        let now = (animated.playing.as_ref()).and_then(|(name, copy, arms)| {
+            let node = moves.clips.get(name)?.played(*copy, *arms);
+            Some((name.as_str(), animator.animation(node)?.seek_time()))
+        });
+        let (marks, was) = (&moves.markers, animated.doing);
+        let doing = stop::doing(marks, (doing, was), now, motion.stopping);
+        let back = (motion.stopping).map(|left| left + velocity.length() * time.delta_secs());
+        let from_s = stop::from_s(marks, (doing, was), back, size);
         if let Some(mut pitch) = pitch {
             pitch.asked = match doing {
                 Doing::Swim(swim) => crate::swim::pitch(motion, Some(swim)),
@@ -541,7 +559,7 @@ fn animate(
                 &mut animator,
                 (&mut transitions, &mut inertia),
                 &mut hands,
-                (doing, act, asked),
+                (doing, act, asked, from_s),
             );
         }
         let Some((name, copy, arms)) = animated.playing.clone() else {
@@ -572,6 +590,13 @@ fn animate(
                 }
             }
             // The jog and sprint at the player's speed, played and warped (`pace::gait`).
+            // A stop by the distance the body has left (`stop`).
+            None if matches!(doing, Doing::Stop(_)) => {
+                if let (Some(left), Some(m)) = (motion.stopping, moves.markers.get(&name)) {
+                    let dt = time.delta_secs();
+                    playing.set_speed(stop::rate(m, playing.seek_time(), left, size, dt));
+                }
+            }
             None if matches!(doing, Doing::Jog | Doing::Sprint) => {
                 if let Some(pace) = moves.paces.get(&name) {
                     let gait = stride(velocity.length(), *pace, place, own);
@@ -584,7 +609,8 @@ fn animate(
         // The ground a travelling clip's feet stand on passes under the body as fast as the
         // clip strides, the way the body goes: its planted feet are kept on it (`feet`).
         if let Ok(mut kept) = feet.get_mut(animated.player) {
-            let pace = moves.paces.get(&name).copied().unwrap_or(0.0);
+            let at = animator.animation(main).map_or(0.0, |a| a.seek_time());
+            let pace = stop::pace(&moves, &name, at);
             let rate = animator.animation(main).map_or(0.0, |a| a.speed());
             kept.stride(velocity, pace * crate::pace::size(place, own), rate, warp);
         }
@@ -607,7 +633,7 @@ fn change(
     animator: &mut AnimationPlayer,
     (transitions, inertia): (&mut AnimationTransitions, &mut crate::inertia::Inertia),
     hands: &mut Query<(&mut CarryPosed, &Grip)>,
-    (doing, act, asked): (Doing, Option<&Act>, u32),
+    (doing, act, asked, from_s): (Doing, Option<&Act>, u32, f32),
 ) {
     let swims = matches!(doing, Doing::Swim(_)) || matches!(animated.doing, Doing::Swim(_));
     animated.doing = doing;
@@ -615,7 +641,7 @@ fn change(
     let (clip, once, from_s, blend) = match act {
         Some(act) => (act.clip.as_str(), act.once, act.from_s, act.blend),
         None if swims => (doing.clip(), doing.once(), 0.0, SWIM_BLEND),
-        None => (doing.clip(), doing.once(), 0.0, BLEND),
+        None => (doing.clip(), doing.once(), from_s, BLEND),
     };
     let hold = act
         .and_then(|act| act.hold.as_ref())
@@ -800,6 +826,8 @@ fn doing(
         Doing::Idle
     }
 }
+
+mod stop;
 
 #[cfg(test)]
 mod course;

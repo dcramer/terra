@@ -361,6 +361,9 @@ fn run() -> (Vec<Frame>, Vec<Tag>, Vec<(Vec3, Vec3)>) {
                 motion.on_ground = mover.height <= 0.0;
                 motion.airborne = mover.airborne;
                 motion.facing = tilt * facing;
+                // Braking on the ground with nothing asked, as the game's `movement::shown`.
+                motion.stopping = (step.speed == 0.0 && mover.height <= 0.0)
+                    .then(|| terra_motion::distance::stopping_distance(mover.speed, kind.decel));
             }
             *world.get_mut::<Transform>(body).unwrap() = place;
             if step.stance {
@@ -434,9 +437,10 @@ fn record(
     );
     let speed = mover.speed;
     let (mut pushed, mut weight) = (0.0, 0.0);
-    for (name, w, rate, _) in &playing {
-        let pace = moves.paces.get(name).copied().unwrap_or(0.0);
-        let warp = if *name == clip && pace > 0.0 {
+    for (name, w, rate, at) in &playing {
+        // A travelling clip's (a stop's) stride is its root speed there (`stop::pace`).
+        let pace = super::stop::pace(moves, name, *at);
+        let warp = if *name == clip && moves.paces.contains_key(name) {
             crate::pace::gait(speed, pace, size).warp
         } else {
             1.0

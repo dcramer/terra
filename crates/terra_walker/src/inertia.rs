@@ -111,7 +111,7 @@ impl Quintic {
 }
 
 /// Each figure's time since its start goes on, and a start asked is taken now.
-fn advance(time: Res<Time>, mut figures: Query<&mut Inertia>) {
+pub(crate) fn advance(time: Res<Time>, mut figures: Query<&mut Inertia>) {
     let dt = time.delta_secs();
     for mut inertia in &mut figures {
         let asked = inertia.asked.take();

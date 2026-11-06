@@ -1239,3 +1239,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-06**: D631 amended (by the agent, pipeline-docs j2): says what is built (inertialization, the course on the world, the foot lock's heading), the distance-matched stop on its branch waiting on the brake call, and what is not built yet.
 - **2026-11-06**: D632 decided (by the agent, pipeline-docs j2): a check gates only once a test plants a known fault and shows the check catches it; until then its number is a reading, not a pass.
 - 2026-11-06 D632: the Why quotes the developer.
+- **2026-11-06**: D633 decided (by the agent, anim-stop j1): the man's brake 40 to 17 m/s², D528's two-step stop at last applied, the stiffest of a 10-20 m/s² sweep with no animation row worse; the distance-matched stop landed with it (pop.stop 3.66 to 1.90, glide.stop 2.73 to 0.54 m/s, stop.rest 0.055 to 0.004 m). D631 amended: the stop is built, no longer on a branch.

@@ -571,7 +571,7 @@ fn walk(
             .find(|(of, _)| *of == entity)
             .map_or(Vec3::ZERO, |(_, wish)| *wish);
         stance.since_acting += dt;
-        shown(&mut motion, &stance, view, wish, body, dt);
+        shown(&mut motion, &stance, view, (wish, kind.decel), body, dt);
         *transform = Transform::from_translation(body.feet).looking_to(motion.facing, body.up);
     }
 }
@@ -598,12 +598,13 @@ fn indoors(motion: &mut Motion, site: Option<&build::Build>, feet: Vec3) {
 /// What the rest of the game reads of a player's motion, from their body: their speed over
 /// the ground and away from the centre, whether they stand, how long they have been in the
 /// air (sliding down a steep face or floating is not falling), and the way the figure faces:
-/// as it goes, or as it works.
+/// as it goes, or as it works; and braking on the ground with nothing asked, how far it goes
+/// before it stands at its kind's `decel` (the figure's distance-matched stop).
 fn shown(
     motion: &mut Motion,
     stance: &Stance,
     view: &View,
-    wish: Vec3,
+    (wish, decel): (Vec3, f32),
     body: &mover::Body,
     dt: f32,
 ) {
@@ -611,6 +612,8 @@ fn shown(
     motion.velocity = body.velocity.reject_from(up);
     motion.rising = body.velocity.dot(up);
     motion.on_ground = body.ground == Ground::Grounded;
+    motion.stopping = (motion.on_ground && wish == Vec3::ZERO)
+        .then(|| terra_motion::distance::stopping_distance(motion.velocity.length(), decel));
     motion.swimming = body.ground == Ground::Swimming;
     motion.under = body.under;
     motion.airborne = match body.ground {
