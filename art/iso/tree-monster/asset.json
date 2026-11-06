@@ -14,6 +14,55 @@
       "minutes": null,
       "adopted": true,
       "note": "rigged as biped"
+    },
+    "animate": {
+      "at": "2026-11-06T06:59:44.919Z",
+      "credits": 0,
+      "minutes": 1.4960666666666667,
+      "clips": [
+        "idle=idle",
+        "walk=walk",
+        "run=run",
+        "attack=slash",
+        "death=fall"
+      ],
+      "note": "idle walk run attack death"
+    },
+    "export": {
+      "at": "2026-11-06T07:02:15.363Z",
+      "credits": 0,
+      "minutes": 0.7661666666666667,
+      "files": [
+        "assets/models/iso/tree-monster.glb"
+      ],
+      "scale": 3.3477,
+      "turn": 0,
+      "note": "scaled 3.348, turned 0 deg, in place walk run, cut attack"
+    },
+    "check": {
+      "at": "2026-11-06T07:02:19.574Z",
+      "credits": 0,
+      "minutes": 0.0023333333333333335,
+      "passed": 23,
+      "of": 25,
+      "failed": [
+        "run loops",
+        "triangles"
+      ],
+      "clips": {
+        "walk": 2.33,
+        "idle": 15.33,
+        "attack": 2,
+        "death": 3,
+        "run": 1.25
+      },
+      "speeds": {
+        "walk": 1.31,
+        "run": 4.85
+      },
+      "triangles": 29040,
+      "height": 3.2,
+      "note": "passed 23 of 25"
     }
   },
   "name": "tree-monster",
