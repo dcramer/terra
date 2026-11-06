@@ -1,0 +1,27 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-10-26T22:28:18.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "f76557e2-c590-4859-900b-6680ae8058c6",
+      "note": "v3.1-20260211"
+    },
+    "rig": {
+      "at": "2026-10-26T22:28:18.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "note": "rigged as biped"
+    }
+  },
+  "name": "tree-monster",
+  "kind": "creature",
+  "body": "biped",
+  "height": 3.2,
+  "theme": "dark-fantasy ruin at night",
+  "description": "a tree monster",
+  "project": "f76557e2-c590-4859-900b-6680ae8058c6",
+  "rig": "biped"
+}

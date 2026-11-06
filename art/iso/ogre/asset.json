@@ -1,0 +1,27 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-10-17T16:56:57.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "a661c0b1-73f4-4f8e-859f-8e08e2a1a0ba",
+      "note": "v3.1-20260211"
+    },
+    "rig": {
+      "at": "2026-10-17T16:56:57.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "note": "rigged as biped"
+    }
+  },
+  "name": "ogre",
+  "kind": "creature",
+  "body": "biped",
+  "height": 2.8,
+  "theme": "dark-fantasy ruin at night",
+  "description": "an ogre",
+  "project": "a661c0b1-73f4-4f8e-859f-8e08e2a1a0ba",
+  "rig": "biped"
+}

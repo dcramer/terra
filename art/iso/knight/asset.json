@@ -1,0 +1,41 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-11-05T05:19:40.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "18615a10-7fd2-4f7d-88df-a2e0699f1208",
+      "note": "v3.1-20260211"
+    },
+    "rig": {
+      "at": "2026-11-05T05:21:16.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "note": "rigged as biped"
+    },
+    "animate": {
+      "at": "2026-11-06T06:50:50.057Z",
+      "credits": 0,
+      "minutes": 1.7449,
+      "clips": [
+        "idle=idle",
+        "walk=walk",
+        "run=run",
+        "attack=slash",
+        "hit=hurt",
+        "death=fall"
+      ],
+      "note": "idle walk run attack hit death"
+    }
+  },
+  "name": "knight",
+  "kind": "hero",
+  "body": "biped",
+  "height": 1.85,
+  "theme": "dark-fantasy ruin at night",
+  "description": "a medieval knight in plate armour",
+  "project": "18615a10-7fd2-4f7d-88df-a2e0699f1208",
+  "rig": "biped"
+}
