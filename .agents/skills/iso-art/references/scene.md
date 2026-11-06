@@ -49,6 +49,7 @@ Measure every still (judging.md) and tune to the refs of the same kind of frame.
 - Hit: sparks, a flash card about 0.6 m, a light for 0.06 s, the creature's emissive (emissive texture = its albedo, strength under 1: a flat emissive over 1 turns it into a pink silhouette) white then red then off over 0.17 s, a flinch about its feet, and hit-stop: both clips at speed 0 for 80 ms.
 - Every effect has a light, a bright core over bloom, and fades rather than pops.
 - Marks on the ground (scorch, frost): Bevy 0.20's `ForwardDecal` works at the ARPG camera unchanged (its SSAO already needs the `DepthPrepass` a decal reads), on uneven ground too.
+- The fighters' rim: every body `ruin::fight` poses takes `rim::Fighter` in every scene (a new scene adds `rim::plugin` to its branch in main.rs); `fight::value` sets each body's albedo and rim share. The rim is a thin cold band on the outline (`fighter_rim`, `lift`), not a wash; 1:1 crops of each fighter judge it (traps.md).
 
 ## Ambient and living nature (`ambient/`)
 

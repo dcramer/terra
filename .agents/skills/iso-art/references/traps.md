@@ -25,6 +25,8 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 - A brazier's bowl shadows its own light into a black disc — `NotShadowCaster` on the bowl.
 - A far fill light flattens the pools into one wash; the sky fill lifts p5 — one short shadowed light a fire, sky fill about 1.5 nits.
 - A rim light from behind spills on everything (light `RenderLayers` filter by view, not mesh: bevy_light's cluster assign) — a fresnel emissive material.
+- A fresnel rim at the ARPG camera washes a figure (j28: the ogre milky, a crown frosted): at 70 px its tail is half the body, and on the normal-mapped normal every fold grazes. Draw a hard band on the mesh's own normal (rim.wesl: whole under cos 0.12, gone over 0.4), masked off tops and undersides by n.y as Dota 2's rim keeps to a top-down mask, at about 4x the fresnel's light; a leafy crown takes it on every leaf, so give it a share (`Fighter::rim`). Debug a band at (10, 0, 10) magenta first.
+- A still stands mid hit flash (0.05 s after the blow): hit.rs lights the struck body's base-colour texture, which a value tint of the base colour does not reach; rim.rs's `mirror` scales it by the body's value. The forest's treant-a stays pale at value 0.55 (logged applied): not its albedo, not found (j30).
 - A flat emissive over 1 makes the hit creature a pink silhouette — emissive texture = albedo, strength under 1.
 - A soft black decal under a 140k lm pool does not show — a texture with rings and flecks, or a darker albedo.
 - A glossy, reflective water face under a strong point light renders as one flat lit disc — check the light's specular before tuning a faked reflection (the ruin's pool is unlanded: `~/.cache/terra-handoff/iso-art-j10-pool/`).
