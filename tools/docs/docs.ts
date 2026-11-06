@@ -421,7 +421,6 @@ export const BUDGETS: { pattern: RegExp; bytes: number; what: string; fix: strin
  * until trimmed, then taken off this list (D627).
  */
 export const OVER_BUDGET: Record<string, number> = {
-  "tools/characters/README.md": 46_153,
   "tools/sandbox/README.md": 48_432,
 };
 
