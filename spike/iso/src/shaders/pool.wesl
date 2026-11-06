@@ -19,8 +19,16 @@ struct Look {
     lights: array<vec4<f32>, 12>,
 }
 
+struct Edge {
+    fade: vec4<f32>,
+    weed: vec4<f32>,
+    green: vec4<f32>,
+}
+
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> pool: Look;
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
+var<uniform> edge: Edge;
 
 const PI: f32 = 3.14159265;
 
@@ -78,6 +86,45 @@ fn height(p: vec2<f32>, t: f32) -> f32 {
     return wind(p, t) * pool.wave.z + rings(p, t);
 }
 
+// Duckweed matting the margin: how much covers a point, in patches broken grain by grain
+// at their edges (a frond is a few millimetres; a cell here about a pixel at the camera).
+fn duckweed(p: vec2<f32>, depth: f32) -> f32 {
+    if edge.weed.x <= 0.0 {
+        return 0.0;
+    }
+    let s = 1.0 / max(edge.weed.z, 0.1);
+    let clump = noise(p * s) * 0.7 + noise(p * s * 3.1 + 5.0) * 0.3;
+    let reach = smoothstep(edge.weed.y, edge.weed.y * 0.35, depth) * smoothstep(-0.03, 0.01, depth);
+    let mat = edge.weed.x * reach * smoothstep(0.42, 0.62, clump);
+    let grain = hash(floor(p * 70.0));
+    return clamp(mat * 1.7 - grain * 0.7, 0.0, 1.0);
+}
+
+// Lily pads in the open shallows: at most one a cell, a round leaf with its notch, each its
+// own size, turn and age. x: cover (0..1), y: its shade (dark at the heart, light at the
+// rim), z: how yellowed it is.
+fn pads(p: vec2<f32>, depth: f32) -> vec3<f32> {
+    if edge.weed.w <= 0.0 {
+        return vec3<f32>(0.0);
+    }
+    let cell = inverseSqrt(edge.weed.w);
+    let id = floor(p / cell);
+    let f = (fract(p / cell) - 0.5) * cell;
+    let calm = smoothstep(0.06, 0.14, depth) * smoothstep(0.45, 0.25, depth);
+    if hash(id + 41.0) > calm * 0.75 {
+        return vec3<f32>(0.0);
+    }
+    let r = edge.green.w * (0.55 + 0.65 * hash(id + 5.3));
+    let room = max(cell * 0.5 - r, 0.0);
+    let d = f - (vec2<f32>(hash(id + 13.1), hash(id + 29.7)) - 0.5) * 2.0 * room;
+    let dist = length(d);
+    let a = atan2(d.y, d.x) + hash(id + 3.3) * 6.283;
+    let notch = smoothstep(0.16, 0.26, abs(atan2(sin(a), cos(a))));
+    let cover = smoothstep(r, r - 0.012, dist) * mix(1.0, notch, smoothstep(0.0, 0.03, dist));
+    let shade = mix(0.75, 1.15, smoothstep(r * 0.4, r, dist)) * (0.8 + 0.4 * hash(id + 7.7));
+    return vec3<f32>(cover, shade, smoothstep(0.75, 0.95, hash(id + 17.0)));
+}
+
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     var pbr_input = pbr_input_from_standard_material(in, is_front);
@@ -91,14 +138,28 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let gz = (height(p + vec2<f32>(0.0, e), t) - h) / e;
     // Calmer in the margin, where the reeds and the bank break the wind.
     let calm = mix(0.3, 1.0, smoothstep(0.02, 0.3, depth));
-    let n = normalize(vec3<f32>(-gx * calm, 1.0, -gz * calm));
+    // What floats there: duckweed in the margin, lily pads in the open shallows; flat, matt,
+    // lit as leaves are and mirroring nothing.
+    let weed = duckweed(p, depth);
+    let pad = pads(p, depth);
+    let float_ = max(weed, pad.x);
+    let still = calm * (1.0 - float_);
+    let n = normalize(vec3<f32>(-gx * still, 1.0, -gz * still));
     pbr_input.N = n;
 
-    // The water's own colour: the mud through the shallows, the dark of the deep.
+    // The water's own colour: the mud through the shallows, the dark of the deep, fading in
+    // over the bank's first few centimetres of depth (more where the margin is soft).
     let k = smoothstep(0.0, pool.deep.a, depth);
     let colour = mix(pool.shallow.rgb, pool.deep.rgb, k);
-    let alpha = smoothstep(-0.02, 0.06, depth) * mix(1.0 - pool.shallow.a, 0.97, k);
-    pbr_input.material.base_color = vec4<f32>(colour, alpha);
+    let fade = select(0.06, edge.fade.x, edge.fade.x > 0.0);
+    let alpha = smoothstep(-0.02, fade, depth) * mix(1.0 - pool.shallow.a, 0.97, k);
+    let grain = 0.7 + 0.6 * hash(floor(p * 70.0) + 3.0);
+    let weed_c = edge.green.rgb * grain;
+    let pad_c = mix(edge.green.rgb * vec3<f32>(0.7, 0.95, 0.7), vec3<f32>(0.09, 0.07, 0.02), pad.z) * pad.y;
+    var base = vec4<f32>(colour, alpha);
+    base = mix(base, vec4<f32>(weed_c, 1.0), weed);
+    base = mix(base, vec4<f32>(pad_c, 1.0), pad.x);
+    pbr_input.material.base_color = base;
 
     // The mirror. V points from the face to the eye.
     let v = pbr_input.V;
@@ -111,7 +172,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let sky = mix(pool.horizon.rgb, pool.sky.rgb, smoothstep(0.1, 0.9, up));
     let bank = smoothstep(0.0, pool.horizon.a, depth)
         * mix(0.35, 1.0, smoothstep(0.3, 0.7, noise(p * 0.22 + vec2<f32>(gx, gz) * 0.5)));
-    var mirror = sky * fresnel * pool.sky.a * bank;
+    // Broad blots in the mirrored sky: clouds and the far bank's trees, a few metres across.
+    let cloud = 1.0 / select(8.0, edge.fade.z, edge.fade.z > 0.0);
+    let blot = noise(p * cloud + vec2<f32>(gx, gz) * 0.3) * 0.65 + noise(p * cloud * 2.7 + 9.0) * 0.35;
+    let broken = mix(1.0, mix(0.2, 1.6, smoothstep(0.25, 0.75, blot)), edge.fade.y);
+    var mirror = sky * fresnel * pool.sky.a * bank * broken;
     // Each light's reflection: its illuminance at the face times a narrow normalised lobe
     // about the mirror direction.
     let s = pool.look.y;
@@ -130,7 +195,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let lobe = norm * pow(max(dot(r, l), 0.0), s);
         mirror += lux * lobe * fresnel * pool.look.z;
     }
-    pbr_input.material.emissive = vec4<f32>(mirror, 1.0);
+    pbr_input.material.emissive = vec4<f32>(mirror * (1.0 - float_), 1.0);
 
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);

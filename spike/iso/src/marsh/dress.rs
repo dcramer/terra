@@ -1,6 +1,6 @@
 //! What stands in the marsh: dead trees in the water at the frame's edges, mossy rocks,
 //! stumps and logs half sunk along the banks, a camp fire on the knight's bank (its flames
-//! the ruin's flipbook, found by its `Halo` card) and a lantern on a post behind the ogre,
+//! the ruin's flipbook, found by its `Halo` card) and a lantern on a post in the mere,
 //! both flickering and mirrored in the water (`pool::Glint`).
 
 use super::land::shape;
@@ -16,8 +16,10 @@ use bevy::prelude::*;
 pub const FIRE: Vec2 = Vec2::new(-1.8, 1.35);
 const FIRE_SIZE: f32 = 0.55;
 const FIRE_LM: f32 = 90_000.0;
-/// The lantern's post, standing in the near channel's shallows, and its light.
-pub const LANTERN: Vec2 = Vec2::new(2.3, 3.4);
+/// The lantern's post, standing in the mere's shallows on its far side (so its mirror image
+/// falls 1.3 m toward the camera into open water, and the lamp stands well inside the frame:
+/// in the near channel it sat on the frame's bottom edge), and its light.
+pub const LANTERN: Vec2 = Vec2::new(6.0, -1.0);
 const POST: f32 = 1.8;
 const LANTERN_LM: f32 = 20_000.0;
 
@@ -118,6 +120,19 @@ fn spawn(
         Transform::from_translation(lamp + Vec3::Y * 0.22),
         bevy::light::NotShadowCaster,
     ));
+    // The glass's glow, a soft card turned to the fixed camera and set a little toward it so
+    // the lamp's frame does not hide it (the flame alone reads as a dark box at 960 px).
+    let eye = crate::ruin::camera::offset().normalize();
+    let at = lamp + Vec3::Y * 0.2 + eye * 0.25;
+    commands.spawn((
+        Mesh3d(meshes.add(Rectangle::new(0.7, 0.7))),
+        MeshMaterial3d(materials.add(glow(
+            LinearRgba::rgb(1.6, 0.75, 0.25),
+            Some(images.add(soft_image())),
+        ))),
+        Transform::from_translation(at).looking_at(at - eye, Vec3::Y),
+        bevy::light::NotShadowCaster,
+    ));
     commands.spawn((
         PointLight {
             color: Color::srgb(1.0, 0.62, 0.3),
@@ -150,6 +165,10 @@ mod tests {
         assert!(near, "no water within a metre toward the camera of the fire");
         let d = shape(LANTERN) - LEVEL;
         assert!((-0.5..-0.05).contains(&d), "the post's foot is {d} under the face");
+        // Its mirror image, 0.7 of the lamp's height toward the camera, is on open water.
+        let eye = crate::ruin::camera::offset();
+        let image = LANTERN + Vec2::new(eye.x, eye.z).normalize() * 0.7 * POST;
+        assert!(shape(image) < LEVEL - 0.1, "the lantern glints on the bank at {image}");
     }
 }
 

@@ -14,15 +14,15 @@ use bevy::prelude::*;
 /// The wisps' homes (x, z), height over the water and how far they drift.
 const HOMES: [Vec2; 4] = [
     Vec2::new(-5.6, 3.4),
-    Vec2::new(4.6, 4.3),
+    Vec2::new(1.0, 3.2),
     Vec2::new(-3.0, -5.6),
-    Vec2::new(7.4, 1.6),
+    Vec2::new(4.0, -4.6),
 ];
 const HIGH: f32 = 0.7;
 const DRIFT: f32 = 0.6;
 /// A wisp's colour (linear, over 1 drives the bloom), light (lumens) and beat (s).
 const COLD: LinearRgba = LinearRgba::rgb(2.2, 6.0, 5.0);
-const WISP_LM: f32 = 900.0;
+const WISP_LM: f32 = 2500.0;
 const BEAT: f32 = 6.0;
 /// Midge clouds, the specks in each, and their size (m: under 0.05 they vanish at 960 px).
 const CLOUDS: usize = 5;
@@ -63,9 +63,12 @@ fn spawn(
 ) {
     let soft = images.add(soft_image());
     let card = meshes.add(Rectangle::new(1.0, 1.0));
-    let core = meshes.add(Sphere::new(0.06));
+    let core = meshes.add(Sphere::new(0.1));
     let hot = materials.add(glow(COLD * 3.0, None));
-    let halo = materials.add(glow(COLD * 0.12, Some(soft.clone())));
+    // A soft orb about the core and a faint wide haze in the damp air about that: at 960 px
+    // a bare core is a dot (iso-art j19).
+    let orb = (meshes.add(Rectangle::new(1.3, 1.3)), materials.add(glow(COLD * 0.4, Some(soft.clone()))));
+    let haze = (meshes.add(Rectangle::new(3.2, 3.2)), materials.add(glow(COLD * 0.05, Some(soft.clone()))));
     for (i, h) in HOMES.iter().enumerate() {
         let home = h.extend(LEVEL + HIGH).xzy();
         let phase = i as f32 * 1.7;
@@ -76,18 +79,20 @@ fn spawn(
             bevy::light::NotShadowCaster,
             Wisp { home, phase, part: Part::Core },
         ));
-        commands.spawn((
-            Mesh3d(card.clone()),
-            MeshMaterial3d(halo.clone()),
-            Transform::from_translation(home),
-            bevy::light::NotShadowCaster,
-            Wisp { home, phase, part: Part::Glow },
-        ));
+        for (mesh, mat) in [&orb, &haze] {
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(mat.clone()),
+                Transform::from_translation(home),
+                bevy::light::NotShadowCaster,
+                Wisp { home, phase, part: Part::Glow },
+            ));
+        }
         commands.spawn((
             PointLight {
                 color: Color::LinearRgba(COLD),
                 intensity: WISP_LM,
-                range: 3.5,
+                range: 5.0,
                 radius: 0.05,
                 shadow_maps_enabled: false,
                 ..default()
@@ -126,7 +131,7 @@ fn spawn(
 /// How bright a wisp is at time `t`: swelling and dying on its beat, a flicker through it.
 pub fn bright(t: f32, phase: f32) -> f32 {
     let k = ((t / BEAT + phase) * std::f32::consts::TAU).sin() * 0.5 + 0.5;
-    let flick = 0.85 + 0.15 * (t * 17.0 + phase * 5.0).sin() * (t * 7.3 + phase).sin();
+    let flick = 0.75 + 0.25 * (t * 17.0 + phase * 5.0).sin() * (t * 7.3 + phase).sin();
     (0.25 + 0.75 * k * k) * flick
 }
 
@@ -146,7 +151,7 @@ fn float(clock: Res<Clock>, cam: Res<Cam>, mut wisps: Query<(&Wisp, &mut Transfo
             Part::Core => tr.scale = Vec3::splat(0.4 + 0.6 * k),
             Part::Glow => {
                 tr.rotation = cam.rot;
-                tr.scale = Vec3::splat(0.35 + 0.5 * k);
+                tr.scale = Vec3::splat(0.55 + 0.45 * k);
             }
             Part::Light => {
                 if let Some(mut l) = light {

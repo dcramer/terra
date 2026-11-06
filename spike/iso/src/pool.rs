@@ -11,7 +11,8 @@
 //! downwind) and rings spreading from drips and rising things.
 //!
 //! Use: `pool::plugin`; a mesh from `surface` over the water's area at its level, its
-//! depth carried per vertex; `material(look)`; `Glint` on the point lights to mirror.
+//! depth carried per vertex; `material(look)`, or `with_edge(look, edge)` for a soft bank,
+//! duckweed and lily pads and a broken sky (`Edge`); `Glint` on the point lights to mirror.
 
 use bevy::asset::{RenderAssetUsages, embedded_asset};
 use bevy::diagnostic::FrameCount;
@@ -47,10 +48,28 @@ pub struct Look {
     pub lights: [Vec4; LIGHTS * 2],
 }
 
+/// The water's margin, where it meets the bank: how softly it fades into the mud, what
+/// floats there, and how the mirrored sky breaks up. All zero (the default) is the plain
+/// margin: a 6 cm fade, nothing floating, an even sky.
+#[derive(Clone, Copy, Debug, Default, Reflect, ShaderType)]
+pub struct Edge {
+    /// x: the depth (m) the water fades in over at the bank (0: 0.06); y: how much the
+    /// mirrored sky varies in broad blots, the far bank's trees and clouds (0..1); z: the
+    /// clouds' size (m, 0: 8).
+    pub fade: Vec4,
+    /// Duckweed: x how much of the margin it mats (0..1), y the depth (m) it reaches out to,
+    /// z its patches' size (m); w lily pads a square metre of open shallows.
+    pub weed: Vec4,
+    /// The duckweed's albedo (linear rgb) and, w, a lily pad's radius (m).
+    pub green: Vec4,
+}
+
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
 pub struct PoolExt {
     #[uniform(100)]
     pub look: Look,
+    #[uniform(101)]
+    pub edge: Edge,
 }
 
 const SHADER: &str = "embedded://iso/shaders/pool.wesl";
@@ -73,6 +92,11 @@ pub fn plugin(app: &mut App) {
 
 /// The water's material: dark, rough and without specular of its own (the shader mirrors).
 pub fn material(look: Look) -> PoolMaterial {
+    with_edge(look, Edge::default())
+}
+
+/// The water's material with a margin of its own: a soft bank, duckweed and lily pads.
+pub fn with_edge(look: Look, edge: Edge) -> PoolMaterial {
     ExtendedMaterial {
         base: StandardMaterial {
             base_color: Color::linear_rgb(look.deep.x, look.deep.y, look.deep.z),
@@ -81,7 +105,7 @@ pub fn material(look: Look) -> PoolMaterial {
             alpha_mode: AlphaMode::Blend,
             ..default()
         },
-        extension: PoolExt { look },
+        extension: PoolExt { look, edge },
     }
 }
 

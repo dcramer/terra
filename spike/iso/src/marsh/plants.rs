@@ -115,11 +115,13 @@ fn spawn(
         for _ in 0..(12 + (rng.f() * 22.0) as usize) {
             let p = c + Vec2::new(rng.f() - 0.5, rng.f() - 0.5) * 0.8;
             let foot = p.extend(shape(p).min(LEVEL + 0.1)).xzy();
-            let tall = rng.range(0.9, 1.8);
+            let tall = rng.range(0.8, 1.6);
             let lean = Vec3::new(rng.f() - 0.5, 0.0, rng.f() - 0.5) * tall * 0.35;
             let dry = rng.f() * 0.6;
-            reeds.blade(foot, tall, rng.range(0.012, 0.024), rng.f() * 6.283, lean, |t| {
-                let g = 0.25 + 0.75 * t;
+            // Broad enough to read as leaves at the camera (a pixel is about 1 cm): thinner
+            // ones alias into dark hair.
+            reeds.blade(foot, tall, rng.range(0.016, 0.03), rng.f() * 6.283, lean, |t| {
+                let g = 0.4 + 1.0 * t;
                 let tip = crate::terrain::smooth(0.5, 1.0, t) * (0.4 + dry);
                 [g * (0.15 + 0.34 * tip), g * (0.2 + 0.12 * tip), g * (0.06 + 0.07 * tip), 1.0]
             });
@@ -158,10 +160,13 @@ fn spawn(
     let mut reed = material(base.clone(), 0.0);
     reed.extension.wind.wind.z = REED_BEND;
     reed.extension.wind.cloth.y = REED_TALL;
+    // No shadows: under a sun 10 degrees up each blade's would run five or six times its
+    // height, streaking the whole frame (iso-art j19's marsh).
     for (mesh, mat) in [(reeds, reed), (sedge, material(base, 0.0))] {
         commands.spawn((
             Mesh3d(meshes.add(mesh.mesh())),
             MeshMaterial3d(winds.add(mat)),
+            bevy::light::NotShadowCaster,
         ));
     }
 }
