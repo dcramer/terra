@@ -12,6 +12,7 @@
 
 use crate::character::{CARRIED_IN, CarryHold, CarryPosed, Held};
 use crate::layer::{Arms, Nodes};
+use crate::pace::shown_velocity;
 use crate::{Downed, Motion, Player, Stance};
 use bevy::{
     gltf::GltfNode, platform::collections::HashMap, prelude::*,
@@ -300,6 +301,7 @@ pub struct Shows {
 struct Figured;
 
 pub fn plugin(app: &mut App) {
+    crate::inertia::plugin(app);
     app.add_systems(Startup, load)
         .add_systems(
             Update,
@@ -446,6 +448,7 @@ fn dress(
     commands.entity(entity).insert((
         AnimationGraphHandle(moves.graph.clone()),
         transitions,
+        crate::inertia::Inertia::default(),
         Animated {
             player,
             hands,
@@ -482,6 +485,7 @@ fn animate(
     mut figures: Query<(
         &mut AnimationPlayer,
         &mut AnimationTransitions,
+        &mut crate::inertia::Inertia,
         &mut Animated,
         &GlobalTransform,
         &Transform,
@@ -491,7 +495,7 @@ fn animate(
     mut feet: Query<&mut crate::feet::Kept>,
 ) {
     let Some(moves) = moves else { return };
-    for (mut animator, mut transitions, mut animated, place, own) in &mut figures {
+    for (mut animator, mut transitions, mut inertia, mut animated, place, own) in &mut figures {
         let Ok((motion, body, stance, downed, acting, pitch, shows)) =
             players.get_mut(animated.player)
         else {
@@ -535,7 +539,7 @@ fn animate(
                 &moves,
                 &mut animated,
                 &mut animator,
-                &mut transitions,
+                (&mut transitions, &mut inertia),
                 &mut hands,
                 (doing, act, asked),
             );
@@ -601,7 +605,7 @@ fn change(
     moves: &Moves,
     animated: &mut Animated,
     animator: &mut AnimationPlayer,
-    transitions: &mut AnimationTransitions,
+    (transitions, inertia): (&mut AnimationTransitions, &mut crate::inertia::Inertia),
     hands: &mut Query<(&mut CarryPosed, &Grip)>,
     (doing, act, asked): (Doing, Option<&Act>, u32),
 ) {
@@ -666,7 +670,13 @@ fn change(
                 }
             }
             animated.mixed.retain(|m| m.mix != node);
-            let playing = transitions.play(animator, node, blend);
+            // An act is taken up whole at once and inertialized from what showed (D631); a
+            // stride loop crossfades, kept in step by its markers.
+            let fade = match act {
+                Some(_) => inertia.start(blend),
+                None => blend,
+            };
+            let playing = transitions.play(animator, node, fade);
             if !once {
                 playing.repeat();
             }
@@ -758,21 +768,6 @@ fn mix(mut figures: Query<(&mut AnimationPlayer, &mut Animated)>) {
                 None => false,
             }
         });
-    }
-}
-
-/// The velocity the figure strides at: the body's over the ground, cut to how fast the shown
-/// body went over the ground since the last frame (`from` to `to`, level about `up`), so a
-/// body its mover says moves but that stands still (held against a wall or a face too steep)
-/// stands, and a frame's jump (a body put somewhere) reads no faster than the mover. Lyra's
-/// `DisplacementSpeed`, the actor's displacement over the frame, beside its velocity.
-fn shown_velocity(velocity: Vec3, from: Option<Vec3>, to: Vec3, up: Vec3, dt: f32) -> Vec3 {
-    match from {
-        Some(from) if dt > 0.0 => {
-            let went = (to - from).reject_from(up).length() / dt;
-            velocity.clamp_length_max(went)
-        }
-        _ => velocity,
     }
 }
 

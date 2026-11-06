@@ -27,6 +27,7 @@ pub mod feet;
 pub mod figure;
 pub mod gaze;
 pub mod grip;
+pub mod inertia;
 pub mod intent;
 pub mod layer;
 pub mod lift;

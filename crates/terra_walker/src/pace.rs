@@ -149,6 +149,21 @@ pub fn stretch(speed: f32, pace: f32, scale: f32) -> f32 {
         .fold(0.0, f32::max)
 }
 
+/// The velocity the figure strides at: the body's over the ground, cut to how fast the shown
+/// body went over the ground since the last frame (`from` to `to`, level about `up`), so a
+/// body its mover says moves but that stands still (held against a wall or a face too steep)
+/// stands, and a frame's jump (a body put somewhere) reads no faster than the mover. Lyra's
+/// `DisplacementSpeed`, the actor's displacement over the frame, beside its velocity.
+pub fn shown_velocity(velocity: Vec3, from: Option<Vec3>, to: Vec3, up: Vec3, dt: f32) -> Vec3 {
+    match from {
+        Some(from) if dt > 0.0 => {
+            let went = (to - from).reject_from(up).length() / dt;
+            velocity.clamp_length_max(went)
+        }
+        _ => velocity,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

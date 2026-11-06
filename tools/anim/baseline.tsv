@@ -5,7 +5,7 @@ glide.stop	2.732	first number 2026-11-06
 start.root	1.611	first number 2026-11-06
 pop.jump	7.488	first number 2026-11-06
 pop.stop	3.741	first number 2026-11-06
-slide.fight	0.207	first number 2026-11-06
+slide.fight	0.3	inertialized acts (anim-blend j3): pop.fight 13.6 to 3.13. The slide rows' down is the run's lowest ball, set by the roll's ball 3.4 cm under the ground; inertialized, the roll dips no more, down's mark rises 3.7 cm and the other moves' swings near the ground count. Not a slide of the figure's: measured on main by the ball's standing height (2.2 cm, 98% of grounded frames) the same rows read 0.20 to 0.48 m; the measure is the next job (anim-blend j4)
 pop.start	2.795	first number 2026-11-06
 seam.loops	2.795	first number 2026-11-06
 glide.steady	0	first number 2026-11-06
@@ -15,9 +15,9 @@ pop.turn	1	first number 2026-11-06
 stop.settle	0.167	first number 2026-11-06
 glide.turn	0	first number 2026-11-06
 glide.jump	0	first number 2026-11-06
-slide.start	0	first number 2026-11-06
-slide.stop	0	first number 2026-11-06
+slide.start	0.177	inertialized acts (anim-blend j3): pop.fight 13.6 to 3.13. The slide rows' down is the run's lowest ball, set by the roll's ball 3.4 cm under the ground; inertialized, the roll dips no more, down's mark rises 3.7 cm and the other moves' swings near the ground count. Not a slide of the figure's: measured on main by the ball's standing height (2.2 cm, 98% of grounded frames) the same rows read 0.20 to 0.48 m; the measure is the next job (anim-blend j4)
+slide.stop	0.278	inertialized acts (anim-blend j3): pop.fight 13.6 to 3.13. The slide rows' down is the run's lowest ball, set by the roll's ball 3.4 cm under the ground; inertialized, the roll dips no more, down's mark rises 3.7 cm and the other moves' swings near the ground count. Not a slide of the figure's: measured on main by the ball's standing height (2.2 cm, 98% of grounded frames) the same rows read 0.20 to 0.48 m; the measure is the next job (anim-blend j4)
 slide.gait	0	first number 2026-11-06
-slide.turn	0	first number 2026-11-06
+slide.turn	0.231	inertialized acts (anim-blend j3): pop.fight 13.6 to 3.13. The slide rows' down is the run's lowest ball, set by the roll's ball 3.4 cm under the ground; inertialized, the roll dips no more, down's mark rises 3.7 cm and the other moves' swings near the ground count. Not a slide of the figure's: measured on main by the ball's standing height (2.2 cm, 98% of grounded frames) the same rows read 0.20 to 0.48 m; the measure is the next job (anim-blend j4)
 slide.jump	0	first number 2026-11-06
 stop.rest	0.007	first number 2026-11-06
