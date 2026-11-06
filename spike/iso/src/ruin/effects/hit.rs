@@ -13,8 +13,8 @@ use bevy::prelude::*;
 /// Where the knight and the ogre stand (fight.rs's CAST), to find them by.
 const KNIGHT: Vec2 = Vec2::new(0.0, 0.0);
 const OGRE: Vec2 = Vec2::new(2.0, -1.4);
-/// When in the knight's attack the blade meets the ogre (fight.rs's 0.75 to 1.25 s).
-const BLOW: f32 = 1.0;
+/// When in the knight's attack the blade meets the ogre: the chop coming down (fight.rs).
+const BLOW: f32 = 1.25;
 /// The still's moment after the blow (s), and the hit-stop's length.
 const STILL_AGE: f32 = 0.05;
 const STOP: f32 = 0.08;

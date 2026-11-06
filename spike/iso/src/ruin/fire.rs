@@ -9,8 +9,10 @@ use crate::motes::{Halo, Tongue, soft_image, tongue_image};
 use crate::scene::model;
 use bevy::prelude::*;
 
-/// The braziers' bowls, where their flames stand.
-pub const BRAZIERS: [Vec2; 2] = [Vec2::new(-2.6, 1.6), Vec2::new(4.4, -3.6)];
+/// The braziers' bowls, where their flames stand: each about 2 m from a fighter, so the
+/// fight stands in their pools, the knight's lit from before him on the left, the ogre's
+/// from behind on the right (a warm edge on it against the dark beyond).
+pub const BRAZIERS: [Vec2; 2] = [Vec2::new(-1.7, 0.9), Vec2::new(3.4, -2.9)];
 /// A brazier's light, and a torch's, in lumens.
 pub const BRAZIER_LM: f32 = 140_000.0;
 pub const TORCH_LM: f32 = 25_000.0;

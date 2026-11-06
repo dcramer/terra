@@ -20,11 +20,14 @@ pub struct Pose {
 
 /// Who fights where: model, clip, the clip's time, the body's place and what it faces.
 const CAST: [(&str, &str, f32, Vec2, Vec2); 3] = [
-    // The hero mid-swing at the ogre (the attack's blow falls at 0.75 to 1.25 s).
+    // The hero's chop coming down on the ogre: in the 2 s attack the arms are up at 1.1 s,
+    // the blade comes down through 1.25 s and he is bent over it at 1.4 s (a sheet of
+    // stills at 0.6 to 1.4 s); the blow lands at 1.25 (effects::hit's `BLOW`) and a still
+    // stands 0.05 s after it.
     (
         "knight",
         "attack",
-        1.0,
+        1.3,
         Vec2::new(0.0, 0.0),
         Vec2::new(2.0, -1.4),
     ),
@@ -65,7 +68,33 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
             clip,
             at,
         });
+        if name != "tree-monster" {
+            rim(&mut commands, place);
+        }
     }
+}
+
+/// A cool back light on a fighter, so its edge reads against the floor as the ARPGs'
+/// heroes' do: a narrow spot from 5 m behind it as the camera sees it, level with its
+/// chest, so the cone meets the floor only far beyond and at a graze (Bevy lights every
+/// mesh in reach, rim.rs; a level spot keeps the spill off the floor near the fight).
+fn rim(commands: &mut Commands, place: Vec2) {
+    let yaw = super::camera::YAW.to_radians();
+    let toward = Vec3::new(yaw.sin(), 0.0, yaw.cos());
+    let chest = place.extend(super::ground::TOP + 1.3).xzy();
+    commands.spawn((
+        SpotLight {
+            color: Color::srgb(0.6, 0.75, 1.0),
+            intensity: 900_000.0,
+            range: 9.0,
+            radius: 0.2,
+            inner_angle: 0.08,
+            outer_angle: 0.17,
+            shadow_maps_enabled: false,
+            ..default()
+        },
+        Transform::from_translation(chest - toward * 5.0).looking_at(chest, Vec3::Y),
+    ));
 }
 
 #[derive(Component)]
