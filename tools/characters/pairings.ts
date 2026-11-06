@@ -19,7 +19,10 @@
 // pairing of two outfits is judged against the worse of the two outfits' own pairings of the
 // same slots, as made: it **passes** when it has no more bad clips and no more vertices poking
 // at rest than that; else it is **refused**, with its worst numbers. Pieces of one outfit are
-// **theirs** and pass.
+// **theirs** and pass. Hair and beards are in no outfit: each is judged against how it sits on
+// the bare figure as shipped, on the piece the other takes the place of (the bare torso for a
+// tunic, the bare head for a crown or the hair), so one that pokes no more on a dressed figure
+// than on its own bare one passes (`references`).
 //
 // A line a stage (D388); each pairing's numbers in the catalogue and in out/pairings.log.
 // Node 22.18 or later; no dependencies.
@@ -57,6 +60,44 @@ export type Pairing = {
   open?: number;
   frames?: number;
 };
+
+/** A person's own piece: one of an optional slot with no item (hair, a beard), made for the bare
+ *  head as shipped, in no outfit. */
+const personal = (w: Wardrobe, p: string) => !w.pieces[p].item && (w.optional ?? []).includes(w.pieces[p].slot ?? "");
+
+/** What a piece takes the place of on the bare figure as shipped: its slot's bare piece, else the
+ *  head (headwear, hair and a beard sit on it). */
+const bareOf = (w: Wardrobe, p: string): string => {
+  const b = w.bodies[w.pieces[p].body];
+  return b.bare[w.pieces[p].slot ?? ""] ?? b.head;
+};
+
+/** The pairings of theirs, as made, that judge a mix of `a` and `b`: each outfit's own piece of the
+ *  other's slot over the other; and for a person's own piece (hair, a beard: no outfit), that
+ *  piece on what the other takes the place of on the bare figure as shipped (a beard over the bare
+ *  torso for a tunic, on the bare head for a crown or the hair), and the other on the bare head
+ *  (a collar the head itself passes into as the head tips back, which hair lying on the scalp
+ *  cannot do better than), so hair that pokes no more on a dressed figure than on its own bare
+ *  one passes. */
+export function references(w: Wardrobe, a: string, b: string): [string, string][] {
+  const [pa, pb] = [w.pieces[a], w.pieces[b]];
+  const ofOutfit = (os: string[], body: string, slot: string | undefined) =>
+    Object.keys(w.pieces).find((p) => w.pieces[p].body === body && w.pieces[p].slot === slot && w.pieces[p].item && outfits(w, p).some((o) => os.includes(o)));
+  const theirs: [string | undefined, string | undefined][] = [
+    [a, ofOutfit(outfits(w, a), pb.body, pb.slot)],
+    [ofOutfit(outfits(w, b), pa.body, pa.slot), b],
+  ];
+  const head = w.bodies[pa.body].head;
+  if (personal(w, a)) theirs.push([a, bareOf(w, b)], [b, head]);
+  if (personal(w, b)) theirs.push([bareOf(w, a), b], [a, head]);
+  const seen = new Set<string>();
+  return theirs.flatMap(([x, y]) => {
+    const key = [x, y].sort().join("|");
+    if (!x || !y || x === y || seen.has(key)) return [];
+    seen.add(key);
+    return [[x, y] as [string, string]];
+  });
+}
 
 /** Every two worn pieces (hair and beards among them) of one body in different slots, in a
  *  fixed order; never two that hold one region, which the game never shows together (a hood
@@ -123,23 +164,17 @@ export function matrix(w: Wardrobe, frames = 12, log: string[] = [], kept?: Pair
   };
   const again = kept ? toMeasure(w, kept) : null;
   const old = new Map((kept ?? []).map((r) => [[...r.pieces].sort().join("|"), r]));
-  const ofOutfit = (os: string[], body: string, slot: string | undefined) =>
-    Object.keys(w.pieces).find((p) => w.pieces[p].body === body && w.pieces[p].slot === slot && w.pieces[p].item && outfits(w, p).some((o) => os.includes(o)));
   return all.map(([a, b]): Pairing => {
     const had = old.get(`${a}|${b}`);
     if (again && had && !again.has(`${a}|${b}`)) return had;
     const m = run(a, b);
-    const [pa, pb] = [w.pieces[a], w.pieces[b]];
     const own = outfits(w, a).some((o) => outfits(w, b).includes(o));
     if (m) log.push(`${m.over === a ? a : b} over ${m.over === a ? b : a}: ${m.clips} bad clips of ${m.frames / frames}, ${m.rest} poking at rest, worst ${m.poke_mm} mm ${m.worst}, open edge worst ${m.open}/${m.edge}; ${m.bad.join(", ") || "none bad"}`);
     if (!m) return { pieces: [a, b], verdict: "apart" };
     const row = { over: m.over, clips: m.clips, rest: m.rest, poke_mm: m.poke_mm, worst: m.worst, open: m.open, frames: m.frames };
     if (own) return { pieces: [a, b], verdict: "theirs", ...row };
-    // The two outfits' own pairings of these slots: a's outfit in b's slot, b's in a's.
-    const refs = [
-      [a, ofOutfit(outfits(w, a), pb.body, pb.slot)],
-      [ofOutfit(outfits(w, b), pa.body, pa.slot), b],
-    ].flatMap(([x, y]) => (x && y && x !== y ? [run(x, y)] : []));
+    // Theirs as made: the two outfits' own pairings of these slots, and hair on the bare figure.
+    const refs = references(w, a, b).map(([x, y]) => run(x, y));
     const { worse, restTheirs, ok } = judge(m, refs);
     log.push(`  against theirs (${refs.length} measured): ${worse.length} clips worse${worse.length ? ` (${worse.join(", ")})` : ""}, ${m.rest} poking at rest against their ${restTheirs}: ${ok ? "pass" : "refused"}`);
     return { pieces: [a, b], verdict: ok ? "pass" : "refused", ...row, worse: worse.length, theirs_rest: restTheirs };

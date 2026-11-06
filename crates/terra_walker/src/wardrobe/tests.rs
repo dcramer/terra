@@ -83,7 +83,8 @@ fn every_look_in_every_state_of_undress_fills_each_slot_and_draws_each_region_on
                 "{name} wearing {worn:?}: {shown:?}: {wrong:?}"
             );
             // Each slot shows the look's piece exactly when its item is worn; hair, no item,
-            // whenever no shown piece holds its region.
+            // whenever no shown piece holds its region or refuses it (the Knight's plate the
+            // buzzed hair).
             for (slot, piece) in &look.pieces {
                 let held = (shown.iter()).filter(|s| **s != piece.as_str()).any(|s| {
                     w.pieces[*s]
@@ -99,7 +100,7 @@ fn every_look_in_every_state_of_undress_fills_each_slot_and_draws_each_region_on
                             && !(w.optional.contains(slot) && held)
                             && !shown.iter().any(|s| w.refused(s, piece))
                     }
-                    None => !held,
+                    None => !held && !shown.iter().any(|s| w.refused(s, piece)),
                 };
                 assert_eq!(
                     shown.contains(&piece.as_str()),
@@ -127,10 +128,12 @@ fn the_starting_kit_is_the_ranger_and_taking_its_coat_off_shows_his_bare_torso_a
             "male_ranger_arms",
             "male_ranger_legs",
             "male_ranger_boots",
+            "male_hair_parted",
             "male_head"
         ]
     );
-    // Their UpperBody, the bare arms, carries the head, so the head piece goes with it.
+    // Their UpperBody, the bare arms, carries the head, so the head piece goes with it; his
+    // hair stays.
     let no_coat = w.compose("male", "ranger", Some(&kit[1..]));
     assert_eq!(
         no_coat,
@@ -138,7 +141,8 @@ fn the_starting_kit_is_the_ranger_and_taking_its_coat_off_shows_his_bare_torso_a
             "male_bare_torso",
             "male_bare_arms",
             "male_ranger_legs",
-            "male_ranger_boots"
+            "male_ranger_boots",
+            "male_hair_parted"
         ]
     );
     let no_trousers: Vec<String> = vec![kit[0].clone(), kit[2].clone()];

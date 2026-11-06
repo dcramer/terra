@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Wardrobe } from "./build_steps.ts";
-import { figures, judge, type Measure, type Pairing, pairs, toMeasure, written } from "./pairings.ts";
+import { figures, judge, type Measure, type Pairing, pairs, references, toMeasure, written } from "./pairings.ts";
 
 const clips = (rows: Record<string, [number, number]>): Measure["each"] => new Map(Object.entries(rows).map(([n, [poke, open]]) => [n, { poke, open }]));
 
@@ -51,6 +51,26 @@ test("the pairings are written in place, a row a line, the rest of the catalogue
   const out = written(text, [{ pieces: ["a", "b"], verdict: "apart" }]);
   assert.equal(out, '{\n  "looks": { "x": [1, 2] },\n  "pairings": [\n    {"pieces":["a","b"],"verdict":"apart"}\n  ],\n  "populations": {}\n}\n');
   assert.deepEqual(JSON.parse(out).pairings, [{ pieces: ["a", "b"], verdict: "apart" }]);
+});
+
+test("hair and beards are judged on the bare figure as shipped, on what the other piece takes the place of", () => {
+  const ww = structuredClone(w) as Wardrobe;
+  ww.optional = ["headwear", "hair", "beard"];
+  Object.assign(ww.pieces, {
+    crop: { body: "b", source: "", slot: "hair", layer: 0, regions: ["hair"] },
+    beard: { body: "b", source: "", slot: "beard", layer: 0, regions: ["beard"] },
+    crown: { body: "b", source: "", slot: "headwear", item: "crown", outfit: "x", layer: 1, regions: [] },
+  });
+  Object.assign(ww.pieces.coat, { outfit: "x" });
+  Object.assign(ww.pieces.hose, { outfit: "y" });
+  // A beard with a coat: the beard on the bare torso the coat covers, the coat on the bare head.
+  assert.deepEqual(references(ww, "beard", "coat"), [["beard", "skin"], ["coat", "head"]]);
+  // Hair with a crown, or with a beard: on the bare head, each of theirs.
+  assert.deepEqual(references(ww, "crop", "crown"), [["crop", "head"], ["crown", "head"]]);
+  assert.deepEqual(references(ww, "beard", "crop"), [["beard", "head"], ["crop", "head"]]);
+  // Two outfits' pieces: their own pairings only, no bare figure.
+  Object.assign(ww.pieces.breeches, { outfit: "x" });
+  assert.deepEqual(references(ww, "coat", "hose"), [["coat", "breeches"]]);
 });
 
 test("--new measures a new piece's pairs and those its outfit's own pairings judge, keeping the rest", () => {

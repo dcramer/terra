@@ -23,16 +23,10 @@
   { "id": "bound", "check": "wardrobe", "stage": "bound", "bar": "every joint of every piece on its body's skeleton" },
   { "id": "looks", "check": "wardrobe", "stage": "looks", "bar": "every look composed in every state of undress" },
   { "id": "build", "check": "build", "bar": "no failure but the known ones (rig, clips, gear, morphs: build_verdict.ts)", "known": [{ "match": "Sprint_Loop", "why": "the man's sprint skates 2.7/7.8 cm, known since char-switch j8" }] },
-  { "id": "looks.hair", "live": "hair", "bar": "every look wears its person's hair (wardrobe.json looks' `hair`)" },
+  { "id": "looks.hair", "live": "hair", "bar": "every look wears its person's hair (wardrobe.json looks' `pieces.hair`)" },
   { "id": "variants", "live": "figures", "bar": "hundreds of dressed figures a body, not millions (D182)", "within": [100, 100000] }
  ],
  "tasks": [
-  {
-   "what": "A fair rule for hair and beards (held to an absolute 5 mm, they are refused against nearly everything): judge them against the bare head's own fit or the base pack's hair as theirs; then hair back in the looks (knight buzzed; knight_cloth buzzed, full beard; noble slick_back, moustache; wizard ponytail, full beard)",
-   "files": ["tools/characters/pairings.ts#judge", "tools/characters/pairings.ts#BAD_POKE_M", "assets/models/character/wardrobe.json"],
-   "check": "node tools/characters/pairings.ts, then node tools/characters/wardrobe.ts",
-   "criterion": "looks.hair"
-  },
   {
    "what": "wardrobe.ts --build: the rows drafted for newly vendored pieces (a draft is in ~/.cache/terra-handoff/char-pipeline-tokens-j3-draft.ts, untested), the build step, pairings.ts --new, the check, a line each; vendor.ts and pairings.ts --new are on main",
    "files": ["tools/characters/wardrobe.ts", "tools/characters/pairings.ts#toMeasure", "tools/characters/vendor.ts#plan"],
@@ -62,6 +56,11 @@
    "what": "Cheaper jobs (research/2026-11-05-agent-pipeline-tokens.md): a code map (tools/characters/map.ts); the skill is split (D627) and tools/characters/README.md is held over its 20 KB budget",
    "files": [".agents/skills/character/SKILL.md"],
    "check": "node tools/token-stats/job.mjs --job '<the job>'"
+  },
+  {
+   "what": "A person's hair is their own, yet compose drops it beside a worn piece that refuses it (the knight_cloth look's buzzed hair under the Knight's plate, its armet off): keep the hair and choose the slot's next piece instead, or put it on the desk as a design call",
+   "files": ["crates/terra_walker/src/wardrobe.rs#compose"],
+   "check": "cargo test -p terra_walker --lib wardrobe::"
   }
  ]
 }
