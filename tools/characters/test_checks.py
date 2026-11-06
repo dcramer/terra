@@ -4,7 +4,7 @@ once a test plants a known fault and shows the check catches it, D632):
     tools/blender/run.sh tools/characters/test_checks.py
 
 From the mannequin, a file in target/check/planted/, checked as the build checks it, in a
-Blender of its own, by the line it prints (D388), four at a time:
+Blender of its own, by the line it prints (D388), seven at a time, each as its file is written:
   - rig_check.py on the mannequin re-exported as it is (the control): passes all seven checks.
     On a copy with one fault each, it fails the check named:
       weights    every twentieth vertex's weights taken off (the glTF exporter binds those
@@ -15,9 +15,11 @@ Blender of its own, by the line it prints (D388), four at a time:
       reach      the left forearm's skin driven by the right foot alone
       seams      one copy of each vertex split at a texture seam given a third of pelvis
       symmetry   the left side's skin given as much of spine_01 again
-      motion     every tenth vertex bound to the root alone, so its edges stretch as he moves
-                 (motion's bad edges; its sink below the ground is not planted, and its
-                 standing feet's gap is never measured, standing_gap staying 0)
+      motion     every tenth vertex bound to the root alone, so its edges stretch as he moves;
+                 the skin 6 cm up off its skeleton, so he stands off the ground (by its
+                 standing feet's gap, past its 5 cm); the soles 5 cm through the ground and
+                 bound to the root, which the hips' lift does not raise (by its sink, past
+                 the mannequin's by 2 cm)
     A fault fails other checks too (an unweighted vertex tears its seam); each must fail its own.
   - gear_check.py on the mannequin wearing a vest (the torso's skin 2 cm out, skinned as the
     body is): passes (1.7% through at worst, Hammer_Loop; the control). The same vest bound
@@ -25,9 +27,10 @@ Blender of its own, by the line it prints (D388), four at a time:
 A whole skin 3 mm out is no fault: it clips no more than the vest (1.9% at worst, 0.5% without
 the hands, where inflated fingers cross). A vest sunk 2 cm into the chest is invisible by
 design: gear_check watches only skin with the look outward of it at rest.
-About three minutes (3 min 8 s on 2026-11-06). Prints TESTCHECKS pass, or each failure; exits 1 on a failure.
+About three minutes (2 min 46 s on 2026-11-06, the machine's load at 50). Prints TESTCHECKS pass, or each failure; exits 1 on a failure.
 """
 
+import json
 import math
 import os
 import re
@@ -49,6 +52,7 @@ import twist
 
 OUT = os.path.join(look.ROOT, "target", "check", "planted")
 TORSO = {"pelvis", "spine_01", "spine_02", "spine_03"}
+WORKERS = 7  # Blenders at once: the 13 checks in two rounds
 os.makedirs(OUT, exist_ok=True)
 
 
@@ -154,6 +158,24 @@ def stretched(arm, body):
     only(body, list(range(0, len(body.data.vertices), 10)), "root")
 
 
+def raised(arm, body):
+    """The skin 6 cm up off its skeleton, skinned as it is: he stands that far off the ground
+    (the lift never lowers a body, lift.py)."""
+    for v in body.data.vertices:
+        v.co.z += 0.06
+
+
+def sunk(arm, body):
+    """The soles (the feet's skin within 3 cm of the ground) 5 cm through it and bound to the
+    root, which the hips' lift does not raise: an auto-rig that weights the floor-side skin to
+    the root bone."""
+    mw = body.matrix_world
+    soles = [v.index for v in body.data.vertices if main_bone(body, v) in ("foot_l", "foot_r", "ball_l", "ball_r") and (mw @ v.co).z < 0.03]
+    for i in soles:
+        body.data.vertices[i].co.z -= 0.05
+    only(body, soles, "root")
+
+
 def shell(out_m, name, only=None, rigid=False):
     """The mannequin's skin `out_m` out along its normals, skinned as it is: a look. With
     `only`, just the skin driven mostly by those bones (a vest over the torso); `rigid`, bound
@@ -204,13 +226,25 @@ RIG = [
     ("rig-torn", torn, "seams"),
     ("rig-lopsided", lopsided, "symmetry"),
     ("rig-stretched", stretched, "motion"),
+    ("rig-raised", raised, "motion:standing_foot_gap_m"),
+    ("rig-sunk", sunk, "motion:sink_over_mannequin_m"),
 ]
+# The part of motion a fault must fail by, its number in rig_check's report, and the limit it is held to.
+PART_LIMIT = {"standing_foot_gap_m": "foot_gap_m", "sink_over_mannequin_m": "sink_over_m"}
 
 
 def judged(name, want, lines):
     """What is wrong with rig_check's `lines` for the planted file `name`, or None."""
     first = lines[0] if lines else ""
     failed = re.match(rf"^✗ RIGCHECK {name}\.glb fails ([a-z_, ]+);", first)
+    want, _, part = (want or "").partition(":")
+    want = want or None
+    if part and failed and want in failed.group(1).split(", "):
+        # Failing motion is not enough: it must be by this part, past its limit.
+        with open(os.path.join(HERE, "out", f"rig-check-{name}.json")) as f:
+            result = json.load(f)
+        got, limit = result["report"]["motion"].get(part), result["limits"][PART_LIMIT[part]]
+        return None if got is not None and got > limit else f"rig_check failed motion on {name} but not by {part} ({got}, limit {limit}): {first}"
     if want is None and name == "rig-pointed":
         # Its motion is not this rig's to judge: only that the rest pose passes once judged.
         return None if not failed or "rest_pose" not in failed.group(1).split(", ") else f"rig_check failed rest_pose on every bone pointing at its child: {first}"
@@ -222,14 +256,15 @@ def judged(name, want, lines):
 
 
 def main():
-    lift.reference()  # measured once here, so four checks at once do not each measure it
-    files =[(name, planted(name, change), want) for name, change, want in RIG]
-    vest = shell(0.02, "gear-vest", TORSO)
-    rigid = shell(0.02, "gear-rigid-vest", TORSO, rigid=True)
-    with ThreadPoolExecutor(4) as pool:
-        rigs = list(pool.map(lambda f: run("rig_check.py", f[1]), files))
-        vest_lines, rigid_lines = pool.map(lambda p: run("gear_check.py", look.FIGURE, p), [vest, rigid])
-    failures = [f for (name, _, want), lines in zip(files, rigs) if (f := judged(name, want, lines))]
+    lift.reference()  # measured once here, so the checks at once do not each measure it
+    # Each check starts as its file is written, while the next is planted (bpy stays on this thread).
+    with ThreadPoolExecutor(WORKERS) as pool:
+        files = [(name, want, pool.submit(run, "rig_check.py", planted(name, change))) for name, change, want in RIG]
+        vest = pool.submit(run, "gear_check.py", look.FIGURE, shell(0.02, "gear-vest", TORSO))
+        rigid = pool.submit(run, "gear_check.py", look.FIGURE, shell(0.02, "gear-rigid-vest", TORSO, rigid=True))
+        rigs = [f.result() for _, _, f in files]
+        vest_lines, rigid_lines = vest.result(), rigid.result()
+    failures = [f for (name, want, _), lines in zip(files, rigs) if (f := judged(name, want, lines))]
     if not any(re.match(r"^✓ GEARCHECK gear-vest on ", l) for l in vest_lines):
         failures.append("gear_check failed the control, a vest of the torso's skin 2 cm out skinned as the body is: " + " | ".join(vest_lines[:3]))
     if not any(re.match(r"^✗ GEARCHECK gear-rigid-vest on ", l) for l in rigid_lines):

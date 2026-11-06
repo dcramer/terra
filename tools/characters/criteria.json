@@ -63,11 +63,6 @@
    "what": "A person's hair is their own, yet compose drops it beside a worn piece that refuses it (the knight_cloth look's buzzed hair under the Knight's plate, its armet off): keep the hair and choose the slot's next piece instead, or put it on the desk as a design call",
    "files": ["crates/terra_walker/src/wardrobe.rs#compose"],
    "check": "cargo test -p terra_walker --lib wardrobe::"
-  },
-  {
-   "what": "Unproven checks (D632), the last two parts of rig_check's motion: its standing feet's gap is never measured (standing_gap stays 0 in rig_check.py; measure it, then plant feet off the ground) and its sink below the ground has no planted fault. A check gates only once a test plants a known fault and shows it caught; every other stage the status reads is proven: vendored, private, reshape (vendored.test.ts), intact (intact.test.ts), neck (neck.test.ts: a neck ring moved 4 mm, a torso run on under the head), pairings (pairings.test.ts, a new poke refused), catalogue and looks (terra_walker wardrobe/tests.rs: a_catalogue_naming_what_it_lacks_is_refused, a_refused_pairing_is_never_composed_and_no_look_may_wear_one), the build's verdict (build_verdict.test.ts), files and bound (wardrobe.test.ts: a piece, its texture or the body's file gone; a bind pose 1 mm off, a joint the body has not), looks.hair and variants (status.test.ts: a look with no hair or a beard in its hair slot; every pairing refused, and nothing refused with the shoes thrice), rig_check's seven checks (motion by its bad edges) and gear_check (test_checks.py, Blender: each fault fails its own check, the mannequin re-exported passes all; char-faults-proof j1). Criteria has no row type for a proof, so it is a task",
-   "files": ["tools/characters/rig_check.py", "tools/characters/test_checks.py"],
-   "check": "tools/blender/run.sh tools/characters/test_checks.py"
   }
  ]
 }
