@@ -40,8 +40,10 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 - A wisp's 6 cm core and 0.6 m glow are dots at 960 px — a 1.3 m soft orb and a 3 m faint haze card about a 10 cm core.
 - `patch` is a reserved word in WGSL: the shader fails at run time with only an ERROR line in the run's log, the frame still saved — grep the run for ERROR before judging a still.
 - Effects sized as they feel read as nothing at 70 px a metre (motes under 0.07 m, banner tears) — size them at the game camera.
-- A 0.7 m soft halo over a 0.13 m core reads as a soft blue blob in every biome's judge — a 0.04 m core drawn out along the flight, a 0.3 m dim halo, a thin white ribbon inside the coloured trail, and a hard star card (kit::star) for the impact, not a swelling disc; a 4k lm bolt light lights no floor beside 60k to 140k lm braziers — about 30k.
+- A 0.7 m soft halo over a 0.13 m core reads as a soft blue blob in every biome's judge — a 0.04 m core drawn out along the flight, a 0.3 m dim halo, a thin white ribbon inside the coloured trail, and a hard star card (kit::star) for the impact, not a swelling disc; a 4k lm bolt light lights no floor beside 60k to 140k lm braziers — about 18k to 30k.
 - A spell's light riding 2 m up lights an even wash, not a pool (2 m out it still gives 0.35x, and beside warm pools its blue greys to violet) — a second short-range light about 0.5 m over the floor under the effect (under 10% a metre out), as the ARPGs fake it with a light or a glow decal.
+- The effect lights all at once wash the fight's floor white (j43: the ruin's p95 0.20 against the refs' 0.13): at the still's moment the bolts fly and the blow bites, so the bite (40k), the slash's edge (28k) and the pools (15k to 22k) count, not the impact's — map the pixels over the refs' p95 before cutting the light that seems to blame.
+- A light's glint in a puddle cut by a straight edge is the floor's normal map through the water, not its line or a shadow (j43; an uncommitted run painting the wet mask as colour shows it) — the water's normal fully flat, its stone only in its colour; a glossy rim round a puddle draws a cut-out's outline — keep the rim matte.
 - An attack held at the wrong moment reads as arms raised — a sheet of times first (below).
 
 ## The worker and the guard
