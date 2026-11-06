@@ -12,7 +12,7 @@ import { type Glb, clips, pixelSize, readGlb, sample, writeGlb } from "./gltf.ts
 import { type Ctx, ROOT, conceptPrompt, main, parseOutput } from "./iso-art.ts";
 import { budget, clipsFor } from "./kinds.ts";
 import { readAsset, readmeCost, statusTable, writeAsset } from "./ledger.ts";
-import { cut, inPlace, loop, place, renameClips } from "./normalize.ts";
+import { centre, cut, inPlace, loop, place, renameClips } from "./normalize.ts";
 
 const README = readFileSync(join(ROOT, "tools", "tripo", "README.md"), "utf8");
 const GUIDE = readFileSync(join(ROOT, "docs", "art-style.md"), "utf8");
@@ -186,12 +186,43 @@ test("export cuts a run to the stride whose ends meet and closes it, and keeps a
   assert.deepEqual(loop(rising, clipsFor("biped")), []);
 });
 
+test("export puts a run cut from mid-clip back over the origin", () => {
+  // Tripo's run gathers speed from a stand, so its in-place cut, a straight line end to end,
+  // leaves the pelvis ahead in the middle, where the loop's stride is cut from.
+  const hips = keys.map((t) => [0, 1, 1.5 * t * t]);
+  const glb = walker([IDLE, ["run", [[1, "translation", keys, hips], ...RUN[1]]]]);
+  const specs = clipsFor("biped");
+  inPlace(glb, specs);
+  loop(glb, specs);
+  const off = (g: Glb) => Object.fromEntries(check(measure(g), "hero", "biped", 1.8).map((r) => [r.check, r]))["run centred"];
+  assert.equal(off(glb).ok, false, `before: ${off(glb).value}`);
+  const moved = centre(glb, specs);
+  assert.ok(moved[0].off > 0.03, `it was off: ${moved[0].off}`);
+  const after = readGlb(writeGlb(glb));
+  assert.ok(off(after).ok, `after: ${off(after).value}`);
+  assert.ok(measure(after).clips.run.motion!.gap < 0.001, "still closed");
+});
+
+test("a loop whose pose meets at the seam but not its velocity fails its seam", () => {
+  // The head rises and falls once a second: the last frame is the first, but it arrives going
+  // down and leaves going up.
+  const t = Array.from({ length: 31 }, (_, k) => k / 30);
+  const bob: [number, string, number[], number[][]] = [4, "translation", t, t.map((s) => [0, 0.8 + 0.3 * Math.sin(Math.PI * s), 0])];
+  const by = Object.fromEntries(check(measure(walker([["idle", [bob]]])), "hero", "biped", 1.8).map((r) => [r.check, r]));
+  assert.ok(by["idle loops"].ok, `the pose meets: ${by["idle loops"].value}`);
+  assert.equal(by["idle seam"].ok, false, `the velocity does not: ${by["idle seam"].value}`);
+  // A last key snapped to the first pose: the gap is 0, the seam's step is not.
+  const snap: [number, string, number[], number[][]] = [4, "translation", [0, 0.95, 1], [[0, 0.8, 0], [0, 0.8, 0.5], [0, 0.8, 0]]];
+  const s = Object.fromEntries(check(measure(walker([["idle", [snap]]])), "hero", "biped", 1.8).map((r) => [r.check, r]));
+  assert.ok(s["idle loops"].ok && !s["idle seam"].ok, `snap: ${s["idle loops"].value}, ${s["idle seam"].value}`);
+});
+
 test("the checks name what is missing and pass what is right", () => {
   const glb = walker([IDLE, WALK, FALL]);
   renameClips(glb, clipsFor("biped"));
   const results = check(measure(glb), "hero", "biped", 1.8);
   const by = Object.fromEntries(results.map((r) => [r.check, r]));
-  for (const ok of ["clip idle", "clip walk", "walk in place", "walk speed", "walk facing", "walk loops", "death ends down", "height", "on the ground", "triangles"]) assert.ok(by[ok].ok, `${ok}: ${by[ok].value}`);
+  for (const ok of ["clip idle", "clip walk", "walk in place", "walk speed", "walk facing", "walk loops", "walk seam", "walk centred", "idle seam", "death ends down", "height", "on the ground", "triangles"]) assert.ok(by[ok].ok, `${ok}: ${by[ok].value}`);
   for (const bad of ["clip run", "clip attack", "textures"]) assert.equal(by[bad].ok, false, bad);
   // A quadruped gets the one walk Tripo has for it.
   assert.deepEqual(clipsFor("quadruped").map((c) => c.preset), ["walk"]);

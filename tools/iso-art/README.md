@@ -21,7 +21,8 @@ Each stage prints a line; Tripo's progress goes to `target/iso-art/NAME/<stage>.
 - **export** asks for the clips in place at the kind's texture size, names them ours, and adds a root node named for the asset that makes it its height (`--height`, life size, D110), turns it to face +Z by the way its walk goes, and stands it on y=0 with the body over the origin (the model contract's base anchor). The game moves the body at the speed `check` records. On Tripo's file it does three things more (`normalize.ts`):
   - **in place**: Tripo's `--in-place` keeps only its `root` joint still while the pelvis walks 2.8 m and runs 5.5 m, so each chain joint's ground drift (end minus start, in its parent's frame) is taken out, as Mixamo's and Unreal's in-place cuts.
   - **cut**: a clip with a `window` in `kinds.ts` is cut to it, in the preset's own seconds: the attack to 0.75 to 2.75 s of the 6.6 s `slash`, whose last 3 s return slowly to guard (the game blends back to idle).
-  - **loop**: a looping clip whose ends meet within 1% is only closed; any other is cut to the window whose ends meet best (searched at 120 fps within the spec's length bounds, each joint against the body over the ground) and what is left spread over it, rotations by the quaternion between (Unity's loop match and Loop Pose). Tripo's run is nearly two strides 15 to 23% of the height apart; one stride inside meets within 4 to 6%. A best window over 10% is left uncut, for `check` to fail. After closing `check` reads 0, so the ledger's export note ("ends X% apart before closing") is the honest number; the pose meets at the seam, not the velocity.
+  - **loop**: a looping clip whose ends meet within 1% is only closed; any other is cut to the window whose ends meet best (searched at 120 fps within the spec's length bounds, each joint against the body over the ground) and what is left spread over it, rotations by the quaternion between (Unity's loop match and Loop Pose). Tripo's run is nearly two strides 15 to 23% of the height apart; one stride inside meets within 4 to 6%. A best window over 10% is left uncut, for `check` to fail. After closing `check` reads 0, so the ledger's export note ("ends X% apart before closing") is the honest number; `check`'s seam reads the rest (below).
+  - **centre**: a walk or run's body is moved, by its mean place over the clip, back over its rest place: the run's loop is cut from 0.41 s on, where Tripo's pelvis is 0.8 to 1.5 m ahead (41 to 58% of the height, all five bipeds, 2026-11-06), so it played ahead of the body and leapt there from the walk.
 
 ## Cost per asset by kind
 
@@ -44,6 +45,8 @@ A re-export Tripo has cached takes 0.0 minutes: cost from the first.
 | each clip by name, its length | the game plays it by name; a length far off is the wrong preset or a broken export |
 | loops close (idle, walk, run) | the last frame meets the first, or the body jumps each time round |
 | walk, run in place | the game moves the body; root motion would carry it twice |
+| seam (idle, walk, run) | played round, the step into and out of the seam under 3x the clip's median, its change of velocity under 1.5x the clip's largest: a snap or a velocity that does not meet |
+| walk, run centred | the body's mean place within 3% of the height of its rest place, or the gait plays ahead of the body |
 | walk, run speed (recorded) | the planted foot's speed against the body, so the game moves it without the feet sliding; run over 1.3x walk |
 | facing | the walk goes toward +Z, glTF's front, within 25 degrees |
 | death ends down | the body ends under 60% of its start height; the nearest preset may not |

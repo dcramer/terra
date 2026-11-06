@@ -13,7 +13,7 @@ import { check, measure, printResults } from "./check.ts";
 import { readGlb, writeGlb } from "./gltf.ts";
 import { type Body, KINDS, type Kind, SPECS, budget, clipsFor, isoPart } from "./kinds.ts";
 import { type Asset, type Stage, type StageRecord, allAssets, assetDir, readAsset, readmeCost, statusTable, writeAsset } from "./ledger.ts";
-import { cut, inPlace, loop, place, renameClips } from "./normalize.ts";
+import { centre, cut, inPlace, loop, place, renameClips } from "./normalize.ts";
 import { DIR, assetSheet, clipSheet } from "./sheet.ts";
 import { blenderCut, splice } from "./decimate.ts";
 
@@ -160,12 +160,13 @@ export function exportAsset(ctx: Ctx, name: string): void {
   const still = inPlace(glb, specs);
   const cuts = cut(glb, specs);
   const loops = loop(glb, specs).filter((l) => l.from > 0 || l.gap > 0.01);
+  const centred = centre(glb, specs).filter((c) => c.off > 0.005);
   const walk = specs.some((c) => c.name === "walk") ? measure(glb).clips.walk?.motion : undefined;
   const placed = place(glb, name, a.height, walk?.heading ?? 0);
   const out = assetFile(ctx.root, name);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, writeGlb(glb));
-  const did = [`scaled ${placed.scale.toFixed(3)}`, `turned ${Math.round(placed.turn)} deg`, still.length && `in place ${still.join(" ")}`, cuts.length && `cut ${cuts.join(" ")}`, ...loops.map((l) => `looped ${l.name} on ${l.from.toFixed(2)}-${l.to.toFixed(2)} s (ends ${(l.gap * 100).toFixed(1)}% apart before closing)`)].filter(Boolean).join(", ");
+  const did = [`scaled ${placed.scale.toFixed(3)}`, `turned ${Math.round(placed.turn)} deg`, still.length && `in place ${still.join(" ")}`, cuts.length && `cut ${cuts.join(" ")}`, ...loops.map((l) => `looped ${l.name} on ${l.from.toFixed(2)}-${l.to.toFixed(2)} s (ends ${(l.gap * 100).toFixed(1)}% apart before closing)`), ...centred.map((c) => `centred ${c.name} (body ${(c.off * 100).toFixed(0)}% of height off)`)].filter(Boolean).join(", ");
   record(ctx, a, "export", { credits: r.out.credits ?? 0, minutes: r.minutes, files: [relative(ctx.root, out)], scale: Number(placed.scale.toFixed(4)), turn: Math.round(placed.turn), note: did });
 }
 

@@ -55,6 +55,15 @@ export type Motion = {
   gap: number;
   /** The body joint's height at the end as a share of its height at the start. */
   endHeight: number;
+  /** How far the body's mean place across the ground is from its rest place, a share of the
+   * rest height: 0 for a body over the origin. */
+  offCentre: number;
+  /** Played round, the larger step into and out of the seam (the last frame to the first, the
+   * first to the second) against the clip's median frame step: a jump at the seam reads over 1. */
+  seamStep: number;
+  /** The change of velocity across the seam against the largest inside the clip: over 1 is a
+   * seam rougher than any frame of the motion (the pose meets, not the velocity). */
+  seamTurn: number;
 };
 
 const flat = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[2] - b[2]);
@@ -79,7 +88,20 @@ export function motion(glb: Glb, clip: Clip, sk: Skeleton): Motion {
   const speeds = steps.map(([x, z]) => Math.hypot(x, z)).sort((a, b) => a - b);
   const sum = steps.reduce((s, [x, z]) => [s[0] + x, s[1] + z], [0, 0]);
   const last = frames - 1;
+  // The seam, every joint in the world (so a body that jumps counts too), the last frame being
+  // the first when played round.
+  const apart = (a: number, b: number, c?: number) => Math.max(...sk.joints.map((j) => Math.hypot(...pos(a, j).map((v, i) => (c === undefined ? v - pos(b, j)[i] : v - 2 * pos(b, j)[i] + pos(c, j)[i]))))) / sk.restHeight;
+  const stepsIn = Array.from({ length: last }, (_, f) => apart(f, f + 1)).sort((a, b) => a - b);
+  const turnsIn = Array.from({ length: Math.max(0, last - 1) }, (_, f) => apart(f, f + 1, f + 2));
+  const median = stepsIn[Math.floor(stepsIn.length / 2)] ?? 0;
+  const seamStep = last >= 2 ? Math.max(apart(last - 1, 0), apart(0, 1)) / Math.max(1e-6, median) : 0;
+  const seamTurn = last >= 2 ? apart(last - 1, 0, 1) / Math.max(1e-6, ...turnsIn) : 0;
+  const home = origin(pose(glb.doc)[sk.body]);
+  const mean = [0, 2].map((k) => poses.slice(0, last).reduce((s, _, f) => s + pos(f, sk.body)[k] - home[k], 0) / Math.max(1, last));
   return {
+    offCentre: Math.hypot(mean[0], mean[1]) / sk.restHeight,
+    seamStep,
+    seamTurn,
     travel: flat(pos(0, sk.body), pos(last, sk.body)),
     speed: speeds.length ? speeds[Math.floor(speeds.length / 2)] : 0,
     heading: (Math.atan2(sum[0], sum[1]) * 180) / Math.PI,
@@ -125,6 +147,8 @@ export function check(m: Measures, kind: Kind, rigType: string | undefined, heig
     add(`${c.name} length`, got.seconds >= c.seconds[0] && got.seconds <= c.seconds[1], `${f(got.seconds)} s`, `${c.seconds[0]}-${c.seconds[1]} s`, "a clip far off this is the wrong preset or a broken export");
     if (!mo) continue;
     if (c.loop) add(`${c.name} loops`, mo.gap < 0.05, `${f(mo.gap * 100, 1)}% of height`, "under 5%", "its last frame meets its first, or the body jumps each time round");
+    if (c.loop) add(`${c.name} seam`, mo.seamStep < 3 && mo.seamTurn < 1.5, `step ${f(mo.seamStep, 1)}x median, turn ${f(mo.seamTurn, 1)}x the clip's most`, "step under 3x, turn under 1.5x", "played round, the seam must move like any frame: a big step is a snap (a last key at rest), a big turn a velocity that does not meet (normalize.ts loop); re-export, or pick another window");
+    if (c.moves) add(`${c.name} centred`, mo.offCentre < 0.03, `body ${f(mo.offCentre * 100, 1)}% of height off`, "under 3%", "the body plays over the entity's place, or the gait runs ahead of its shadow and leaps there from the walk (normalize.ts centre); re-export");
     if (c.moves) {
       add(`${c.name} in place`, mo.travel < 0.1, `${f(mo.travel)} m`, "under 0.10 m", "the game moves the body at the clip's speed; root motion would carry it twice");
       add(`${c.name} speed`, mo.speed > 0.2, `${f(mo.speed)} m/s`, "over 0.20 m/s (recorded for the game)", "how fast the planted foot says the body goes, so the game moves it without sliding the feet");

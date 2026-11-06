@@ -140,6 +140,47 @@ export function loop(glb: Glb, specs: ClipSpec[]): Looped[] {
   return done;
 }
 
+/** Puts each moving clip's body over the origin, as it stands at rest: Tripo's in-place cut
+ * leaves the pelvis wherever the clip began, and a loop cut out of the run's middle (0.41 s on)
+ * keeps it there, 0.8 to 1.5 m ahead of the body's place (knight, ogre, tree monster, treants,
+ * 2026-11-06), so the run played ahead of its shadow's owner and leapt there from the walk. The
+ * body's mean place across the ground over the clip is moved to its rest place, by the top
+ * translated joint of the chain in its parent's rest frame (twice, as the parent may turn).
+ * Returns each clip moved and by how much, a share of the rest height. */
+export function centre(glb: Glb, specs: ClipSpec[]): { name: string; off: number }[] {
+  const sk = skeleton(glb);
+  if (!sk) return [];
+  const world = pose(glb.doc);
+  const home = origin(world[sk.body]);
+  const parent = new Map<number, number>();
+  glb.doc.nodes.forEach((n: any, i: number) => (n.children ?? []).forEach((c: number) => parent.set(c, i)));
+  const done: { name: string; off: number }[] = [];
+  for (const spec of specs.filter((c) => c.moves)) {
+    const anim = (glb.doc.animations ?? []).find((a: any) => a.name === spec.name);
+    if (!anim) continue;
+    const i = anim.channels.findIndex((ch: any) => ch.target?.path === "translation" && sk.chain.includes(ch.target.node));
+    if (i < 0) continue;
+    let first = 0;
+    for (let pass = 0; pass < 2; pass++) {
+      const clip = clips(glb).find((c) => c.name === spec.name)!;
+      const n = Math.max(2, Math.round(clip.duration * LOOP_FPS));
+      let [x, z] = [0, 0];
+      for (let f = 0; f < n; f++) {
+        const b = origin(pose(glb.doc, clip, (f / n) * clip.duration)[sk.body]);
+        [x, z] = [x + (b[0] - home[0]) / n, z + (b[2] - home[2]) / n];
+      }
+      if (pass === 0) first = Math.hypot(x, z) / sk.restHeight;
+      const p = parent.get(anim.channels[i].target.node);
+      const m = p === undefined ? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] : world[p];
+      const shift = solve3(m, [x, 0, z]);
+      const { times, values } = readChannel(glb, anim, anim.channels[i]);
+      writeChannel(glb, anim, i, times, values.map((v) => v.map((c, k) => c - shift[k])));
+    }
+    done.push({ name: spec.name, off: first });
+  }
+  return done;
+}
+
 /** Bends each channel of an animation so its last key is its first, by the share of the time. */
 function close(glb: Glb, anim: any): void {
   anim.channels.forEach((ch: any, i: number) => {
