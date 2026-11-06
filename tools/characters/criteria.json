@@ -53,7 +53,7 @@
    "check": "the review desk"
   },
   {
-   "what": "Cheaper jobs (research/2026-11-05-agent-pipeline-tokens.md): a code map (tools/characters/map.ts); the skill is split (D627) and tools/characters/README.md is held over its 20 KB budget",
+   "what": "Cheaper jobs (research/2026-11-05-agent-pipeline-tokens.md): a code map (tools/characters/map.ts); the skill is split and tools/characters/README.md trimmed to 5 KB, its scripts.md and made-clips.md read by row or section (D627)",
    "files": [".agents/skills/character/SKILL.md"],
    "check": "node tools/token-stats/job.mjs --job '<the job>'"
   },
@@ -61,6 +61,11 @@
    "what": "A person's hair is their own, yet compose drops it beside a worn piece that refuses it (the knight_cloth look's buzzed hair under the Knight's plate, its armet off): keep the hair and choose the slot's next piece instead, or put it on the desk as a design call",
    "files": ["crates/terra_walker/src/wardrobe.rs#compose"],
    "check": "cargo test -p terra_walker --lib wardrobe::"
+  },
+  {
+   "what": "Unproven checks (D632): every stage the status reads (wardrobe.ts's vendored, private, reshape, catalogue, pairings, files, intact, bound, looks; the build's verdict) gates only once a test plants a known fault and shows the stage catches it. Name each stage's planted-fault test (intact.test.ts, vendored.test.ts, pairings.test.ts, build_verdict.test.ts have some) or write it; criteria has no row type for it, so it is a task",
+   "files": ["tools/characters/wardrobe.ts", "tools/characters/build_verdict.test.ts"],
+   "check": "node --test tools/characters/*.test.ts"
   }
  ]
 }
