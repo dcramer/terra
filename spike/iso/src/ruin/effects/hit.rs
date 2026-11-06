@@ -20,6 +20,9 @@ const STOP: f32 = 0.08;
 const FLINCH: f32 = 0.15;
 const RISE: f32 = 0.05;
 const FALL: f32 = 0.16;
+/// The star flash at the bite: its size (m) and life (s).
+const STAR: f32 = 1.0;
+const STAR_LIFE: f32 = 0.14;
 
 #[derive(Resource, Default)]
 struct Hit {
@@ -57,8 +60,8 @@ fn spawn(
 ) {
     let strike = stage.strike();
     let mut rng = Rng::new(0x41771);
-    let soft = images.add(crate::motes::soft_image());
-    let flash = materials.add(glow(LinearRgba::rgb(6.0, 4.0, 3.0), Some(soft)));
+    let star = images.add(super::kit::star_image());
+    let flash = materials.add(glow(LinearRgba::rgb(9.0, 6.5, 4.0), Some(star)));
     commands.spawn((
         Mesh3d(meshes.add(Rectangle::new(1.0, 1.0))),
         MeshMaterial3d(flash.clone()),
@@ -83,14 +86,14 @@ fn spawn(
     let out = (stage.foe - stage.knight).normalize().extend(0.0).xzy() + Vec3::Y * 0.45;
     let streak = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
     let spark = materials.add(glow(LinearRgba::rgb(14.0, 6.5, 1.6), None));
-    sparks(&mut commands, burst, &streak, &spark, &mut rng, 26, out, 0.8, (4.0, 10.0), 0.03);
+    sparks(&mut commands, burst, &streak, &spark, &mut rng, 30, out, 0.8, (4.0, 10.0), 0.018);
 }
 
 /// Finds the knight and the ogre by where they stand, and the ogre's materials once its
 /// model is in.
 fn find(
     mut hit: ResMut<Hit>,
-    bodies: Query<(Entity, &Transform), With<WorldAssetRoot>>,
+    bodies: Query<(Entity, &Transform), (With<WorldAssetRoot>, Without<ChildOf>)>,
     children: Query<&Children>,
     skins: Query<&MeshMaterial3d<StandardMaterial>>,
     stage: Res<Stage>,
@@ -208,14 +211,16 @@ fn show(
     for (part, tr, light, burst) in &mut parts {
         match part {
             Part::Flash(m) => {
-                let k = (a / 0.12).clamp(0.0, 1.0);
+                // A hard star where the blade bites (kit::star), full at once and gone in
+                // a seventh of a second, not a swelling soft disc.
+                let k = (a / STAR_LIFE).clamp(0.0, 1.0);
                 let mut tr = tr.unwrap();
                 tr.translation = stage.strike();
-                tr.rotation = cam.rot;
-                tr.scale = Vec3::splat(if a < 0.12 { 0.5 * (1.0 - k * k) + 0.1 } else { 0.0 });
+                tr.rotation = cam.rot * Quat::from_rotation_z(0.2);
+                tr.scale = Vec3::splat(if (0.0..STAR_LIFE).contains(&a) { STAR * (1.0 - 0.4 * k) } else { 0.0 });
                 if let Some(mut m) = materials.get_mut(m) {
-                    let f = 1.0 - k;
-                    m.base_color = LinearRgba::rgb(6.0 * f, 4.0 * f, 3.0 * f).into();
+                    let f = (1.0 - k).powf(1.5);
+                    m.base_color = LinearRgba::rgb(9.0 * f, 6.5 * f, 4.0 * f).into();
                 }
             }
             Part::Light => {

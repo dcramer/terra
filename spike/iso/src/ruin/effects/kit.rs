@@ -204,6 +204,32 @@ impl Noise {
     }
 }
 
+/// The brightness of an impact's star at `p` (the card's -1 to 1): a pinpoint core, four
+/// thin long rays and four shorter diagonal ones, over a faint glow; as Diablo IV's and Path
+/// of Exile 2's hits flash, a hard star a frame or two long rather than a soft disc.
+pub fn star(p: Vec2) -> f32 {
+    let ray = |a: f32, b: f32, len: f32, w: f32| {
+        let t = (1.0 - a.abs() / len).max(0.0);
+        (-b.abs() / w).exp() * t * t * t
+    };
+    let d = Vec2::new(p.x + p.y, p.y - p.x) * std::f32::consts::FRAC_1_SQRT_2;
+    let r = p.length();
+    let rays = ray(p.x, p.y, 1.0, 0.018).max(ray(p.y, p.x, 1.0, 0.018))
+        + 0.6 * ray(d.x, d.y, 0.55, 0.014).max(ray(d.y, d.x, 0.55, 0.014));
+    let core = (-r * r / 0.004).exp();
+    let glow = 0.22 * (1.0 - r).max(0.0).powi(4);
+    (rays + core + glow).min(1.0)
+}
+
+/// The star as a white texture, its brightness in the alpha (for an additive card).
+pub fn star_image() -> Image {
+    let n = 128;
+    image(n, n, |x, y| {
+        let p = (Vec2::new(x as f32, y as f32) + 0.5) / n as f32 * 2.0 - 1.0;
+        [1.0, 1.0, 1.0, star(p)]
+    })
+}
+
 /// An sRGB image of `w` by `h` from a function of the pixel to its colour and alpha.
 pub fn image(w: u32, h: u32, f: impl Fn(u32, u32) -> [f32; 4]) -> Image {
     let mut data = Vec::with_capacity((w * h * 4) as usize);
@@ -253,5 +279,16 @@ mod tests {
         assert!(p1.x > p0.x && p0.x > 0.0);
         assert!(v1.length() < v0.length());
         assert!(v1.y < 0.0 && p1.y < 0.0);
+    }
+
+    /// The star is hard, not a disc: full at its core, still bright out along a ray, dark
+    /// just off the ray at the same distance, and nothing at the card's corners.
+    #[test]
+    fn the_star_is_rays_not_a_disc() {
+        assert!(star(Vec2::ZERO) > 0.99);
+        let on = star(Vec2::new(0.5, 0.0));
+        let off = star(Vec2::new(0.5, 0.15));
+        assert!(on > 0.1 && off < on / 4.0, "on the ray {on}, off it {off}");
+        assert!(star(Vec2::new(0.95, 0.95)) < 0.01);
     }
 }
