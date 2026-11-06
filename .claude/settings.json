@@ -84,5 +84,8 @@
       }
     ]
   },
-  "subagentPromptCacheTtl": "1h"
+  "subagentPromptCacheTtl": "1h",
+  "enabledPlugins": {
+    "sentry@claude-plugins-official": false
+  }
 }
