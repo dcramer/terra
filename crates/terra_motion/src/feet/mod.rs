@@ -104,6 +104,10 @@ pub const CAUGHT_STEP_S: f32 = 0.12;
 pub const STEP_UP_M: (f32, f32) = (0.05, 0.09);
 /// Share of a step by which the foot is over where it lands; the rest it comes down.
 const OVER: f32 = 0.7;
+/// Share of a step by which the foot only lifts, neither going nor turning: a foot comes off
+/// the ground before it swings (ALS's and Lyra's turn-in-place steps lift the heel first), so a
+/// step's first frame does not skate the ball across the ground under it.
+const LIFT: f32 = 0.15;
 /// The lock weight falls from 1 to 0 no faster than this (the bake's ramp, markers.ts RAMP_S).
 pub const RELEASE_S: f32 = 0.1;
 /// A blend back to the clip, when the lock is let go (a body down, a roll) or a step is cut.
@@ -129,7 +133,7 @@ enum State {
     Stepping {
         from: Pose,
         s: f32,
-        land: Option<Vec3>,
+        land: Option<Pose>,
     },
     /// Going back to the clip's foot.
     Blending { from: Pose, s: f32 },
@@ -522,27 +526,29 @@ impl Foot {
 
     /// A step from `from` to land under the clip's foot, `s` of the way, lifted over an arc;
     /// where it comes down once found (`land`).
-    fn stepping(&mut self, from: Pose, s: f32, land: Option<Vec3>, posed: &Posed) -> Pose {
+    fn stepping(&mut self, from: Pose, s: f32, land: Option<Pose>, posed: &Posed) -> Pose {
         let clip = posed.pose;
         let flat = (from.at - clip.at).reject_from(posed.up).length();
         let up = (flat * 0.5).clamp(STEP_UP_M.0, STEP_UP_M.1);
         let lift = posed.up * up * libm::sinf(core::f32::consts::PI * s.min(1.0));
-        // Over the clip's foot by OVER of the way, then down onto where it was then, so the
-        // foot lands still rather than gliding in with a driven body.
+        // Over the clip's foot by OVER of the way, then down onto where it was then, headed as
+        // it was then, so the foot lands still rather than gliding in with a driven body or
+        // swinging its ball round with a turning one (turn.idle.180's 3 cm, anim-blend j9).
         let land = if s >= OVER {
-            Some(land.unwrap_or(clip.at))
+            Some(land.unwrap_or(clip))
         } else {
             None
         };
-        let turn = from.turn.slerp(clip.turn, ease(s / OVER));
+        let go = ease((s - LIFT) / (OVER - LIFT));
+        let turn = land.map_or_else(|| from.turn.slerp(clip.turn, go), |l| l.turn);
         if s >= 1.0 {
-            let at = land.unwrap_or(clip.at);
+            let at = land.map_or(clip.at, |l| l.at);
             self.state = State::Planted(Pose { at, turn });
             self.caught = false;
             return Pose { at, turn };
         }
         self.state = State::Stepping { from, s, land };
-        let at = land.unwrap_or_else(|| from.at.lerp(clip.at, ease(s / OVER)));
+        let at = land.map_or_else(|| from.at.lerp(clip.at, go), |l| l.at);
         Pose {
             at: at + lift,
             turn,
