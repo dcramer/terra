@@ -28,16 +28,28 @@ pub fn plugin(app: &mut App) {
         .add_systems(PostStartup, hide_glade_water);
 }
 
-/// The water by day: dark, the sky's band its colour, a breeze's ripples.
+/// The water by day: dark, the sky's band its colour, a breeze's ripples. At r4 the glint's
+/// broad lobe (600) over gentle ripples (0.04) drew one round dappled spotlight on a grey
+/// slab (judge forest-r4); a tight lobe at twice the gain over steeper ripples breaks it
+/// into small sharp sparkles, and a greener, clearer shallow tints the edge.
 pub fn look() -> Look {
     Look {
         deep: Vec4::new(0.004, 0.009, 0.010, 0.6),
-        shallow: Vec4::new(0.03, 0.028, 0.018, 0.5),
+        shallow: Vec4::new(0.05, 0.07, 0.045, 0.8),
         sky: Vec4::new(420.0, 560.0, 820.0, 1.0),
-        horizon: Vec4::new(700.0, 760.0, 820.0, 0.35),
-        wave: Vec4::new(0.86, 0.5, 0.04, 0.0),
-        look: Vec4::new(0.0, 600.0, 1.0, 0.15),
+        horizon: Vec4::new(700.0, 760.0, 820.0, 0.6),
+        wave: Vec4::new(0.86, 0.5, 0.07, 0.0),
+        look: Vec4::new(0.0, 4_000.0, 2.0, 0.15),
         lights: default(),
+    }
+}
+
+/// The margin: a soft fade onto the bank's mud, the mirrored sky broken into the far
+/// trees' blots.
+pub fn edge() -> pool::Edge {
+    pool::Edge {
+        fade: Vec4::new(0.3, 0.8, 0.0, 0.0),
+        ..default()
     }
 }
 
@@ -59,10 +71,12 @@ fn spawn(
     let face = pool::surface(POND - half, POND + half, 0.25, WATER, |p| land.height(p));
     commands.spawn((
         Mesh3d(meshes.add(face)),
-        MeshMaterial3d(pools.add(pool::material(look()))),
+        MeshMaterial3d(pools.add(pool::with_edge(look(), edge()))),
         bevy::light::NotShadowCaster,
     ));
-    let focus = super::FOCUS.extend(crate::terrain::shape(super::FOCUS) + 1.2).xzy();
+    let focus = super::FOCUS
+        .extend(crate::terrain::shape(super::FOCUS) + 1.2)
+        .xzy();
     let camera = focus + crate::ruin::camera::offset();
     commands.spawn((
         PointLight {
@@ -96,12 +110,18 @@ mod tests {
     /// the sun's mirror would for a camera looking down at it.
     #[test]
     fn the_glitter_is_on_the_water() {
-        assert!(crate::terrain::pond(GLITTER) > 0.1, "{GLITTER} is not in the pond");
+        assert!(
+            crate::terrain::pond(GLITTER) > 0.1,
+            "{GLITTER} is not in the pond"
+        );
         let camera = Vec3::new(8.3, 16.8, 15.0);
         let l = sun_glint(camera);
         assert!(l.y > 20.0, "the glint light at {l} is low");
         // Beyond the glitter from the camera, on the ground.
         let (c, g, s) = (camera.xz(), GLITTER, l.xz());
-        assert!((s - g).dot(g - c) > 0.0, "the glint light at {l} is on the camera's side");
+        assert!(
+            (s - g).dot(g - c) > 0.0,
+            "the glint light at {l} is on the camera's side"
+        );
     }
 }

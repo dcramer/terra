@@ -4,6 +4,7 @@
 //! the knight fighting the iso pipeline's tree creatures, with the ruin's spell and hit;
 //! a moose walking the far bank, birds crossing, pollen in the sun (life.rs).
 
+pub mod clearing;
 mod dress;
 mod fight;
 mod life;
@@ -32,13 +33,18 @@ const FOCUS: Vec2 = Vec2::new(4.6, 4.8);
 /// poe2-shock-nova, le-desert-fight) 0.06 to 0.10, 0.30 to 0.40, 0.27 to 0.47 and 0.03 to
 /// 0.11. A sun of 2,600 alone moved p95 only to 0.13 (the floor is dark grass and soil), so
 /// the exposure opens a stop, the sky's fill drops so the shade stays dark, Tony McMapface
-/// replaces AgX (which greys greens and a flame) and the grade adds saturation.
-const EV100: f32 = 8.0;
-const SUN_LUX: f32 = 3_200.0;
-const SKY_NITS: f32 = 330.0;
+/// replaces AgX (which greys greens and a flame) and the grade adds saturation. At r4 (EV 8,
+/// sun 3,200, sky 330) the frame still graded as dusk: p50 0.044, p95 0.216, saturation
+/// 0.23 (judge forest-r4), the fight's ground in an oak's shade; half a stop more, a
+/// brighter sun over a darker sky fill, the fight in a sun break (clearing.rs).
+const EV100: f32 = 7.5;
+const SUN_LUX: f32 = 4_200.0;
+const SKY_NITS: f32 = 300.0;
 /// 1.45 at r1 made the sunlit grass acid lime (judge forest-r1, both judges); 1.3 keeps
-/// the shade's greens.
+/// the shade's greens. The midtones get their own (the greens' band) over it.
 const SATURATION: f32 = 1.3;
+/// 1.15 left saturation 0.254 (the day refs' 0.27 to 0.47).
+const MID_SATURATION: f32 = 1.25;
 
 pub fn stage() -> Stage {
     Stage {
@@ -57,6 +63,7 @@ pub fn plugin(app: &mut App) {
             life::plugin,
             dress::plugin,
             pond::plugin,
+            clearing::plugin,
         ))
         .add_systems(Startup, (camera, fight::spawn))
         .add_systems(
@@ -140,6 +147,10 @@ fn camera(mut commands: Commands, args: Res<crate::Args>, mut images: ResMut<Ass
                 post_saturation: SATURATION,
                 ..default()
             },
+            midtones: bevy::render::view::ColorGradingSection {
+                saturation: MID_SATURATION,
+                ..default()
+            },
             ..default()
         },
     ));
@@ -159,7 +170,10 @@ mod tests {
             assert!(fire > 2.5, "{p} is {fire} m from the camp fire");
         }
         let clear = SECOND.distance(TARGET);
-        assert!(clear > 0.7, "the flash at {TARGET} covers the creature at {SECOND}");
+        assert!(
+            clear > 0.7,
+            "the flash at {TARGET} covers the creature at {SECOND}"
+        );
         assert!(SECOND.distance(KNIGHT) > TARGET.distance(KNIGHT));
     }
 }

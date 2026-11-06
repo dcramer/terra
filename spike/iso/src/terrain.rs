@@ -43,7 +43,9 @@ pub fn bare(p: Vec2) -> f32 {
         .max(path(fire, Vec2::new(-9.0, 5.5), 0.65))
         .max(path(Vec2::new(-9.0, 5.5), Vec2::new(-20.0, 9.0), 0.55));
     let scuffs = smooth(0.68, 0.8, fbm(p * 0.35, 93)) * (1.0 - woods(p));
-    (camp.max(paths * 0.7).max(scuffs * 0.5)).clamp(0.0, 1.0)
+    // The forest's fight's clearing (wood/clearing.rs), between the camp and the pond.
+    let fight = crate::wood::clearing::trodden(p);
+    (camp.max(paths * 0.7).max(scuffs * 0.5).max(fight)).clamp(0.0, 1.0)
 }
 
 /// The pond's water, metres.
