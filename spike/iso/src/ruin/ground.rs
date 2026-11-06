@@ -46,6 +46,7 @@ pub fn spawn(
     asset: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut weathered: ResMut<Assets<super::flags::FlagsMaterial>>,
 ) {
     // The earth: a wide plane, its texture repeated every 2 m, dark as night soil.
     let mut earth = material(&asset, "packed_earth", Color::srgb(0.4, 0.36, 0.32));
@@ -57,7 +58,10 @@ pub fn spawn(
     ));
 
     let flags = materials.add(material(&asset, "large_grey_tiles", Color::WHITE));
-    commands.spawn((Mesh3d(meshes.add(paving())), MeshMaterial3d(flags.clone())));
+    commands.spawn((
+        Mesh3d(meshes.add(paving())),
+        MeshMaterial3d(weathered.add(super::flags::flags(&asset))),
+    ));
 
     // Loose slabs where the paving breaks: lifted, tipped and fallen, grey as the flags.
     let mut loose = Blocks::default();
@@ -110,6 +114,8 @@ fn paving() -> Mesh {
     let nz = ((z1 - z0) / CELL) as u32 + 1;
     let mut pos = Vec::new();
     let mut uv = Vec::new();
+    // The weather flags.wesl lays over the flags: how mossy, how wet.
+    let mut weather = Vec::new();
     let mut col = Vec::new();
     let mut idx = Vec::new();
     let corner = |i: u32, j: u32| Vec2::new(x0 + i as f32 * CELL, z0 + j as f32 * CELL);
@@ -133,6 +139,7 @@ fn paving() -> Mesh {
                     let settle = (fbm(*p * 0.3, 311) - 0.5) * 0.03;
                     pos.push([p.x, TOP + settle, p.y]);
                     uv.push((*p / FLAGS_M).to_array());
+                    weather.push([super::litter::mossy(*p), super::water::puddled(*p)]);
                     // Grime: drifts of dirt washed over the flags, thickest at the broken edge.
                     let drift = smooth(0.35, 0.75, fbm(*p * 0.25, 312));
                     let speck = fbm(*p * 2.5, 313);
@@ -158,6 +165,7 @@ fn paving() -> Mesh {
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0f32, 1.0, 0.0]; n])
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, weather)
     .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
     .with_inserted_indices(Indices::U32(idx))
     .with_generated_tangents()

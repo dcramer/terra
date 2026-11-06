@@ -22,9 +22,8 @@ pub const PUDDLES: [(Vec2, Vec2, f32); 4] = [
     (Vec2::new(6.7, -1.6), Vec2::new(0.7, 0.45), 0.1),
 ];
 /// The pool's face, a little under the flags' lowest (their settling is 1.5 cm either way),
-/// so the broken flags at its bank overlap its edge; a puddle's face just over their highest.
+/// so the broken flags at its bank overlap its edge.
 const POOL_LEVEL: f32 = super::ground::TOP - 0.02;
-const PUDDLE_LEVEL: f32 = super::ground::TOP + 0.017;
 
 /// How wet `p` is under a blob of `half` size at `at`, 0 (dry) to 1 (its deep middle): an
 /// ellipse with a ragged noisy bank, steep at the water line so the edge reads crisp (a
@@ -38,6 +37,17 @@ pub fn blob(p: Vec2, (at, half, _): (Vec2, Vec2, f32), seed: u32) -> f32 {
 /// How much of the pool is at `p` (0..1): the paving gives way to it (ground.rs).
 pub fn pool(p: Vec2) -> f32 {
     blob(p, POOL, 331)
+}
+
+/// How wet the flags are at `p` under the puddles (0..1). A puddle is wet stone drawn by
+/// the flags' own material (flags.wesl: darker, near-mirror smooth, a sharp water line), not
+/// a film of water over them: the film's mirrored sky drew them as violet ovals (judge r8).
+pub fn puddled(p: Vec2) -> f32 {
+    PUDDLES
+        .iter()
+        .enumerate()
+        .map(|(k, d)| blob(p, *d, 341 + 2 * k as u32))
+        .fold(0.0, f32::max)
 }
 
 /// The water at night: near black, a faint moonlit band, the bank's dark mirror, still air.
@@ -70,35 +80,17 @@ pub fn spawn(
     mut pools: ResMut<Assets<pool::PoolMaterial>>,
 ) {
     let water = pools.add(pool::with_edge(look(), edge()));
-    // A puddle is a few centimetres deep: dark wet stone over its middle, not a clear film.
-    let mut thin = look();
-    thin.deep.w = 0.12;
-    thin.shallow.w = 0.45;
-    // The moonlit sky's sheen, stronger than the pool's, so a puddle off a fire's line
-    // reads as wet stone and not as a hole.
-    thin.sky.w = 30.0;
-    // Its bank's dark mirror reaches only its rim: a puddle is all margin, and at the
-    // pool's reach it mirrored only the bank, black.
-    thin.horizon.w = 0.02;
-    let film = pools.add(pool::with_edge(thin, edge()));
-    let mut lay =
-        |blob_at: (Vec2, Vec2, f32), level: f32, seed: u32, water: &Handle<pool::PoolMaterial>| {
-            let (at, half, depth) = blob_at;
-            let reach = half * 1.6;
-            let face = pool::surface(at - reach, at + reach, 0.08, level, |p| {
-                // Dry ground stands over the face, so only the blob is wet.
-                level - depth * blob(p, blob_at, seed) + 0.06 * (1.0 - blob(p, blob_at, seed))
-            });
-            commands.spawn((
-                Mesh3d(meshes.add(face)),
-                MeshMaterial3d(water.clone()),
-                bevy::light::NotShadowCaster,
-            ));
-        };
-    lay(POOL, POOL_LEVEL, 331, &water);
-    for (k, p) in PUDDLES.iter().enumerate() {
-        lay(*p, PUDDLE_LEVEL, 341 + 2 * k as u32, &film);
-    }
+    let (at, half, depth) = POOL;
+    let reach = half * 1.6;
+    let face = pool::surface(at - reach, at + reach, 0.08, POOL_LEVEL, |p| {
+        // Dry ground stands over the face, so only the blob is wet.
+        POOL_LEVEL - depth * pool(p) + 0.06 * (1.0 - pool(p))
+    });
+    commands.spawn((
+        Mesh3d(meshes.add(face)),
+        MeshMaterial3d(water),
+        bevy::light::NotShadowCaster,
+    ));
 }
 
 #[cfg(test)]

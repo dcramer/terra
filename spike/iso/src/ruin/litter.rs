@@ -46,12 +46,16 @@ fn open(p: Vec2) -> f32 {
 
 /// How wet `p` is: litter neither floats on the pool nor lies in the puddles.
 fn wet(p: Vec2) -> f32 {
-    let puddles = super::water::PUDDLES
-        .iter()
-        .enumerate()
-        .map(|(k, d)| super::water::blob(p, *d, 341 + 2 * k as u32))
-        .fold(0.0, f32::max);
-    super::water::pool(p).max(puddles)
+    super::water::pool(p).max(super::water::puddled(p))
+}
+
+/// How mossy the flags are at `p` (0..1, flags.wesl grows it): some in every joint, thick
+/// toward the walls and the broken edge, in patches; least where the fight's feet go.
+pub fn mossy(p: Vec2) -> f32 {
+    let patch = smooth(0.3, 0.7, fbm(p * 0.45, 631));
+    let broken = 1.0 - smooth(0.5, 0.95, paved(p));
+    let lie = 0.25 + 0.5 * by_walls(p).max(broken) + 0.35 * patch;
+    (lie * (0.5 + 0.5 * open(p))).min(1.0)
 }
 
 /// How thick the leaves lie at `p` (0..1): blown into drifts against the walls and into the
@@ -249,5 +253,28 @@ mod tests {
             leafy(pool) == 0.0 && rubbly(pool) == 0.0,
             "litter on the pool"
         );
+    }
+
+    /// Every flag has some moss in its joints, the walls' feet most; each puddle is wet at
+    /// its middle and dry a metre past its bank.
+    #[test]
+    fn moss_everywhere_thickest_at_the_walls_and_puddles_are_wet() {
+        let foot = Vec2::new(-3.0, BACK_Z + 0.6);
+        assert!(
+            mossy(FIGHT) > 0.1,
+            "the fight's joints bare: {}",
+            mossy(FIGHT)
+        );
+        assert!(
+            mossy(foot) > mossy(FIGHT) + 0.3,
+            "{} vs {}",
+            mossy(foot),
+            mossy(FIGHT)
+        );
+        for (at, half, _) in super::super::water::PUDDLES {
+            assert!(super::super::water::puddled(at) > 0.9, "puddle at {at} dry");
+            let past = at + Vec2::new(half.x + 1.0, 0.0);
+            assert!(super::super::water::puddled(past) == 0.0, "wet at {past}");
+        }
     }
 }
