@@ -1,0 +1,75 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-10-27T00:23:48.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "120f7f53-3b0a-4781-aac4-19bed9fd8a5c",
+      "note": "v3.1-20260211"
+    },
+    "rig": {
+      "at": "2026-10-27T00:23:48.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "note": "rigged as biped"
+    },
+    "animate": {
+      "at": "2026-11-06T07:58:31.955Z",
+      "credits": 0,
+      "minutes": 0.82335,
+      "clips": [
+        "idle=idle",
+        "walk=walk",
+        "run=run",
+        "attack=slash",
+        "death=fall"
+      ],
+      "note": "idle walk run attack death"
+    },
+    "export": {
+      "at": "2026-11-06T07:59:40.632Z",
+      "credits": 0,
+      "minutes": 0.8424333333333334,
+      "files": [
+        "assets/models/iso/treant-a.glb"
+      ],
+      "scale": 2.6573,
+      "turn": 180,
+      "note": "scaled 2.657, turned 180 deg, in place walk run, cut attack, looped run on 0.41-1.04 s (ends 4.4% apart before closing)"
+    },
+    "check": {
+      "at": "2026-11-06T08:00:48.791Z",
+      "credits": 0,
+      "minutes": 0.0015166666666666666,
+      "passed": 24,
+      "of": 25,
+      "failed": [
+        "triangles"
+      ],
+      "clips": {
+        "run": 0.63,
+        "walk": 2.33,
+        "attack": 2,
+        "idle": 15.33,
+        "death": 3
+      },
+      "speeds": {
+        "walk": 1.06,
+        "run": 3.55
+      },
+      "triangles": 28916,
+      "height": 2.6,
+      "note": "passed 24 of 25"
+    }
+  },
+  "name": "treant-a",
+  "kind": "creature",
+  "body": "biped",
+  "height": 2.6,
+  "theme": "a temperate forest by day",
+  "description": "a tree creature",
+  "project": "120f7f53-3b0a-4781-aac4-19bed9fd8a5c",
+  "rig": "biped"
+}

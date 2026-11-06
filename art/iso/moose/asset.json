@@ -1,0 +1,64 @@
+{
+  "stages": {
+    "model": {
+      "at": "2026-10-24T09:32:30.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "project": "db7311a1-1e0d-4774-aef6-8c11882652a2",
+      "note": "v3.1-20260211"
+    },
+    "rig": {
+      "at": "2026-10-24T09:32:30.000Z",
+      "credits": null,
+      "minutes": null,
+      "adopted": true,
+      "note": "rigged as quadruped"
+    },
+    "animate": {
+      "at": "2026-11-06T07:57:55.159Z",
+      "credits": 0,
+      "minutes": 0.16235,
+      "clips": [
+        "walk=walk"
+      ],
+      "note": "walk"
+    },
+    "export": {
+      "at": "2026-11-06T08:00:42.097Z",
+      "credits": 0,
+      "minutes": 0.22768333333333332,
+      "files": [
+        "assets/models/iso/moose.glb"
+      ],
+      "scale": 2.4379,
+      "turn": 90,
+      "note": "scaled 2.438, turned 90 deg, in place walk, looped walk on 1.12-1.98 s (ends 0.0% apart before closing)"
+    },
+    "check": {
+      "at": "2026-11-06T08:00:49.111Z",
+      "credits": 0,
+      "minutes": 0.00031666666666666665,
+      "passed": 10,
+      "of": 10,
+      "failed": [],
+      "clips": {
+        "walk": 0.87
+      },
+      "speeds": {
+        "walk": 1.45
+      },
+      "triangles": 9976,
+      "height": 2.2,
+      "note": "passed 10 of 10"
+    }
+  },
+  "name": "moose",
+  "kind": "creature",
+  "body": "other",
+  "height": 2.2,
+  "theme": "a temperate forest by day",
+  "description": "a moose",
+  "project": "db7311a1-1e0d-4774-aef6-8c11882652a2",
+  "rig": "quadruped"
+}
