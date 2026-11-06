@@ -27,9 +27,9 @@ Read D631 (the methods, in order), D455 (the foot lock), D452 (the ratchet's rul
 
 Done: acts inertialized at their start (j3) and end (j5); every change but a stride loop into a stride loop in step inertialized, the offsets refit a frame on so the pose keeps its velocity (j6: pop.fight 1.00, pop.jump 1.00, stop.rest 0.020); the course on the world, so its foot lock works (j4). The foot lock's up is the body's place from the planet's centre (`feet.rs`): a test standing on a flat plane away from the origin has no foot lock (none does now).
 
-1. `stop.settle` 0.667 s (stop.jog: the lock steps the feet to the idle's stance at +0.53 and +0.68 s, `--trace stop.jog`): distance matching the stop (3) should land them on it.
-2. `slide.turn` 0.034 m (turn.idle.180): orientation warping or a turn-in-place step.
-3. `glide.stop` 2.73 m/s, `pop.stop` 2.31 (stop.sprint, upperarm_l at +0.02 s): play `Jog_Stop`/`Jog_Stop_R` (fight.glb) by distance on the planted foot (`terra_motion::distance`, `Markers::distance`); the glide measure then takes a distance-matched clip's root speed as its stride.
+j9: a lock's step lands headed as over its landing (slide.turn 0.004); the trace shows each foot's lock state and stars a counted slide.
+
+1. `glide.stop` 2.73 m/s, `pop.stop` 2.31, `stop.settle` 0.667 s: the distance-matched stop is built (branch `anim-stop-cap`, the j10 handoff's cap table) and waits on the mover's brake (the developer's anim-stop-brake): its pop is about 0.55 x its play rate², the rate about sqrt(brake / 6.7 m/s²).
 4. `start.root` 1.35 m/s, `pop.start` 2.69: `Jog_Start` by distance.
 5. `seam.loops` 2.77 (Sprint_Loop's own wrap, upperarm_l): the clip's seam (the `character` skill).
 6. `glide.gait` 0.79 m/s.
