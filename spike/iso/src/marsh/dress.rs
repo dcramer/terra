@@ -35,9 +35,11 @@ const LANTERN_LM: f32 = 20_000.0;
 /// 2.5 m and the lantern's 1.2 m, so their pools read tiny (the judge); a fill high over each
 /// widens its pool on the ground and lights the mist. Not a `Glint`: the water mirrors the
 /// flame, not the fill. Ranges 12 and 9 lifted the whole frame's darks (p5 0.0063 to 0.0101):
-/// the range window keeps each pool and ends its tail.
-const FIRE_FILL: (f32, f32, f32) = (3.0, 150_000.0, 9.0);
-const LANTERN_FILL: (f32, f32, f32) = (1.6, 60_000.0, 7.5);
+/// the range window keeps each pool and ends its tail. Ranges 9 and 7.5 still lit the moon's
+/// shadows at the frame's edges, the dead trees and the bottom-left bank (p5 0.0063 to 0.0086
+/// with the mist wholly over water, iso-art j45): 7 and 6 end the pools inside the frame.
+const FIRE_FILL: (f32, f32, f32) = (3.0, 170_000.0, 7.0);
+const LANTERN_FILL: (f32, f32, f32) = (1.6, 75_000.0, 6.0);
 
 /// Where the lamp's foot hangs: under the crossarm's end.
 fn lamp() -> Vec3 {
@@ -250,23 +252,29 @@ mod tests {
         lm / (4.0 * std::f32::consts::PI) * (d.y / d.length()) / d.length_squared() * window
     }
 
-    /// Each lamp's pool reaches past where the moon swamped its flame alone: 4 m from the
+    /// Each lamp's pool reaches past where the moon swamped its flame alone: 3.5 m from the
     /// fire and 2.5 m from the lantern, flame and fill light the ground at a quarter of the
-    /// moon's lux or more (the flame alone gave under a tenth).
+    /// moon's lux or more (the flame alone gave under a tenth); and each pool ends inside
+    /// the frame, the fill dark 6.5 m out from the fire and 5.5 m from the lantern, so it
+    /// does not lift the moon's shadows at the frame's edges.
     #[test]
     fn the_lamps_pools_reach_out_of_the_moonlight() {
         let quarter = crate::marsh::light::MOON_LUX * 0.25;
         let bed = FIRE.extend(shape(FIRE)).xzy();
-        let p = bed + Vec3::X * 4.0;
+        let p = bed + Vec3::X * 3.5;
         let (up, lm, range) = FIRE_FILL;
         let fire = lux(bed + Vec3::Y * 0.6, FIRE_LM, 9.0, p) + lux(bed + Vec3::Y * up, lm, range, p);
-        assert!(fire > quarter, "the fire lights 4 m out at {fire} lux");
+        assert!(fire > quarter, "the fire lights 3.5 m out at {fire} lux");
+        let far = lux(bed + Vec3::Y * up, lm, range, bed + Vec3::X * 6.5);
+        assert!(far < 1.0, "the fire's fill lights 6.5 m out at {far} lux");
         let lamp = lamp();
         let p = Vec3::new(lamp.x, LEVEL, lamp.z) + Vec3::Z * 2.5;
         let (up, lm, range) = LANTERN_FILL;
         let lantern = lux(lamp + Vec3::Y * 0.17, LANTERN_LM, 6.0, p)
             + lux(lamp + Vec3::Y * up, lm, range, p);
         assert!(lantern > quarter, "the lantern lights 2.5 m out at {lantern} lux");
+        let far = lux(lamp + Vec3::Y * up, lm, range, p + Vec3::Z * 3.0);
+        assert!(far < 1.0, "the lantern's fill lights 5.5 m out at {far} lux");
     }
 
     /// The lamp hangs clear of the pole and the water: under the crossarm's end, a reach
