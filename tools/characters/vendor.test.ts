@@ -46,7 +46,10 @@ test("what is vendored already is skipped; other bytes under its name, or two pi
   assert.match(plan(["Male_Nobody"], priv, new Map(), read).faults[0], /no glTF piece of that name/);
 });
 
-test("SHA256SUMS gains the new lines after its own, as they were", () => {
+test("SHA256SUMS gains the new lines among its own, every line in path order", () => {
   const text = `${H("a")}  art/b.gltf\n${H("b")}  art/d.gltf\n`;
-  assert.equal(withLines(text, [{ to: "art/c.gltf", hash: H("c") }, { to: "art/a.gltf", hash: H("1") }]), `${text}${H("1")}  art/a.gltf\n${H("c")}  art/c.gltf\n`);
+  const out = withLines(text, [{ to: "art/c.gltf", hash: H("c") }, { to: "art/a.gltf", hash: H("1") }, { to: "art/b.gltf", hash: H("9") }]);
+  assert.equal(out, `${H("1")}  art/a.gltf\n${H("a")}  art/b.gltf\n${H("c")}  art/c.gltf\n${H("b")}  art/d.gltf\n`, "sorted, and a line already there keeps its hash");
+  // An unsorted file comes out sorted: the order is the file's, not the order it was vendored in.
+  assert.equal(withLines(`${H("b")}  art/d.gltf\n${H("a")}  art/b.gltf\n`, []), `${H("a")}  art/b.gltf\n${H("b")}  art/d.gltf\n`);
 });

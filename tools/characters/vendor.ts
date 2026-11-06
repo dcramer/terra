@@ -89,12 +89,13 @@ export function plan(names: string[], priv: Map<string, string>, sums: Map<strin
   return out;
 }
 
-/** SHA256SUMS with the new files' lines after its own, as written, in path order among themselves. */
+/** SHA256SUMS with the new files' lines among its own, every line in path order (byte order, as
+ * `LC_ALL=C sort -k2`), so a vendoring's diff is its new lines alone; a line already there keeps its hash. */
 export function withLines(text: string, add: { to: string; hash: string }[]): string {
   const m = manifest(text);
-  const fresh = add.filter((a) => !m.has(a.to)).sort((a, b) => (a.to < b.to ? -1 : 1));
-  const head = text.endsWith("\n") || !text ? text : `${text}\n`;
-  return head + fresh.map((a) => `${a.hash}  ${a.to}\n`).join("");
+  for (const a of add) if (!m.has(a.to)) m.set(a.to, a.hash);
+  const rows = [...m].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([path, hash]) => `${hash}  ${path}\n`);
+  return rows.join("");
 }
 
 function list(priv: Map<string, string>, sums: Map<string, string>, prefix: string): string[] {
