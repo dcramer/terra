@@ -8,7 +8,7 @@
   },
   "build": {
    "command": "tools/characters/build_bodies.sh --step wardrobe:male",
-   "takes": "3 min, Blender; one build at a time; then git checkout -- assets/models/character/fight.glb",
+   "takes": "3 min, Blender; one build at a time",
    "owns": ["art/characters/", "art/animation/", "art/gear/", "tools/characters/*.py", "tools/characters/build*.ts", "tools/characters/bodies.json", "tools/blender/"]
   }
  },

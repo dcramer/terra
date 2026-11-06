@@ -30,10 +30,12 @@ export type Step = {
   outputs: string[];
   /** Files it changes where they are (the mannequin's clips): its outputs, kept when it runs. */
   inPlace?: string[];
-  /** Its in-place outputs are committed, and rewriting them is not idempotent (Blender's glTF
-   * round trip moves the mannequin's floats a little each time): while git has them and every
-   * input as committed, they are taken as built from those inputs and the step runs with
-   * ADOPT=1, checking without rewriting. */
+  /** Its in-place outputs, and those of its outputs git tracks, are committed, and rebuilding
+   * them is not byte for byte (Blender's glTF round trip moves the mannequin's floats a little
+   * each time): while git has them and every input of the step and of what it needs as
+   * committed, they are taken as built from those inputs, never restored from the step cache,
+   * and the step runs with ADOPT=1, making its untracked outputs and checking without
+   * rewriting the tracked ones. */
   committed?: boolean;
   /** Bash, run at the repository's root with $blender, $here and $out set; set -euo pipefail. */
   run: string;
@@ -281,14 +283,17 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
     needs: ["clips", "base"],
     inputs: [...py("made_clips.py", "export_character.py", "hold.py", "clear.ts", "wrist_limit.ts", "mirror.ts", "additive.ts", "markers.ts"), `${fight}.json`, fight],
     outputs: [`${OUT}/fight-mannequin.glb`, "assets/models/character/fight.glb"],
+    committed: true,
     run: [
       blender("made_clips.py", `"$out/fight-mannequin.glb" --list=${fight}.json`, "^MADE [0-9]|Error"),
-      blender("export_character.py", `"$out/${base}.glb" assets/models/character/fight.glb "--clips=$out/fight-mannequin.glb" --list=${fight}.json --textures=2048`, "^(SHIELD|HOLD|EXPORTED)|Error"),
-      "node $here/clear.ts assets/models/character/fight.glb     # a gliding swing foot lifted clear (clear.ts)",
-      "node $here/wrist_limit.ts assets/models/character/fight.glb   # the played sword wrists inside a person's (D565)",
-      "node $here/mirror.ts assets/models/character/fight.glb    # the mirrored clips (art/animation/mirrors.json)",
-      "node $here/additive.ts assets/models/character/fight.glb  # the carried arm's swings (art/animation/swings.json)",
-      "node $here/markers.ts assets/models/character/fight.glb   # each clip's foot-down markers (D455)",
+      "if [[ -z ${ADOPT:-} ]]; then",
+      `  ${blender("export_character.py", `"$out/${base}.glb" assets/models/character/fight.glb "--clips=$out/fight-mannequin.glb" --list=${fight}.json --textures=2048`, "^(SHIELD|HOLD|EXPORTED)|Error")}`,
+      "  node $here/clear.ts assets/models/character/fight.glb     # a gliding swing foot lifted clear (clear.ts)",
+      "  node $here/wrist_limit.ts assets/models/character/fight.glb   # the played sword wrists inside a person's (D565)",
+      "  node $here/mirror.ts assets/models/character/fight.glb    # the mirrored clips (art/animation/mirrors.json)",
+      "  node $here/additive.ts assets/models/character/fight.glb  # the carried arm's swings (art/animation/swings.json)",
+      "  node $here/markers.ts assets/models/character/fight.glb   # each clip's foot-down markers (D455)",
+      "fi",
     ].join("\n"),
   });
   // Each body of the wardrobe (D611, wardrobe.json): its bare pieces cut from a copy of their

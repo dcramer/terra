@@ -149,12 +149,41 @@ export class Builder {
     }
   }
 
+  /** A committed step's files git tracks (its in-place outputs and those of its outputs git has). */
+  private tracked(s: Step): string[] {
+    const paths = [...(s.inPlace ?? []), ...s.outputs];
+    try {
+      return execFileSync("git", ["ls-files", "--", ...paths], { cwd: this.root, encoding: "utf8" }).split("\n").filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Whether a committed step's tracked files are as built: git has them, every input of the
+   * step and of the steps it needs, all the way down, as committed. A need's outputs are not
+   * tracked (out/ is ignored), so its inputs stand for them. */
+  private adoptable(s: Step): boolean {
+    if (!s.committed) return false;
+    const reads = new Set<string>();
+    const seen = new Set<string>();
+    const walk = (t: Step) => {
+      if (seen.has(t.name)) return;
+      seen.add(t.name);
+      for (const p of Object.keys(this.readsNow(t).inputs)) reads.add(p);
+      for (const n of t.needs) walk(this.steps.find((u) => u.name === n)!);
+    };
+    walk(s);
+    const tracked = this.tracked(s);
+    return tracked.length > 0 && this.asCommitted([...reads, ...tracked]);
+  }
+
   private async runStep(s: Step, why: string, adoptOk = true): Promise<Outcome> {
     rmSync(join(this.stamps, `${safe(s.name)}.json`), { force: true });
-    for (const p of s.outputs) rmSync(join(this.root, p), { force: true });
     const now = this.readsNow(s);
-    const adopt = adoptOk && s.committed && this.asCommitted([...Object.keys(now.inputs), ...(s.inPlace ?? [])]);
-    if (adopt) why = `${(s.inPlace ?? []).join(", ")} as committed, from its inputs as committed`;
+    const adopt = adoptOk && this.adoptable(s);
+    const kept = new Set(adopt ? this.tracked(s) : []);
+    for (const p of s.outputs) if (!kept.has(p)) rmSync(join(this.root, p), { force: true });
+    if (adopt) why = `${[...kept].join(", ")} as committed, from its inputs as committed`;
     const t0 = performance.now();
     const code = await this.exec(s, adopt ? { ADOPT: "1" } : {});
     const seconds = Math.round((performance.now() - t0) / 1000);
@@ -216,7 +245,8 @@ export class Builder {
 
   /** The step's outputs and log from the cache, each checked against its hash, with its stamp; undefined when the cache has not all of them. */
   private restore(s: Step): Outcome | undefined {
-    if (!this.shareable(s)) return undefined;
+    // A committed step whose inputs are as committed keeps git's files, never another build's.
+    if (!this.shareable(s) || this.adoptable(s)) return undefined;
     const now = this.readsNow(s);
     let entry: { outputs: Record<string, string>; log?: string; seconds: number };
     const at = join(this.cache!, "keys", `${now.key}.json`);

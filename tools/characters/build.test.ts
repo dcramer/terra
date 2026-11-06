@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -102,6 +102,41 @@ test("a committed output rewritten in place is taken as built while git has it a
   writeFileSync(join(root, "src.txt"), "changed\n");
   assert.equal((await run([drift])).states.drift, "built");
   assert.equal(readFileSync(join(root, "made.txt"), "utf8"), "made\nagain\n", "not rebuilt from a changed input");
+});
+
+test("a committed output git tracks is kept, not rebuilt or restored, while it and every input down its needs are as committed", async () => {
+  const cache = mkdtempSync(join(tmpdir(), "terra-cache-"));
+  const { root, run } = scratch(cache);
+  writeFileSync(join(root, "game.txt"), "as committed\n");
+  writeFileSync(join(root, ".gitignore"), "out/\n");
+  const git = (...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: root, stdio: "ignore" });
+  git("init", "-q");
+  git("add", "src.txt", "other.txt", "game.txt", ".gitignore");
+  git("commit", "-qm", "x");
+  // The export is not byte for byte: each run writes a different game.txt, as Blender's does.
+  const base: Step = { name: "base", section: 0, needs: [], inputs: ["other.txt"], outputs: ["out/base.txt"], run: "cp other.txt out/base.txt" };
+  const fight: Step = {
+    name: "fight", section: 1, needs: ["base"], inputs: ["src.txt"], outputs: ["out/clips.txt", "game.txt"], committed: true,
+    run: 'echo clips > out/clips.txt; [[ -n ${ADOPT:-} ]] || { cat out/base.txt; echo $RANDOM$RANDOM; } > game.txt',
+  };
+  const first = await run([base, fight]);
+  assert.equal(first.states.fight, "built");
+  assert.equal(readFileSync(join(root, "game.txt"), "utf8"), "as committed\n", "a tracked output rewritten though nothing changed");
+  assert.ok(existsSync(join(root, "out", "clips.txt")), "its untracked output not made");
+  // Another worktree's build, with the same key, in the step cache: not restored over git's.
+  // (game.txt changed by hand, so not as committed: built, and kept in the cache under the same key.)
+  writeFileSync(join(root, "game.txt"), "by hand\n");
+  rmSync(join(root, "out", "stamps"), { recursive: true });
+  await run([base, fight]);
+  assert.notEqual(readFileSync(join(root, "game.txt"), "utf8"), "by hand\n");
+  git("checkout", "-q", "--", "game.txt");
+  rmSync(join(root, "out", "stamps"), { recursive: true });
+  await run([base, fight]);
+  assert.equal(readFileSync(join(root, "game.txt"), "utf8"), "as committed\n", "restored from the step cache over git's file");
+  // A need's input changed: rebuilt.
+  writeFileSync(join(root, "other.txt"), "changed\n");
+  await run([base, fight]);
+  assert.match(readFileSync(join(root, "game.txt"), "utf8"), /^changed\n/, "not rebuilt from a need's changed input");
 });
 
 test("the joined log keeps the build's order and a skipped step's output from when it ran", async () => {
