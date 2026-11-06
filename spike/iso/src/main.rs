@@ -9,8 +9,8 @@ mod forest;
 mod mipmaps;
 mod motes;
 mod nav;
+mod marsh;
 mod party;
-#[allow(dead_code)] // The marsh's water and next the ruin's pool; no scene draws it yet.
 mod pool;
 mod rest;
 mod rim;
@@ -46,6 +46,8 @@ pub struct Args {
     pub ruin: bool,
     /// `--scene forest`: the temperate wood by day at the ruin's camera (wood/).
     pub forest: bool,
+    /// `--scene marsh`: the marsh at dusk at the ruin's camera (marsh/).
+    pub marsh: bool,
     /// `--film N` with `--shot dir/f.jpg`: N frames from `--frames` on, at a fixed 30 per
     /// second of game time, saved as dir/f-0000.jpg on; clips play rather than hold.
     pub film: u32,
@@ -66,6 +68,7 @@ fn args() -> Args {
         size: (1920, 1080),
         ruin: false,
         forest: false,
+        marsh: false,
         film: 0,
     };
     let mut it = std::env::args().skip(1);
@@ -80,6 +83,7 @@ fn args() -> Args {
                 "ruin" => a.ruin = true,
                 // The forest is by day unless `--hour` says otherwise after it.
                 "forest" => (a.forest, a.hour) = (true, scene::Hour::Day),
+                "marsh" => a.marsh = true,
                 _ => {}
             },
             "--demo-at" => a.demo_at = val().parse().unwrap(),
@@ -142,6 +146,11 @@ fn main() {
     }
     if args.ruin {
         app.add_plugins((mipmaps::plugin, ruin::plugin)).run();
+        return;
+    }
+    if args.marsh {
+        // The glade's ground material, then the marsh's own land over it.
+        app.add_plugins((mipmaps::plugin, terrain::plugin, marsh::plugin)).run();
         return;
     }
     if args.forest {
