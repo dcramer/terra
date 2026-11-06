@@ -1,11 +1,12 @@
 //! The ruin's ambient life beside the fight (the developer's "multiple monsters and
 //! animals, living nature"): spiders scuttling over the walls' faces that run from the
-//! fight's blows (spiders.rs). The creatures are the repository's own animals
-//! (assets/models/creatures, not the Tripo pipeline), each playing its own clips, a fixed
-//! pool spawned at the start. Each hears the knight's blows land (`Blows`) and goes
-//! through a short script from that moment, so a still is one moment of it and a film
-//! plays it.
+//! fight's blows (spiders.rs), pigeons on the wall tops that take off and circle at them
+//! (birds.rs). The creatures are the repository's own animals (assets/models/creatures,
+//! not the Tripo pipeline), each playing its own clips, a fixed pool spawned at the start.
+//! Each hears the knight's blows land (`Blows`) and goes through a short script from that
+//! moment, so a still is one moment of it and a film plays it.
 
+mod birds;
 mod spiders;
 
 use super::effects::kit::Clock;
@@ -14,8 +15,8 @@ use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Blows>()
-        .add_systems(Startup, spiders::spawn)
-        .add_systems(Update, (hear, spiders::go, gait).chain());
+        .add_systems(Startup, (spiders::spawn, birds::spawn))
+        .add_systems(Update, (hear, (spiders::go, birds::go), gait).chain());
 }
 
 /// When in the knight's attack his blade meets the ogre (effects::hit's `BLOW`, private to

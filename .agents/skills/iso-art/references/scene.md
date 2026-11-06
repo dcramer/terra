@@ -61,6 +61,7 @@ Measure every still (judging.md) and tune to the refs of the same kind of frame.
 - Fog: lit alpha-blended horizontal cards low over the ground with tattered noise, drifting on the scene's `WIND` and fading in and out, alpha at most about 0.34. It lifted the mids into lavender smudges at r3: keep it low and in the pools.
 - Dust motes in each fire's light, fireflies blinking by the trees and grassy edges: soft additive dots facing the camera. Under 0.07 m they do not show at 960 px.
 - Wind: a `StandardMaterial` extended with a vertex shader (and its prepass) bending blades by height in rolling gusts; cloth (a banner) on the same material, by how far down. Only a film shows it.
+- Creatures beside the fight (ruin/life/, iso-art j37): the repository's animals (`assets/models/creatures`, not Tripo; a GLB's clips: `node -e` over its JSON chunk). `Blows` counts the knight's blows (his attack passing 1.25 s); each creature runs a keyed script (`along`, `heading`) from the first blow after its rest, `Gait` switching its moving and resting clips (the walk paced to its speed), held in a still at a set moment. Spiders (0.1 scale, 0.58 m, ~25 px at 960) cling to stone faces by a torch (`Stone::Face`, `Pillar`); pigeons (1.2) perch on the back wall's `ridge` and circle once (lift 1.8 m keeps them in frame; 3 m left it). A test keeps each clear of the fighters as 3.4 m columns. No crow, rat or bat is in the repository.
 
 ## Water (`spike/iso/src/pool.rs`, `shaders/pool.wesl`; the marsh and the forest's pond)
 
