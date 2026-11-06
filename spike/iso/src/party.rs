@@ -15,8 +15,13 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 pub fn plugin(app: &mut App) {
+    app.add_systems(Startup, spawn).add_plugins(animate);
+}
+
+/// What moves and animates every actor, the party's and the beasts', without the party
+/// (the forest scene's, wood/).
+pub fn animate(app: &mut App) {
     app.init_resource::<Clips>()
-        .add_systems(Startup, spawn)
         .add_systems(
             Update,
             (
@@ -70,6 +75,8 @@ const KINDS: &[(&str, [&str; 4])] = &[
     (crate::wildlife::SPARROW, ["Idle", "Hop", "Fly", "Peck"]),
     (crate::wildlife::MALLARD, ["Float", "Swim", "Fly", "Dabble"]),
     (crate::wildlife::SQUIRREL, ["Idle", "Walk", "Run", "Eat"]),
+    // The iso pipeline's moose: Tripo gives a quadruped a walk and nothing else.
+    (crate::wildlife::MOOSE, ["walk", "walk", "walk", "walk"]),
 ];
 
 #[derive(Resource, Default)]

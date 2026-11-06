@@ -13,9 +13,11 @@ pub fn plugin(app: &mut App) {
 /// A body's clip and where in it to stand.
 #[derive(Component)]
 pub struct Pose {
-    gltf: Handle<Gltf>,
-    clip: &'static str,
-    at: f32,
+    pub gltf: Handle<Gltf>,
+    pub clip: &'static str,
+    pub at: f32,
+    /// Played once and held at its end (a death), not looped.
+    pub once: bool,
 }
 
 /// Who fights where: model, clip, the clip's time, the body's place and what it faces.
@@ -67,6 +69,7 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
             gltf: asset.load(path),
             clip,
             at,
+            once: false,
         });
         if name != "tree-monster" {
             rim(&mut commands, place);
@@ -131,7 +134,10 @@ fn pose(
         };
         let (graph, node) = AnimationGraph::from_clip(clip.clone());
         let mut p = players.get_mut(player).unwrap();
-        let playing = p.play(node).repeat().seek_to(pose.at);
+        let playing = p.play(node).seek_to(pose.at);
+        if !pose.once {
+            playing.repeat();
+        }
         if args.shot.is_some() && args.film == 0 {
             playing.set_speed(0.0);
         }

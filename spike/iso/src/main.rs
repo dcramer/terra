@@ -19,6 +19,7 @@ mod terrain;
 mod ui;
 mod water;
 mod wildlife;
+mod wood;
 
 use bevy::diagnostic::FrameCount;
 use bevy::prelude::*;
@@ -41,6 +42,8 @@ pub struct Args {
     pub size: (u32, u32),
     /// `--scene glade|ruin`: the party's glade (the default) or the ARPG's ruin (ruin/).
     pub ruin: bool,
+    /// `--scene forest`: the temperate wood by day at the ruin's camera (wood/).
+    pub forest: bool,
     /// `--film N` with `--shot dir/f.jpg`: N frames from `--frames` on, at a fixed 30 per
     /// second of game time, saved as dir/f-0000.jpg on; clips play rather than hold.
     pub film: u32,
@@ -60,6 +63,7 @@ fn args() -> Args {
         focus: Vec2::new(-1.0, 1.0),
         size: (1920, 1080),
         ruin: false,
+        forest: false,
         film: 0,
     };
     let mut it = std::env::args().skip(1);
@@ -70,7 +74,12 @@ fn args() -> Args {
             "--frames" => a.frames = val().parse().unwrap(),
             "--film" => a.film = val().parse().unwrap(),
             "--demo" => a.demo = true,
-            "--scene" => a.ruin = val() == "ruin",
+            "--scene" => match val().as_str() {
+                "ruin" => a.ruin = true,
+                // The forest is by day unless `--hour` says otherwise after it.
+                "forest" => (a.forest, a.hour) = (true, scene::Hour::Day),
+                _ => {}
+            },
             "--demo-at" => a.demo_at = val().parse().unwrap(),
             "--zoom" => a.zoom = val().parse().unwrap(),
             "--hour" => {
@@ -131,6 +140,27 @@ fn main() {
     }
     if args.ruin {
         app.add_plugins((mipmaps::plugin, ruin::plugin)).run();
+        return;
+    }
+    if args.forest {
+        // The glade's land, wood, pond and beasts without its party, camera and orders.
+        app.add_plugins((
+            mipmaps::plugin,
+            terrain::plugin,
+            scene::plugin,
+            forest::plugin,
+            foliage::plugin,
+            party::animate,
+            rim::plugin,
+            water::plugin,
+            wildlife::plugin,
+            (motes::plugin, smoke::plugin),
+            wood::plugin,
+        ))
+        .add_systems(PostStartup, |args: Res<Args>, mut commands: Commands| {
+            commands.insert_resource(args.hour);
+        })
+        .run();
         return;
     }
     app.add_plugins((

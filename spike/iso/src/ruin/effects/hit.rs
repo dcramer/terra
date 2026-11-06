@@ -5,14 +5,12 @@
 //! feet), and both clips held for a hit-stop of 80 ms. The blow lands each time the
 //! knight's attack passes `BLOW`; in a still, the moment is `STILL_AGE` after it.
 
-use super::STRIKE;
+use super::Stage;
 use super::kit::{Burst, Cam, Clock, glow, sparks};
 use crate::forest::Rng;
 use bevy::prelude::*;
 
-/// Where the knight and the ogre stand (fight.rs's CAST), to find them by.
-const KNIGHT: Vec2 = Vec2::new(0.0, 0.0);
-const OGRE: Vec2 = Vec2::new(2.0, -1.4);
+/// Where the knight and the ogre stand is the stage's (mod.rs), to find them by.
 /// When in the knight's attack the blade meets the ogre: the chop coming down (fight.rs).
 const BLOW: f32 = 1.25;
 /// The still's moment after the blow (s), and the hit-stop's length.
@@ -55,7 +53,9 @@ fn spawn(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    stage: Res<Stage>,
 ) {
+    let strike = stage.strike();
     let mut rng = Rng::new(0x41771);
     let soft = images.add(crate::motes::soft_image());
     let flash = materials.add(glow(LinearRgba::rgb(6.0, 4.0, 3.0), Some(soft)));
@@ -74,13 +74,13 @@ fn spawn(
             radius: 0.1,
             ..default()
         },
-        Transform::from_translation(STRIKE + Vec3::Y * 0.2),
+        Transform::from_translation(strike + Vec3::Y * 0.2),
         Part::Light,
     ));
     let burst = commands
-        .spawn((Burst { at: STRIKE, age: -1.0 }, Part::Burst))
+        .spawn((Burst { at: strike, age: -1.0 }, Part::Burst))
         .id();
-    let out = (OGRE - KNIGHT).normalize().extend(0.0).xzy() + Vec3::Y * 0.45;
+    let out = (stage.foe - stage.knight).normalize().extend(0.0).xzy() + Vec3::Y * 0.45;
     let streak = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
     let spark = materials.add(glow(LinearRgba::rgb(14.0, 6.5, 1.6), None));
     sparks(&mut commands, burst, &streak, &spark, &mut rng, 26, out, 0.8, (4.0, 10.0), 0.03);
@@ -93,6 +93,7 @@ fn find(
     bodies: Query<(Entity, &Transform), With<WorldAssetRoot>>,
     children: Query<&Children>,
     skins: Query<&MeshMaterial3d<StandardMaterial>>,
+    stage: Res<Stage>,
 ) {
     let near = |p: Vec2| {
         bodies
@@ -101,10 +102,10 @@ fn find(
             .map(|(e, t)| (e, t.rotation))
     };
     if hit.knight.is_none() {
-        hit.knight = near(KNIGHT).map(|b| b.0);
+        hit.knight = near(stage.knight).map(|b| b.0);
     }
     if hit.ogre.is_none()
-        && let Some((e, r)) = near(OGRE)
+        && let Some((e, r)) = near(stage.foe)
     {
         hit.ogre = Some(e);
         hit.base = r;
@@ -201,6 +202,7 @@ fn show(
     mut parts: Query<(&Part, Option<&mut Transform>, Option<&mut PointLight>, Option<&mut Burst>)>,
     mut bodies: Query<&mut Transform, (With<WorldAssetRoot>, Without<Part>)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    stage: Res<Stage>,
 ) {
     let a = if clock.still { STILL_AGE } else { clock.t - hit.at };
     for (part, tr, light, burst) in &mut parts {
@@ -208,7 +210,7 @@ fn show(
             Part::Flash(m) => {
                 let k = (a / 0.12).clamp(0.0, 1.0);
                 let mut tr = tr.unwrap();
-                tr.translation = STRIKE;
+                tr.translation = stage.strike();
                 tr.rotation = cam.rot;
                 tr.scale = Vec3::splat(if a < 0.12 { 0.5 * (1.0 - k * k) + 0.1 } else { 0.0 });
                 if let Some(mut m) = materials.get_mut(m) {
@@ -224,7 +226,7 @@ fn show(
     }
     let Some(ogre) = hit.ogre else { return };
     if let Ok(mut tr) = bodies.get_mut(ogre) {
-        let d = (OGRE - KNIGHT).normalize().extend(0.0).xzy();
+        let d = (stage.foe - stage.knight).normalize().extend(0.0).xzy();
         let f = flinch(a);
         tr.rotation = Quat::from_axis_angle(Vec3::Y.cross(d).normalize(), FLINCH * f)
             * Quat::from_rotation_y(0.12 * f)

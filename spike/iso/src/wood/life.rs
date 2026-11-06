@@ -1,0 +1,165 @@
+//! The forest's life beyond the glade's beasts (wildlife.rs, which graze, root, peck and
+//! dabble as they do in the glade): a moose walking the pond's far bank and back (its one
+//! clip a walk, so it never stands), a few finches crossing the clearing high over the
+//! fight and round again, and pollen and midges drifting in the sun about the fighters.
+
+use crate::forest::Rng;
+use crate::party::{Actor, creature};
+use crate::ruin::effects::kit::{Cam, glow};
+use crate::terrain::shape;
+use crate::wildlife::{CHAFFINCH, MOOSE, SPARROW};
+use bevy::prelude::*;
+
+pub fn plugin(app: &mut App) {
+    app.add_systems(PostStartup, spawn)
+        .add_systems(Update, (roam, drift));
+}
+
+/// The moose's beat along the far bank: it walks to each in turn, then back.
+const BEAT: [Vec2; 3] = [
+    Vec2::new(12.0, -1.0),
+    Vec2::new(16.5, -0.5),
+    Vec2::new(20.5, 0.5),
+];
+/// The finches' crossing, from the wood west of the camp to the wood past the pond, and
+/// how high over the land they fly.
+const CROSS: (Vec2, Vec2) = (Vec2::new(-8.0, 9.0), Vec2::new(18.0, -6.0));
+const HIGH: f32 = 4.5;
+/// Specks of pollen and midges about the fight, and how far from its middle they keep.
+const SPECKS: usize = 90;
+const SPREAD: f32 = 7.0;
+
+/// An actor that goes round its beat for ever: walking it back and forth, or flying it and
+/// starting again from the first point.
+#[derive(Component)]
+struct Roam {
+    beat: Vec<Vec2>,
+    next: usize,
+    back: bool,
+    fly: bool,
+}
+
+/// A speck: its home, the phases and sizes of its wander.
+#[derive(Component)]
+struct Speck {
+    home: Vec3,
+    phase: Vec3,
+    reach: f32,
+    size: f32,
+}
+
+fn spawn(
+    mut commands: Commands,
+    asset: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let mut moose = Actor::new(MOOSE, 1.45, 1.45, 2.2, 0.8);
+    moose.path.push_back(BEAT[1]);
+    let e = creature(&mut commands, &asset, moose, BEAT[0], 0.0, 1.0);
+    commands.entity(e).insert(Roam {
+        beat: BEAT.to_vec(),
+        next: 1,
+        back: false,
+        fly: false,
+    });
+    let dir = (CROSS.1 - CROSS.0).normalize();
+    let side = dir.perp();
+    for i in 0..5 {
+        let lag = dir * (-1.6 * i as f32) + side * [0.0, 0.9, -0.8, 1.7, -1.5][i];
+        let model = if i % 2 == 0 { CHAFFINCH } else { SPARROW };
+        let mut bird = Actor::new(model, 5.0, 5.0, 0.15, 0.08);
+        bird.running = true;
+        bird.lift = HIGH + 0.4 * i as f32;
+        let from = CROSS.0 + lag;
+        bird.path.push_back(CROSS.1 + lag);
+        let e = creature(&mut commands, &asset, bird, from, 0.0, 1.7);
+        commands.entity(e).insert(Roam {
+            beat: vec![from, CROSS.1 + lag],
+            next: 1,
+            back: false,
+            fly: true,
+        });
+    }
+    let mut rng = Rng::new(0x9011e);
+    let soft = images.add(crate::motes::soft_image());
+    let card = meshes.add(Rectangle::new(1.0, 1.0));
+    let mid = (super::KNIGHT + super::FOE + super::TARGET) / 3.0;
+    let pollen = materials.add(glow(LinearRgba::rgb(2.4, 2.2, 1.5), Some(soft.clone())));
+    let midge = materials.add(glow(LinearRgba::rgb(0.9, 0.85, 0.7), Some(soft)));
+    for i in 0..SPECKS {
+        let p = mid + Vec2::new(rng.range(-SPREAD, SPREAD), rng.range(-SPREAD, SPREAD));
+        let home = p.extend(shape(p) + rng.range(0.3, 2.6)).xzy();
+        let is_midge = i % 3 == 0;
+        commands.spawn((
+            Mesh3d(card.clone()),
+            MeshMaterial3d(if is_midge { midge.clone() } else { pollen.clone() }),
+            Transform::from_translation(home),
+            bevy::light::NotShadowCaster,
+            Speck {
+                home,
+                phase: Vec3::new(rng.range(0.0, 6.3), rng.range(0.0, 6.3), rng.range(0.0, 6.3)),
+                reach: if is_midge { 0.25 } else { 0.9 },
+                size: if is_midge { 0.03 } else { rng.range(0.035, 0.06) },
+            },
+        ));
+    }
+}
+
+/// Gives each roamer its next point when it gets to the last.
+fn roam(mut roamers: Query<(&mut Roam, &mut Actor, &mut Transform)>) {
+    for (mut r, mut actor, mut tr) in &mut roamers {
+        if !actor.path.is_empty() {
+            continue;
+        }
+        if r.fly {
+            // Round again: back to the start, out of sight in the wood, and across.
+            let start = r.beat[0];
+            tr.translation.x = start.x;
+            tr.translation.z = start.y;
+            actor.path.push_back(r.beat[1]);
+            actor.running = true;
+            continue;
+        }
+        let last = r.beat.len() - 1;
+        if r.next == last {
+            r.back = true;
+        } else if r.next == 0 {
+            r.back = false;
+        }
+        r.next = if r.back { r.next - 1 } else { r.next + 1 };
+        let to = r.beat[r.next];
+        actor.path.push_back(to);
+    }
+}
+
+/// The specks wander about their homes (midges in a tight dance, pollen in a slow drift
+/// on the breeze) facing the camera.
+fn drift(time: Res<Time>, cam: Res<Cam>, mut specks: Query<(&Speck, &mut Transform)>) {
+    let t = time.elapsed_secs();
+    for (s, mut tr) in &mut specks {
+        let k = if s.reach < 0.5 { 3.1 } else { 0.35 };
+        let w = Vec3::new(
+            (t * k * 1.3 + s.phase.x).sin() + 0.5 * (t * k * 2.9 + s.phase.y).sin(),
+            0.6 * (t * k * 0.9 + s.phase.z).sin(),
+            (t * k * 1.1 + s.phase.y).sin() + 0.5 * (t * k * 2.3 + s.phase.x).sin(),
+        );
+        tr.translation = s.home + w * s.reach;
+        tr.rotation = cam.rot;
+        tr.scale = Vec3::splat(s.size);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The moose's beat and the finches' crossing keep out of the pond, on dry land.
+    #[test]
+    fn the_moose_walks_dry_land() {
+        for p in BEAT {
+            assert!(crate::terrain::pond(p) < -0.05, "{p} is in the pond");
+        }
+    }
+}

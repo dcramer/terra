@@ -19,6 +19,8 @@ pub const CHAFFINCH: &str = "models/creatures/Chaffinch.glb";
 pub const SPARROW: &str = "models/creatures/Sparrow.glb";
 pub const MALLARD: &str = "models/creatures/Mallard.glb";
 pub const SQUIRREL: &str = "models/creatures/Squirrel.glb";
+/// The forest scene's (wood/): the iso pipeline's, a walk its only clip.
+pub const MOOSE: &str = "models/iso/moose.glb";
 
 pub fn plugin(app: &mut App) {
     // After Startup, so the nav knows the trees, rocks and water it keeps off.

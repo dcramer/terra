@@ -6,6 +6,7 @@
 //! number of lights" in a skill). Every part is a function of the clock: in a still the
 //! first bolt has just struck and the other two are in the air.
 
+use super::Stage;
 use super::kit::{Burst, Cam, Clock, glow, sparks};
 use crate::forest::Rng;
 use bevy::asset::RenderAssetUsages;
@@ -20,9 +21,6 @@ const TRAVEL: f32 = 0.5;
 const BOLTS: usize = 3;
 /// The still's moment in the volley: bolt 0 struck 0.08 s ago, 1 and 2 in the air.
 const STILL: f32 = 0.58;
-/// The caster's chest and the target's (the tree monster's, fight.rs's places).
-const HERO: Vec3 = Vec3::new(0.0, 1.35, 0.0);
-const TARGET: Vec3 = Vec3::new(-2.8, 1.5, -3.4);
 /// How far behind a bolt its trail reaches, in the flight's share.
 const TAIL: f32 = 0.4;
 const TRAIL_POINTS: usize = 14;
@@ -49,10 +47,12 @@ pub fn plugin(app: &mut App) {
 
 /// Where bolt `i` is at `s` of its flight: from the hero's off hand to the bark, rising in
 /// an arc and swinging to its own side so the three do not lie in one line.
-fn path(i: usize, s: f32) -> Vec3 {
-    let dir = (TARGET - HERO).normalize();
-    let from = HERO + dir * 0.45;
-    let to = TARGET - dir * 0.35;
+/// The caster's chest and the target's are the stage's (mod.rs).
+fn path(stage: &Stage, i: usize, s: f32) -> Vec3 {
+    let (hero, bark) = (stage.hero(), stage.bark());
+    let dir = (bark - hero).normalize();
+    let from = hero + dir * 0.45;
+    let to = bark - dir * 0.35;
     let side = dir.cross(Vec3::Y).normalize();
     let swing = [-0.45, 0.4, 0.05][i];
     from.lerp(to, s)
@@ -71,7 +71,9 @@ fn spawn(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    stage: Res<Stage>,
 ) {
+    let stage = &*stage;
     let mut rng = Rng::new(0x5be11);
     let soft = images.add(crate::motes::soft_image());
     let ball = meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap());
@@ -124,12 +126,12 @@ fn spawn(
                 radius: 0.2,
                 ..default()
             },
-            Transform::from_translation(path(i, 1.0)),
+            Transform::from_translation(path(stage, i, 1.0)),
             Bolt(i, Part::Bang),
         ));
-        let at = path(i, 1.0);
+        let at = path(stage, i, 1.0);
         let burst = commands.spawn((Burst { at, age: -1.0 }, Bolt(i, Part::Bang))).id();
-        let back = (HERO - TARGET).normalize() + Vec3::Y * 0.6;
+        let back = (stage.hero() - stage.bark()).normalize() + Vec3::Y * 0.6;
         sparks(&mut commands, burst, &streak, &spark, &mut rng, 14, back, 0.9, (3.0, 7.5), 0.02);
     }
 }
@@ -176,12 +178,14 @@ fn fly(
     )>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    stage: Res<Stage>,
 ) {
+    let stage = &*stage;
     let p = if clock.still { STILL } else { clock.t.rem_euclid(PERIOD) };
     for (Bolt(i, part), tr, light, burst) in &mut parts {
         let (s, struck) = flight(*i, p);
         let flying = (0.0..1.0).contains(&s);
-        let head = path(*i, s.clamp(0.0, 1.0));
+        let head = path(stage, *i,s.clamp(0.0, 1.0));
         match part {
             Part::Core | Part::Glow => {
                 let mut tr = tr.unwrap();
@@ -199,7 +203,7 @@ fn fly(
                 let tip = s.min(1.0);
                 let points: Vec<Vec3> = if s > 0.0 && tail < tip {
                     (0..TRAIL_POINTS)
-                        .map(|j| path(*i, tail + (tip - tail) * j as f32 / (TRAIL_POINTS - 1) as f32))
+                        .map(|j| path(stage, *i,tail + (tip - tail) * j as f32 / (TRAIL_POINTS - 1) as f32))
                         .collect()
                 } else {
                     Vec::new()
@@ -212,7 +216,7 @@ fn fly(
                 let mut tr = tr.unwrap();
                 let on = (0.0..0.35).contains(&struck);
                 let k = (struck / 0.35).clamp(0.0, 1.0);
-                tr.translation = path(*i, 1.0);
+                tr.translation = path(stage, *i,1.0);
                 tr.rotation = cam.rot;
                 tr.scale = Vec3::splat(if on { 0.5 + 1.6 * (1.0 - (1.0 - k).powi(3)) } else { 0.0 });
                 if let Some(mut m) = materials.get_mut(mat) {
@@ -252,10 +256,11 @@ mod tests {
     /// Each bolt leaves the hero and ends at the target, above the floor all the way.
     #[test]
     fn bolts_fly_hero_to_target() {
+        let st = Stage::default();
         for i in 0..BOLTS {
-            assert!(path(i, 0.0).distance(HERO) < 0.6);
-            assert!(path(i, 1.0).distance(TARGET) < 0.5);
-            assert!((0..=10).all(|j| path(i, j as f32 / 10.0).y > 1.0));
+            assert!(path(&st, i, 0.0).distance(st.hero()) < 0.6);
+            assert!(path(&st, i, 1.0).distance(st.bark()) < 0.5);
+            assert!((0..=10).all(|j| path(&st, i, j as f32 / 10.0).y > 1.0));
         }
     }
 }

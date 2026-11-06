@@ -6,10 +6,10 @@
 mod ambient;
 mod beyond;
 mod blocks;
-mod camera;
+pub mod camera;
 mod dress;
 pub mod effects;
-mod fight;
+pub mod fight;
 mod fire;
 mod grass;
 mod ground;

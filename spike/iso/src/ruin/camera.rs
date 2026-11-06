@@ -34,6 +34,17 @@ pub fn offset() -> Vec3 {
 }
 
 pub fn spawn(mut commands: Commands, args: Res<Args>, mut images: ResMut<Assets<Image>>) {
+    arpg(&mut commands, &args, &mut images, FOCUS, EV100);
+}
+
+/// The ARPG's camera on `focus`, at exposure `ev100`, as the ruin's; the forest's too.
+pub fn arpg(
+    commands: &mut Commands,
+    args: &Args,
+    images: &mut Assets<Image>,
+    focus: Vec3,
+    ev100: f32,
+) -> Entity {
     let mut camera = commands.spawn((
         Camera3d::default(),
         Projection::from(PerspectiveProjection {
@@ -42,7 +53,7 @@ pub fn spawn(mut commands: Commands, args: Res<Args>, mut images: ResMut<Assets<
             far: 120.0,
             ..default()
         }),
-        Transform::from_translation(FOCUS + offset()).looking_at(FOCUS, Vec3::Y),
+        Transform::from_translation(focus + offset()).looking_at(focus, Vec3::Y),
         bevy::camera::Hdr,
         Msaa::Off,
         TemporalAntiAliasing::default(),
@@ -56,9 +67,10 @@ pub fn spawn(mut commands: Commands, args: Res<Args>, mut images: ResMut<Assets<
         ShadowFilteringMethod::Temporal,
         Bloom::NATURAL,
         Tonemapping::TonyMcMapface,
-        Exposure { ev100: EV100 },
+        Exposure { ev100 },
         MainCamera,
     ));
+    let id = camera.id();
     if args.shot.is_some() {
         let (w, h) = args.size;
         let image = Image::new_target_texture(
@@ -71,6 +83,7 @@ pub fn spawn(mut commands: Commands, args: Res<Args>, mut images: ResMut<Assets<
         camera.insert(RenderTarget::Image(image.clone().into()));
         commands.insert_resource(Offscreen(image));
     }
+    id
 }
 
 #[cfg(test)]
