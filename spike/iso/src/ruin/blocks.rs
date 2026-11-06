@@ -49,6 +49,53 @@ impl Blocks {
         }
     }
 
+    /// One flat face through four corners wound counter-clockwise seen from outside, each
+    /// corner its own colour, box-mapped as a block's faces are.
+    pub fn quad(&mut self, p: [Vec3; 4], tile: f32, shift: Vec2, col: [Color; 4]) {
+        let n = (p[1] - p[0]).cross(p[2] - p[0]);
+        let n = if n.length_squared() > 1e-12 {
+            n.normalize()
+        } else {
+            (p[2] - p[0]).cross(p[3] - p[0]).normalize_or(Vec3::Y)
+        };
+        let base = self.pos.len() as u32;
+        for (q, c) in p.iter().zip(col) {
+            self.pos.push(q.to_array());
+            self.nor.push(n.to_array());
+            self.uv.push((box_map(*q, n) / tile + shift).to_array());
+            self.col.push(c.to_linear().to_f32_array());
+        }
+        self.idx
+            .extend([base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    /// Another set of blocks moved by `t` into this one, box-mapped again where it lands.
+    pub fn append(&mut self, other: Blocks, t: Transform, tile: f32) {
+        let base = self.pos.len() as u32;
+        for (p, n) in other.pos.iter().zip(&other.nor) {
+            let p = t.transform_point(Vec3::from_array(*p));
+            let n = (t.rotation * Vec3::from_array(*n)).normalize();
+            self.pos.push(p.to_array());
+            self.nor.push(n.to_array());
+            self.uv.push((box_map(p, n) / tile).to_array());
+        }
+        self.col.extend(other.col);
+        self.idx.extend(other.idx.iter().map(|i| i + base));
+    }
+
+    #[cfg(test)]
+    pub fn len(&self) -> usize {
+        self.pos.len()
+    }
+    #[cfg(test)]
+    pub fn position(&self, k: usize) -> Vec3 {
+        Vec3::from_array(self.pos[k])
+    }
+    #[cfg(test)]
+    pub fn normal(&self, k: usize) -> Vec3 {
+        Vec3::from_array(self.nor[k])
+    }
+
     pub fn mesh(self) -> Mesh {
         Mesh::new(
             PrimitiveTopology::TriangleList,
