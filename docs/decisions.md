@@ -611,6 +611,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D621](decisions/D621.md) | With no world kept, the land behind the title screen is the new world it first offers | Tech | Agent | Decided | The title screen keeps the world itself behind it… |
 | [D622](decisions/D622.md) | The woods' grown trees stream round the player in blocks of their grid, the far cards laid at the start standing for every one | Tech | Agent | Decided | The woods' grid of tree cells (`terra_land::woods`, a… |
 | [D623](decisions/D623.md) | A world's land is generated off the main thread, behind the loading screen | Tech | Agent | Decided | Entering a world first passes through a state of its… |
+| [D631](decisions/D631.md) | The figure's transitions follow shipped engines' methods, measured on the animation course | Tech | Agent | Decided | How the figure goes from one clip to the next is… |
 
 ## Tools and workflow
 
