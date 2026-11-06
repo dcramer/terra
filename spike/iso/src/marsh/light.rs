@@ -7,9 +7,9 @@ use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 
 /// The low sun on the ground, in lux, its height (degrees) and the sky's fill, in nits.
-pub const SUN_LUX: f32 = 350.0;
-const SUN_UP: f32 = 6.0;
-pub const SKY_NITS: f32 = 3.0;
+pub const SUN_LUX: f32 = 2500.0;
+const SUN_UP: f32 = 10.0;
+pub const SKY_NITS: f32 = 18.0;
 /// The haze over the far marsh, and its colour toward the sun.
 pub const HAZE: Color = Color::srgb(0.10, 0.08, 0.13);
 pub const SUN_HAZE: Color = Color::srgb(0.55, 0.28, 0.14);
@@ -20,7 +20,7 @@ pub fn plugin(app: &mut App) {
 
 fn spawn(mut commands: Commands) {
     commands.insert_resource(GlobalAmbientLight {
-        color: Color::srgb(0.55, 0.45, 1.0),
+        color: Color::srgb(0.5, 0.55, 1.0),
         brightness: SKY_NITS,
         ..default()
     });

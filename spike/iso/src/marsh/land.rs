@@ -68,8 +68,8 @@ pub fn look() -> Look {
     Look {
         deep: Vec4::new(0.004, 0.006, 0.007, 0.35),
         shallow: Vec4::new(0.02, 0.018, 0.012, 0.45),
-        sky: Vec4::new(3.0, 3.6, 7.5, 6.0),
-        horizon: Vec4::new(28.0, 12.0, 6.0, 0.25),
+        sky: Vec4::new(10.0, 12.0, 26.0, 25.0),
+        horizon: Vec4::new(40.0, 18.0, 9.0, 0.25),
         wave: Vec4::new(super::WIND.x, super::WIND.y, 0.03, 0.0),
         look: Vec4::new(0.0, 600.0, 1.0, 0.3),
         lights: default(),

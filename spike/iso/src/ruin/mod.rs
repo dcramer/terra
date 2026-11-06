@@ -3,7 +3,7 @@
 //! broken flagstone floor between fallen walls, lit by the moon and by braziers and torches.
 //! The glade (the default scene) shares only its helpers.
 
-mod ambient;
+pub mod ambient;
 mod beyond;
 mod blocks;
 pub mod camera;

@@ -11,13 +11,15 @@ use crate::scene::model;
 use bevy::prelude::*;
 
 /// The camp fire's bed, its size (m) and light (lumens, range m).
-pub const FIRE: Vec2 = Vec2::new(-1.7, 0.9);
+/// On the near channel's bank, so its mirror image (about 0.4 m toward the camera at this
+/// pitch) falls on the water: a fire further up the bank glints on mud.
+pub const FIRE: Vec2 = Vec2::new(-1.8, 1.35);
 const FIRE_SIZE: f32 = 0.55;
-const FIRE_LM: f32 = 30_000.0;
-/// The lantern's post and its light.
-pub const LANTERN: Vec2 = Vec2::new(3.4, -2.4);
-const POST: f32 = 1.6;
-const LANTERN_LM: f32 = 8_000.0;
+const FIRE_LM: f32 = 90_000.0;
+/// The lantern's post, standing in the near channel's shallows, and its light.
+pub const LANTERN: Vec2 = Vec2::new(2.3, 3.4);
+const POST: f32 = 1.8;
+const LANTERN_LM: f32 = 20_000.0;
 
 /// Model, place, yaw (degrees), scale, how far sunk (m).
 const PROPS: [(&str, Vec2, f32, f32, f32); 14] = [
@@ -25,11 +27,12 @@ const PROPS: [(&str, Vec2, f32, f32, f32); 14] = [
     ("models/iso/dead-tree-b.glb", Vec2::new(8.6, -4.8), 200.0, 1.0, 0.3),
     ("models/iso/dead-tree-a.glb", Vec2::new(-5.4, -7.0), 110.0, 0.8, 0.3),
     ("models/iso/dead-tree-b.glb", Vec2::new(9.8, 3.6), 290.0, 0.9, 0.3),
-    ("models/nature/forest/mossy_rock_a_2.glb", Vec2::new(-3.6, 1.6), 30.0, 0.8, 0.1),
-    ("models/nature/forest/mossy_rock_b_3.glb", Vec2::new(4.4, 0.2), 140.0, 0.9, 0.1),
-    ("models/nature/forest/mossy_rock_a_5.glb", Vec2::new(-6.2, -2.4), 250.0, 1.1, 0.15),
-    ("models/nature/forest/mossy_rock_b_6.glb", Vec2::new(1.2, 2.2), 75.0, 0.6, 0.05),
-    ("models/nature/forest/mossy_rock_a_1.glb", Vec2::new(5.6, -6.6), 10.0, 1.2, 0.2),
+    // The scanned rocks are boulders 2 to 3 m across at scale 1: stones here.
+    ("models/nature/forest/mossy_rock_a_2.glb", Vec2::new(-3.6, 0.9), 30.0, 0.3, 0.05),
+    ("models/nature/forest/mossy_rock_b_3.glb", Vec2::new(4.4, 0.2), 140.0, 0.35, 0.05),
+    ("models/nature/forest/mossy_rock_a_5.glb", Vec2::new(-6.2, -2.4), 250.0, 0.45, 0.1),
+    ("models/nature/forest/mossy_rock_b_6.glb", Vec2::new(0.9, 1.9), 75.0, 0.22, 0.03),
+    ("models/nature/forest/mossy_rock_a_1.glb", Vec2::new(5.6, -6.6), 10.0, 0.5, 0.1),
     ("models/nature/forest/stump.glb", Vec2::new(-4.8, -0.6), 0.0, 1.0, 0.05),
     ("models/nature/forest/stump.glb", Vec2::new(6.2, -2.8), 130.0, 0.8, 0.05),
     ("models/props/Log.glb", Vec2::new(-2.4, 2.6), 70.0, 1.0, 0.12),
@@ -82,7 +85,7 @@ fn spawn(
         PointLight {
             color: Color::srgb(1.0, 0.55, 0.22),
             intensity: FIRE_LM,
-            range: 7.0,
+            range: 9.0,
             radius: 0.2,
             shadow_maps_enabled: true,
             ..default()
@@ -119,7 +122,7 @@ fn spawn(
         PointLight {
             color: Color::srgb(1.0, 0.62, 0.3),
             intensity: LANTERN_LM,
-            range: 5.0,
+            range: 6.0,
             radius: 0.08,
             shadow_maps_enabled: false,
             ..default()
@@ -131,6 +134,23 @@ fn spawn(
         },
         Glint,
     ));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::marsh::LEVEL;
+
+    /// The fire burns on dry ground within a metre of the water (so it glints in it), and
+    /// the lantern's post stands in the shallows.
+    #[test]
+    fn the_fire_is_dry_by_the_water_and_the_post_wet() {
+        assert!(shape(FIRE) > LEVEL + 0.03, "the fire is wet: {}", shape(FIRE));
+        let near = (1..=10).any(|i| shape(FIRE + Vec2::new(0.0, i as f32 * 0.1)) < LEVEL);
+        assert!(near, "no water within a metre toward the camera of the fire");
+        let d = shape(LANTERN) - LEVEL;
+        assert!((-0.5..-0.05).contains(&d), "the post's foot is {d} under the face");
+    }
 }
 
 /// The flames' light breathing: two slow waves and a quick one, never under 70%.

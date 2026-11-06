@@ -1,5 +1,5 @@
 //! The marsh's fight: the knight's chop landing on the ogre, his bolts striking a treant
-//! winding up its blow, and a tree monster wading in from the far channel. Each body plays
+//! winding up its blow (the tree monster wading behind them is life.rs's). Each body plays
 //! one clip from a fixed time (the ruin's `Pose`), held there in a still.
 
 use super::land::shape;
@@ -9,15 +9,13 @@ use crate::scene::model;
 use bevy::prelude::*;
 
 /// Model, clip, the clip's time, place, and what it faces.
-const CAST: [(&str, &str, f32, Vec2, Vec2); 4] = [
+const CAST: [(&str, &str, f32, Vec2, Vec2); 3] = [
     // The chop coming down, as in the ruin (effects::hit's `BLOW`).
     ("knight", "attack", 1.3, KNIGHT, FOE),
     // The ogre the blow bites, its own swing just begun.
     ("ogre", "attack", 0.45, FOE, KNIGHT),
     // The bolts' mark, swinging at him from the left.
     ("treant-a", "attack", 0.9, TARGET, KNIGHT),
-    // Wading in out of the far channel toward the fight.
-    ("tree-monster", "walk", 0.3, Vec2::new(-0.6, -4.6), KNIGHT),
 ];
 
 pub fn plugin(app: &mut App) {

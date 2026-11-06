@@ -5,9 +5,9 @@
 //! on the effects' clock, so a still is one moment and a film plays.
 
 mod banner;
-mod dust;
-mod fog;
-mod grass;
+pub mod dust;
+pub mod fog;
+pub mod grass;
 
 use bevy::prelude::*;
 

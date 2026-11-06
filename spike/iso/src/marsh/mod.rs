@@ -10,7 +10,10 @@
 mod dress;
 mod fight;
 mod land;
+mod life;
 mod light;
+mod plants;
+mod wisps;
 
 use crate::ruin::effects::Stage;
 use bevy::prelude::*;
@@ -46,6 +49,13 @@ pub fn plugin(app: &mut App) {
             dress::plugin,
             light::plugin,
             fight::plugin,
+            plants::plugin,
+            wisps::plugin,
+            life::plugin,
+            // The ruin's low fog, firelit dust and fireflies, and its wind material.
+            crate::ruin::ambient::fog::plugin,
+            crate::ruin::ambient::dust::plugin,
+            crate::ruin::ambient::grass::plugin,
         ))
         .add_systems(Startup, camera)
         .add_systems(Update, crate::motes::face_halo);
