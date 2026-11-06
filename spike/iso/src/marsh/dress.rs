@@ -30,6 +30,13 @@ const ARM: Vec3 = Vec3::new(-0.94, 0.0, 0.342);
 const ARM_LONG: f32 = 0.6;
 const HANG: f32 = 0.6;
 const LANTERN_LM: f32 = 20_000.0;
+/// Each lamp's fill: a high, broad, unshadowed light over it (how high, lumens, range m).
+/// At EV 7.5 the 1,100 lux moon swamps a point light past sqrt(I / 1100) m, the fire's about
+/// 2.5 m and the lantern's 1.2 m, so their pools read tiny (the judge); a fill high over each
+/// widens its pool on the ground and lights the mist. Not a `Glint`: the water mirrors the
+/// flame, not the fill.
+const FIRE_FILL: (f32, f32, f32) = (3.0, 150_000.0, 12.0);
+const LANTERN_FILL: (f32, f32, f32) = (1.6, 60_000.0, 9.0);
 
 /// Where the lamp's foot hangs: under the crossarm's end.
 fn lamp() -> Vec3 {
@@ -120,6 +127,7 @@ fn spawn(
         },
         Glint,
     ));
+    commands.spawn(fill(bed, FIRE_FILL, Color::srgb(1.0, 0.55, 0.22), 1.0));
     // The lantern on its pole: a round post of rough wood with a crossarm toward the
     // screen's left, the lamp hung from the arm's end, a crisp flame in its lit glass (a
     // 0.7 m soft glow card here read as "a bloom ball with no readable post", "a sprite").
@@ -183,6 +191,23 @@ fn spawn(
         },
         Glint,
     ));
+    commands.spawn(fill(lamp, LANTERN_FILL, Color::srgb(1.0, 0.62, 0.3), 7.0));
+}
+
+/// A lamp's fill over `at`, flickering with its flame (the same seed).
+fn fill(at: Vec3, (up, lm, range): (f32, f32, f32), color: Color, seed: f32) -> impl Bundle {
+    (
+        PointLight {
+            color,
+            intensity: lm,
+            range,
+            radius: 0.5,
+            shadow_maps_enabled: false,
+            ..default()
+        },
+        Transform::from_translation(at + Vec3::Y * up),
+        Flicker { lm, seed },
+    )
 }
 
 #[cfg(test)]
@@ -206,6 +231,30 @@ mod tests {
         let under = Vec2::new(flame.x, flame.z);
         let image = under + Vec2::new(eye.x, eye.z).normalize() * 0.7 * (flame.y - LEVEL);
         assert!(shape(image) < LEVEL - 0.1, "the lantern glints on the bank at {image}");
+    }
+
+    /// Lux on level ground at `p` from an isotropic point light of `lm` lumens at `at`.
+    fn lux(at: Vec3, lm: f32, p: Vec3) -> f32 {
+        let d = at - p;
+        lm / (4.0 * std::f32::consts::PI) * (d.y / d.length()) / d.length_squared()
+    }
+
+    /// Each lamp's pool reaches past where the moon swamped its flame alone: 4 m from the
+    /// fire and 2.5 m from the lantern, flame and fill light the ground at a quarter of the
+    /// moon's lux or more (the flame alone gave under a tenth).
+    #[test]
+    fn the_lamps_pools_reach_out_of_the_moonlight() {
+        let quarter = crate::marsh::light::MOON_LUX * 0.25;
+        let bed = FIRE.extend(shape(FIRE)).xzy();
+        let p = bed + Vec3::X * 4.0;
+        let fire = lux(bed + Vec3::Y * 0.6, FIRE_LM, p)
+            + lux(bed + Vec3::Y * FIRE_FILL.0, FIRE_FILL.1, p);
+        assert!(fire > quarter, "the fire lights 4 m out at {fire} lux");
+        let lamp = lamp();
+        let p = Vec3::new(lamp.x, LEVEL, lamp.z) + Vec3::Z * 2.5;
+        let lantern = lux(lamp + Vec3::Y * 0.17, LANTERN_LM, p)
+            + lux(lamp + Vec3::Y * LANTERN_FILL.0, LANTERN_FILL.1, p);
+        assert!(lantern > quarter, "the lantern lights 2.5 m out at {lantern} lux");
     }
 
     /// The lamp hangs clear of the pole and the water: under the crossarm's end, a reach
