@@ -135,6 +135,17 @@ export function multiply(a: Mat4, b: Mat4): Mat4 {
   return out;
 }
 
+/** The inverse of an affine matrix (a last row of 0, 0, 0, 1, as every glTF node's and bind's). */
+export function invert(m: Mat4): Mat4 {
+  const [a, b, c, d, e, f, g, h, i] = [m[0], m[4], m[8], m[1], m[5], m[9], m[2], m[6], m[10]]; // rows
+  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  if (Math.abs(det) < 1e-12) throw new Error("invert: the matrix is singular (a zero scale)");
+  const r = [(e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det, (f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det, (d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det];
+  const t = [m[12], m[13], m[14]];
+  const tr = [0, 1, 2].map((row) => -(r[row * 3] * t[0] + r[row * 3 + 1] * t[1] + r[row * 3 + 2] * t[2]));
+  return [r[0], r[3], r[6], 0, r[1], r[4], r[7], 0, r[2], r[5], r[8], 0, tr[0], tr[1], tr[2], 1];
+}
+
 export function apply(m: Mat4, p: number[]): Vec3 {
   return [
     m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12],
@@ -336,7 +347,8 @@ function cached(glb: Glb, index: number): number[][] {
   return m.get(index)!;
 }
 
-function skinMatrices(glb: Glb, skin: any, world: Mat4[]): Mat4[] {
+/** Each joint's world(joint) * inverseBind in a pose: what it does to a point of the mesh. */
+export function skinMatrices(glb: Glb, skin: any, world: Mat4[]): Mat4[] {
   const ibm = skin.inverseBindMatrices !== undefined ? cached(glb, skin.inverseBindMatrices) : [];
   const identity = compose([0, 0, 0], [0, 0, 0, 1], [1, 1, 1]);
   return skin.joints.map((j: number, i: number) => multiply(world[j], ibm[i] ?? identity));

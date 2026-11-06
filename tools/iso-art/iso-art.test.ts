@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { check, measure, skeleton } from "./check.ts";
-import { type Glb, clips, pixelSize, readGlb, sample, writeGlb } from "./gltf.ts";
+import { splice } from "./decimate.ts";
+import { type Glb, accessor, addTyped, clips, invert, pixelSize, points, pose, readGlb, sample, writeGlb } from "./gltf.ts";
 import { type Ctx, ROOT, conceptPrompt, main, parseOutput } from "./iso-art.ts";
 import { budget, clipsFor } from "./kinds.ts";
 import { readAsset, readmeCost, statusTable, writeAsset } from "./ledger.ts";
@@ -215,6 +216,41 @@ test("a loop whose pose meets at the seam but not its velocity fails its seam", 
   const snap: [number, string, number[], number[][]] = [4, "translation", [0, 0.95, 1], [[0, 0.8, 0], [0, 0.8, 0.5], [0, 0.8, 0]]];
   const s = Object.fromEntries(check(measure(walker([["idle", [snap]]])), "hero", "biped", 1.8).map((r) => [r.check, r]));
   assert.ok(s["idle loops"].ok && !s["idle seam"].ok, `snap: ${s["idle loops"].value}, ${s["idle seam"].value}`);
+});
+
+test("decimate splices a cut written in Blender's bind space back into the original's, skeleton and clips untouched", () => {
+  // The original as export writes it: a scale on the armature (export's size) inside the bind, so
+  // world(joint) * inverseBind is 2x for every joint. The cut as Blender writes it: the same
+  // skeleton, its joints in another order, its points in the world at rest and its binds undoing
+  // the world, so world(joint) * inverseBind is the identity. Spliced unmapped, it is twice the size.
+  const orig = walker([WALK]);
+  orig.doc.nodes[0].scale = [2, 2, 2];
+  const cut = walker([]);
+  cut.doc.nodes[0].scale = [2, 2, 2];
+  const order = [2, 1, 3, 4]; // foot_l, hips, foot_r, head
+  cut.doc.skins[0].joints = order;
+  const world = pose(cut.doc);
+  const prim = cut.doc.meshes[0].primitives[0];
+  const rest = accessor(cut, prim.attributes.POSITION);
+  prim.attributes.POSITION = addTyped(cut, Float32Array.from(rest.flat().map((v) => 2 * v)), "VEC3");
+  prim.attributes.JOINTS_0 = addTyped(cut, Uint8Array.from([1, 0, 2, 3].flatMap((j) => [j, 0, 0, 0])), "VEC4");
+  const ibm = addTyped(cut, Float32Array.from(order.flatMap((j) => invert(world[j]))), "VEC4");
+  Object.assign(cut.doc.accessors[ibm], { type: "MAT4", count: order.length });
+  cut.doc.skins[0].inverseBindMatrices = ibm;
+  const cutGlb = readGlb(writeGlb(cut));
+  const before = JSON.stringify({ nodes: orig.doc.nodes, skins: orig.doc.skins, animations: orig.doc.animations });
+  const walk = clips(orig)[0];
+  const seen = (g: Glb, t?: number) => points(g, pose(g.doc, t === undefined ? undefined : walk, t));
+  const [atRest, walking] = [seen(orig), seen(orig, 0.5)];
+  const s = splice(orig, cutGlb);
+  const after = readGlb(writeGlb(orig));
+  assert.ok(s.drift < 1e-6, `drift ${s.drift}`);
+  assert.equal(s.after, 2);
+  const near = (a: number[][], b: number[][], what: string) => a.forEach((p, i) => p.forEach((v, k) => assert.ok(Math.abs(v - b[i][k]) < 1e-5, `${what} point ${i}: ${p} against ${b[i]}`)));
+  near(seen(cutGlb), atRest, "the cut at rest");
+  near(seen(after), atRest, "spliced, at rest");
+  near(seen(after, 0.5), walking, "spliced, mid-walk");
+  assert.equal(JSON.stringify({ nodes: after.doc.nodes, skins: after.doc.skins, animations: after.doc.animations }).replace(/"(inverseBindMatrices|input|output)":\d+/g, ""), before.replace(/"(inverseBindMatrices|input|output)":\d+/g, ""), "the nodes (the hand's frame), skin and clips are the original's");
 });
 
 test("the checks name what is missing and pass what is right", () => {

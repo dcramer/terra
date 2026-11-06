@@ -3,12 +3,13 @@
 // own GLB, so its skeleton, inverse binds, clips, materials, textures and root node stay exactly
 // as `export` wrote them. A Blender glTF round trip of a whole Tripo rig risks the bone frames a
 // held prop is measured in (the knight's hand_r), the clip names and the root node; the mesh
-// alone risks nothing but its joint indices, remapped here by joint name.
+// alone risks only its joint indices, remapped here by joint name, and its space: Blender writes a
+// skinned mesh's points in the world at rest, so they are mapped through both files' binds.
 
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Glb, accessor, addTyped, bounds, compact } from "./gltf.ts";
+import { type Glb, type Mat4, accessor, addTyped, apply, bounds, compact, invert, multiply, pose, skinMatrices } from "./gltf.ts";
 
 const ARRAY_BUFFER = 34962, ELEMENT_ARRAY_BUFFER = 34963;
 
@@ -25,12 +26,29 @@ function jointNames(doc: any, mesh: number): string[] | undefined {
   return doc.skins[node.skin].joints.map((j: number) => doc.nodes[j].name);
 }
 
+/** What the file does to its main mesh's points at rest: a skinned mesh's world(joint) *
+ * inverseBind, the same for every joint when the rest pose is the bind pose (as Tripo's rig and
+ * Blender's exporter write it, each in its own space: Tripo's carries export's scale, Blender's
+ * is the identity); an unskinned mesh's node's world matrix. */
+function bindOf(glb: Glb, mesh: number, label: string): Mat4 {
+  const { doc } = glb;
+  const ni = doc.nodes.findIndex((n: any) => n.mesh === mesh);
+  const world = pose(doc);
+  if (doc.nodes[ni].skin === undefined) return world[ni];
+  const ms = skinMatrices(glb, doc.skins[doc.nodes[ni].skin], world);
+  const size = Math.max(...ms[0].slice(0, 12).map(Math.abs));
+  const off = Math.max(...ms.map((m) => Math.max(...m.map((v, k) => Math.abs(v - ms[0][k])))));
+  if (off > 1e-3 * Math.max(1, size)) throw new Error(`the ${label}'s rest pose is not its bind pose (a joint's world * inverse bind differs from the first's by ${off.toFixed(4)}): its points are in no one space to map; cut the GLB \`export\` wrote, its skeleton at rest, and export the cut with no pose applied (tools/blender/decimate.py)`);
+  return ms[0];
+}
+
 export type Splice = { before: number; after: number; drift: number };
 
 /** Puts `cut`'s main mesh in place of `orig`'s, attribute by attribute: one primitive each, the
- * same attributes, joints by name. `drift` is how far the cut's bounds moved, a share of the
- * original's diagonal; over 2% the cut is in another space (an axis or a bind not undone) and
- * it is refused. */
+ * same attributes, joints by name, points mapped from the cut's bind space to the original's
+ * (Blender writes a skinned mesh's points in the world at rest, Tripo's are export's scale
+ * under it). `drift` is how far the mapped cut's bounds moved, a share of the original's
+ * diagonal; over 2% the cut is of another model or pose, and it is refused. */
 export function splice(orig: Glb, cut: Glb): Splice {
   const [om, cm] = [mainMesh(orig.doc), mainMesh(cut.doc)];
   const [op, cp] = [orig.doc.meshes[om].primitives, cut.doc.meshes[cm].primitives];
@@ -46,12 +64,22 @@ export function splice(orig: Glb, cut: Glb): Splice {
     if (i < 0) throw new Error(`the cut's joint ${n} is not in the original's skin: cut the GLB \`export\` wrote, not another`);
     return i;
   });
-  const read = (k: string) => accessor(cut, c.attributes[k]);
+  // The cut's points into the original's space through the world both rest in: p_o = B_o^-1 B_c p_c
+  // (j25 spliced them unmapped, 76-159% off); normals by the inverse transpose, tangents as points.
+  const map = multiply(invert(bindOf(orig, om, "original")), bindOf(cut, cm, "cut"));
+  const inv = invert(map);
+  const unit = (v: number[]) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
+  const toNormal = (n: number[]) => unit([0, 1, 2].map((r) => inv[r * 4] * n[0] + inv[r * 4 + 1] * n[1] + inv[r * 4 + 2] * n[2]));
+  const toVector = (t: number[]) => [...unit([0, 1, 2].map((r) => map[r] * t[0] + map[4 + r] * t[1] + map[8 + r] * t[2])), ...t.slice(3)];
+  const read = (k: string) => {
+    const rows = accessor(cut, c.attributes[k]);
+    return k === "POSITION" ? rows.map((p) => apply(map, p)) : k === "NORMAL" ? rows.map(toNormal) : k === "TANGENT" ? rows.map(toVector) : rows;
+  };
   const pos = read("POSITION");
   const [ob, nb] = [bounds(accessor(orig, o.attributes.POSITION) as any), bounds(pos as any)];
   const diag = Math.hypot(...ob.max.map((v, i) => v - ob.min[i]));
   const drift = Math.max(...[0, 1, 2].flatMap((i) => [Math.abs(nb.min[i] - ob.min[i]), Math.abs(nb.max[i] - ob.max[i])])) / diag;
-  if (drift > 0.02) throw new Error(`the cut mesh's bounds are ${(drift * 100).toFixed(1)}% of its size from the original's: it is in another space (Blender's axes or bind not undone on export); look at both before splicing`);
+  if (drift > 0.02) throw new Error(`the cut mesh's bounds, mapped into the original's bind space, are ${(drift * 100).toFixed(1)}% of its size from the original's: it is a cut of another model or export (or Blender's axes not undone); cut the GLB \`export\` wrote last (tools/blender/decimate.py) and splice that`);
   const attributes: Record<string, number> = {};
   for (const k of Object.keys(o.attributes)) {
     const rows = k === "POSITION" ? pos : read(k);
