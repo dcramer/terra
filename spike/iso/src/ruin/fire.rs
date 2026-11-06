@@ -249,7 +249,9 @@ impl Coals {
                 Transform::from_translation(
                     top + Vec3::new(a.cos() * r, 0.01 + 0.06 * k, a.sin() * r),
                 )
-                .with_rotation(Quat::from_rotation_y(rng.f() * 6.0) * Quat::from_rotation_x(rng.f()))
+                .with_rotation(
+                    Quat::from_rotation_y(rng.f() * 6.0) * Quat::from_rotation_x(rng.f()),
+                )
                 .with_scale(Vec3::new(s * rng.range(0.9, 1.4), s * 0.6, s)),
                 bevy::light::NotShadowCaster,
             ));
@@ -349,6 +351,8 @@ fn light(
             lumens,
             seed: rng.f() * 40.0,
         },
+        // The pool and the puddles mirror every fire (water.rs).
+        crate::pool::Glint,
     ));
 }
 

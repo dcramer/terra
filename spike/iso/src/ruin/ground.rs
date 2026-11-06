@@ -36,7 +36,9 @@ pub fn paved(p: Vec2) -> f32 {
     // Holes: none under the fight, so it stands on whole flags.
     let clear = smooth(3.5, 5.5, (p - Vec2::new(0.5, -1.0)).length());
     let holes = smooth(0.7, 0.76, fbm(p * 0.6 + Vec2::splat(40.0), 303)) * clear;
-    edge * (1.0 - holes)
+    // The rain pool by the west brazier, where the flags have sunk and broken (water.rs).
+    let pool = smooth(0.2, 0.5, super::water::pool(p));
+    edge * (1.0 - holes) * (1.0 - pool)
 }
 
 pub fn spawn(
@@ -55,10 +57,7 @@ pub fn spawn(
     ));
 
     let flags = materials.add(material(&asset, "large_grey_tiles", Color::WHITE));
-    commands.spawn((
-        Mesh3d(meshes.add(paving())),
-        MeshMaterial3d(flags.clone()),
-    ));
+    commands.spawn((Mesh3d(meshes.add(paving())), MeshMaterial3d(flags.clone())));
 
     // Loose slabs where the paving breaks: lifted, tipped and fallen, grey as the flags.
     let mut loose = Blocks::default();
@@ -74,7 +73,11 @@ pub fn spawn(
             continue;
         }
         placed += 1;
-        let size = Vec3::new(rng.range(0.45, 1.1), rng.range(0.08, 0.14), rng.range(0.4, 0.8));
+        let size = Vec3::new(
+            rng.range(0.45, 1.1),
+            rng.range(0.08, 0.14),
+            rng.range(0.4, 0.8),
+        );
         let tip = rng.range(2.0, 9.0f32).to_radians() * (1.0 - left);
         let rot = Quat::from_euler(
             EulerRot::YXZ,
@@ -85,7 +88,14 @@ pub fn spawn(
         let v = rng.range(0.35, 0.6);
         let at = Vec3::new(p.x, EARTH + size.y * 0.35, p.y);
         let shift = Vec2::new(rng.f(), rng.f());
-        loose.add(at, size, rot, FLAGS_M, shift, Color::srgb(v, v * 0.97, v * 0.93));
+        loose.add(
+            at,
+            size,
+            rot,
+            FLAGS_M,
+            shift,
+            Color::srgb(v, v * 0.97, v * 0.93),
+        );
     }
     commands.spawn((Mesh3d(meshes.add(loose.mesh())), MeshMaterial3d(flags)));
 }
@@ -105,7 +115,12 @@ fn paving() -> Mesh {
     let corner = |i: u32, j: u32| Vec2::new(x0 + i as f32 * CELL, z0 + j as f32 * CELL);
     for j in 0..nz - 1 {
         for i in 0..nx - 1 {
-            let (a, b, c, d) = (corner(i, j), corner(i + 1, j), corner(i, j + 1), corner(i + 1, j + 1));
+            let (a, b, c, d) = (
+                corner(i, j),
+                corner(i + 1, j),
+                corner(i, j + 1),
+                corner(i + 1, j + 1),
+            );
             // Wound so the face looks up: (+z) then (+x) seen from above.
             for tri in [[a, c, b], [b, c, d]] {
                 let kept = clip(tri, |p| paved(p) - 0.5);
@@ -123,7 +138,11 @@ fn paving() -> Mesh {
                     let speck = fbm(*p * 2.5, 313);
                     let edge = 1.0 - smooth(0.5, 0.95, left);
                     let v = 0.78 * (1.0 - 0.45 * drift - 0.55 * edge) * (0.85 + 0.3 * speck);
-                    col.push(Color::srgb(v, v * 0.97, v * 0.93).to_linear().to_f32_array());
+                    col.push(
+                        Color::srgb(v, v * 0.97, v * 0.93)
+                            .to_linear()
+                            .to_f32_array(),
+                    );
                 }
                 for k in 1..kept.len() as u32 - 1 {
                     idx.extend([base, base + k, base + k + 1]);
@@ -177,8 +196,14 @@ mod tests {
     #[test]
     fn court_paved_edges_earth() {
         assert!(paved(Vec2::ZERO) > 0.9, "the fight's floor is paved");
-        assert!(paved(Vec2::new(0.0, -12.0)) < 0.01, "beyond the back wall is earth");
-        assert!(paved(Vec2::new(-14.0, 0.0)) < 0.01, "beyond the west wall is earth");
+        assert!(
+            paved(Vec2::new(0.0, -12.0)) < 0.01,
+            "beyond the back wall is earth"
+        );
+        assert!(
+            paved(Vec2::new(-14.0, 0.0)) < 0.01,
+            "beyond the west wall is earth"
+        );
     }
 
     /// A triangle cut by a straight contour keeps exactly the half on the kept side: the
@@ -190,7 +215,10 @@ mod tests {
         let area: f32 = (1..kept.len() - 1)
             .map(|k| (kept[k] - kept[0]).perp_dot(kept[k + 1] - kept[0]) * 0.5)
             .sum();
-        assert!((area.abs() - 1.5).abs() < 1e-5, "kept {kept:?}, area {area}");
+        assert!(
+            (area.abs() - 1.5).abs() < 1e-5,
+            "kept {kept:?}, area {area}"
+        );
         assert!(kept.iter().all(|p| p.x <= 1.0 + 1e-5));
     }
 

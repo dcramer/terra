@@ -16,23 +16,32 @@ mod ground;
 mod held;
 mod light;
 mod walls;
+mod water;
 
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(
-        Startup,
-        (
-            camera::spawn,
-            ground::spawn,
-            walls::spawn,
-            dress::spawn,
-            beyond::spawn,
-            grass::spawn,
-            light::spawn,
-            fire::spawn,
-            fight::spawn,
-        ),
-    )
-    .add_plugins((fight::plugin, fire::plugin, effects::plugin, ambient::plugin));
+    app.insert_resource(light::fog())
+        .add_systems(
+            Startup,
+            (
+                camera::spawn,
+                ground::spawn,
+                walls::spawn,
+                dress::spawn,
+                beyond::spawn,
+                grass::spawn,
+                light::spawn,
+                fire::spawn,
+                fight::spawn,
+                water::spawn,
+            ),
+        )
+        .add_plugins((
+            crate::pool::plugin,
+            fight::plugin,
+            fire::plugin,
+            effects::plugin,
+            ambient::plugin,
+        ));
 }

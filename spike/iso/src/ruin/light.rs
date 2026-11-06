@@ -9,6 +9,16 @@ use bevy::prelude::*;
 pub const MOON_LUX: f32 = 190.0;
 pub const SKY_NITS: f32 = 1.5;
 
+/// The court's ground fog: thin, dark and ankle-low, so it hangs in the shade and over the
+/// water without lifting the floor's mid-tones to grey (judge r3: "fog lifting mid-tones").
+pub fn fog() -> super::ambient::fog::FogLook {
+    super::ambient::fog::FogLook {
+        thick: 0.2,
+        colour: Vec3::new(0.3, 0.34, 0.42),
+        height: (0.05, 0.28),
+    }
+}
+
 pub fn spawn(mut commands: Commands) {
     commands.insert_resource(GlobalAmbientLight {
         color: Color::srgb(0.45, 0.55, 1.0),

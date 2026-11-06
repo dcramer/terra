@@ -21,7 +21,9 @@ const TRIES: f32 = 2.2;
 pub fn grassy(p: Vec2) -> f32 {
     let earth = 1.0 - smooth(0.35, 0.75, paved(p));
     let drift = smooth(0.3, 0.6, fbm(p * 0.22, 501));
-    earth * (0.25 + 0.75 * drift)
+    // None in the pool, a few stalks at its bank (water.rs).
+    let dry = 1.0 - smooth(0.05, 0.25, super::water::pool(p));
+    earth * (0.25 + 0.75 * drift) * dry
 }
 
 pub fn spawn(
@@ -111,6 +113,9 @@ mod tests {
     #[test]
     fn grass_on_earth_not_flags() {
         assert!(grassy(Vec2::ZERO) < 0.01, "no grass on the fight's flags");
-        assert!(grassy(Vec2::new(0.0, -13.0)) > 0.2, "grass beyond the back wall");
+        assert!(
+            grassy(Vec2::new(0.0, -13.0)) > 0.2,
+            "grass beyond the back wall"
+        );
     }
 }
