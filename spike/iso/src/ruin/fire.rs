@@ -174,6 +174,7 @@ struct Coals {
     /// From the crust's dull red to the heart's yellow.
     heat: [Handle<StandardMaterial>; 4],
     haze: Handle<StandardMaterial>,
+    soot: Handle<StandardMaterial>,
 }
 
 impl Coals {
@@ -188,7 +189,15 @@ impl Coals {
             emissive: e,
             ..default()
         };
+        let soft = images.add(soft_image());
         Coals {
+            soot: materials.add(StandardMaterial {
+                base_color: Color::srgba(0.012, 0.01, 0.009, 0.8),
+                base_color_texture: Some(soft.clone()),
+                perceptual_roughness: 1.0,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            }),
             lump: meshes.add(Sphere::new(1.0).mesh().ico(1).unwrap()),
             glow: meshes.add(Circle::new(1.0)),
             heat: [
@@ -200,7 +209,7 @@ impl Coals {
             .map(|e| materials.add(hot(e))),
             haze: materials.add(StandardMaterial {
                 base_color: LinearRgba::rgb(1.4, 0.36, 0.04).into(),
-                base_color_texture: Some(images.add(soft_image())),
+                base_color_texture: Some(soft),
                 unlit: true,
                 alpha_mode: AlphaMode::Add,
                 ..default()
@@ -210,6 +219,15 @@ impl Coals {
 
     /// The bed in a bowl whose rim is at `top`, 0.42 m across the rim.
     fn spawn(&self, commands: &mut Commands, rng: &mut Rng, top: Vec3) {
+        // Soot on the flags about the brazier's foot, years of fallen ash and smoke.
+        commands.spawn((
+            Mesh3d(self.glow.clone()),
+            MeshMaterial3d(self.soot.clone()),
+            Transform::from_translation(top.with_y(super::ground::TOP + 0.004))
+                .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
+                .with_scale(Vec3::new(1.25, 1.05, 1.0)),
+            bevy::light::NotShadowCaster,
+        ));
         commands.spawn((
             Mesh3d(self.glow.clone()),
             MeshMaterial3d(self.haze.clone()),
