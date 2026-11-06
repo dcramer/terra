@@ -26,6 +26,48 @@ const STEP: f32 = 0.16;
 /// Below this a wall is gone, down to its rubble.
 const GONE: f32 = 0.22;
 const PILLAR_R: f32 = 0.4;
+/// The back wall's run (its two ends) and its skin's seed; its top is `back_top`.
+pub const BACK: (Vec2, Vec2, u32) = (Vec2::new(-10.5, BACK_Z), Vec2::new(5.5, BACK_Z), 11);
+
+/// The back wall's height along x before its top is broken: 3.5 m where it stands best,
+/// down to a course or two, and a breach behind the fight where the tree monster comes
+/// through.
+pub fn back_top(x: f32) -> f32 {
+    let breach = 1.0 - smooth(0.6, 1.6, (x + 2.6).abs());
+    let top = 2.3 + 1.2 * (x * 0.55).sin() + 0.5 * (x * 1.7 + 1.0).sin();
+    (top * (1.0 - breach) + 0.3 * breach).max(0.3) * (1.0 - 0.6 * smooth(3.0, 5.5, x))
+}
+
+/// A wall's broken top at `s` m along its run: its height and how far its ridge leans
+/// across it. `wall` builds its skin from these, and `ridge` finds a point on it.
+fn cut(a: Vec2, z: Vec2, seed: u32, top: &impl Fn(f32) -> f32, s: f32) -> (f32, f32) {
+    let d = (z - a).normalize();
+    let noise = |s: f32, k: u32| fbm(Vec2::new(s, 0.5), seed * 8 + k);
+    let c = a + d * s;
+    let along = if d.x.abs() > d.y.abs() { c.x } else { c.y };
+    let jag = (noise(s * 0.9, 0) - 0.5) * 0.9
+        + (noise(s * 3.3, 1) - 0.5) * 0.6
+        + (noise(s * 8.0, 7) - 0.5) * 0.3;
+    let lean = (noise(s * 1.3, 6) - 0.5) * THICK * 0.4;
+    ((top(along) + jag).max(0.0), lean)
+}
+
+/// The point on a wall's ridge nearest `p` across its run, as its skin draws it (the
+/// samples' heights and leans, straight between them): where a bird perches on its top.
+pub fn ridge(a: Vec2, z: Vec2, seed: u32, top: impl Fn(f32) -> f32, p: Vec2) -> Vec3 {
+    let d = (z - a).normalize();
+    let len = (z - a).length();
+    let n = (len / STEP).ceil() as usize;
+    let s = (p - a).dot(d).clamp(0.0, len);
+    let i = ((s / len * n as f32) as usize).min(n - 1);
+    let (s0, s1) = (len * i as f32 / n as f32, len * (i + 1) as f32 / n as f32);
+    let (h0, l0) = cut(a, z, seed, &top, s0);
+    let (h1, l1) = cut(a, z, seed, &top, s1);
+    let k = (s - s0) / (s1 - s0);
+    let (h, lean) = (h0 + (h1 - h0) * k, l0 + (l1 - l0) * k);
+    let c = a + d * s + Vec2::new(-d.y, d.x) * lean;
+    Vec3::new(c.x, h, c.y)
+}
 
 pub fn spawn(
     mut commands: Commands,
@@ -37,18 +79,7 @@ pub fn spawn(
     let mut rng = Rng::new(0x3a11_5);
     // The back wall: 3.5 m where it stands best, down to a course or two, and a breach
     // behind the fight where the tree monster comes through.
-    wall(
-        &mut b,
-        &mut rng,
-        Vec2::new(-10.5, BACK_Z),
-        Vec2::new(5.5, BACK_Z),
-        11,
-        |x| {
-            let breach = 1.0 - smooth(0.6, 1.6, (x + 2.6).abs());
-            let top = 2.3 + 1.2 * (x * 0.55).sin() + 0.5 * (x * 1.7 + 1.0).sin();
-            (top * (1.0 - breach) + 0.3 * breach).max(0.3) * (1.0 - 0.6 * smooth(3.0, 5.5, x))
-        },
-    );
+    wall(&mut b, &mut rng, BACK.0, BACK.1, BACK.2, back_top);
     // The west wall: low, a course or three, gone in places.
     wall(
         &mut b,
@@ -188,16 +219,11 @@ fn wall(b: &mut Blocks, rng: &mut Rng, a: Vec2, z: Vec2, seed: u32, top: impl Fn
         .map(|i| {
             let s = len * i as f32 / n as f32;
             let c = a + d * s;
-            let along = if d.x.abs() > d.y.abs() { c.x } else { c.y };
-            let jag = (noise(s * 0.9, 0) - 0.5) * 0.9
-                + (noise(s * 3.3, 1) - 0.5) * 0.6
-                + (noise(s * 8.0, 7) - 0.5) * 0.3;
-            let h = (top(along) + jag).max(0.0);
+            let (h, lean) = cut(a, z, seed, &top, s);
             let half = |k: u32| THICK * 0.5 + (noise(s * 1.7, k) - 0.5) * 0.08;
             let (ta, tb) = (half(2), -half(3));
             let drop = |k: u32| 0.04 + 0.3 * noise(s * 2.1, k);
             let at = |t: f32, y: f32| Vec3::new(c.x + across.x * t, y, c.y + across.y * t);
-            let lean = (noise(s * 1.3, 6) - 0.5) * THICK * 0.4;
             Cut {
                 foot: [at(ta, -0.05), at(tb, -0.05)],
                 side: [at(ta, h - drop(4)), at(tb, h - drop(5))],

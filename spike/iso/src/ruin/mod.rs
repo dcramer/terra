@@ -15,6 +15,7 @@ mod flags;
 mod grass;
 mod ground;
 mod held;
+mod life;
 mod light;
 mod litter;
 mod walls;
@@ -47,5 +48,6 @@ pub fn plugin(app: &mut App) {
             fire::plugin,
             effects::plugin,
             ambient::plugin,
+            life::plugin,
         ));
 }
