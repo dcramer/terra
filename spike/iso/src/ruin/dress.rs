@@ -8,7 +8,7 @@ use crate::scene::model;
 use bevy::prelude::*;
 
 /// Model, place, yaw in degrees, and a tip over (degrees about X, for a barrel on its side).
-const PROPS: [(&str, Vec2, f32, f32); 17] = [
+const PROPS: [(&str, Vec2, f32, f32); 21] = [
     (
         "models/iso/dead-tree-a.glb",
         Vec2::new(-11.0, -8.4),
@@ -58,6 +58,22 @@ const PROPS: [(&str, Vec2, f32, f32); 17] = [
     ("models/props/Campfire.glb", Vec2::new(-6.2, 3.4), 0.0, 0.0),
     ("models/props/Chest.glb", Vec2::new(-7.9, -4.6), 75.0, 0.0),
     ("models/props/Sack.glb", Vec2::new(6.9, 3.6), 20.0, 0.0),
+    // More of the fallen: a skull at the pool's bank, one by the east wall, a heap of
+    // bones west of the fight and the walls' debris at the front edge.
+    ("models/iso/skull.glb", Vec2::new(-3.0, 1.3), 140.0, 0.0),
+    ("models/iso/skull.glb", Vec2::new(5.8, -4.6), 30.0, 0.0),
+    (
+        "models/props/barrow/BoneHeap.glb",
+        Vec2::new(-4.4, 0.2),
+        60.0,
+        0.0,
+    ),
+    (
+        "models/props/barrow/Debris.glb",
+        Vec2::new(2.8, 5.6),
+        90.0,
+        0.0,
+    ),
 ];
 
 pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {

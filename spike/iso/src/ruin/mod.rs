@@ -15,6 +15,7 @@ mod grass;
 mod ground;
 mod held;
 mod light;
+mod litter;
 mod walls;
 mod water;
 
@@ -35,6 +36,7 @@ pub fn plugin(app: &mut App) {
                 fire::spawn,
                 fight::spawn,
                 water::spawn,
+            litter::spawn,
             ),
         )
         .add_plugins((

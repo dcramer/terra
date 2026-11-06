@@ -35,7 +35,7 @@ pub fn paved(p: Vec2) -> f32 {
     let edge = smooth(-0.4, 0.4, inside + ragged);
     // Holes: none under the fight, so it stands on whole flags.
     let clear = smooth(3.5, 5.5, (p - Vec2::new(0.5, -1.0)).length());
-    let holes = smooth(0.7, 0.76, fbm(p * 0.6 + Vec2::splat(40.0), 303)) * clear;
+    let holes = smooth(0.66, 0.72, fbm(p * 0.6 + Vec2::splat(40.0), 303)) * clear;
     // The rain pool by the west brazier, where the flags have sunk and broken (water.rs).
     let pool = smooth(0.2, 0.5, super::water::pool(p));
     edge * (1.0 - holes) * (1.0 - pool)
