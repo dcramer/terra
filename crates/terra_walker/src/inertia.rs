@@ -32,6 +32,12 @@ pub struct Inertia {
     asked: Option<f32>,
     /// Taking the offsets this frame, to decay over this time, s.
     taking: Option<f32>,
+    /// Taking them again next frame, over this time, s, once the clip's own velocity is
+    /// known (its pose last frame and now), and whether this frame's taking is that refit.
+    refit: Option<f32>,
+    refitting: bool,
+    /// Each bone's pose the clips put out last frame, before its offset.
+    clips: HashMap<Entity, (Quat, Vec3)>,
     /// Each bone's offset and how long since it was taken, s.
     offsets: HashMap<Entity, Offset>,
     t: f32,
@@ -85,9 +91,10 @@ impl Quintic {
                 t1: 0.0,
             };
         }
-        // Moving away from the clip it is taken as still; moving toward it, the time is
-        // shortened so it comes to the clip at rest rather than past it.
-        let v0 = v0.min(0.0);
+        // Moving toward the clip, the time is shortened so it comes to the clip at rest rather
+        // than past it. Moving away (the clip leaving a still pose, an act's wind-up) it goes
+        // on away and turns back: Bollo takes it as still, which jumps the pose's velocity by
+        // the clip's own on the frame it is taken up.
         let t1 = if v0 < 0.0 { t1.min(-5.0 * x0 / v0) } else { t1 };
         let (t2, t3) = (t1 * t1, t1 * t1 * t1);
         let a0 = ((-8.0 * v0 * t1 - 20.0 * x0) / t2).max(0.0);
@@ -113,7 +120,11 @@ impl Quintic {
 fn advance(time: Res<Time>, mut figures: Query<&mut Inertia>) {
     let dt = time.delta_secs();
     for mut inertia in &mut figures {
-        inertia.taking = inertia.asked.take();
+        let asked = inertia.asked.take();
+        let refit = inertia.refit.take();
+        inertia.refitting = asked.is_none() && refit.is_some();
+        inertia.taking = asked.or(refit);
+        inertia.refit = asked;
         if inertia.taking.is_some() {
             inertia.offsets.clear();
             inertia.t = 0.0;
@@ -139,9 +150,15 @@ fn inertialize(
         if let Some(over) = inertia.taking
             && let Some(seen) = inertia.seen.get(&bone)
         {
-            let offset = offset(*seen, clip, dt, over);
+            let was = if inertia.refitting {
+                inertia.clips.get(&bone).copied()
+            } else {
+                None
+            };
+            let offset = offset(*seen, clip, was, dt, over);
             inertia.offsets.insert(bone, offset);
         }
+        inertia.clips.insert(bone, clip);
         let t = inertia.t;
         if let Some(offset) = inertia.offsets.get(&bone) {
             place.rotation = Quat::from_axis_angle(offset.axis, offset.turn.at(t)) * clip.0;
@@ -154,9 +171,21 @@ fn inertialize(
 }
 
 /// The offset of what showed (`seen`: last frame and the one before) from the clip's pose
-/// now, the shown pose carried on a frame at its own velocity, decaying over `over` s.
-fn offset(seen: [(Quat, Vec3); 2], clip: (Quat, Vec3), dt: f32, over: f32) -> Offset {
+/// now, the shown pose carried on a frame at its own velocity, decaying over `over` s. Its
+/// velocity is the shown pose's against the clip's, the clip's pose last frame `clip_was`
+/// (none on the frame a clip is taken up, its motion not yet known: then the clip is taken
+/// as still, Bollo's, and the refit a frame on takes its motion out, so the pose's velocity
+/// carries on whole rather than jumping by the clip's own, the finisher's sword arm 1.51
+/// times its clips' worst on its first frame).
+fn offset(
+    seen: [(Quat, Vec3); 2],
+    clip: (Quat, Vec3),
+    clip_was: Option<(Quat, Vec3)>,
+    dt: f32,
+    over: f32,
+) -> Offset {
     let [(last, at), (before, was)] = seen;
+    let clip_was = clip_was.unwrap_or(clip);
     let mut step = last * before.inverse();
     if step.w < 0.0 {
         step = -step;
@@ -166,7 +195,7 @@ fn offset(seen: [(Quat, Vec3); 2], clip: (Quat, Vec3), dt: f32, over: f32) -> Of
     if now.w < 0.0 {
         now = -now;
     }
-    let mut then = (last * clip.0.inverse()).normalize();
+    let mut then = (last * clip_was.0.inverse()).normalize();
     if then.dot(now) < 0.0 {
         then = -then;
     }
@@ -181,7 +210,7 @@ fn offset(seen: [(Quat, Vec3); 2], clip: (Quat, Vec3), dt: f32, over: f32) -> Of
     let length = gap.length();
     let (along, shift) = if length > NONE {
         let along = gap / length;
-        let was = (at - clip.1).dot(along);
+        let was = (at - clip_was.1).dot(along);
         (along, Quintic::new(length, (length - was) / dt, over))
     } else {
         (Vec3::X, Quintic::new(0.0, 0.0, over))
@@ -236,7 +265,7 @@ mod tests {
 
     #[test]
     fn a_quintic_never_passes_its_clip() {
-        for v0 in [0.0, -1.0, -5.0, -40.0, 3.0] {
+        for v0 in [0.0, -1.0, -5.0, -40.0, 3.0, 10.0, 30.0] {
             let q = Quintic::new(0.3, v0, 0.3);
             for i in 0..400 {
                 assert!(q.at(i as f32 * 1e-3) >= -1e-5, "v0 {v0}: below at {i} ms");
@@ -249,7 +278,7 @@ mod tests {
         // Shown turning 0.1 rad a frame about y; the clip is still, 1 rad on.
         let turn = |a: f32| Quat::from_rotation_y(a);
         let seen = [(turn(0.2), Vec3::ZERO), (turn(0.1), Vec3::ZERO)];
-        let o = offset(seen, (turn(1.0), Vec3::ZERO), 1.0 / 60.0, 0.3);
+        let o = offset(seen, (turn(1.0), Vec3::ZERO), None, 1.0 / 60.0, 0.3);
         let at = |t: f32| {
             (Quat::from_axis_angle(o.axis, o.turn.at(t)) * turn(1.0))
                 .to_euler(EulerRot::YXZ)
@@ -263,5 +292,32 @@ mod tests {
         let v = (at(1e-3) - at(0.0)) / 1e-3;
         assert!((v - 6.0).abs() < 0.1, "at the shown velocity: {v}");
         assert!((at(0.3) - 1.0).abs() < 1e-4, "ends on the clip");
+    }
+
+    #[test]
+    fn a_refit_takes_the_clips_own_motion_out_so_a_still_pose_stays_still() {
+        // Shown still at 0; the clip turning away from it, 2 rad/s about y, now at 1 rad.
+        let dt = 1.0 / 60.0;
+        let turn = |a: f32| Quat::from_rotation_y(a);
+        let seen = [(turn(0.0), Vec3::ZERO), (turn(0.0), Vec3::ZERO)];
+        let clip = |t: f32| turn(1.0 + 2.0 * t);
+        let was = Some((clip(-dt), Vec3::ZERO));
+        let o = offset(seen, (clip(0.0), Vec3::ZERO), was, dt, 0.3);
+        let at = |t: f32| {
+            (Quat::from_axis_angle(o.axis, o.turn.at(t)) * clip(t))
+                .to_euler(EulerRot::YXZ)
+                .0
+        };
+        assert!(at(0.0).abs() < 1e-4, "starts where it showed: {}", at(0.0));
+        let v = (at(1e-3) - at(0.0)) / 1e-3;
+        assert!(v.abs() < 0.05, "still, not at the clip's 2 rad/s: {v}");
+        assert!((at(0.3) - clip(0.3).to_euler(EulerRot::YXZ).0).abs() < 1e-4);
+        // Without the clip's last pose it is taken as still: the pose moves at the clip's.
+        let o = offset(seen, (clip(0.0), Vec3::ZERO), None, dt, 0.3);
+        let v = (Quat::from_axis_angle(o.axis, o.turn.at(1e-3)) * clip(1e-3))
+            .to_euler(EulerRot::YXZ)
+            .0
+            / 1e-3;
+        assert!((v - 2.0).abs() < 0.05, "Bollo's: {v}");
     }
 }
