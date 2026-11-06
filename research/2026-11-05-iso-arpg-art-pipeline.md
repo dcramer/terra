@@ -31,6 +31,28 @@ Dated 2026-11-05 (experiment iso-art, job j1). The developer asked for "a replic
 - **Numbers, not taste.** Every still is measured against the references by the same script and judged by the rubric in `~/.cache/terra-review/iso-art/judge.md`, with the blind pairwise step the spike found more reliable than an absolute score.
 - **Open question**: an ARPG follow camera (these five games) or the spike's fixed Baldur's Gate II view is a design choice for the developers; this experiment uses the follow camera because the references do, and decides nothing.
 
+## Is it good enough, at what cost (2026-11-06, after jobs j1 to j49)
+
+**Verdict: the pipeline is replicable and cheap per asset, and it holds a vertical-slice look (5 of 10 against shipped ARPGs' store frames) in three biomes; it is not near shippable (7, the approval bar), and the last ten jobs bought tenths, not points.** The limit is no longer the assets but the scene's surface density, colour and effect finish, which are an artist's hours in the shipped games and a job each here.
+
+Scores, by a harsh judge against two store frames per biome (rubric and blind pairwise step in the skill's `judging.md`; a judge's absolute score drifts 0.3 between runs, so only a clear pairwise win counts):
+
+| Biome | First | Best | What won the last clear round | Gaps the judge still names |
+|---|---|---|---|---|
+| Ruin courtyard, night (PoE2, V Rising) | 3.5 (r1) | 5.4 (r15) | the floor strewn with rubble, skulls and bones (fine detail 0.082 to 0.110) | scatter of one size without intent; surfaces flat (fine 0.11 against 0.14 to 0.23, saturation 0.53 against 0.70); embers and smoke landed but read only slightly |
+| Forest glade, day (Last Epoch, PoE2) | 4.5 (r2) | 5.4 (r11) | lawn clumps over the flat lime lawns | the pond's glints a confetti of specks, no sun path; ribbon effects without a hot core; muddy mid-tones (p50 0.068 against 0.09 to 0.105) |
+| Marsh, night (V Rising) | 3.5 (r1) | 4.9 (r11) | moonlit water and banks (rounds r4 to r9) | flat empty grass, no reed beds; water one milky blue; blacks lifted (p5 0.006 against 0.0002 to 0.004); mist lost twice and was taken out |
+
+Assets, judged one by one at the game camera (assets-r1): a prop 6 to 7 (barrel 7, wagon 6, dead trees 6.5, sword 6.5), the knight 6, the creatures 4.5 to 5 (ogre, treants, tree monster, moose), small props 3 to 4 (torch, bone pile). What holds: Tripo's mesh and texture at 15 to 20 m, its biped rig and presets played as they are once `export` puts them in place and closes the loops, and the cut to the 24k creature cap under the same skeleton (`decimate`, j42). What does not: non-humans on the human preset (the treants crawl to a run), every non-biped rig gets a walk only (no idle, attack or death without paid motions), Tripo's glossy materials read plastic under a rim, and creatures share the ground's value until tinted.
+
+The biomes' creatures: from the pipeline, the knight, ogre, tree monster, two treants and the moose (all from rigged projects already in the account, 0 credits); beside them, the repository's animated animals, not from this pipeline (deer, boar, fox, squirrel, finches, mallard, heron, owl, crows, hares, spiders, pigeons, fireflies and wisps).
+
+Cost per asset (tools/iso-art/README.md has the table): a new figure is 85 to 95 Studio credits (concept 10 to 20, model 55, rig 20; 55 to 65 with a standard model), a new prop 65 to 75 (35 to 45), an asset adopted from a rigged project 0. At the Professional plan's $20 for 3,000 credits that is about $0.60 a figure and $0.45 a prop (Tripo's API sells credits at a cent each: $0.90 and $0.70). Minutes: animate 0.7 to 1.7, export 0.1 to 0.9, check under a second, the decimate splice a few minutes of Blender on the worker; model and rig untimed (none were affordable). No credits were spent: all night the account held 5 and its free images were used up.
+
+The real cost is agent time: 52 jobs and leads, 326M tokens summed (mostly the same context read again each turn), 2.4M written, about 6 to 8M a job; a biome to its 5 took 7 to 13 jobs, and each judge round about 80k. A job lands one gap; a lead fits about seven rounds.
+
+What a credit top-up would buy, at 85 to 95 a figure: 1,000 credits ($7 on the plan) is ten new rigged creatures with their presets, the one thing the night could not do. Cheapest first: the account's unrigged wolf, giant spider and skeleton at 20 each for the rig alone (forest and ruin), then new ones the biomes lack, a marsh hag or bog troll; then prompted motions (20 each) for an idle, attack and death on the quadrupeds. It would not move a biome's score: the judge's gaps are the ground, the water and the effects, which credits do not touch.
+
 ## Sources
 
 - Blizzard, "Diablo IV Quarterly Update, June 2021": https://news.blizzard.com/en-us/article/23665024/diablo-iv-quarterly-updatejune-2021
