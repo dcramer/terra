@@ -28,7 +28,7 @@ The isometric experiment's art pipeline, as it proved out from 2026-11-05 (exper
 2. Take one gap: the judge's first, else the handoff's first. Say the number it should move (a stats measure against the refs of the same kind, a check, a clip's read).
 3. Make the change in its own module; one look a change: shoot the still on the render worker (scene.md), measure it with stats.ts, look at it at 960 px and a 1:1 crop where it matters.
 4. Land each checked step on main as its own commit naming iso-art, with the numbers before and after and the still's path in the message: an asset with its ledger, a scene module, a tool fix with its test. Spike tests pass on the worker; `node --test` for the tool.
-5. At a round's end, the blind pairwise judge, then the scorer (judging.md). Keep a change only on a clear or strong win; two rounds without a gain stops the line of work.
+5. At a round's end, the blind pairwise judge, then the scorer (judging.md), run by the lead, not the helper (a helper reaches its bound before judging). Keep a change only on a clear or strong win; revert one that loses, even slightly (the marsh's mist, twice); a slight win that only fixes a fault (a creature hidden in shade) may stay, said so in the log. Two rounds without a gain stops the line of work.
 6. Hand off: commits, each still's stats line, scores, what failed and why, next steps in order, a `FOR REVIEW` line for each still or film for the developer (the review-desk skill).
 
 ## Rules
@@ -46,7 +46,7 @@ The isometric experiment's art pipeline, as it proved out from 2026-11-05 (exper
 ## What is still unknown
 
 - Model and rig minutes for a new asset (only adopted projects were timed); whether `--standard` models pass the asset judge.
-- The budgets' 1M-triangle frame share: no bench of the ruin yet (D185); the rigged ogre, tree-monster and treants are decimated (`decimate`, asset.md), the bone-pile, torch and skull not yet.
-- No asset has been judged on the asset rubric; the asset view, its sheet and its walk-and-run film (asset.md, Check) are at the game camera, the sheets right only from iso-art j31.
-- The forest by day and the marsh at dusk (`--scene marsh`) are made; neither has refs of its own kind yet (they are judged on the water and night refs) nor a judge's approval.
-- Water works (`pool.rs`, scene.md's water section) in the marsh and the forest's pond; how it reads by day beside le-river-beam is unjudged.
+- Where it stands (2026-11-06): each biome near 5 of 10, none at the approval bar of 7; scores, costs and the verdict in [the research note](../../../research/2026-11-05-iso-arpg-art-pipeline.md#is-it-good-enough-at-what-cost-2026-11-06-after-jobs-j1-to-j49). The gaps every judge names: surface density and saturation (fine detail 0.09 to 0.12 against 0.13 to 0.23), water (forest confetti glints, marsh one milky blue), effects without a hot core.
+- The budgets' 1M-triangle frame share: no bench of any biome yet (D185); the ruin's scatter (j46) added about 270k triangles of skulls and bone heaps, undecimated. The rigged ogre, tree-monster and treants are decimated (`decimate`, asset.md), the bone-pile, torch and skull not yet.
+- Model and rig minutes for a new asset, and whether a `--standard` model passes the asset judge: nothing new was affordable.
+- Fog over night water: two sheet designs lost (traps.md); a lit volume in a lamp's cone is untried.
