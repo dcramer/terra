@@ -19,6 +19,7 @@ mod scene;
 mod smoke;
 mod terrain;
 mod ui;
+mod view;
 mod water;
 mod wildlife;
 mod wood;
@@ -51,6 +52,8 @@ pub struct Args {
     /// `--film N` with `--shot dir/f.jpg`: N frames from `--frames` on, at a fixed 30 per
     /// second of game time, saved as dir/f-0000.jpg on; clips play rather than hold.
     pub film: u32,
+    /// `--asset NAME` with `--shot dir/NAME.png`: the asset view (view.rs), one asset alone.
+    pub asset: Option<String>,
 }
 
 /// A film's frame rate in game time, whatever the machine draws.
@@ -70,6 +73,7 @@ fn args() -> Args {
         forest: false,
         marsh: false,
         film: 0,
+        asset: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -78,6 +82,7 @@ fn args() -> Args {
             "--shot" => a.shot = Some(val().into()),
             "--frames" => a.frames = val().parse().unwrap(),
             "--film" => a.film = val().parse().unwrap(),
+            "--asset" => a.asset = Some(val()),
             "--demo" => a.demo = true,
             "--scene" => match val().as_str() {
                 "ruin" => a.ruin = true,
@@ -143,6 +148,10 @@ fn main() {
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f64(1.0 / FILM_FPS),
         ));
+    }
+    if args.asset.is_some() {
+        app.add_plugins((mipmaps::plugin, view::plugin)).run();
+        return;
     }
     if args.ruin {
         app.add_plugins((mipmaps::plugin, ruin::plugin)).run();
@@ -213,6 +222,9 @@ fn shoot(
     let (Some(path), Some(image)) = (&args.shot, offscreen) else {
         return;
     };
+    if args.asset.is_some() {
+        return; // the asset view shoots its own (view.rs)
+    }
     let n = frame.0.wrapping_sub(args.frames);
     if args.film > 0 && n < args.film {
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("f");
