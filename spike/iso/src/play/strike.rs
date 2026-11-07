@@ -172,6 +172,12 @@ fn land(
                 fell
             }
         };
+        debug!(
+            "blow {} lands on {body} at {:.2}{}",
+            s.blows,
+            foe,
+            if fell { ", it falls" } else { "" }
+        );
         if fell {
             commands.entity(body).insert(Fallen);
         }

@@ -361,7 +361,9 @@
     ],
     // Play's blows (play.rs, play/strike.rs): the sword's trail and the sparks where it
     // bites. Only play adds the effects to the street (it stages no fight), so a still is
-    // as before. The sparks' lights at a quarter of the preset's (tuned in the ruin's day):
-    // at full, the night street's near wall flashed orange for a few frames (iso-play j5).
-    effects: [(preset: "slash"), (preset: "hit-spark", light: 0.25)],
+    // as before. The lights dimmed from the presets' (tuned in the ruin's day): at full,
+    // the night street's near wall flashed orange for a few frames, the sparks' (iso-play
+    // j5) and the trail's through the whole swing (iso-play j8: at 0.2 the wall's red still
+    // tripled, 0.05 to 0.16, over a swing).
+    effects: [(preset: "slash", light: 0.05), (preset: "hit-spark", light: 0.25)],
 )
