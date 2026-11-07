@@ -393,7 +393,9 @@ pub struct Pads {
 
 /// The mirror (a planar reflection): `lift` over Fresnel's two percent (an art cheat, 1 is
 /// physical), how far (m) a unit of the ripples' slope moves what it mirrors, and the sky
-/// it shows where nothing stands over it (none: the light preset's sky).
+/// it shows where nothing stands over it (none: the light preset's sky). `smear` streaks
+/// it along the view, a fraction of the frame's height each way, as rough wet asphalt
+/// does (full on a thin film, a quarter on a deep puddle; 0: a clean mirror).
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
 #[serde(deny_unknown_fields, default)]
 pub struct Mirror {
@@ -401,6 +403,7 @@ pub struct Mirror {
     pub distort: f32,
     pub sky: Option<Colour>,
     pub nits: Option<f32>,
+    pub smear: f32,
 }
 
 impl Default for Mirror {
@@ -410,6 +413,7 @@ impl Default for Mirror {
             distort: 0.1,
             sky: None,
             nits: None,
+            smear: 0.0,
         }
     }
 }

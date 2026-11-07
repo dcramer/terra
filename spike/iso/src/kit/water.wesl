@@ -226,7 +226,28 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let moved = world + vec3<f32>(n.x, 0.0, n.z) * look.mirror.y;
         let clip = look.clip_from_world * vec4<f32>(moved, 1.0);
         let uv = clip.xy / max(clip.w, 1e-4) * vec2<f32>(0.5, -0.5) + 0.5;
-        reflected = textureSampleLevel(mirror_map, mirror_sampler, clamp(uv, vec2<f32>(0.001), vec2<f32>(0.999)), 0.0).rgb;
+        if look.mirror.w > 0.0 {
+            // A thin film over rough asphalt mirrors through the surface's spread of
+            // slopes: GGX's lobe, at a grazing view, long in the plane of incidence, so a
+            // window or a sign streaks up and down the frame (Lagarde, "Water drop 2b",
+            // 2013: wet roads' stretched reflections); a deep puddle stays a mirror.
+            // Twelve taps along the frame's height, a tent's weights, jittered a pixel.
+            let thin = 1.0 - smoothstep(0.008, 0.03, in.uv_b.x);
+            let reach = look.mirror.w * mix(0.25, 1.0, thin);
+            let jitter = hash(floor(in.position.xy)) - 0.5;
+            var sum = vec3<f32>(0.0);
+            var weights = 0.0;
+            for (var i = 0; i < 12; i++) {
+                let s = (f32(i) + 0.5 + jitter) / 12.0 * 2.0 - 1.0;
+                let w = 1.0 - abs(s);
+                let at = uv + vec2<f32>((hash(vec2<f32>(f32(i), jitter)) - 0.5) * reach * 0.06, s * reach);
+                sum += textureSampleLevel(mirror_map, mirror_sampler, clamp(at, vec2<f32>(0.001), vec2<f32>(0.999)), 0.0).rgb * w;
+                weights += w;
+            }
+            reflected = sum / weights;
+        } else {
+            reflected = textureSampleLevel(mirror_map, mirror_sampler, clamp(uv, vec2<f32>(0.001), vec2<f32>(0.999)), 0.0).rgb;
+        }
     }
     // The key's lane (the moon's), on a calmer face and under its soft peak, and each
     // glinting light's streak (nits).

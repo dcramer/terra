@@ -61,7 +61,7 @@ pub struct Look {
     /// Absorption a metre (rgb) and, w, a thin film's depth (m, 0: none).
     pub absorb: Vec4,
     /// x the mirror's lift over Fresnel, y its distortion (m a unit slope), z 1 when the
-    /// mirror's texture is bound.
+    /// mirror's texture is bound, w its smear (a fraction of the frame, on a thin film).
     pub mirror: Vec4,
     /// x the fine tile (m), y the broad tile (m), z the slope, w the margin's calm.
     pub ripple: Vec4,
@@ -200,7 +200,12 @@ pub fn look(water: &Water, wind: Vec2, light: Option<&Light>) -> (Look, Vec3) {
             .map_or(Vec3::splat(0.004), linear)
             .extend(water.shore),
         absorb: Vec4::new(a.0, a.1, a.2, film),
-        mirror: Vec4::new(water.mirror.lift, water.mirror.distort, 0.0, 0.0),
+        mirror: Vec4::new(
+            water.mirror.lift,
+            water.mirror.distort,
+            0.0,
+            water.mirror.smear,
+        ),
         ripple: Vec4::new(
             water.ripples.fine,
             water.ripples.broad,
