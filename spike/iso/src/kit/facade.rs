@@ -54,6 +54,11 @@ pub struct Bays {
     pub grime: f32,
     #[serde(default = "plaster")]
     pub plaster: String,
+    /// Rooms behind the glass, `back` deep (kit/rooms.rs): each bay's floored and walled,
+    /// lit, dark, screen-lit, blinded, curtained or shuttered by a hash; none, a flat lit
+    /// card on the set-back face behind each lit bay.
+    #[serde(default)]
+    pub rooms: Option<super::rooms::Rooms>,
 }
 
 fn plaster() -> String {
@@ -198,6 +203,19 @@ impl Bays {
                 storeys.round().max(1.0) * self.storey
             ));
         }
+        let room = super::rooms::FRONT + 1.0;
+        if self.rooms.is_some() && self.back < room {
+            return Err(format!(
+                "the front from x {} to {} has rooms behind its glass but its `back` is {} m: \
+                 a room starts {} m behind the modules' face, clear of their reveals, and \
+                 under a metre deep shows no floor. Fix: its `back` to {room} or more, near \
+                 2 for a room seen from above (kit/rooms.rs, D634)",
+                along.0,
+                along.1,
+                self.back,
+                super::rooms::FRONT
+            ));
+        }
         let k = columns(along, self.width)[0].1;
         if !(STRETCH.0..=STRETCH.1).contains(&k) {
             return Err(format!(
@@ -276,6 +294,12 @@ pub fn spawn(
             module(b.pier, Vec3::new(x, st as f32 * b.storey, face), 1.0, clean);
         }
     }
+    if let Some(r) = &b.rooms {
+        super::rooms::spawn(
+            commands, meshes, materials, side, along, &cols, storeys, wall, b, r,
+        );
+        return;
+    }
     if b.colours.is_empty() {
         return;
     }
@@ -330,6 +354,7 @@ mod tests {
             paint: None,
             grime: 0.0,
             plaster: "plaster".into(),
+            rooms: None,
         }
     }
 
@@ -410,5 +435,11 @@ mod tests {
         let e = bays(3.0).check((0.0, 12.0), 16.0).unwrap_err();
         assert!(e.contains("to 15") && e.contains("Fix"), "{e}");
         assert!(bays(3.0).check((0.0, 12.0), 15.0).is_ok());
+        let mut b = bays(3.0);
+        b.rooms = Some(crate::kit::parse("(tv: 0.1)", "test", "rooms.rs").unwrap());
+        let e = b.check((0.0, 12.0), 15.0).unwrap_err();
+        assert!(e.contains("`back` to") && e.contains("Fix"), "{e}");
+        b.back = 2.0;
+        assert!(b.check((0.0, 12.0), 15.0).is_ok());
     }
 }
