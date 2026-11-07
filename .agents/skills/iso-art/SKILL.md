@@ -11,8 +11,9 @@ The isometric experiment's art pipeline, as it proved out from 2026-11-05 (exper
 
 - **The tool**: [tools/iso-art](../../../tools/iso-art/README.md), `node tools/iso-art/iso-art.ts`, TypeScript, no dependencies; `node --test tools/iso-art/iso-art.test.ts`. It depends on no spike (D133).
 - **The assets**: `assets/models/iso/<name>.glb`, each with its ledger `art/iso/NAME/asset.json`; `node tools/iso-art/iso-art.ts status` lists them.
-- **The scenes**: the experiment's code lives in a spike, `spike/iso/` (D133: throwaway, deleted once its research note is written; nothing lasting may depend on it). A biome is a `--scene` there; the ruin at night is `spike/iso/src/ruin/`.
 - **Judging** (D634): outside the repository in `~/.cache/terra-review/iso-kit/`: `judge.md` (the adversarial rubric toward realism and the blind pair), `refs/<biome>/` (photographs and game frames, never committed, with `refs.md` and judges' copies in `960/`), `refs/stats.json`; the measure is in the repository, `node tools/iso-art/stats.ts`. What a fresh agent needs from them is in [judging.md](references/judging.md).
+- **The scenes**: the experiment's code lives in a spike, `spike/iso/` (D133: throwaway, deleted once its research note is written; nothing lasting may depend on it). A biome is a data file there, `spike/iso/biomes/<name>.ron`, drawn by the shared kit in `spike/iso/src/kit/` and run by `--biome NAME` (D634, [kit.md](references/kit.md)); the ruin at night's modules are still `spike/iso/src/ruin/`.
+- **The loop**: `node spike/iso/loop.ts` shoots, measures and prepares the judges of every biome and keeps a round by the ratchet ([kit.md](references/kit.md)); its rounds, kept stills, blind pairs and `history.json` are in `~/.cache/terra-review/iso-kit/`, beside `refs/` and `judge.md`.
 - **Handoffs**: `~/.cache/terra-handoff/iso-art-j<n>.md`, the coordinator's `iso-art-lead.md`. Read only the last one and what it points to.
 
 ## The steps (each a page beside this one)
@@ -21,15 +22,24 @@ The isometric experiment's art pipeline, as it proved out from 2026-11-05 (exper
 2. [Making a good biome scene](references/scene.md): camera, ground and walls from the scanned materials, light against the refs' numbers, the fight, effects, ambient and living nature, the film.
 3. [Judging](references/judging.md): the bar, each biome's realistic references and how they were collected, the measures, the rubric for a scene and an asset, the blind pair, the adversarial loop and its ratchet, briefing a judge.
 4. [Traps](references/traps.md): what cost jobs before. Read it before your first shot.
+5. [The biome kit and its loop](references/kit.md): a biome file's fields, the kit's modules, adding a biome, `loop.ts`'s commands.
 
-## The loop a job follows
+## The loop a job follows (biomes and the kit, D634)
 
-1. Read the last handoff's next steps and only the files it names. `node tools/iso-art/iso-art.ts status` for assets; `node tools/tripo/tripo.ts balance` before anything that spends.
-2. Take one gap: the judge's first, else the handoff's first. Say the number it should move (a stats measure against the refs of the same kind, a check, a clip's read).
-3. Make the change in its own module; one look a change: shoot the still on the render worker (scene.md), measure it with stats.ts, look at it at 960 px and a 1:1 crop where it matters.
-4. Land each checked step on main as its own commit naming iso-art, with the numbers before and after and the still's path in the message: an asset with its ledger, a scene module, a tool fix with its test. Spike tests pass on the worker; `node --test` for the tool.
-5. At a round's end, the blind pairwise judge, then the scorer (judging.md's loop, D634), run by the lead, not the helper (a helper reaches its bound before judging). A change to the shared kit is kept only if no biome loses its pair (the ratchet). A biome's own change is kept only on a clear or strong win; revert one that loses, even slightly (the marsh's mist, twice); a slight win that only fixes a fault (a creature hidden in shade) may stay, said so in the log. Two rounds without a gain stops the line of work.
-6. Hand off: commits, each still's stats line, scores, what failed and why, next steps in order, a `FOR REVIEW` line for each still or film for the developer (the review-desk skill).
+1. **Read** the last handoff's next steps and only the files it names; `node spike/iso/loop.ts history` for where each biome stands.
+2. **Shoot** the baseline: `node spike/iso/loop.ts shoot` (a line a biome: its measures beside its refs' ranges, and whether it matches its kept still). Start it in the background; it waits on the worker.
+3. **Look** at the still the judge's first gap names (960 px, a 1:1 crop where it matters) and say the number it should move: a measure against the refs, a judge's gap.
+4. **Change one thing**, in the kit (a layer, mask, scatter, water, effect, light preset) or a biome's file: a kit change reaches every biome, so every biome is shot after it.
+5. **Shoot** again with `--dirty` (or after landing it): a biome whose still did not move ties without a judge; each that moved gets two briefs in `rounds/<round>/briefs/`.
+6. **Judge**: the lead runs each brief as a subagent, the blind pair and the adversarial judge (judging.md; a helper reaches its bound before judging), and records each answer: `record <round> <biome> pair <A|B|same> <margin>`, `record <round> <biome> score <n> "<gaps>"`. A slight loss prepares a second pair, order swapped: run it too.
+7. **Verdict**: `node spike/iso/loop.ts verdict <round>`. KEEP: land the change on main naming iso-kit, with each biome's line and score before and after in the message; the round's stills are kept. REVERT: undo it (the losers named). A change to one biome alone is kept only on its clear or strong win; a slight win that only fixes a fault (a creature hidden in shade) may stay, said so. The quality bar is the judge's score (approve at 7), never the pair alone; two rounds without a gain stop the line of work.
+8. **Hand off**: commits, each biome's line and score, what failed and why, next steps in order, a `FOR REVIEW` line for each still or film for the developer (the review-desk skill).
+
+## The loop for an asset
+
+1. `node tools/iso-art/iso-art.ts status`; `node tools/tripo/tripo.ts balance` before anything that spends. Take one gap: the judge's first, else the handoff's first, and its number (a check, a clip's read, a measure).
+2. Make the change; look at it at the game camera in a biome (scene.md's still), measure it with stats.ts.
+3. Land each checked step on main as its own commit naming iso-art, with the numbers before and after and the still's path: an asset with its ledger, a tool fix with its test (`node --test`). The blind pair and the scorer at a round's end, run by the lead; keep a change only on a clear or strong win, revert one that loses even slightly (the marsh's mist, twice).
 
 ## Rules
 

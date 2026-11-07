@@ -1,6 +1,6 @@
 # Making a good biome scene
 
-A biome is a scene of the iso spike (`spike/iso/`, D133: throwaway, nothing lasting depends on it), chosen by `--scene NAME`. The ruin at night (`spike/iso/src/ruin/`) is the worked example: copy its split, not its numbers, for a new biome. Build it in steps, a still each, measured and landed on its own: camera and ground; walls and props; light; the fight; effects; ambient; the film.
+A biome is a data file of the iso spike (`spike/iso/`, D133: throwaway, nothing lasting depends on it), `spike/iso/biomes/<name>.ron`, drawn by the shared kit and run by `--biome NAME` (D634, [kit.md](kit.md); `--scene ruin|forest|marsh` reads the same file). What its file cannot say yet is its layout's modules. The ruin at night (`spike/iso/src/ruin/`) is the worked example: copy its split, not its numbers, for a new biome. Build it in steps, a still each, measured and landed on its own: camera and ground; walls and props; light; the fight; effects; ambient; the film.
 
 ## Modules (one each, numbers to tune at its top)
 
@@ -81,6 +81,7 @@ At 55 degrees real water reflects 2% (Fresnel), so it is near black; what reads 
 
 ## Shooting and the film (on the render worker, embargoed machines build nothing)
 
-- Still, from the repository root, `--dirty` for uncommitted code: `cargo xtask remote-render --gpu --dirty --minutes 40 --collect target/job/amb -- sh -c "mkdir -p target/job/amb; cargo test --release --manifest-path spike/iso/Cargo.toml > target/job/amb/test.txt 2>&1; cargo run --release --manifest-path spike/iso/Cargo.toml -- --scene ruin --shot target/job/amb/s.png > target/job/amb/run.txt 2>&1; true"`. Files land in `~/.cache/terra-review/remote/<job>/target/job/`; block with `cargo xtask remote-render --wait <job>`; grep `test result|panicked|ERROR` in its `job.log` and the run file.
+- Every biome at once, measured against its refs and its kept still, with its judges' briefs: `node spike/iso/loop.ts shoot [--biomes a,b] [--film] [--dirty]` ([kit.md](kit.md)). A still runs on the film's fixed step, so unchanged code gives the same still (to 0.0001 of a measure; in real time the fires moved p95 by 0.0025).
+- One still by hand, from the repository root, `--dirty` for uncommitted code: `cargo xtask remote-render --gpu --dirty --minutes 40 --collect target/job/amb -- sh -c "mkdir -p target/job/amb; cargo test --release --manifest-path spike/iso/Cargo.toml > target/job/amb/test.txt 2>&1; cargo run --release --manifest-path spike/iso/Cargo.toml -- --biome ruin --shot target/job/amb/s.png > target/job/amb/run.txt 2>&1; true"`. Files land in `~/.cache/terra-review/remote/<job>/target/job/`; block with `cargo xtask remote-render --wait <job>`; grep `test result|panicked|ERROR` in its `job.log` and the run file.
 - Film: the same with `--size 1280x720 --frames 300 --film 480 --shot target/job/film/f.jpg` (480 frames at a fixed 30 a game second from frame 300), then `ffmpeg -framerate 30 -i <remote>/target/job/film/f-%04d.jpg -c:v libx264 -crf 18 -pix_fmt yuv420p ~/.cache/terra-review/iso-art/film/NAME.mp4`. About 2 minutes with the build, 43 MB back. 12 to 20 s a biome for the review desk.
 - Stills and films go to `~/.cache/terra-review/iso-art/<round>/`, each with its stats line, for the judge and the desk.

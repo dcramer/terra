@@ -332,7 +332,7 @@ function shoot(argv: string[], say: (l: string) => void) {
   h.rounds[round] = rnd;
   saveHistory(h);
   const ties = Object.values(rnd.biomes).filter((e) => e.changed === false).length;
-  if (judges) say(`next: run the ${judges} judge${judges > 1 ? "s" : ""}' briefs in ${join(dir, "briefs")} (the lead, as subagents), record each answer, then: node spike/iso/loop.ts verdict ${round}`);
+  if (judges) say(`next: run the briefs of the ${judges} changed biome${judges > 1 ? "s" : ""} in ${join(dir, "briefs")} (the lead, as subagents), record each answer, then: node spike/iso/loop.ts verdict ${round}`);
   else say(`every biome ties its kept still (${ties}): nothing to judge; node spike/iso/loop.ts verdict ${round} keeps it`);
 }
 
