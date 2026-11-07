@@ -389,7 +389,7 @@ type PropsChanged = (
 /// their base, stopped by walls, props, trees, bodies and roofs, floated by deep water. A body
 /// with no stamina, as in the walker on its own, never tires.
 #[allow(clippy::too_many_arguments)]
-fn walk(
+pub(crate) fn walk(
     time: Res<Time>,
     planet: Res<Planet>,
     site: Option<Res<Site>>,

@@ -22,6 +22,8 @@ terra_core.workspace = true
 terra_gen.workspace = true
 # The character controller (D53): the world's sources in its shapes (`mover_world`).
 terra_motion.workspace = true
+# The walker layer's side of the server (`net`, docs/netcode.md).
+terra_net.workspace = true
 terra_world.workspace = true
 
 [dev-dependencies]

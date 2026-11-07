@@ -37,6 +37,7 @@ pub mod lift;
 pub mod model_files;
 pub mod movement;
 pub mod mover_world;
+pub mod net;
 pub mod options;
 pub mod pace;
 pub mod pose;

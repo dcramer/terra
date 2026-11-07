@@ -128,6 +128,51 @@ pub fn read(
     }
 }
 
+/// An intent on the wire (docs/netcode.md): exact, so a server runs what the player's own
+/// game ran. A held key is the same intent tick after tick, which goes up as a bit.
+impl terra_net::wire::Wire for Intent {
+    fn write(&self, to: &mut terra_net::wire::Writer) {
+        to.varint(self.held);
+        to.varint(self.pressed);
+        // Small turns either way stay small (zigzag).
+        to.varint(u64::from(((self.wheel << 1) ^ (self.wheel >> 31)) as u32));
+        to.bool(self.aim.is_some());
+        if let Some(aim) = self.aim {
+            aim.origin.to_array().write(to);
+            aim.direction.to_array().write(to);
+        }
+        to.bool(self.busy);
+        to.bool(self.choosing);
+    }
+
+    fn read(from: &mut terra_net::wire::Reader) -> Result<Self, terra_net::wire::Malformed> {
+        use terra_net::wire::Malformed;
+        let (held, pressed) = (from.varint()?, from.varint()?);
+        let wheel = u32::try_from(from.varint()?).map_err(|_| Malformed::Range)?;
+        let wheel = ((wheel >> 1) as i32) ^ -((wheel & 1) as i32);
+        let aim = if from.bool()? {
+            let origin = Vec3::from_array(<[f32; 3]>::read(from)?);
+            let direction = Vec3::from_array(<[f32; 3]>::read(from)?);
+            // A stranger's numbers: an aim from nowhere or along nothing is refused.
+            let direction = Dir3::new(direction).map_err(|_| Malformed::Range)?;
+            if !origin.is_finite() {
+                return Err(Malformed::Range);
+            }
+            Some(Ray3d { origin, direction })
+        } else {
+            None
+        };
+        Ok(Intent {
+            held,
+            pressed,
+            wheel,
+            aim,
+            busy: from.bool()?,
+            choosing: from.bool()?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

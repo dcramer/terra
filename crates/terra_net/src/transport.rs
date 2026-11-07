@@ -48,6 +48,21 @@ pub trait ServerTransport {
     fn flush(&mut self) {}
 }
 
+impl<T: ServerTransport + ?Sized> ServerTransport for Box<T> {
+    fn poll(&mut self, into: &mut Vec<FromClients>) {
+        (**self).poll(into);
+    }
+    fn send(&mut self, to: Peer, lane: Lane, bytes: &[u8]) {
+        (**self).send(to, lane, bytes);
+    }
+    fn drop_peer(&mut self, peer: Peer) {
+        (**self).drop_peer(peer);
+    }
+    fn flush(&mut self) {
+        (**self).flush();
+    }
+}
+
 /// A client's end of a transport.
 pub trait ClientTransport {
     fn poll(&mut self, into: &mut Vec<FromServer>);

@@ -6738,6 +6738,7 @@ dependencies = [
  "terra_core",
  "terra_gen",
  "terra_motion",
+ "terra_net",
  "terra_world",
 ]
 

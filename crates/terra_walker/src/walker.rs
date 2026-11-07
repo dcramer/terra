@@ -182,7 +182,7 @@ impl Stamina {
 }
 
 /// Where a player is looking.
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct View {
     /// Along the ground.
     pub forward: Vec3,
@@ -205,6 +205,7 @@ impl Plugin for WalkerPlugin {
         crate::bone_audit::plugin(app);
         camera::plugin(app);
         movement::plugin(app);
+        crate::net::plugin(app);
         app.init_resource::<Hands>()
             .init_resource::<WarpTo>()
             // On entering each world, before the camera's place is propagated, from which
