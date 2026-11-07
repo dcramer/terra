@@ -505,7 +505,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D31](decisions/D31.md) | Bevy version policy | Tech | Agent | Decided | Pinned, now to 0.20. |
 | [D32](decisions/D32.md) | Terrain meshing library | Tech | Agent | Decided | The `transvoxel` crate, in `terra_voxel`… |
 | [D33](decisions/D33.md) | Physics | Tech | Agent | Leaning | Avian for rigid bodies: loose objects… |
-| [D34](decisions/D34.md) | Networking library | Tech | Agent | Leaning | Our own messages over `renet`, with a Steam transport… |
+| [D34](decisions/D34.md) | Networking library | Tech | Agent | Decided | `renet` behind a transport seam of two lanes… |
 | [D35](decisions/D35.md) | UI | Tech | Agent | Leaning | Bevy's own UI for the game; `bevy_egui` for developer… |
 | [D36](decisions/D36.md) | Coordinates | Tech | Agent | Leaning | One coordinate frame per world, with positions relative… |
 | [D40](decisions/D40.md) | Materials in voxels | Tech | Agent | Decided | Voxels carry a material as well as a shape… |
@@ -614,6 +614,9 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D622](decisions/D622.md) | The woods' grown trees stream round the player in blocks of their grid, the far cards laid at the start standing for every one | Tech | Agent | Decided | The woods' grid of tree cells (`terra_land::woods`, a… |
 | [D623](decisions/D623.md) | A world's land is generated off the main thread, behind the loading screen | Tech | Agent | Decided | Entering a world first passes through a state of its… |
 | [D631](decisions/D631.md) | The figure's transitions follow shipped engines' methods, measured on the animation course | Tech | Agent | Decided | How the figure goes from one clip to the next is… |
+| [D636](decisions/D636.md) | The wire is our own bit packer with a total reader, and `terra_net` knows no game type | Tech | Agent | Decided | `terra_net` is plain Rust, generic over what the rules… |
+| [D651](decisions/D651.md) | The server's tick answers intent; a client predicts its own body and shows the rest in the past | Tech | Agent | Decided | A client sends its intent for each numbered tick (D138)… |
+| [D652](decisions/D652.md) | State is sent as the most recent, by area and priority within a byte budget; world changes as ordered operations kept by region | Tech | Agent | Decided | A thing on the wire is an entity made of parts… |
 
 ## Tools and workflow
 

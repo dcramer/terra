@@ -1,0 +1,101 @@
+# Netcode
+
+Status: **designed, 2026-11-06; `terra_net` under way** (D34, D651, D652, D636). How the server of [multiplayer.md](multiplayer.md) (D51) talks to its clients: what is sent, when, and how a client stays smooth. The survey behind it is [research/2026-11-06-netcode.md](../research/2026-11-06-netcode.md). It serves v0 (a host and a few friends, four clients at 100 ms and 1% loss, two realms on one host) and keeps D52's thousand possible: nothing is sent to everyone, and every cost is per area.
+
+## The model
+
+As shipped server-authoritative games do it (Source, Overwatch, Unreal, Tribes and Halo for what is sent):
+
+- **The server decides, on D138's 64 Hz tick.** Ticks are numbered. A client sends intent; only the server's tick changes shared state (v0's third seam).
+- **Your own body is predicted.** The client runs the same mover on its intent at once, keeps what it predicted, and when the server's answer for a tick differs, sets the body to the answer and replays the intents since (D651).
+- **Everything else is shown in the past**, between the last two states received (snapshot interpolation), about 62 ms back.
+- **State is sent as the most recent, never as history**: unreliable, by area, by priority, within a byte budget a packet (D652).
+- **World changes are operations in the server's order** (D21, D29), reliable and ordered, kept per area so an arrival is sent the area's record, not the world's.
+- **Always a client** (D51): solo, the game is a client of a server in the same process over the in-memory transport. There is one code path, as Minecraft's single player has been since it moved to an integrated server.
+
+Not lockstep, though D30 makes every machine compute alike: a drop-in world cannot wait for its slowest player. D30 instead makes predictions right nearly always.
+
+## The crate
+
+`terra_net` is plain Rust with no Bevy and knows no game type (D28). It gives the machinery; each rules crate says what its own state looks like on the wire.
+
+| Module | Holds |
+|---|---|
+| `wire` | A bit packer and the `Wire` trait (D636): ranged integers, quantised floats, varints. The reader is total: any bytes give a value or an error, never a panic, and every length is capped |
+| `transport` | The seam (D34): two lanes, `Ordered` (reliable, in order) and `State` (unreliable), as a server's and a client's trait. `loopback`: in memory, with latency, jitter, loss, duplication and reordering drawn from a seed on a clock the test advances, so a run repeats exactly. `udp` (a feature): `renet` with `renet_netcode` |
+| `ack` | Sequence numbers with an ack and a 32-packet ack field in every `State` packet (Fiedler), ours because the transport's unreliable lane reports none |
+| `clock` | The client's estimate of the server's tick and how far ahead of it to run |
+| `interest` | Which cells a client is sent, on a hashed grid of cubes over the realm, round or under ground alike |
+| `server`, `client` | The two state machines: connect, entities, operations, intents |
+| `predict` | The history of a predicted state and its replay |
+
+**A thing on the wire is an entity made of parts.** An entity has an id the server gives, a kind (data, D136), a place (for interest and priority) and a few parts, each a small versioned record a rules crate defines and encodes: a body's motion, its stance, what it wears, its health. The server encodes a changed part once a tick and shares the bytes among every client it goes to, so the cost is by what changed, not by clients times entities. A part is public or its owner's alone (your own inventory, your body at full precision).
+
+**Rooms.** A connection is in one room, a realm instance (instances.md); entities, interest and operation records are a room's. A crossing moves the connection and its character between rooms on the server.
+
+The Bevy side is thin: the server and the client each sit in a resource, a system before `Sim::Act` writes each player's `Intent` from what arrived, one after `Sim::End` writes changed parts and sends. Each layer registers its own parts (D198): the walker a body's motion and look, survival what is carried, creatures theirs. A bot or load-test client uses `terra_net::client` with no Bevy at all (D73).
+
+## Ticks, intent and prediction (D651)
+
+- **Intent**: each `State` packet from a client carries its intents for the last ticks not yet acknowledged (at most 8, 125 ms), so a lost packet loses nothing. The server keeps a small buffer a player and takes tick T's intent at tick T; if it is missing it repeats the last (Overwatch).
+- **Clock**: the client runs ahead of the server by half the round trip plus a margin, so its intent arrives just before it is needed. Every server packet says how early the last intent arrived; the client speeds or slows its tick by at most 2% to hold the margin at two ticks plus measured jitter (Overwatch, Rocket League). A jump of more than a second resets it.
+- **Prediction**: the client keeps, for each tick not yet answered, its intent and its body after it (`terra_motion`'s `Body` is plain and `Clone`). The server's packet carries the body's authoritative state for the last intent tick it ran. Equal within a tolerance (1 mm, 1 mm/s): the history up to it is dropped. Different: the body is set to the answer and the later intents are replayed against the world as it now is, other bodies where they are shown (Unreal's saved moves). The picture eases over the error (`tick::Smoothed` already separates where a body is from where it is drawn).
+- **Others**: shown at the server's time less two send intervals plus jitter; between two states it interpolates, past the last it holds for at most 250 ms, then stops.
+- **Blows**: a player's blow is judged on the server against creatures where that player saw them, rewound at most 250 ms (Source's lag compensation). No player strikes a player (D2). It comes with the fight's job, not the first ones.
+- **World changes are not predicted in v0**: a dig shows when the server's order arrives, the swing's wind-up covering the round trip. Minecraft predicts and reverts; we measure the feel at 100 ms first.
+
+## What is sent, and when (D652)
+
+- **Rate**: the server sends each client one `State` packet every second tick (32 Hz), at most 1,200 bytes (under any path's MTU, never fragmented).
+- **Most recent state, by priority**: for each client the server knows, per part, the version that client last acknowledged. A part whose version is newer is owed. Owed parts gain priority each tick by kind and nearness, the packet is filled from the highest, and what does not fit waits and rises (Tribes, Halo, Fiedler's priority accumulator). A thing at rest costs nothing; a crowd degrades by updating far things less often, never by growing the packet.
+- **Interest**: cells of 32 m; a client is sent the entities in cells within its radius (128 m to start, a number per kind later) and stops being sent them one cell further out (hysteresis). Leaving is a part's version too, sent until acknowledged, so no reliable message is needed and order cannot go wrong.
+- **Operations**: on `Ordered`. A client asks; the server checks reach, ownership and permission (D51), gives the operation the next number in its region's record (regions of 256 m) and sends it to every client whose interest holds the region. A client entering a region says the number it has and is sent what follows: a late join is the same path. Compacting a long record into a snapshot is D21's later step.
+- **Events** (a noise, a blow landing): on `Ordered`, by area, in v0. If the soak shows them waiting behind a lost packet, they move to the `State` lane, resent until acknowledged.
+- **Quantising**: positions to 1/512 m within a cell-relative frame, velocities to 1/64 m/s, directions to 12 bits a turn; a client's own body unquantised.
+
+First numbers, each a reading until its test has a planted fault (D632); they set v0's unset budgets:
+
+| Budget | First target |
+|---|---|
+| Down, a player among 3 others and 50 creatures | 8 kB/s |
+| Up, a player | 4 kB/s |
+| Server, per client per tick, to pick and pack | 20 µs |
+| A late joiner correct around itself, on loopback | under 1 s |
+
+## Connecting
+
+1. `Hello`: the protocol's version (a hash of the wire schema and the game's data fingerprint), the player's identity and name. The identity is a public key whose secret stays on the player's machine (D592); the server proves it by a signed challenge. Steam's identity replaces it with the relay (D34).
+2. `Refuse` with a reason a player can read (wrong version, world full, not allowed), or `Welcome`: the tick, the room's realm and seed (v0's second seam: the seed is all a client needs to make the land), the world's clock, the entity that is yours.
+3. The area arrives by the ordinary paths (operations for its regions, then state); the client is `Ready` when its own region's record is whole.
+4. Leaving, by choice or timeout (10 s): the character is saved where it stood (D592) and its body leaves the world. When the host leaves, every client is told why, the world is saved and the session ends.
+
+## How each crate crosses
+
+| Crate | Owns | Sent as |
+|---|---|---|
+| `terra_motion`, `terra_walker` | Bodies and the mover | A motion part (place, velocity, facing, ground state); the owner's at full precision for prediction; intent up |
+| `terra_core`, `terra_voxel`, `terra_build` | The ground and bases | Operations, in order, by region |
+| `terra_items`, `terra_survival` | What is carried, vitals | Operations the server checks; an owner-only part for the pack, a public one for what is worn |
+| `terra_creatures` | Creatures, simulated only on the server, in cells any player is near | Motion, and the move a creature is in with the tick it began, so each client plays the clip itself |
+| `terra_climate`, the sky | Nothing travels but the clock and the seed (D540) | `Welcome`, then a clock correction |
+
+## Tests, with no window
+
+Each check has a planted fault beside it (D632).
+
+- **Milestone D** (engine.md): a server and two clients on loopback over a toy state end the same; a third joining late catches up. Fault: an operation dropped from one region's record must fail it.
+- **Soak**: four clients, 100 ms, 1% loss, jitter and reordering, 30 simulated minutes in seconds of real time: no lasting mismatch, bytes a player a second reported. Fault: acknowledgements switched off must show as state never settling.
+- **Prediction**: a body walked on the real mover at 100 ms: no corrections on clear ground, a planted push corrected within a round trip. Fault: a client mover with other gravity must be corrected every tick.
+- **The reader**: random and truncated bytes never panic and never allocate past the caps.
+
+## Build order
+
+1. `terra_net` plain: `wire`, `transport` with loopback, `ack`, `interest`, `server`, `client`, operations, milestone D's test and the soak.
+2. `clock` and `predict`, and two bodies walking together on the real mover in one process, with the prediction test and the first bytes-a-second reading.
+3. The `udp` transport and connecting: version, identity, refusals.
+4. The game as a client of its own server (the Bevy side), then a second player in it.
+5. The fight, the pack and creatures across the seam, each with its track.
+
+## Open, for the developers
+
+- **A body on disconnect**: recommended, it leaves at once and the character is saved where it stood; the other choice is a sleeping body that can be hurt.

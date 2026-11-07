@@ -67,11 +67,11 @@ An animation pipeline gives a body that moves; nothing in the list says what it 
 
 ## Server (6)
 
-The largest risk and the only track at zero. No `terra_net` exists yet.
+The largest risk. The design is [netcode.md](netcode.md) (D34, D651, D652, D636), from the survey in research/2026-11-06-netcode.md; `terra_net` follows its build order.
 
 - **Have**: the fixed tick (D138), rules in plain crates (D28), operations in order (D21), the same world on every machine (D30), and the plan to use `renet` with our own messages (D34).
 - **Need**:
-  - **A design first** (D49). multiplayer.md says what a server must do, not how: there is no research note on netcode and no design for prediction, what is sent or when. D34 chose `renet` and no replication framework without one. The first job surveys shipped games and current Bevy libraries, then writes the design, and D34 stands or changes on it.
+  - The design built (netcode.md): written 2026-11-06 for the developers to read (D49); D34 stands on its survey.
   - `terra_net`, and a server started inside the game. The same server running with no window is for scripted runs now (D51); offering it to players comes later.
   - **Always a client.** Even solo, the drawn game is a client of a server. Otherwise there are two code paths.
   - **Two realms at once.** One player can be in each realm, so a host's server runs both while its own client draws one. instances.md's split (a headless `App` per instance on the server, the client's world in the main `World`) means a host holds its realm twice. Measure that memory before building on it.
