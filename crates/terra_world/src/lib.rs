@@ -93,6 +93,7 @@ pub mod smoke;
 pub mod spatial;
 pub mod start;
 pub mod streaming;
+pub mod system_errors;
 pub mod terrain;
 pub mod threads;
 pub mod tick;

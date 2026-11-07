@@ -111,6 +111,8 @@ pub fn plugin(app: &mut App) {
                 later.run_if(input_just_pressed(LATER)),
                 weather.run_if(input_just_pressed(WEATHER)),
             )
+                // Of the world's clock and climate: none while a world is made (D623).
+                .run_if(terra_world::instance::in_world)
                 .before(Ticking),
         )
         .add_systems(
@@ -122,6 +124,7 @@ pub fn plugin(app: &mut App) {
                 panel::show,
             )
                 .chain()
+                .run_if(terra_world::instance::in_world)
                 .after(Ticking),
         );
 }

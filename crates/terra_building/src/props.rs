@@ -180,7 +180,11 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (load, show, swing, preview).chain())
         .add_systems(
             FixedUpdate,
-            open_and_shut.after(terra_survival::interact::Focusing),
+            // A player's act, so of the world's tick: none while a world is made (D623), when
+            // the site it reads is gone.
+            open_and_shut
+                .in_set(terra_world::tick::Sim::Act)
+                .after(terra_survival::interact::Focusing),
         );
 }
 

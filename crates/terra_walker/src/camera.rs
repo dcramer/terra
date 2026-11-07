@@ -92,6 +92,9 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             PostUpdate,
             follow
+                // In the world's frame (its start): none while a world is made (D623), when a
+                // player crossing between worlds stands in neither.
+                .run_if(terra_world::instance::in_world)
                 .before(TransformSystems::Propagate)
                 .before(terra_world::remote::CameraHold),
         );

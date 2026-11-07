@@ -69,6 +69,7 @@ fn main() -> AppExit {
     }
 
     let mut app = App::new();
+    terra_world::system_errors::plugin(&mut app);
     app.add_plugins((
         shell::ShellPlugin(options.clone()),
         planet::plugin,
