@@ -10,7 +10,7 @@
 use crate::ack::{Acks, Header};
 use crate::identity::Identity;
 use crate::proto::{
-    Down, EntityId, Kind, MOST_INTENTS, MOST_PARTS, Reason, Region, RoomId, Stamp, Up,
+    Down, EntityId, Kind, MOST_EVENTS, MOST_INTENTS, MOST_PARTS, Reason, Region, RoomId, Stamp, Up,
 };
 use crate::transport::{ClientTransport, FromServer, Lane};
 use crate::wire::{Malformed, Reader, Wire, Writer};
@@ -19,8 +19,8 @@ use std::collections::{HashMap, VecDeque};
 /// What the game is told.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Event {
-    /// The server let it in: the room, the entity that is its own, the game's word on the
-    /// room.
+    /// The server let it in, or moved it to another room (a crossing): the room, the entity
+    /// that is its own, the game's word on the room. It holds nothing of a room before.
     Welcome {
         tick: u32,
         room: RoomId,
@@ -35,6 +35,11 @@ pub enum Event {
     },
     /// The records of the regions round it are whole: the world round it is as the server's.
     Ready,
+    /// Something happened near, once, on a tick of the server's: a noise, a blow landing.
+    Happened {
+        tick: u32,
+        bytes: Vec<u8>,
+    },
     /// An entity came near, and one left or is no more.
     Entered(EntityId),
     Gone(EntityId),
@@ -92,6 +97,9 @@ impl Entity {
     }
 }
 
+/// How many events' numbers are remembered: more than are ever unacknowledged at once.
+const HEARD_KEPT: usize = 64;
+
 /// How long a forgotten entity is remembered as forgotten, ticks: longer than any packet is
 /// taken (the acknowledgements refuse one 33 packets old).
 const TOMB_TICKS: u32 = 256;
@@ -107,6 +115,10 @@ pub struct Client {
     /// Its intents the server is not known to hold, oldest first, a tick each.
     intents: VecDeque<(u32, Vec<u8>)>,
     closed: bool,
+    /// The tick it was let into its room: state from before is another room's.
+    floor: u32,
+    /// The numbers of the events lately heard, so a copy is not heard twice.
+    heard_events: VecDeque<u32>,
     /// The server's challenge, and the hello waiting for it.
     challenge: Option<[u8; 32]>,
     asking: Option<(u64, Identity, String)>,
@@ -164,12 +176,18 @@ impl Client {
                         room,
                         you,
                         realm,
-                    }) => events.push(Event::Welcome {
-                        tick,
-                        room,
-                        you,
-                        realm,
-                    }),
+                    }) => {
+                        // Let in, or crossed to another room: what it held was the last's.
+                        self.entities.clear();
+                        self.tombs.clear();
+                        self.floor = tick;
+                        events.push(Event::Welcome {
+                            tick,
+                            room,
+                            you,
+                            realm,
+                        });
+                    }
                     Ok(Down::Op {
                         region,
                         number,
@@ -224,6 +242,25 @@ impl Client {
             }
             self.tombs
                 .retain(|_, at| tick.saturating_sub(*at) < TOMB_TICKS);
+        }
+        // From before it came to this room: nothing of it is this room's.
+        if tick < self.floor {
+            return Ok(());
+        }
+        for _ in 0..from.ranged(MOST_EVENTS as u32)? {
+            let id = u32::try_from(from.varint()?).map_err(|_| Malformed::Range)?;
+            let ago = from.bits(6)? as u32;
+            let bytes = from.run()?;
+            if !self.heard_events.contains(&id) {
+                self.heard_events.push_back(id);
+                if self.heard_events.len() > HEARD_KEPT {
+                    self.heard_events.pop_front();
+                }
+                events.push(Event::Happened {
+                    tick: tick.saturating_sub(ago),
+                    bytes: bytes.to_vec(),
+                });
+            }
         }
         while from.bool()? {
             let id = EntityId(u32::try_from(from.varint()?).map_err(|_| Malformed::Range)?);

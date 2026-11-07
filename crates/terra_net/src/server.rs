@@ -11,7 +11,7 @@ mod replicate;
 
 use crate::ack::Acks;
 use crate::identity;
-use crate::interest::{Grid, Place, cell_of};
+use crate::interest::{Grid, Place, cell_of, distance_squared};
 use crate::proto::{Down, EntityId, Kind, MOST_PARTS, Reason, Region, RoomId, Up};
 use crate::transport::{FromClients, Lane, Peer, ServerTransport};
 use crate::wire::{Wire, Writer};
@@ -136,12 +136,22 @@ enum Sent {
         version: u32,
     },
     Gone(EntityId),
+    Event(u32),
 }
 
 struct Flight {
     seq: u16,
     tick: u32,
     sent: Vec<Sent>,
+}
+
+/// Something that happened near a client, once: a noise, a blow landing. Sent until
+/// acknowledged or too old to matter.
+struct Outgoing {
+    id: u32,
+    tick: u32,
+    sent_at: Option<u32>,
+    bytes: Vec<u8>,
 }
 
 /// An entity a client is to forget: since when, and when it was last told.
@@ -170,6 +180,10 @@ struct Session {
     intents: VecDeque<(u32, Vec<u8>)>,
     last: Option<Vec<u8>>,
     heard: Option<u32>,
+    events: VecDeque<Outgoing>,
+    next_event: u32,
+    /// How long its acknowledgements take to come back, ticks, smoothed.
+    round_trip: Option<f32>,
 }
 
 impl Session {
@@ -190,6 +204,9 @@ impl Session {
             intents: VecDeque::new(),
             last: None,
             heard: None,
+            events: VecDeque::new(),
+            next_event: 0,
+            round_trip: None,
         }
     }
 }
@@ -346,7 +363,9 @@ impl Server {
         }
     }
 
-    /// Lets a client in, to a room, seeing from an entity that is its own. `realm` is the
+    /// Lets a client in, to a room, seeing from an entity that is its own; or, for a client
+    /// already in, moves it to another room (a crossing, instances.md): it is told the new
+    /// room as it was the first, and begins it holding nothing. `realm` is the
     /// game's word on the room, passed on as it is.
     pub fn welcome(
         &mut self,
@@ -359,9 +378,19 @@ impl Server {
         let Some(session) = self.sessions.get_mut(&peer) else {
             return;
         };
+        // Let in, or crossing from another room: either way it holds nothing of this room
+        // yet, and nothing of the last is owed it.
         session.welcomed = true;
         session.room = room;
         session.view = Some(you);
+        session.known.clear();
+        session.leaving.clear();
+        session.flights.clear();
+        session.watching.clear();
+        session.records.clear();
+        session.events.clear();
+        session.settled = false;
+        session.sweep = 0;
         if let Some(entity) = self.entities.get_mut(&you) {
             entity.owner = Some(peer);
         }
@@ -503,6 +532,33 @@ impl Server {
         let record = self.room(room).records.entry(region).or_default();
         record.push(bytes.to_vec());
         (region, record.len() as u32 - 1)
+    }
+
+    /// Something happened at a place, once (a noise, a blow landing): every client near it
+    /// is told, on the state lane, again until it acknowledges or the event is half a second
+    /// old, when it is dropped: a noise late is worse than none.
+    pub fn happen(&mut self, room: RoomId, place: Place, bytes: &[u8]) {
+        let reach = self.config.radius_m * self.config.radius_m;
+        let tick = self.tick;
+        for session in self.sessions.values_mut() {
+            let eye = session.view.and_then(|view| self.entities.get(&view));
+            let near = eye.is_some_and(|eye| distance_squared(eye.place, place) <= reach);
+            if session.welcomed && session.room == room && near {
+                session.next_event += 1;
+                session.events.push_back(Outgoing {
+                    id: session.next_event,
+                    tick,
+                    sent_at: None,
+                    bytes: bytes.to_vec(),
+                });
+            }
+        }
+    }
+
+    /// How long a client's acknowledgements take to come back, ticks: its round trip and a
+    /// tick or so of waiting to be sent. None until one has.
+    pub fn round_trip_ticks(&self, peer: Peer) -> Option<f32> {
+        self.sessions.get(&peer)?.round_trip
     }
 
     /// Ends the tick: each client is sent the operations it lacks and, on the ticks state is

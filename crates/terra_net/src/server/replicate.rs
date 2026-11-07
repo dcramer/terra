@@ -4,7 +4,7 @@
 use super::{Audience, Config, Entity, Flight, Known, Leaving, PartSpec, Room, Sent, Session};
 use crate::ack::{Header, WATCHED};
 use crate::interest::{cell_of, distance_squared};
-use crate::proto::{Down, EntityId, MOST_INTENTS, MOST_PARTS, Stamp};
+use crate::proto::{Down, EntityId, MOST_EVENTS, MOST_INTENTS, MOST_PARTS, Stamp};
 use crate::transport::{Lane, Peer, ServerTransport};
 use crate::wire::{Malformed, Reader, Wire, Writer};
 use terra_gen::hash::QuickMap;
@@ -49,7 +49,7 @@ pub(super) fn heard(
     scratch.acked.clear();
     let new = session.acks.incoming(header, &mut scratch.acked);
     for &seq in &scratch.acked {
-        settle(session, seq);
+        settle(session, seq, tick);
     }
     if new {
         intents(session, &mut from, tick)?;
@@ -89,15 +89,22 @@ fn intents(session: &mut Session, from: &mut Reader, tick: u32) -> Result<(), Ma
 
 /// A packet of ours arrived: the client holds what it carried, unless it began to be sent
 /// the thing anew, or to forget it, after the packet left.
-fn settle(session: &mut Session, seq: u16) {
+fn settle(session: &mut Session, seq: u16, tick: u32) {
     let Some(index) = session.flights.iter().position(|flight| flight.seq == seq) else {
         return;
     };
     let Some(flight) = session.flights.remove(index) else {
         return;
     };
+    let took = tick.saturating_sub(flight.tick) as f32;
+    session.round_trip = Some(
+        session
+            .round_trip
+            .map_or(took, |held| held + (took - held) * 0.125),
+    );
     for sent in flight.sent {
         match sent {
+            Sent::Event(id) => session.events.retain(|event| event.id != id),
             Sent::Part { id, part, version } => {
                 if let Some(known) = session
                     .known
@@ -228,6 +235,60 @@ fn due(sent_at: Option<u32>, tick: u32, resend: u32) -> bool {
     sent_at.is_none_or(|at| tick.saturating_sub(at) >= resend)
 }
 
+/// How long something sent and not acknowledged waits to be sent again, ticks: half again
+/// the client's measured round trip and a send, so a packet is called lost only once its
+/// acknowledgement is truly overdue; the config's number until one is measured, and at most.
+fn resend_after(session: &Session, config: &Config) -> u32 {
+    session
+        .round_trip
+        .map_or(config.resend_ticks, |round_trip| {
+            ((round_trip * 1.5) as u32 + config.send_every).clamp(4, config.resend_ticks)
+        })
+}
+
+/// How long an event is worth telling, ticks: half a second.
+const EVENT_LIFE: u32 = 32;
+
+/// The events a client has not acknowledged, oldest first, as many as the packet and
+/// [`MOST_EVENTS`] allow; those past their life are dropped untold.
+fn events(
+    session: &mut Session,
+    tick: u32,
+    resend: u32,
+    budget: usize,
+    to: &mut Writer,
+    sent: &mut Vec<Sent>,
+) {
+    session
+        .events
+        .retain(|event| tick.saturating_sub(event.tick) <= EVENT_LIFE);
+    let mut room = budget.saturating_sub(to.len() + 1);
+    let chosen: Vec<usize> = session
+        .events
+        .iter()
+        .enumerate()
+        .filter(|(_, event)| due(event.sent_at, tick, resend))
+        .filter(|(_, event)| {
+            let fits = event.bytes.len() + 8 <= room;
+            if fits {
+                room -= event.bytes.len() + 8;
+            }
+            fits
+        })
+        .map(|(index, _)| index)
+        .take(MOST_EVENTS)
+        .collect();
+    to.ranged(chosen.len() as u32, MOST_EVENTS as u32);
+    for index in chosen {
+        let event = &mut session.events[index];
+        to.varint(u64::from(event.id));
+        to.bits(u64::from(tick - event.tick), 6);
+        to.run(&event.bytes);
+        event.sent_at = Some(tick);
+        sent.push(Sent::Event(event.id));
+    }
+}
+
 /// How many entities that would not fit are passed over before a packet is called full.
 const MOST_MISSES: usize = 8;
 
@@ -243,6 +304,7 @@ pub(super) fn send(
 ) {
     let (tick, config) = (world.tick, world.config);
     let budget = config.packet_bytes;
+    let resend = resend_after(session, config);
     let mut to = Writer::reusing(std::mem::take(&mut scratch.packet));
     let header = session.acks.outgoing();
     header.write(&mut to);
@@ -256,9 +318,10 @@ pub(super) fn send(
     }
     .write(&mut to);
     let mut sent = Vec::new();
+    events(session, tick, resend, budget, &mut to, &mut sent);
 
     for (&id, leaving) in session.leaving.iter_mut() {
-        if !due(leaving.sent_at, tick, config.resend_ticks) {
+        if !due(leaving.sent_at, tick, resend) {
             continue;
         }
         if to.len() + 7 > budget {
@@ -282,7 +345,7 @@ pub(super) fn send(
         let Some(entity) = world.entities.get(&id) else {
             continue;
         };
-        let again = due(known.sent_at, tick, config.resend_ticks);
+        let again = due(known.sent_at, tick, resend);
         let (mut mask, mut weight) = (0u8, 0.0f32);
         for (index, part) in entity.parts.iter().enumerate() {
             let Some(part) = part else { continue };

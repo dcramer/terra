@@ -134,6 +134,11 @@ const SEEDED: [&str; 3] = ["seed", "state", "self."];
 /// takes the world's seed instead.
 const KEYED_BY_PLACE: &[(&str, &str, &str)] = &[
     (
+        "crates/terra_net/src/identity.rs",
+        "challenge",
+        "a connection's challenge from the server's own secret (D592): who may join, not the world; a world's seed is public and would let a hello be forged",
+    ),
+    (
         "crates/terra_build_layout/",
         "",
         "a build laid from its own cells (a Base's grid): its boards, stones, stairs and trims follow what is built, as a blueprint's, the same in every world; what is built and where is the world's",

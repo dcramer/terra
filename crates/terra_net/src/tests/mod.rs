@@ -9,6 +9,7 @@
 
 mod hostile;
 mod milestone;
+mod rooms;
 mod soak;
 
 use crate::client::{Client, Event as Heard};
@@ -286,7 +287,7 @@ impl Table {
                     }
                     Heard::Ready => seat.ready_after = Some(seat.ticks),
                     Heard::Closed(reason) => seat.closed = Some(reason),
-                    Heard::Entered(_) | Heard::Gone(_) => {}
+                    Heard::Entered(_) | Heard::Gone(_) | Heard::Happened { .. } => {}
                 }
             }
             seat.ticks += 1;

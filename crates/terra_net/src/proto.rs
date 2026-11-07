@@ -2,8 +2,9 @@
 //! lane, and the shape of a state packet each way.
 //!
 //! A state packet down: [`Header`](crate::ack::Header), the tick it is the state after, the
-//! newest of the client's intents the server holds and how many ticks early it came, then
-//! items to the packet's end. An item is an entity gone, or some of its parts' bytes, with its
+//! newest of the client's intents the server holds and how many ticks early it came, the
+//! events it has not acknowledged (each with its number and how many ticks ago it happened),
+//! then items to the packet's end. An item is an entity gone, or some of its parts' bytes, with its
 //! kind while the client may not know it yet. A state packet up: the header, the newest
 //! intent's tick and the intents for the ticks up to it not yet known to have arrived, one
 //! equal to the one before it as a single bit.
@@ -15,6 +16,8 @@ use crate::wire::{Malformed, Reader, Wire, Writer};
 pub const MOST_PARTS: usize = 8;
 /// The most intents a state packet repeats (D651): 125 ms of ticks.
 pub const MOST_INTENTS: usize = 8;
+/// The most events a state packet carries.
+pub const MOST_EVENTS: usize = 15;
 /// The longest name a player gives, bytes.
 pub const MOST_NAME: usize = 32;
 
