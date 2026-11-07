@@ -195,7 +195,11 @@ fn show(
     args: Res<crate::Args>,
     clock: Res<Clock>,
     hit: Res<Hit>,
-    mut scuffs: Query<&mut super::mark::Mark, With<Scuff>>,
+    cues: Res<Cues>,
+    mut scuffs: Query<
+        (&mut super::mark::Mark, &mut Transform),
+        (With<Scuff>, Without<WorldAssetRoot>),
+    >,
     mut bodies: Query<&mut Transform, With<WorldAssetRoot>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     stage: Res<Stage>,
@@ -205,8 +209,17 @@ fn show(
     } else {
         clock.t - hit.at
     };
-    for mut mark in &mut scuffs {
-        mark.age = a;
+    for (mut mark, mut tr) in &mut scuffs {
+        // In play the scuff is the player's blow's, on the floor under where it bit
+        // (play/strike.rs's contact), not the staged one's (held back while he plays).
+        mark.age = match (args.play, cues.contact) {
+            (true, Some(c)) => {
+                tr.translation = scuff_at(&c);
+                clock.t - cues.blow
+            }
+            (true, None) => -1.0,
+            _ => a,
+        };
     }
     // In play the ogre's flinch and flash are play's own blows' (play/strike.rs).
     let Some(ogre) = hit.ogre.filter(|_| !args.play) else {
@@ -230,6 +243,11 @@ fn show(
             }
         }
     }
+}
+
+/// Where a blow's scuff lies: on the floor straight under the bite.
+fn scuff_at(c: &crate::kit::effects::Contact) -> Vec3 {
+    Vec3::new(c.point.x, c.floor, c.point.z)
 }
 
 #[cfg(test)]
