@@ -20,8 +20,106 @@ pub struct Grounded {
     pub floor: f32,
 }
 
+/// A posed body standing on the floor at height `floor` (m): its blob lies under its feet
+/// (the joints named `foot_*` and `ball_*`, Tripo's and Unreal's), not its bounds, which
+/// are its bind pose's (iso-kit j42), and follows them as its pose moves them.
+#[derive(Component)]
+pub struct Feet {
+    pub floor: f32,
+}
+
+/// A posed body's blob and the footprint it was made for (m).
+#[derive(Component)]
+struct Under {
+    blob: Entity,
+    size: Vec2,
+}
+
+/// A foot this far over the floor (m) is in the air: its stride's swing casts no contact.
+const LIFTED: f32 = 0.22;
+/// A sole's half-width about its joints (m).
+const SOLE: f32 = 0.08;
+
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, lay);
+    app.add_systems(Update, (lay, under_feet));
+}
+
+/// The footprint of a body's feet in its own turn: the joints near the floor (all of them if
+/// every one is lifted), widened by a sole, as (middle, half-size) in metres; none with no
+/// feet.
+pub fn footprint(joints: &[Vec3], floor: f32) -> Option<(Vec2, Vec2)> {
+    let down: Vec<Vec3> = joints
+        .iter()
+        .copied()
+        .filter(|p| p.y < floor + LIFTED)
+        .collect();
+    let feet = if down.is_empty() { joints } else { &down };
+    let (lo, hi) = feet.iter().fold((Vec2::MAX, Vec2::MIN), |(lo, hi), p| {
+        (lo.min(p.xz()), hi.max(p.xz()))
+    });
+    (!feet.is_empty()).then(|| ((lo + hi) / 2.0, (hi - lo) / 2.0 + Vec2::splat(SOLE)))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn under_feet(
+    mut commands: Commands,
+    bodies: Query<(Entity, &Feet, &GlobalTransform, Option<&Under>)>,
+    children: Query<&Children>,
+    joints: Query<(&Name, &GlobalTransform)>,
+    mut placed: Query<&mut Transform>,
+    mut images: ResMut<Assets<Image>>,
+    mut quads: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (body, feet, at, under) in &bodies {
+        let (_, rot, pos) = at.to_scale_rotation_translation();
+        let f = rot * Vec3::Z;
+        let turn = Quat::from_rotation_y(f.x.atan2(f.z));
+        let frame = Affine3A::from_rotation_translation(turn, pos).inverse();
+        let points: Vec<Vec3> = children
+            .iter_descendants(body)
+            .filter_map(|e| joints.get(e).ok())
+            .filter(|(n, _)| n.as_str().starts_with("foot_") || n.as_str().starts_with("ball_"))
+            .map(|(_, t)| {
+                let p = frame.transform_point3(t.translation());
+                Vec3::new(p.x, t.translation().y, p.z)
+            })
+            .collect();
+        let Some((mid, half)) = footprint(&points, feet.floor) else {
+            continue;
+        };
+        let size = (half + Vec2::splat(MARGIN)) * 2.0;
+        let centre = pos + turn * Vec3::new(mid.x, 0.0, mid.y);
+        let place = Transform::from_translation(Vec3::new(centre.x, feet.floor + LIFT, centre.z))
+            .with_rotation(turn * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2));
+        match under {
+            Some(u) => {
+                if let Ok(mut t) = placed.get_mut(u.blob) {
+                    *t = place.with_scale((size / u.size).extend(1.0));
+                }
+            }
+            None => {
+                let seed = (pos.x * 131.0 + pos.z * 17.0).to_bits() % 9973;
+                let material = materials.add(StandardMaterial {
+                    base_color: Color::BLACK,
+                    base_color_texture: Some(images.add(blob(half, seed))),
+                    alpha_mode: AlphaMode::Blend,
+                    unlit: true,
+                    ..default()
+                });
+                let blob = commands
+                    .spawn((
+                        Mesh3d(quads.add(Rectangle::new(size.x, size.y))),
+                        MeshMaterial3d(material),
+                        place,
+                        NotShadowCaster,
+                        RenderLayers::layer(super::water::LAYER),
+                    ))
+                    .id();
+                commands.entity(body).insert(Under { blob, size });
+            }
+        }
+    }
 }
 
 /// Texels a metre of a blob's image, and its largest side.
@@ -152,6 +250,20 @@ mod tests {
         }
         // The stain reaches further where its noise is high.
         assert!(shade(0.28, 1.0) > shade(0.28, 0.0) + 0.03);
+    }
+
+    /// A walker's footprint spans its planted feet, not a foot swinging in the air, and is
+    /// a sole wider; with every foot lifted it spans them all.
+    #[test]
+    fn a_footprint_is_the_planted_feet() {
+        let planted = [Vec3::new(-0.1, 0.1, 0.3), Vec3::new(-0.1, 0.05, 0.45)];
+        let swing = Vec3::new(0.12, 0.35, -0.3);
+        let (mid, half) = footprint(&[planted[0], planted[1], swing], 0.0).unwrap();
+        assert!((mid - Vec2::new(-0.1, 0.375)).length() < 1e-5, "{mid}");
+        assert!((half - Vec2::new(SOLE, 0.075 + SOLE)).length() < 1e-5, "{half}");
+        let (mid, _) = footprint(&[swing], 0.0).unwrap();
+        assert!((mid - swing.xz()).length() < 1e-5);
+        assert!(footprint(&[], 0.0).is_none());
     }
 
     #[test]

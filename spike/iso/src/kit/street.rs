@@ -149,7 +149,10 @@ pub struct Lamps {
 /// `at` and `height` up a front of `side`, flat on the wall or a `blade` standing out from
 /// it; it glows at `nits` and lights the street around it in `colour` at `lumens`, out to
 /// `range` metres (a short one makes a pool that falls off to dark), its light `shadows`
-/// cast or not.
+/// cast or not. With a `pool` (cone degrees, metres out from the wall, lumens) its light on
+/// the street is a spot from the sign aimed down at the pavement that far out, and `lumens`
+/// and `range` only its glow on the wall about it, so the face falls dark above and beside
+/// it instead of taking the sign's colour whole (iso-kit j42: "neon floods the face").
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Sign {
@@ -167,6 +170,8 @@ pub struct Sign {
     pub range: f32,
     #[serde(default)]
     pub shadows: bool,
+    #[serde(default)]
+    pub pool: Option<(f32, f32, f32)>,
 }
 
 fn nine() -> f32 {
@@ -185,7 +190,9 @@ pub enum Line {
 /// A model (under `assets/`) at each x of `at` on `side`'s `line`, moved `out` metres away
 /// from the road (into it when negative; from the middle on `Road`), turned `turn` degrees
 /// from facing the road, scaled `scale`; a rigged one (a person on the pavement) held in its
-/// `pose`, a clip of its GLB by name and the time in it (the ruin's `Pose`).
+/// `pose`, a clip of its GLB by name and the time in it (the ruin's `Pose`), and edged by
+/// `rim` times the fighters' cold rim band (rim.rs; none at 0), so a dark figure reads off
+/// the dark wet street as the ARPGs lift theirs.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Prop {
@@ -201,6 +208,8 @@ pub struct Prop {
     pub scale: f32,
     #[serde(default)]
     pub pose: Option<(String, f32)>,
+    #[serde(default)]
+    pub rim: f32,
 }
 
 fn deep() -> f32 {
@@ -601,9 +610,19 @@ fn spawn(
             let yaw = p.side.facing() + p.turn.to_radians();
             let body = model(&mut commands, &asset, &p.model, at, yaw, p.scale);
             // A rigged body's bounds are its bind pose's, a square far wider than its feet
-            // (j40's walker stood in a 1.5 m black square): only still props are grounded.
+            // (j40's walker stood in a 1.5 m black square): a still prop is grounded by its
+            // bounds, a posed body by its feet (kit/contact.rs).
             if p.pose.is_none() {
                 commands.entity(body).insert(Grounded { floor: at.y });
+            } else {
+                commands
+                    .entity(body)
+                    .insert(super::contact::Feet { floor: at.y });
+            }
+            if p.rim > 0.0 {
+                commands
+                    .entity(body)
+                    .insert(crate::rim::Fighter::valued(1.0, p.rim));
             }
             if let Some((clip, time)) = &p.pose {
                 // The pose names its clip for the life of the app: a few names, once, at
@@ -890,16 +909,37 @@ fn signs(
             ));
         }
         let lamp = mid + to_road * if sg.blade { 0.4 } else { 0.6 };
-        commands.spawn((
+        let mut glow = commands.spawn((
             PointLight {
                 color: sg.colour.color(),
                 intensity: sg.lumens,
                 range: sg.range,
                 radius: (w.max(h) * 0.3).min(0.6),
-                shadow_maps_enabled: sg.shadows,
+                shadow_maps_enabled: sg.shadows && sg.pool.is_none(),
                 ..default()
             },
             Transform::from_translation(lamp),
+        ));
+        let Some((cone, reach, lumens)) = sg.pool else {
+            glow.insert(Glint);
+            continue;
+        };
+        // The pool: down from the sign onto the pavement `reach` out from the wall, its
+        // cone's edge grazing the wall a little under the sign, so the face lights only
+        // below it and falls off with the distance (the ARPGs' pool under a light).
+        let foot = Vec3::new(sg.at, st.kerb.1, s * (wall - reach));
+        commands.spawn((
+            SpotLight {
+                color: sg.colour.color(),
+                intensity: lumens,
+                range: (lamp - foot).length() + 3.0,
+                radius: (w.max(h) * 0.3).min(0.6),
+                inner_angle: cone.to_radians() * 0.5,
+                outer_angle: cone.to_radians(),
+                shadow_maps_enabled: sg.shadows,
+                ..default()
+            },
+            Transform::from_translation(lamp).looking_at(foot, Vec3::X),
             Glint,
         ));
     }

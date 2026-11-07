@@ -14,7 +14,11 @@
 use super::light::Colour;
 use super::street::Side;
 use crate::forest::Rng;
+use bevy::asset::embedded_asset;
+use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
+use bevy::render::render_resource::AsBindGroup;
+use bevy::shader::ShaderRef;
 use serde::Deserialize;
 
 /// A front's bays: the kit's GLB (under `assets/`), its scenes by index for the street
@@ -59,6 +63,81 @@ pub struct Bays {
     /// card on the set-back face behind each lit bay.
     #[serde(default)]
     pub rooms: Option<super::rooms::Rooms>,
+    /// The painted plaster weathered (kit/wall.wesl): none, the paint and grime alone.
+    #[serde(default)]
+    pub wall: Option<Wall>,
+}
+
+/// A front's plaster weathered (iso-kit j42, the judge's "one flat wall with no plaster or
+/// stains"): a scan of `assets/materials/` (`scan`, at its true `metres`) laid over the paint
+/// in world space, its value and stains at `contrast` (1 its own), the paint keeping its
+/// tint; `streaks` of dirt washed down from each upper storey's string course and its
+/// `sill` (m over the storey's floor), out to `longest` m; grime up its `foot`.
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Wall {
+    pub scan: String,
+    #[serde(default = "two")]
+    pub metres: f32,
+    #[serde(default = "one")]
+    pub contrast: f32,
+    #[serde(default)]
+    pub streaks: f32,
+    #[serde(default = "sill")]
+    pub sill: f32,
+    #[serde(default = "longest")]
+    pub longest: f32,
+    #[serde(default)]
+    pub foot: f32,
+}
+
+fn two() -> f32 {
+    2.0
+}
+
+fn one() -> f32 {
+    1.0
+}
+
+fn sill() -> f32 {
+    0.9
+}
+
+fn longest() -> f32 {
+    1.8
+}
+
+/// The plaster's material: the module's own, weathered by wall.wesl.
+pub type WallMaterial = ExtendedMaterial<StandardMaterial, WallExt>;
+
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct WallExt {
+    /// x the scan's metres, y its contrast, z the streaks', w the foot's grime.
+    #[uniform(100)]
+    pub look: Vec4,
+    /// x the storey's height, y the longest streak, z the sills' height, w their share.
+    #[uniform(101)]
+    pub storey: Vec4,
+    #[texture(102)]
+    #[sampler(103)]
+    pub scan: Handle<Image>,
+}
+
+impl MaterialExtension for WallExt {
+    fn fragment_shader() -> ShaderRef {
+        "embedded://iso/kit/wall.wesl".into()
+    }
+}
+
+impl Wall {
+    /// The weathering for bays a `storey` tall, its scan loaded.
+    fn ext(&self, asset: &AssetServer, storey: f32) -> WallExt {
+        WallExt {
+            look: Vec4::new(self.metres, self.contrast, self.streaks, self.foot),
+            storey: Vec4::new(storey, self.longest, self.sill, 0.6),
+            scan: asset.load(format!("materials/{}/color.jpg", self.scan)),
+        }
+    }
 }
 
 fn plaster() -> String {
@@ -73,10 +152,13 @@ fn plaster() -> String {
 pub struct Paint {
     plaster: String,
     tint: LinearRgba,
+    wall: Option<WallExt>,
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, paint);
+    embedded_asset!(app, "wall.wesl");
+    app.add_plugins(MaterialPlugin::<WallMaterial>::default())
+        .add_systems(Update, paint);
 }
 
 /// Grime's colour, multiplied in: a sooty brown.
@@ -116,7 +198,9 @@ fn paint(
         Option<&bevy::gltf::GltfMaterialName>,
     )>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut weathered: ResMut<Assets<WallMaterial>>,
     mut made: Local<Made>,
+    mut walls: Local<std::collections::HashMap<AssetId<StandardMaterial>, Handle<WallMaterial>>>,
 ) {
     for (root, p) in &roots {
         let mut seen = false;
@@ -149,6 +233,28 @@ fn paint(
                     h
                 }
             };
+            if let Some(ext) = &p.wall {
+                // The weathered copy of the painted one, one a painted material.
+                let w = match walls.get(&h.id()) {
+                    Some(w) => w.clone(),
+                    None => {
+                        let Some(base) = materials.get(&h).cloned() else {
+                            continue;
+                        };
+                        let w = weathered.add(ExtendedMaterial {
+                            base,
+                            extension: ext.clone(),
+                        });
+                        walls.insert(h.id(), w.clone());
+                        w
+                    }
+                };
+                commands
+                    .entity(e)
+                    .remove::<MeshMaterial3d<StandardMaterial>>()
+                    .insert(MeshMaterial3d(w));
+                continue;
+            }
             m.0 = h;
         }
         if seen {
@@ -251,6 +357,7 @@ pub fn spawn(
     let s = side.z();
     let turn = Quat::from_rotation_y(side.facing());
     let scene = |i: usize| asset.load(GltfAssetLabel::Scene(i).from_asset(b.model.clone()));
+    let wall_ext = b.wall.as_ref().map(|w| w.ext(asset, b.storey));
     // A module, its plaster painted as its column and storey weather (`Bays::tint`); the
     // end piers the paint itself.
     let mut module = |i: usize, at: Vec3, k: f32, tint: Option<LinearRgba>| {
@@ -264,6 +371,7 @@ pub fn spawn(
             e.insert(Paint {
                 plaster: b.plaster.clone(),
                 tint,
+                wall: wall_ext.clone(),
             });
         }
     };
@@ -355,6 +463,7 @@ mod tests {
             grime: 0.0,
             plaster: "plaster".into(),
             rooms: None,
+            wall: None,
         }
     }
 

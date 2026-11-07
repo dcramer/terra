@@ -88,6 +88,7 @@
                     colours: [Srgb(1.0, 0.72, 0.42), Srgb(0.62, 0.8, 1.0)],
                     paint: Srgb(0.78, 0.5, 0.4), grime: 0.35,
                     back: 2.2,
+                    wall: (scan: "concrete_wall_006", contrast: 1.2, streaks: 0.7, foot: 0.6),
                     rooms: (tv: 0.2, blinds: 0.25, curtains: 0.25, shut: 0.3,
                             cloth: [Srgb(0.55, 0.12, 0.1), Srgb(0.75, 0.62, 0.4)],
                             shutters: [Srgb(0.42, 0.45, 0.43), Srgb(0.45, 0.35, 0.25)]))),
@@ -99,6 +100,7 @@
                     colours: [Srgb(1.0, 0.72, 0.42), Srgb(1.0, 0.85, 0.6)],
                     paint: Srgb(0.9, 0.84, 0.68), grime: 0.45,
                     back: 2.2,
+                    wall: (scan: "concrete_wall_006", contrast: 1.4, streaks: 0.8, foot: 0.7),
                     rooms: (tv: 0.25, blinds: 0.3, curtains: 0.15, shut: 0.45,
                             cloth: [Srgb(0.2, 0.35, 0.3)],
                             shutters: [Srgb(0.3, 0.38, 0.42), Srgb(0.42, 0.45, 0.43)]))),
@@ -111,6 +113,7 @@
                               Srgb(1.0, 0.9, 0.75)],
                     paint: Srgb(0.6, 0.66, 0.72), grime: 0.35,
                     back: 2.2,
+                    wall: (scan: "concrete_wall_006", contrast: 1.2, streaks: 0.7, foot: 0.6),
                     rooms: (tv: 0.2, blinds: 0.3, curtains: 0.2, shut: 0.25,
                             cloth: [Srgb(0.75, 0.62, 0.4), Srgb(0.3, 0.2, 0.45)],
                             shutters: [Srgb(0.42, 0.45, 0.43)]))),
@@ -133,11 +136,13 @@
              size: (0.9, 3.15), blade: true, colour: Srgb(1.0, 0.16, 0.55), nits: 30.0,
              lumens: 100000.0, range: 7.0, shadows: true),
             (texture: "models/iso/city/signs/bar.png", side: North, at: -3.0, height: 4.6,
-             size: (2.9, 1.1), colour: Srgb(0.1, 0.82, 1.0), nits: 30.0, lumens: 150000.0,
-             range: 6.5, shadows: true),
+             size: (2.9, 1.1), colour: Srgb(0.1, 0.82, 1.0), nits: 30.0, lumens: 20000.0,
+             range: 2.5, shadows: true, pool: (62.0, 2.2, 150000.0)),
+            // A spot down onto the pavement, the wall's glow only about the sign (iso-kit
+            // j42): the face above and between the signs falls dark.
             (texture: "models/iso/city/signs/drug.png", side: North, at: 3.6, height: 5.6,
-             size: (1.0, 2.0), colour: Srgb(0.22, 1.0, 0.42), nits: 30.0, lumens: 60000.0,
-             range: 6.5, shadows: true),
+             size: (1.0, 2.0), colour: Srgb(0.22, 1.0, 0.42), nits: 30.0, lumens: 8000.0,
+             range: 2.5, shadows: true, pool: (58.0, 2.0, 70000.0)),
             (texture: "models/iso/city/signs/24h.png", side: North, at: 9.0, height: 4.4,
              size: (2.2, 1.0), colour: Srgb(1.0, 0.19, 0.09), nits: 30.0, lumens: 80000.0,
              range: 6.0, shadows: true),
@@ -164,11 +169,13 @@
             (model: "models/iso/city/manhole-cover.glb", side: North, line: Road, at: [4.0],
              out: 1.2),
             // People, for the street's scale (the iso hero, 1.85 m, held in his clips):
-            // one walking the pavement under the pharmacy's sign, one crossing at the zebra.
-            (model: "models/iso/knight.glb", side: North, line: Wall, at: [3.0], out: 1.0,
-             turn: 75.0, pose: ("walk", 0.4)),
-            (model: "models/iso/knight.glb", side: North, line: Road, at: [-1.5], out: 1.2,
-             turn: 15.0, pose: ("walk", 1.5)),
+            // each in a pool (iso-kit j42, the judge's "near-black on near-black"): one walking
+            // the pavement in the sodium lamp's pool at x 8, one in the BAR's cyan pool, each
+            // edged by a faint cold rim (about a third of the ruin's fighters' at this ev).
+            (model: "models/iso/knight.glb", side: North, line: Wall, at: [6.8], out: 1.4,
+             turn: 75.0, pose: ("walk", 0.4), rim: 0.35),
+            (model: "models/iso/knight.glb", side: North, line: Wall, at: [-2.4], out: 1.5,
+             turn: -60.0, pose: ("walk", 1.5), rim: 0.35),
         ],
     ),
     light: (preset: "city-night-rain"),

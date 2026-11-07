@@ -182,7 +182,8 @@ fn main() {
         return;
     }
     if args.layout == Some(Layout::Street) {
-        app.add_plugins((mipmaps::plugin, kit::street::plugin))
+        // The rim for the street's people (a prop's `rim`).
+        app.add_plugins((mipmaps::plugin, rim::plugin, kit::street::plugin))
             .run();
         return;
     }
