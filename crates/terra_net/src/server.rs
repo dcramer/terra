@@ -10,6 +10,7 @@
 mod replicate;
 
 use crate::ack::Acks;
+use crate::identity;
 use crate::interest::{Grid, Place, cell_of};
 use crate::proto::{Down, EntityId, Kind, MOST_PARTS, Reason, Region, RoomId, Up};
 use crate::transport::{FromClients, Lane, Peer, ServerTransport};
@@ -54,6 +55,9 @@ pub struct Config {
     pub resend_ticks: u32,
     /// The most bytes of a state packet: under any path's MTU.
     pub packet_bytes: usize,
+    /// What its challenges are drawn from ([`crate::identity`]): the game's to give, from
+    /// the operating system's randomness, so no hello overheard on one run passes on another.
+    pub secret: u64,
 }
 
 impl Config {
@@ -68,6 +72,7 @@ impl Config {
             refresh_every: 8,
             resend_ticks: 16,
             packet_bytes: 1200,
+            secret: 0,
         }
     }
 }
@@ -75,7 +80,7 @@ impl Config {
 /// What the game is told of its clients.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Event {
-    /// A client of the right version asks to play: answer with [`Server::welcome`] or
+    /// A client of the right version, proven to hold the identity it gives, asks to play: answer with [`Server::welcome`] or
     /// [`Server::refuse`].
     Hello {
         peer: Peer,
@@ -146,6 +151,8 @@ struct Leaving {
 }
 
 struct Session {
+    /// The number its hello must be signed with.
+    challenge: [u8; 32],
     welcomed: bool,
     room: RoomId,
     /// The entity it sees the world from: its own.
@@ -166,8 +173,9 @@ struct Session {
 }
 
 impl Session {
-    fn new() -> Session {
+    fn new(challenge: [u8; 32]) -> Session {
         Session {
+            challenge,
             welcomed: false,
             room: RoomId(0),
             view: None,
@@ -192,6 +200,8 @@ pub struct Server {
     parts: Vec<PartSpec>,
     tick: u32,
     next_entity: u32,
+    /// How many connections it has had: each one's challenge is its own.
+    joined: u64,
     entities: QuickMap<EntityId, Entity>,
     rooms: QuickMap<RoomId, Room>,
     sessions: BTreeMap<Peer, Session>,
@@ -213,6 +223,7 @@ impl Server {
             parts,
             tick: 0,
             next_entity: 0,
+            joined: 0,
             entities: QuickMap::default(),
             rooms: QuickMap::default(),
             sessions: BTreeMap::new(),
@@ -243,7 +254,10 @@ impl Server {
                         transport.send(peer, Lane::Ordered, &Down::Refuse(Reason::Full).encoded());
                         transport.drop_peer(peer);
                     } else {
-                        self.sessions.insert(peer, Session::new());
+                        self.joined += 1;
+                        let challenge = identity::challenge(self.config.secret, self.joined);
+                        transport.send(peer, Lane::Ordered, &Down::Challenge(challenge).encoded());
+                        self.sessions.insert(peer, Session::new(challenge));
                     }
                 }
                 FromClients::Left(peer) => self.forget(peer, events),
@@ -281,15 +295,25 @@ impl Server {
                 version,
                 identity,
                 name,
+                signature,
             }) if !session.welcomed => {
-                if version == self.config.version {
+                if version != self.config.version {
+                    self.refuse(transport, peer, Reason::Version);
+                } else if !identity::proven(
+                    &identity,
+                    &session.challenge,
+                    version,
+                    &name,
+                    &signature,
+                ) {
+                    // Not the holder of that key, or a hello heard on another connection.
+                    self.refuse(transport, peer, Reason::Refused);
+                } else {
                     events.push(Event::Hello {
                         peer,
                         identity,
                         name,
                     });
-                } else {
-                    self.refuse(transport, peer, Reason::Version);
                 }
             }
             Ok(Up::Ask(bytes)) if session.welcomed => events.push(Event::Asked { peer, bytes }),

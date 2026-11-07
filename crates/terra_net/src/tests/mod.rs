@@ -12,6 +12,7 @@ mod milestone;
 mod soak;
 
 use crate::client::{Client, Event as Heard};
+use crate::identity::Identity;
 use crate::interest::{Place, cell_of, distance_squared};
 use crate::proto::{EntityId, Kind, Reason, Region, RoomId};
 use crate::server::{Audience, Config, Event, PartSpec, Server};
@@ -164,7 +165,7 @@ impl Table {
         seat.client.hello(
             &mut seat.tap,
             VERSION,
-            [self.seats.len() as u8; 32],
+            &Identity::from_secret([self.seats.len() as u8 + 1; 32]),
             "player",
         );
         self.seats.push(seat);

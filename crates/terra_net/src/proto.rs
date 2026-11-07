@@ -85,11 +85,13 @@ impl Wire for Reason {
 /// A client's messages on the ordered lane.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Up {
-    /// The first: the protocol's version, who this is (a public key, D592) and their name.
+    /// The first, in answer to the server's challenge: the protocol's version, who this is
+    /// (a public key, D592), their name, and all of it signed with the challenge.
     Hello {
         version: u64,
         identity: [u8; 32],
         name: String,
+        signature: [u8; 64],
     },
     /// An operation asked for: the server checks it and, if it stands, orders it.
     Ask(Vec<u8>),
@@ -102,11 +104,13 @@ impl Wire for Up {
                 version,
                 identity,
                 name,
+                signature,
             } => {
                 to.ranged(0, 1);
                 version.write(to);
                 identity.write(to);
                 name.write(to);
+                signature.write(to);
             }
             Up::Ask(bytes) => {
                 to.ranged(1, 1);
@@ -126,6 +130,7 @@ impl Wire for Up {
                     version,
                     identity,
                     name,
+                    signature: <[u8; 64]>::read(from)?,
                 }
             }
             _ => Up::Ask(from.run()?.to_vec()),
@@ -155,6 +160,9 @@ pub enum Down {
     Settled,
     /// The connection ends, and why.
     Closing(Reason),
+    /// The first thing a server says: the number a hello must be signed with
+    /// ([`crate::identity`]).
+    Challenge([u8; 32]),
 }
 
 impl Wire for Down {
@@ -166,14 +174,14 @@ impl Wire for Down {
                 you,
                 realm,
             } => {
-                to.ranged(0, 4);
+                to.ranged(0, 5);
                 tick.write(to);
                 room.0.write(to);
                 you.0.write(to);
                 to.run(realm);
             }
             Down::Refuse(reason) => {
-                to.ranged(1, 4);
+                to.ranged(1, 5);
                 reason.write(to);
             }
             Down::Op {
@@ -181,20 +189,24 @@ impl Wire for Down {
                 number,
                 bytes,
             } => {
-                to.ranged(2, 4);
+                to.ranged(2, 5);
                 region.write(to);
                 to.varint(u64::from(*number));
                 to.run(bytes);
             }
-            Down::Settled => to.ranged(3, 4),
+            Down::Settled => to.ranged(3, 5),
             Down::Closing(reason) => {
-                to.ranged(4, 4);
+                to.ranged(4, 5);
                 reason.write(to);
+            }
+            Down::Challenge(challenge) => {
+                to.ranged(5, 5);
+                challenge.write(to);
             }
         }
     }
     fn read(from: &mut Reader) -> Result<Self, Malformed> {
-        Ok(match from.ranged(4)? {
+        Ok(match from.ranged(5)? {
             0 => Down::Welcome {
                 tick: u32::read(from)?,
                 room: RoomId(u16::read(from)?),
@@ -208,7 +220,8 @@ impl Wire for Down {
                 bytes: from.run()?.to_vec(),
             },
             3 => Down::Settled,
-            _ => Down::Closing(Reason::read(from)?),
+            4 => Down::Closing(Reason::read(from)?),
+            _ => Down::Challenge(<[u8; 32]>::read(from)?),
         })
     }
 }
@@ -258,6 +271,7 @@ mod tests {
                 version: 0xFEED_F00D_1234_5678,
                 identity: [9; 32],
                 name: "Ása".to_string(),
+                signature: [5; 64],
             },
             Up::Ask(vec![1, 2, 3]),
         ];
@@ -279,6 +293,7 @@ mod tests {
             },
             Down::Settled,
             Down::Closing(Reason::HostLeft),
+            Down::Challenge([3; 32]),
         ];
         for down in downs {
             assert_eq!(Down::decoded(&down.encoded()), Ok(down));
@@ -297,6 +312,7 @@ mod tests {
             version: 1,
             identity: [0; 32],
             name: "x".repeat(MOST_NAME + 1),
+            signature: [0; 64],
         };
         assert_eq!(Up::decoded(&hello.encoded()), Err(Malformed::Long));
     }

@@ -110,6 +110,27 @@ impl Wire for Shown {
     }
 }
 
+impl Shown {
+    /// The body a share of the way from this state to a later one: what is drawn of another
+    /// player between two words of the server (snapshot interpolation, D651).
+    pub fn between(&self, later: &Shown, share: f32) -> Shown {
+        Shown {
+            feet: self.feet.lerp(later.feet, f64::from(share)),
+            velocity: self.velocity.lerp(later.velocity, share),
+            facing: self
+                .facing
+                .lerp(later.facing, share)
+                .try_normalize()
+                .unwrap_or(later.facing),
+            ground: if share < 0.5 {
+                self.ground
+            } else {
+                later.ground
+            },
+        }
+    }
+}
+
 /// A body as its own player is told: exact, the server's answer to a tick's prediction.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Own {

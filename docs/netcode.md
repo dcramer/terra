@@ -1,6 +1,6 @@
 # Netcode
 
-Status: **designed, 2026-11-06; build steps 1 and 2 built** (D34, D651, D652, D636): `terra_net` passes milestone D and the soak on the in-memory transport, and two men walk together on the real mover, each predicting its own body. Of step 3 the UDP transport, the version check and the refusals are built (`cargo test -p terra_net --features udp`); proving an identity is not. Steps 4 and 5 are not built. How the server of [multiplayer.md](multiplayer.md) (D51) talks to its clients: what is sent, when, and how a client stays smooth. The survey behind it is [research/2026-11-06-netcode.md](../research/2026-11-06-netcode.md). It serves v0 (a host and a few friends, four clients at 100 ms and 1% loss, two realms on one host) and keeps D52's thousand possible: nothing is sent to everyone, and every cost is per area.
+Status: **designed, 2026-11-06; build steps 1 and 2 built** (D34, D651, D652, D636): `terra_net` passes milestone D and the soak on the in-memory transport, and two men walk together on the real mover, each predicting its own body. Step 3 is built too (`cargo test -p terra_net --features udp`): the UDP transport, the version check, the refusals, and an identity proven by a signed challenge. Steps 4 and 5, the game as a client of its own server and the rest of play across it, are not built. How the server of [multiplayer.md](multiplayer.md) (D51) talks to its clients: what is sent, when, and how a client stays smooth. The survey behind it is [research/2026-11-06-netcode.md](../research/2026-11-06-netcode.md). It serves v0 (a host and a few friends, four clients at 100 ms and 1% loss, two realms on one host) and keeps D52's thousand possible: nothing is sent to everyone, and every cost is per area.
 
 ## The model
 
@@ -40,7 +40,7 @@ The Bevy side is thin: the server and the client each sit in a resource, a syste
 - **Intent**: each `State` packet from a client carries its intents for the last ticks not yet acknowledged (at most 8, 125 ms), so a lost packet loses nothing. The server keeps a small buffer a player and takes tick T's intent at tick T; if it is missing it repeats the last (Overwatch).
 - **Clock**: the client runs ahead of the server by half the round trip plus a margin, so its intent arrives just before it is needed. Every server packet says how early the last intent arrived; the client speeds or slows its tick by at most 2% to hold the margin at two ticks plus measured jitter (Overwatch, Rocket League). A jump of more than a second resets it.
 - **Prediction**: the client keeps, for each tick not yet answered, its intent and its body after it (`terra_motion`'s `Body` is plain and `Clone`). The server's packet carries the body's authoritative state for the last intent tick it ran. Equal within a tolerance (1 mm, 1 mm/s): the history up to it is dropped. Different: the body is set to the answer and the later intents are replayed against the world as it now is, other bodies where they are shown (Unreal's saved moves). The picture eases over the error (`tick::Smoothed` already separates where a body is from where it is drawn).
-- **Others**: shown at the server's time less two send intervals plus jitter; between two states it interpolates, past the last it holds for at most 250 ms, then stops.
+- **Others**: shown at the server's time less two send intervals plus jitter; between two states it interpolates (`Samples::around`, `Shown::between`), and past the last it holds: it never runs on beyond what the server said.
 - **Blows**: a player's blow is judged on the server against creatures where that player saw them, rewound at most 250 ms (Source's lag compensation). No player strikes a player (D2). It comes with the fight's job, not the first ones.
 - **World changes are not predicted in v0**: a dig shows when the server's order arrives, the swing's wind-up covering the round trip. Minecraft predicts and reverts; we measure the feel at 100 ms first.
 
@@ -67,7 +67,7 @@ On the real mover (four men walking, sprinting and jumping for 30 simulated minu
 
 ## Connecting
 
-1. `Hello`: the protocol's version (a hash of the wire schema and the game's data fingerprint), the player's identity and name. The identity is a public key whose secret stays on the player's machine (D592); the server proves it by a signed challenge. Steam's identity replaces it with the relay (D34).
+1. The server's challenge, then `Hello`: the protocol's version (a hash of the wire schema and the game's data fingerprint), the player's identity and name, signed with the challenge. The identity is a public key whose secret stays on the player's machine (D592). Steam's identity replaces it with the relay (D34).
 2. `Refuse` with a reason a player can read (wrong version, world full, not allowed), or `Welcome`: the tick, the room's realm and seed (v0's second seam: the seed is all a client needs to make the land), the world's clock, the entity that is yours.
 3. The area arrives by the ordinary paths (operations for its regions, then state); the client is `Ready` when its own region's record is whole.
 4. Leaving, by choice or timeout (10 s): the character is saved where it stood (D592) and its body leaves the world at once (D637). When the host leaves, every client is told why, the world is saved and the session ends.
@@ -95,6 +95,6 @@ Each check has a planted fault beside it (D632).
 
 1. `terra_net` plain: `wire`, `transport` with loopback, `ack`, `interest`, `server`, `client`, operations, milestone D's test and the soak.
 2. `clock` and `predict`, and two bodies walking together on the real mover in one process, with the prediction test and the first bytes-a-second reading.
-3. The `udp` transport and connecting: version, identity, refusals. Built but for identity: the 32 bytes a client gives are passed to the game unproven; the signed challenge is to come, with a signature crate.
+3. The `udp` transport and connecting: version, identity, refusals. Built: a server's first word to a connection is a challenge never given before, and a hello carries it signed (Ed25519, `ed25519-dalek`), so nobody plays as another and a hello overheard is no use.
 4. The game as a client of its own server (the Bevy side), then a second player in it.
 5. The fight, the pack and creatures across the seam, each with its track.

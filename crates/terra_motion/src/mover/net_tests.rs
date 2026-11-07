@@ -11,6 +11,7 @@ use glam::{DVec3, Vec3};
 use std::collections::BTreeMap;
 use terra_net::client::{Client, Event as Heard};
 use terra_net::clock::Clock;
+use terra_net::identity::Identity;
 use terra_net::predict::History;
 use terra_net::proto::{EntityId, Kind as NetKind, RoomId};
 use terra_net::server::{Audience, Config, Event, PartSpec, Server};
@@ -131,7 +132,12 @@ impl Walk {
             };
             let mut wire = walk.network.connect(conditions);
             let mut client = Client::new();
-            client.hello(&mut wire, VERSION, [seat as u8; 32], "walker");
+            client.hello(
+                &mut wire,
+                VERSION,
+                &Identity::from_secret([seat as u8 + 1; 32]),
+                "walker",
+            );
             walk.seats.push(Seat {
                 wire,
                 client,
@@ -346,6 +352,27 @@ fn a_predicted_walk_is_the_servers_walk_and_each_sees_the_other() {
             "the newest word of the other is {} ticks old",
             walk.server.tick() - sample.tick
         );
+        // Between its last two words the other is drawn where the server had it on the tick
+        // between, to a centimetre: a walk is straight over two ticks.
+        let samples = entity.part(SHOWN).expect("shown");
+        let older = samples.older.as_ref().expect("two words of a walking body");
+        assert!(
+            samples.newer.tick - older.tick >= 2,
+            "sent every second tick"
+        );
+        let mid = older.tick + 1;
+        let (from, to, share) = samples.around(f64::from(mid));
+        let (from, to) = (
+            Shown::decoded(&from.bytes).expect("reads"),
+            Shown::decoded(&to.bytes).expect("reads"),
+        );
+        assert!(share > 0.0 && share < 1.0);
+        let drawn = from.between(&to, share);
+        assert!(
+            drawn.feet.distance(walk.truth[&(other, mid)]) < 0.01,
+            "drawn {:?}",
+            drawn.feet
+        );
         // Its own exact body is told to it alone.
         assert!(entity.part(OWN).is_none());
     }
@@ -415,7 +442,7 @@ fn four_men_for_half_an_hour_are_never_mispredicted() {
 #[test]
 fn a_shove_is_corrected_within_a_round_trip() {
     let mut walk = Walk::new();
-    walk.run(8);
+    walk.run(32);
     let shoved = walk.id(0);
     let at = 640;
     walk.shove = Some((at, shoved, Vec3::new(0.0, 4.0, 6.0)));

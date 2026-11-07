@@ -7,12 +7,14 @@
 //! - [`ack`]: which unreliable packets arrived.
 //! - [`interest`]: what is near a place.
 //! - [`proto`]: the names and messages that cross.
+//! - [`identity`]: who a player is, proven by a signed challenge.
 //! - [`server`], [`client`]: the two ends.
 //! - [`clock`], [`predict`]: a client's tick against its server's, and prediction by replay.
 
 pub mod ack;
 pub mod client;
 pub mod clock;
+pub mod identity;
 pub mod interest;
 pub mod predict;
 pub mod proto;

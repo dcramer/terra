@@ -216,6 +216,7 @@ impl ClientTransport for UdpClient {
 mod tests {
     use super::*;
     use crate::client::{Client, Event as Heard};
+    use crate::identity::Identity;
     use crate::proto::{Kind, Reason, RoomId};
     use crate::server::{Audience, Config, Event, PartSpec, Server};
 
@@ -268,7 +269,7 @@ mod tests {
                     client.hello(
                         tap,
                         7 + index as u64,
-                        [0; 32],
+                        &Identity::from_secret([index as u8 + 1; 32]),
                         if index == 0 { "first" } else { "second" },
                     );
                 }

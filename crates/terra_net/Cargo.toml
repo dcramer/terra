@@ -9,6 +9,9 @@ publish.workspace = true
 [dependencies]
 # The loopback's seeded faults and the grids' quick maps (`terra_gen::hash`).
 terra_gen.workspace = true
+# Who a player is (D592): a hello is signed with the key whose public half names them.
+# The standard Ed25519 crate (dalek, BSD-3), with no engine and no randomness of its own here.
+ed25519-dalek = "3.0.0"
 # The UDP carrier (D34): connections, channels and fragments, and the netcode standard over
 # a socket. Plain crates with no engine in them; behind the `udp` feature so a peer in memory
 # builds neither.

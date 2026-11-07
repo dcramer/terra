@@ -8,6 +8,7 @@
 //! told to be forgotten stays forgotten against anything older.
 
 use crate::ack::{Acks, Header};
+use crate::identity::Identity;
 use crate::proto::{
     Down, EntityId, Kind, MOST_INTENTS, MOST_PARTS, Reason, Region, RoomId, Stamp, Up,
 };
@@ -56,6 +57,24 @@ pub struct Samples {
     pub newer: Sample,
 }
 
+/// How many sends back of the newest word others are shown (D651): two, so one lost packet
+/// leaves something to draw toward, as Source's interpolation ratio.
+pub const SHOWN_SENDS_BACK: u32 = 2;
+
+impl Samples {
+    /// The two states to draw between at a tick of the server's (it may fall between ticks),
+    /// and how far from the first to the second: 0 at or before the older, 1 at or past the
+    /// newer, where it is held, never run on past what the server said.
+    pub fn around(&self, tick: f64) -> (&Sample, &Sample, f32) {
+        let Some(older) = &self.older else {
+            return (&self.newer, &self.newer, 1.0);
+        };
+        let span = f64::from(self.newer.tick - older.tick);
+        let share = ((tick - f64::from(older.tick)) / span.max(1.0)).clamp(0.0, 1.0);
+        (older, &self.newer, share as f32)
+    }
+}
+
 /// An entity as the client holds it.
 #[derive(Clone, Debug)]
 pub struct Entity {
@@ -88,6 +107,9 @@ pub struct Client {
     /// Its intents the server is not known to hold, oldest first, a tick each.
     intents: VecDeque<(u32, Vec<u8>)>,
     closed: bool,
+    /// The server's challenge, and the hello waiting for it.
+    challenge: Option<[u8; 32]>,
+    asking: Option<(u64, Identity, String)>,
     inbox: Vec<FromServer>,
     acked: Vec<u16>,
     /// Packets that could not be read.
@@ -99,21 +121,34 @@ impl Client {
         Client::default()
     }
 
-    /// Asks to play: the first thing sent.
+    /// Asks to play, as an identity: sent once the server's challenge is in hand, signed with
+    /// it ([`crate::identity`]).
     pub fn hello(
         &mut self,
         transport: &mut impl ClientTransport,
         version: u64,
-        identity: [u8; 32],
+        identity: &Identity,
         name: &str,
     ) {
+        self.asking = Some((version, identity.clone(), name.to_string()));
+        self.greet(transport);
+    }
+
+    /// Sends the hello when both it and the challenge are held, whichever came first.
+    fn greet(&mut self, transport: &mut impl ClientTransport) {
+        let (Some(challenge), Some((version, identity, name))) = (self.challenge, &self.asking)
+        else {
+            return;
+        };
         let hello = Up::Hello {
-            version,
-            identity,
-            name: name.to_string(),
+            version: *version,
+            identity: identity.public(),
+            name: name.clone(),
+            signature: identity.sign(&challenge, *version, name),
         };
         transport.send(Lane::Ordered, &hello.encoded());
         transport.flush();
+        self.asking = None;
     }
 
     /// Takes what the transport has for it.
@@ -145,6 +180,10 @@ impl Client {
                         bytes,
                     }),
                     Ok(Down::Settled) => events.push(Event::Ready),
+                    Ok(Down::Challenge(challenge)) => {
+                        self.challenge = Some(challenge);
+                        self.greet(transport);
+                    }
                     Ok(Down::Refuse(reason) | Down::Closing(reason)) => self.close(reason, events),
                     Err(_) => self.malformed += 1,
                 },
