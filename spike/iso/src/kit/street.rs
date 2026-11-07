@@ -48,6 +48,10 @@ pub struct Street {
     /// Where the camera looks, (x, z): the fight's middle.
     #[serde(default)]
     pub focus: (f32, f32),
+    /// After rain, how deep (m) a film of the biome's water lies over all the paving between
+    /// the puddles (0: only the puddles), mirroring at the shore's fade of that depth.
+    #[serde(default)]
+    pub film: f32,
     #[serde(default)]
     pub fronts: Vec<Front>,
     #[serde(default)]
@@ -273,10 +277,15 @@ impl Street {
     }
 
     /// How deep water stands at a point (m), as the water's face reads it: up to 6 cm in a
-    /// puddle's middle, 0 at its edge (`puddled` a half), under the face's cut (5 cm) on the
-    /// dry, so no face is drawn there.
+    /// puddle's middle, 0 at its edge (`puddled` a half), the `film` between them; with no
+    /// film under the face's cut (5 cm) on the dry, so no face is drawn there.
     pub fn standing(&self, p: Vec2) -> f32 {
-        (self.puddled(p) - 0.5) * 0.12
+        let puddle = (self.puddled(p) - 0.5) * 0.12;
+        if self.film > 0.0 {
+            puddle.max(self.film)
+        } else {
+            puddle
+        }
     }
 
     /// How near a rising wall a point is: a front's foot on the pavements, the kerb's face on
@@ -811,5 +820,28 @@ mod tests {
         }
         let share = wet as f32 / n as f32;
         assert!((0.03..0.4).contains(&share), "puddles cover {share}");
+    }
+
+    /// A film wets the whole paving at its depth and the puddles stand deeper; with none,
+    /// the dry lies under the water face's cut.
+    #[test]
+    fn a_film_lies_between_the_puddles() {
+        let mut st = neon();
+        st.film = 0.0;
+        let ps: Vec<Vec2> = (0..2000)
+            .map(|k| Vec2::new((k % 50) as f32 * 0.7 - 17.0, (k / 50) as f32 * 0.4 - 8.0))
+            .collect();
+        let dry = ps
+            .iter()
+            .find(|p| st.puddled(**p) < 0.01)
+            .expect("a dry point");
+        let wet = ps
+            .iter()
+            .find(|p| st.puddled(**p) > 0.99)
+            .expect("a puddle");
+        assert!(st.standing(*dry) < -0.05);
+        st.film = 0.008;
+        assert_eq!(st.standing(*dry), 0.008);
+        assert!(st.standing(*wet) > 0.05);
     }
 }

@@ -13,6 +13,9 @@
         kerb: (0.3, 0.15),
         length: 70.0,
         focus: (0.0, -4.0),
+        // Just after rain: a film of the water (8 mm, a third of a puddle's mirror at its
+        // 2 cm shore) over all the paving, so the lights streak across the whole wet road.
+        film: 0.008,
         // The road: Poly Haven's worn, cracked Asphalt 02 at its 3 m, wet all over and
         // standing in patches and along the gutters.
         asphalt: (
