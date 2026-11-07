@@ -5,9 +5,12 @@
 //! material's (a fern's fronds and a tree's leaf cards are cut out by alpha, so the plants
 //! stay walkable) and taller than a kerb (a manhole cover, a decal). A posed body's bounds
 //! are its bind pose's, far wider than its feet (kit/contact.rs), so a creature takes one
-//! circle at its middle, moving with it. What is smaller than a stone or bigger than a cart
-//! (walls, ground, a tree whole) is left to each layout's `Ground`.
+//! circle at its middle, moving with it. A thin thing (a fallen log) blocks if it is long; one
+//! bigger than a cart (a dead tree's branches, a wagon) blocks by its foot, its points half a
+//! metre to a metre up (above a tree's roots, below its branches); what is smaller than a stone or still bigger (walls, ground)
+//! is left to each layout's `Ground`.
 
+use crate::rim::RimMaterial;
 use crate::ruin::fight::Pose;
 use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
@@ -28,12 +31,20 @@ pub const BODY: f32 = 0.3;
 #[derive(Component)]
 pub struct Footprint(pub Vec<(Vec2, f32)>);
 
+/// A thin thing's sizes kept too (m): a pole or a fallen log's short side, if it is long.
+const THIN: (f32, f32) = (0.12, 0.6);
+/// The band above its lowest point a model too big for a footprint is cut at for its foot
+/// (m): a dead tree's trunk above its root flare (1.4 to 2.8 m across at the ground, j7's
+/// marsh probe) and below its spreading branches.
+const FOOT: (f32, f32) = (0.5, 1.0);
+
 /// The circles along a box on the ground (lo, hi its corners): as many as its long side
 /// holds of its short, each its half short side across, end to end.
 pub fn circles(lo: Vec2, hi: Vec2) -> Vec<(Vec2, f32)> {
     let size = hi - lo;
     let (short, long) = (size.min_element(), size.max_element());
-    if short < SHORT.0 || short > SHORT.1 || long > LONG {
+    let thin = short >= THIN.0 && long >= THIN.1;
+    if (short < SHORT.0 && !thin) || short > SHORT.1 || long > LONG {
         return Vec::new();
     }
     let along = if size.x >= size.y { Vec2::X } else { Vec2::Y };
@@ -54,15 +65,42 @@ pub fn blocked(circles: &[(Vec2, f32)], here: Vec2, to: Vec2) -> bool {
     })
 }
 
-/// Whether a mesh's material is solid: opaque, not cut out or blended (leaves, fronds,
-/// glass); `None` while it loads.
-fn solid(
+/// The box on the ground of a model's foot: its points (in its frame) in the `FOOT` band over
+/// the lowest, at least `SHORT.0` across (a trunk thinner than a stone still blocks); `None`
+/// with none there.
+pub fn foot(points: &[Vec3], scale: f32) -> Option<(Vec2, Vec2)> {
+    let base = points.iter().map(|p| p.y).reduce(f32::min)?;
+    let (mut lo, mut hi) = (Vec2::MAX, Vec2::MIN);
+    let band = |p: &&Vec3| (FOOT.0..FOOT.1).contains(&((p.y - base) * scale));
+    for p in points.iter().filter(band) {
+        (lo, hi) = (lo.min(p.xz()), hi.max(p.xz()));
+    }
+    if lo.x > hi.x {
+        return None;
+    }
+    let grow = ((Vec2::splat(SHORT.0 / scale) - (hi - lo)) / 2.0).max(Vec2::ZERO);
+    Some((lo - grow, hi + grow))
+}
+
+/// Whether a mesh's material is solid, by its alpha mode: opaque, not cut out or blended
+/// (leaves, fronds, glass); `None` while it loads.
+fn solid(alpha: Option<AlphaMode>) -> Option<bool> {
+    alpha.map(|a| matches!(a, AlphaMode::Opaque))
+}
+
+/// A mesh's alpha mode: its standard material's, or the base's of the rim that replaced it
+/// (rim.rs); `None` with neither (a kit shader), `Some(None)` while it loads.
+fn alpha(
+    m: Option<&MeshMaterial3d<StandardMaterial>>,
+    rim: Option<&MeshMaterial3d<RimMaterial>>,
     materials: &Assets<StandardMaterial>,
-    m: &MeshMaterial3d<StandardMaterial>,
-) -> Option<bool> {
-    materials
-        .get(&m.0)
-        .map(|m| matches!(m.alpha_mode, AlphaMode::Opaque))
+    rims: Option<&Assets<RimMaterial>>,
+) -> Option<Option<AlphaMode>> {
+    match (m, rim) {
+        (Some(m), _) => Some(materials.get(&m.0).map(|m| m.alpha_mode)),
+        (None, Some(r)) => Some(rims.and_then(|a| a.get(&r.0)).map(|m| m.base.alpha_mode)),
+        (None, None) => None,
+    }
 }
 
 /// Once a placed model's meshes are in: its footprint, from its solid meshes' bounds in its
@@ -75,15 +113,16 @@ pub(super) fn take(
         (Without<ChildOf>, Without<Footprint>, Without<super::Hero>),
     >,
     children: Query<&Children>,
-    meshes: Query<
-        (
-            Option<&Aabb>,
-            &GlobalTransform,
-            Option<&MeshMaterial3d<StandardMaterial>>,
-        ),
-        With<Mesh3d>,
-    >,
+    meshes: Query<(
+        &Mesh3d,
+        Option<&Aabb>,
+        &GlobalTransform,
+        Option<&MeshMaterial3d<StandardMaterial>>,
+        Option<&MeshMaterial3d<RimMaterial>>,
+    )>,
     materials: Res<Assets<StandardMaterial>>,
+    rims: Option<Res<Assets<RimMaterial>>>,
+    data: Res<Assets<Mesh>>,
 ) {
     'root: for (root, g, asset, posed) in &roots {
         // A posed body's bounds are its bind pose's: one circle at its feet, once it is in.
@@ -104,15 +143,17 @@ pub(super) fn take(
         let to_local = g.affine().inverse();
         let (mut lo, mut hi) = (Vec2::MAX, Vec2::MIN);
         let mut any = false;
+        let mut parts = Vec::new();
         for e in children.iter_descendants(root) {
-            let Ok((b, mg, m)) = meshes.get(e) else {
+            let Ok((mesh, b, mg, m, rim)) = meshes.get(e) else {
                 continue;
             };
             any = true;
-            // Its bounds and material not in yet: next frame. A material of the kit's own
-            // (foliage, bark shaders) is no prop's solid body.
+            // Its bounds and material not in yet: next frame. A stone's or log's material
+            // swapped for its rim (rim.rs) is its base's; one of the kit's own (foliage, bark
+            // shaders) is no prop's solid body.
             let Some(b) = b else { continue 'root };
-            match m.map(|m| solid(&materials, m)) {
+            match alpha(m, rim, &materials, rims.as_deref()).map(solid) {
                 Some(None) => continue 'root,
                 None | Some(Some(false)) => continue,
                 Some(Some(true)) => {}
@@ -132,27 +173,59 @@ pub(super) fn take(
                 continue;
             }
             (lo, hi) = (lo.min(blo.xz()), hi.max(bhi.xz()));
+            parts.push((mesh.0.id(), to_local * mg.affine()));
         }
         if !any {
             continue; // Its meshes are not in yet.
         }
-        let c: Vec<(Vec2, f32)> = if lo.x > hi.x {
-            Vec::new()
-        } else {
-            // In the world's metres, for the sizes, then back to its own frame.
+        // In the world's metres, for the sizes, then back to its own frame.
+        let ring = |lo: Vec2, hi: Vec2| -> Vec<(Vec2, f32)> {
             circles(lo * scale, hi * scale)
                 .into_iter()
                 .map(|(p, r)| (p / scale, r / scale))
                 .collect()
         };
         let size = (hi - lo).max(Vec2::ZERO) * scale;
+        let mut c = if lo.x > hi.x {
+            Vec::new()
+        } else {
+            ring(lo, hi)
+        };
+        // Too big for one (a dead tree's spread branches): its foot, from its points.
+        let big = size.max_element() > LONG || size.min_element() > SHORT.1;
+        let mut by_foot = String::new();
+        if c.is_empty() && big {
+            let points: Vec<Vec3> = parts
+                .iter()
+                .filter_map(|(id, to)| Some((data.get(*id)?, to)))
+                .filter_map(|(m, to)| {
+                    let p = m.try_attribute(Mesh::ATTRIBUTE_POSITION).ok()?;
+                    Some(
+                        p.as_float3()?
+                            .iter()
+                            .map(|&p| to.transform_point3(p.into())),
+                    )
+                })
+                .flatten()
+                .collect();
+            if let Some((flo, fhi)) = foot(&points, scale) {
+                c = ring(flo, fhi);
+                let (s, mid) = ((fhi - flo) * scale, (flo + fhi) / 2.0 * scale);
+                by_foot = format!(
+                    ", by its foot {:.2} x {:.2} m at {mid:.2} of {} points",
+                    s.x,
+                    s.y,
+                    points.len()
+                );
+            }
+        }
         debug!(
-            "footprint {:?} at {:.1}: {} circles, {:.2} x {:.2} m",
+            "footprint {:?} at {:.1}: {} circles, {:.2} x {:.2} m{by_foot}",
             asset.0.path(),
             g.translation().xz(),
             c.len(),
             size.x,
-            size.y
+            size.y,
         );
         commands.entity(root).insert(Footprint(c));
     }
@@ -223,11 +296,82 @@ mod tests {
             of(&mut mats, AlphaMode::Mask(0.5)),
             of(&mut mats, AlphaMode::Blend),
         );
-        assert_eq!(solid(&mats, &opaque), Some(true));
-        assert_eq!(solid(&mats, &mask), Some(false), "a fern's fronds");
-        assert_eq!(solid(&mats, &blend), Some(false), "glass");
         let missing = of(&mut mats, AlphaMode::Opaque);
         mats.remove(&missing.0);
-        assert_eq!(solid(&mats, &missing), None);
+        let is = |m: &MeshMaterial3d<StandardMaterial>| solid(alpha(Some(m), None, &mats, None)?);
+        assert_eq!(is(&opaque), Some(true));
+        assert_eq!(is(&mask), Some(false), "a fern's fronds");
+        assert_eq!(is(&blend), Some(false), "glass");
+        assert_eq!(is(&missing), None);
+    }
+
+    /// A forest stone whose material rim.rs swapped for its rim is solid by its base (it took
+    /// no footprint while only the standard material was read), and a kit shader's is none.
+    #[test]
+    fn a_rimmed_stone_is_solid_by_its_base() {
+        let mats = Assets::<StandardMaterial>::default();
+        let mut rims = Assets::<RimMaterial>::default();
+        let mut of = |a: AlphaMode| {
+            MeshMaterial3d(rims.add(bevy::pbr::ExtendedMaterial {
+                base: StandardMaterial {
+                    alpha_mode: a,
+                    ..default()
+                },
+                extension: crate::rim::RimExt::default(),
+            }))
+        };
+        let (stone, frond) = (of(AlphaMode::Opaque), of(AlphaMode::Mask(0.5)));
+        let is = |r| alpha(None, Some(r), &mats, Some(&rims)).map(solid);
+        assert_eq!(is(&stone), Some(Some(true)), "a stone");
+        assert_eq!(is(&frond), Some(Some(false)), "a frond");
+        assert_eq!(alpha(None, None, &mats, Some(&rims)), None, "a kit shader");
+    }
+
+    /// A fallen log a quarter metre thick blocks along its length; a twig does not.
+    #[test]
+    fn a_thin_log_blocks_along_its_length() {
+        let log = circles(Vec2::new(-1.5, -0.125), Vec2::new(1.5, 0.125));
+        assert!(!log.is_empty(), "a log 3 x 0.25 m");
+        let inside = |p: Vec2| log.iter().any(|&(q, r)| p.distance(q) < r + BODY);
+        for x in [-1.3, 0.0, 1.3] {
+            assert!(inside(Vec2::new(x, 0.0)), "{x} along it");
+        }
+        assert!(!inside(Vec2::new(0.0, 0.6)), "a stride beside it");
+        assert!(
+            circles(Vec2::ZERO, Vec2::new(0.4, 0.05)).is_empty(),
+            "a twig"
+        );
+        assert!(
+            circles(Vec2::ZERO, Vec2::new(0.4, 0.15)).is_empty(),
+            "a short stick"
+        );
+    }
+
+    /// A dead tree's foot is its trunk: points under its spread branches, not their 5 m;
+    /// a trunk thinner than a stone still takes one.
+    #[test]
+    fn a_trees_foot_is_its_trunk() {
+        let mut points = Vec::new();
+        for k in 0..8 {
+            let a = k as f32 * core::f32::consts::FRAC_PI_4;
+            let (s, c) = a.sin_cos();
+            points.push(Vec3::new(0.9 * c, 0.0, 0.8 * s)); // roots flared at the ground
+            points.push(Vec3::new(0.2 * c, 0.6, 0.2 * s)); // its trunk
+            points.push(Vec3::new(0.15 * c, 0.9, 0.15 * s));
+            points.push(Vec3::new(2.5 * c, 3.0, 1.3 * s)); // branches
+        }
+        let (lo, hi) = foot(&points, 1.0).unwrap();
+        assert!((hi - lo).max_element() < 0.5, "{lo} {hi}: its trunk");
+        let c = circles(lo, hi);
+        assert_eq!(c.len(), 1, "{c:?}");
+        assert!(c[0].0.length() < 0.05, "at its middle");
+        let thin: Vec<Vec3> = points
+            .iter()
+            .map(|p| *p * Vec3::new(0.3, 1.0, 0.3))
+            .collect();
+        let (lo, hi) = foot(&thin, 1.0).unwrap();
+        assert!(!circles(lo, hi).is_empty(), "a thin trunk");
+        let flat = [Vec3::ZERO, Vec3::new(4.0, 0.3, 4.0)];
+        assert_eq!(foot(&flat, 1.0), None, "nothing at a trunk's height");
     }
 }
