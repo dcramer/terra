@@ -591,13 +591,17 @@ pub struct Weather {
     pub layer: super::weather::Layer,
 }
 
-/// An effect preset by name (iso-kit j6 names them), and where it plays if not the fight's.
+/// An effect preset by name (iso-kit j6 names them), where it plays if not the fight's, and
+/// how bright its lights are against the preset's (a preset tuned in the ruin's day floods
+/// a night street's walls).
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Effect {
     pub preset: String,
     #[serde(default)]
     pub at: Option<(f32, f32)>,
+    #[serde(default = "one")]
+    pub light: f32,
 }
 
 /// A kind of life (iso-kit j7 names them: insects, birds, beasts, drones) and how many.

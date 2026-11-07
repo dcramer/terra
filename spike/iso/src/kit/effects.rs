@@ -251,17 +251,22 @@ impl Effects {
     /// The biome's list (the staged fight's where there is none), each preset read, and
     /// the budget held.
     pub fn load(biome: Option<&Biome>) -> Result<Effects, String> {
-        let list: Vec<(String, Option<Vec2>)> = match biome {
+        let list: Vec<(String, Option<Vec2>, f32)> = match biome {
             Some(b) => b
                 .effects
                 .iter()
-                .map(|e| (e.preset.clone(), e.at.map(Vec2::from)))
+                .map(|e| (e.preset.clone(), e.at.map(Vec2::from), e.light))
                 .collect(),
-            None => FIGHT.iter().map(|n| (n.to_string(), None)).collect(),
+            None => FIGHT.iter().map(|n| (n.to_string(), None, 1.0)).collect(),
         };
         let mut out = Vec::new();
-        for (name, at) in list {
-            out.push((name.clone(), Preset::load(&name)?, at));
+        for (name, at, light) in list {
+            let mut p = Preset::load(&name)?;
+            // The biome's brightness for its lights (biome.rs `Effect::light`).
+            for l in &mut p.lamps {
+                l.lm *= light;
+            }
+            out.push((name.clone(), p, at));
         }
         let fx = Effects(out);
         let b = fx.budget();
@@ -948,6 +953,29 @@ mod tests {
         for name in FIGHT {
             assert!(fight.get(name).is_some(), "the staged fight's {name}");
         }
+    }
+
+    /// A biome's `light` scales its preset's lamps and nothing else; left out, the preset's.
+    #[test]
+    fn a_biomes_light_scales_its_lamps() {
+        let mut b = Biome::load("neon-street").unwrap();
+        b.effects = vec![crate::kit::biome::Effect {
+            preset: "hit-spark".into(),
+            at: None,
+            light: 0.25,
+        }];
+        let dim = Effects::load(Some(&b)).unwrap();
+        let full = Preset::load("hit-spark").unwrap();
+        let (d, f) = (&dim.0[0].1, &full);
+        assert_eq!(d.lamps.len(), f.lamps.len());
+        for (a, z) in d.lamps.iter().zip(&f.lamps) {
+            assert!((a.lm - z.lm * 0.25).abs() < 1e-3, "{} vs {}", a.lm, z.lm);
+            assert_eq!(a.range, z.range);
+        }
+        let s = |p: &Preset| p.sparks.as_ref().map(|s| s.count);
+        assert_eq!(s(d), s(f), "the sparks unchanged");
+        let e: crate::kit::biome::Effect = ron::from_str("(preset: \"slash\")").unwrap();
+        assert_eq!(e.light, 1.0);
     }
 
     /// A name with no file fails naming the folder and the presets there are.
