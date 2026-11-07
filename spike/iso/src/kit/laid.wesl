@@ -27,6 +27,7 @@ struct Params {
     shape: vec4<f32>,
     wear: vec4<f32>,
     seams: vec4<f32>,
+    grime: vec4<f32>,
     mark_at: array<vec4<f32>, 24>,
     mark_turn: array<vec4<f32>, 24>,
     mark_rep: array<vec4<f32>, 24>,
@@ -132,6 +133,8 @@ struct Flag {
     tilt: vec3<f32>,
     gone: f32,
     rim: f32,
+    // Metres in from the piece's nearest joint (its splits' too).
+    edge: f32,
 }
 
 // Per-cell variation as Substance Designer's Tile Generator gives each tile (random size by
@@ -258,7 +261,8 @@ fn flag(uv: vec2<f32>, uv_m: f32, px: f32, p: vec2<f32>, feet: f32) -> Flag {
     }
     let gone = smoothstep(-0.006, 0.006, depth);
     let rim = gone * (1.0 - smoothstep(0.0, 0.07, depth));
-    return Flag(key, joint, bevel, tilt, gone, rim);
+    let edge = min(min(min(q.x, sz.x - q.x), min(q.y, sz.y - q.y)), seam) + chip * 0.02;
+    return Flag(key, joint, bevel, tilt, gone, rim, edge);
 }
 
 // How far `p` lies outside mark `k`'s nearest repeat (negative inside), in metres, and
@@ -312,6 +316,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var tilt_n = vec3<f32>(0.0);
     var gone = 0.0;
     var gone_rim = 0.0;
+    var edge = 8.0;
+    var unit_dirt = 0.5;
     var joint_all = joint;
     if laid.shape.x > 0.5 {
         let f = flag(in.uv, uv_m, px, p, feet);
@@ -328,6 +334,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         tilt_n = f.tilt;
         gone = f.gone;
         gone_rim = f.rim;
+        edge = f.edge;
+        unit_dirt = hash(key + 151.0);
     }
     joint = joint_all;
 
@@ -410,6 +418,45 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let tint = select(vec3<f32>(0.6, 0.6, 0.58), vec3<f32>(0.62, 0.45, 0.07), kind == 1u);
             colour = mix(colour, tint * mix(1.0, grain_v, 0.6), cover);
             paint = max(paint, cover);
+        }
+    }
+
+    // A city floor's grime (`grime`, biome.rs `Grime`, all 0 but the street's), over the
+    // marks as a street's is over its paint, as paving and asphalt are at night in
+    // photographs: dark wet dirt soaked in from each unit's joints, patchy along them; broad
+    // blotches of trodden and spilt grime, each unit dirtier or cleaner than the next; dirt
+    // banked at the walls' feet and the kerbs; and spots, chewing gum on the flags, oil
+    // dripped on the road, each its own size and tone.
+    if laid.grime.x + laid.grime.y + laid.grime.z > 0.0 {
+        // Its own grain at a few centimetres (finer blurs away under a pixel at the camera).
+        let speck = hash(floor(p * 25.0) + 23.0) * 0.6 + noise(p * 9.0 + 5.0) * 0.4;
+        let filth = colour * 0.3 + vec3<f32>(0.016, 0.014, 0.011) * (0.3 + 1.4 * speck);
+        let along = noise(p * 4.0 + 61.0) * 0.6 + noise(p * 13.0 + 3.0) * 0.4;
+        let reach = laid.grime.x * (0.3 + 1.4 * along) * (0.5 + unit_dirt);
+        let soak = (1.0 - smoothstep(0.0, max(reach, 1e-4), edge)) * step(1e-4, laid.grime.x)
+            * smoothstep(0.25, 0.55, along);
+        // Blotches from a metre down to a hand, so a unit is stained in patches, not shaded
+        // whole (a value a unit reads as a checkerboard).
+        let b = noise(p * 0.45 + 71.0) * 0.3 + noise(p * 1.6 + 29.0) * 0.25 + noise(p * 5.5 + 11.0) * 0.2
+            + noise(p * 14.0 + 17.0) * 0.15 + noise(p * 31.0 + 37.0) * 0.1;
+        let unit_g = (unit_dirt - 0.5) * 0.3 * step(0.5, laid.shape.x);
+        let blot = smoothstep(0.4, 0.7, b + unit_g + feet * 0.3) * laid.grime.y;
+        let bank = smoothstep(0.55, 0.85, feet + (noise(p * 3.0 + 7.0) - 0.5) * 0.4) * laid.grime.y;
+        // Dried spills and drips: sparse stains a hand to half a metre, their edges crisp
+        // and ragged, as a spill dries to a tide line (the soft blotches alone read clean).
+        let s = noise(p * 2.7 + 83.0) * 0.6 + noise(p * 9.0 + 41.0) * 0.28 + noise(p * 33.0 + 7.0) * 0.12;
+        let spill = smoothstep(0.64, 0.67, s + (unit_dirt - 0.5) * 0.08) * laid.grime.y;
+        colour = mix(colour, filth, max(max(soak * 0.85, spill * 0.6), max(blot * 0.8, bank)));
+        if laid.grime.z > 0.0 {
+            let cell_m = max(0.125, laid.grime.w * 2.5);
+            let c = floor(p / cell_m);
+            let at = (vec2<f32>(hash(c + 213.0), hash(c + 217.0)) * 0.6 + 0.2 + c) * cell_m;
+            let r = laid.grime.w * 0.5 * mix(0.33, 1.0, hash(c + 219.0));
+            let d = length(p - at) * (1.0 + (noise(p * 60.0 + c) - 0.5) * 0.5);
+            let has = step(hash(c + 211.0), laid.grime.z * cell_m * cell_m);
+            let spot = clamp((r - d) / max(px, 1e-4) + 0.5, 0.0, 1.0) * min(1.0, 2.0 * r / max(px, 1e-4)) * has;
+            colour *= mix(1.0, mix(0.12, 0.45, hash(c + 223.0)), spot);
+            mark_rough *= mix(1.0, 0.6, spot);
         }
     }
 

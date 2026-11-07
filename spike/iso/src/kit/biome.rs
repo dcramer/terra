@@ -173,6 +173,10 @@ pub struct Laid {
     /// broken and gone (kit/laid.rs `Wear`).
     #[serde(default)]
     pub wear: Wear,
+    /// A city floor's grime over its units, blotches, banks and spots (`Grime`, drawn by
+    /// kit/laid.wesl); none by default.
+    #[serde(default)]
+    pub grime: Grime,
 }
 
 /// An old floor's units, each told apart (`courses`) and worn its own way, as Substance
@@ -204,6 +208,28 @@ pub struct Wear {
     /// How far in (m) each piece's arris is worn round, shaded toward its joint (0: sharp).
     #[serde(default)]
     pub round: f32,
+}
+
+/// A city floor's grime (none by default), as a street's paving and road are in
+/// photographs at night: dirt soaked into each unit along its joints, blotches of trodden
+/// and spilt grime, some units far dirtier than the next, dark wet dirt banked at `feet`,
+/// and spots (chewing gum on a pavement, oil drips on a road), each its own size and tone.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Grime {
+    /// How far (m) dirt has soaked in from each unit's joints, darkest at the joint and
+    /// patchy along it (0: none; needs `courses`).
+    #[serde(default)]
+    pub edges: f32,
+    /// How dark the dirtiest blotches, units and the banks at `feet` fall, 0 (none) to 1.
+    #[serde(default)]
+    pub blotch: f32,
+    /// Spots a square metre (0: none), up to 64 (a busy pavement has dozens).
+    #[serde(default)]
+    pub spots: f32,
+    /// The largest spot's width (m); the rest down to a third of it.
+    #[serde(default)]
+    pub size: f32,
 }
 
 /// A mark on a laid floor: a rectangle `size` metres (along its own x and z) centred `at`

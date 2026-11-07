@@ -58,6 +58,10 @@
             grit: 0.25,
             damp: 0.9,
             feet: Site("walls"),
+            // Its grime (iso-kit j65, the judges' "too clean, no grime where the walls meet
+            // the ground"): blotches of tyre and oil grime, wet dirt banked in the gutters,
+            // oil dripped in spots up to 20 cm.
+            grime: (blotch: 0.5, spots: 1.5, size: 0.2),
             // A city road's marks (kit/laid.rs), the road along x, its lanes' middles at z
             // ±1.75: three patched repairs; dripped oil down each lane's middle and the
             // wheel paths' rubber either side; worn white centre dashes (3 m every 9 m), a
@@ -107,6 +111,7 @@
             grain: (0.4, 0.5),
             wet: Site("gutter"),
             damp: 0.6,
+            grime: (blotch: 0.4),
         ),
         // The north fronts' faces are bays of Poly Haven's apartments facade (kit/facade.rs,
         // iso-kit j26), its scenes: 0 door-large, 1 door-small, 2 shop-window (two sash
@@ -274,6 +279,11 @@
             grit: 0.2,
             damp: 0.7,
             feet: Site("walls"),
+            // A city pavement's grime (iso-kit j65, the judges' "a clean, even grid of
+            // flags"): dirt soaked up to 6 cm in from the joints, each flag dirtier or
+            // cleaner than the next, blotches trodden in, wet dirt banked at the fronts'
+            // feet, and chewing gum, thirty spots a square metre up to 4 cm.
+            grime: (edges: 0.06, blotch: 0.6, spots: 30.0, size: 0.04),
             // The scan's six courses of flags in a running bond, off its colour map, so
             // each flag is its own (iso-kit j49, the judge's "no paving joints"): its value
             // and roughness its own, a few relaid off-tone, one in ten cracked across, and
@@ -287,7 +297,7 @@
                 (0.669, [0.166, 0.5, 0.833]),
                 (0.835, [0.0, 0.334, 0.668]),
             ],
-            spread: (0.18, 0.4),
+            spread: (0.24, 0.4),
             wear: (split: 0.06, tilt: 0.03, broken: 0.1, gap: 0.015),
             // The flags' stains and repairs (iso-kit j46): the road's trench run on across
             // the north pavement to the wall, relaid darker; bin juice under the bins, drips
