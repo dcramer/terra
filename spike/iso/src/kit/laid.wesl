@@ -25,9 +25,9 @@ struct Params {
     courses: array<vec4<f32>, 4>,
     joints: array<vec4<f32>, 4>,
     shape: vec4<f32>,
-    mark_at: array<vec4<f32>, 16>,
-    mark_turn: array<vec4<f32>, 16>,
-    mark_rep: array<vec4<f32>, 16>,
+    mark_at: array<vec4<f32>, 24>,
+    mark_turn: array<vec4<f32>, 24>,
+    mark_rep: array<vec4<f32>, 24>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(106)

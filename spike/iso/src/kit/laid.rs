@@ -58,8 +58,9 @@ pub struct Params {
 /// Most courses and joints a course a scan's units are told apart by.
 pub const COURSES: usize = 4;
 const JOINTS: usize = 7;
-/// Most marks a laid floor carries.
-pub const MARKS: usize = 16;
+/// Most marks a laid floor carries (laid.wesl's arrays are as long): a city road's lines,
+/// crossings, patches and stains (iso-kit j46: 16 left no room for its oil and trenches).
+pub const MARKS: usize = 24;
 
 /// How far a point of the floor (world x, z) lies outside a mark's nearest repeat, in
 /// metres, negative inside. laid.wesl's `mark_edge` is the same.

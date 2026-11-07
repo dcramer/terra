@@ -54,6 +54,13 @@ pub struct Street {
     /// the puddles (0: only the puddles), mirroring at the shore's fade of that depth.
     #[serde(default)]
     pub film: f32,
+    /// Where water stands: the patches' noise (0 to 1) over which a puddle lies, so lower
+    /// is more puddles (0.64 about a tenth of the street; iso-kit j46).
+    #[serde(default = "puddle_level")]
+    pub puddles: f32,
+    /// Wires strung across and along the street and pipes down its fronts (kit/cables.rs).
+    #[serde(default)]
+    pub cables: Vec<super::cables::Cable>,
     #[serde(default)]
     pub fronts: Vec<Front>,
     #[serde(default)]
@@ -178,6 +185,10 @@ fn nine() -> f32 {
     9.0
 }
 
+fn puddle_level() -> f32 {
+    0.64
+}
+
 /// Where a prop stands across the street: by the kerb on the pavement, against the wall, or
 /// on the road `out` metres from its middle toward its side.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -213,6 +224,10 @@ pub struct Prop {
     pub rim: f32,
     #[serde(default)]
     pub stroll: bool,
+    /// Metres up from its line's floor: a wall-hung thing (an air conditioner under a
+    /// window, a payphone, a lamp over a door), with no contact shadow under it.
+    #[serde(default)]
+    pub up: f32,
 }
 
 fn deep() -> f32 {
@@ -297,6 +312,9 @@ impl Street {
                 }
             }
         }
+        for c in &self.cables {
+            c.check()?;
+        }
         Ok(())
     }
 
@@ -315,7 +333,7 @@ impl Street {
     pub fn puddled(&self, p: Vec2) -> f32 {
         let patch = fbm(p * 0.32 + Vec2::splat(17.0), 402);
         let lower = 0.08 * self.gutter(p);
-        smooth(0.64, 0.7, patch + lower)
+        smooth(self.puddles, self.puddles + 0.06, patch + lower)
     }
 
     /// How deep water stands at a point (m), as the water's face reads it: up to 6 cm in a
@@ -606,17 +624,20 @@ fn spawn(
     }
 
     fronts(&mut commands, &asset, &mut meshes, &mut materials, &st);
+    super::cables::spawn(&mut commands, &mut meshes, &mut materials, &st.cables);
     lamps(&mut commands, &mut meshes, &mut materials, &st);
     signs(&mut commands, &asset, &mut meshes, &mut materials, &st);
     for p in &st.props {
         for x in &p.at {
-            let at = st.spot(p.side, p.line, *x, p.out);
+            let at = st.spot(p.side, p.line, *x, p.out) + Vec3::Y * p.up;
             let yaw = p.side.facing() + p.turn.to_radians();
             let body = model(&mut commands, &asset, &p.model, at, yaw, p.scale);
             // A rigged body's bounds are its bind pose's, a square far wider than its feet
             // (j40's walker stood in a 1.5 m black square): a still prop is grounded by its
-            // bounds, a posed body by its feet (kit/contact.rs).
-            if p.pose.is_none() {
+            // bounds, a posed body by its feet (kit/contact.rs); a hung one not at all.
+            if p.up > 0.0 {
+                // Hung on the wall: nothing on the floor under it.
+            } else if p.pose.is_none() {
                 commands.entity(body).insert(Grounded { floor: at.y });
             } else {
                 commands
