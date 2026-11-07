@@ -40,6 +40,16 @@ pub enum Event {
         tick: u32,
         bytes: Vec<u8>,
     },
+    /// A player said something, to everyone.
+    Said {
+        name: String,
+        text: String,
+    },
+    /// A player is in the world, or has left it.
+    Roster {
+        name: String,
+        here: bool,
+    },
     /// An entity came near, and one left or is no more.
     Entered(EntityId),
     Gone(EntityId),
@@ -201,6 +211,8 @@ impl Client {
                         bytes,
                     }),
                     Ok(Down::Settled) => events.push(Event::Ready),
+                    Ok(Down::Said { name, text }) => events.push(Event::Said { name, text }),
+                    Ok(Down::Roster { name, here }) => events.push(Event::Roster { name, here }),
                     Ok(Down::Challenge(challenge)) => {
                         self.challenge = Some(challenge);
                         self.greet(transport);
@@ -390,6 +402,12 @@ impl Client {
             before = Some(bytes);
         }
         transport.send(Lane::State, &to.finish());
+        transport.flush();
+    }
+
+    /// Says something to everyone in the world.
+    pub fn say(&mut self, transport: &mut impl ClientTransport, text: &str) {
+        transport.send(Lane::Ordered, &Up::Say(text.to_string()).encoded());
         transport.flush();
     }
 

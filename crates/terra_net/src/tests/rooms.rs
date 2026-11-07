@@ -46,6 +46,7 @@ struct Hall {
     server: Server,
     guests: Vec<Guest>,
     hellos: Vec<Peer>,
+    said: Vec<(Peer, String)>,
 }
 
 impl Hall {
@@ -61,6 +62,7 @@ impl Hall {
             server: Server::new(Config::new(VERSION), vec![part]),
             guests: Vec::new(),
             hellos: Vec::new(),
+            said: Vec::new(),
         }
     }
 
@@ -99,8 +101,10 @@ impl Hall {
             let mut events = Vec::new();
             self.server.poll(&mut self.wire, &mut events);
             for event in events {
-                if let Event::Hello { peer, .. } = event {
-                    self.hellos.push(peer);
+                match event {
+                    Event::Hello { peer, .. } => self.hellos.push(peer),
+                    Event::Said { peer, text } => self.said.push((peer, text)),
+                    _ => {}
                 }
             }
             let tick = self.server.tick();
@@ -373,4 +377,72 @@ fn state_that_comes_before_the_welcome_is_kept() {
         .expect("its part")
         .newer;
     assert!(server.tick() - u32::from_le_bytes(lit.bytes[..4].try_into().expect("a tick")) < 4);
+}
+
+/// Who is here, and what they say (docs/v0-tracks.md, Server: text chat and a player list):
+/// each is told of the others as they come and go, and what one says everyone hears once, by
+/// name, the host's own words among them.
+#[test]
+fn everyone_is_told_who_is_here_and_hears_what_is_said() {
+    let mut hall = Hall::new();
+    hall.server.host_name = Some("host".to_string());
+    hall.join(rough(51));
+    hall.run(16, |_, _| {});
+    let first = hall.hellos[0];
+    hall.seat(first, HERE, [0.0; 3]);
+    hall.join(rough(52));
+    hall.run(32, |_, _| {});
+    let second = hall.hellos[1];
+    hall.seat(second, HERE, [1.0, 0.0, 0.0]);
+    hall.run(32, |_, _| {});
+    let roster = |guest: &Guest| -> Vec<(String, bool)> {
+        let told = guest.heard.iter().filter_map(|heard| match heard {
+            Heard::Roster { name, here } => Some((name.clone(), *here)),
+            _ => None,
+        });
+        told.collect()
+    };
+    let said = |guest: &Guest| -> Vec<(String, String)> {
+        let told = guest.heard.iter().filter_map(|heard| match heard {
+            Heard::Said { name, text } => Some((name.clone(), text.clone())),
+            _ => None,
+        });
+        told.collect()
+    };
+    let here = |name: &str| (name.to_string(), true);
+    // Both links say "guest"; the host is named to each as it comes.
+    assert_eq!(roster(&hall.guests[0]), [here("host"), here("guest")]);
+    assert_eq!(roster(&hall.guests[1]), [here("guest"), here("host")]);
+    assert_eq!(hall.server.names().collect::<Vec<_>>(), ["guest", "guest"]);
+
+    let Guest { tap, client, .. } = &mut hall.guests[0];
+    client.say(tap, "is anyone there?");
+    hall.run(16, |_, _| {});
+    hall.server.say(&mut hall.wire, "host", "i am");
+    hall.run(16, |_, _| {});
+    let both = [
+        ("guest".to_string(), "is anyone there?".to_string()),
+        ("host".to_string(), "i am".to_string()),
+    ];
+    assert_eq!(said(&hall.guests[0]), both);
+    assert_eq!(said(&hall.guests[1]), both);
+    assert_eq!(hall.said, [(first, "is anyone there?".to_string())]);
+
+    // One goes: the other is told. And words too long are no game of ours: their sender is
+    // dropped, as for any nonsense on the ordered lane.
+    hall.guests[1].tap.close();
+    hall.run(16, |_, _| {});
+    assert_eq!(
+        roster(&hall.guests[0]).last(),
+        Some(&("guest".to_string(), false))
+    );
+    let Guest { tap, client, .. } = &mut hall.guests[0];
+    client.say(tap, &"x".repeat(crate::proto::MOST_SAY + 1));
+    hall.run(16, |_, _| {});
+    assert!(
+        hall.guests[0]
+            .heard
+            .contains(&Heard::Closed(Reason::Malformed))
+    );
+    assert_eq!(hall.server.clients(), 0);
 }

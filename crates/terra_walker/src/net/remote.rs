@@ -6,6 +6,8 @@
 //!   metres east of the world's start.
 //! - `net.join {"address": "127.0.0.1:47000", "name": "guest"}`: this game joins the world
 //!   hosted there. It must have made the same world (the same `--seed`).
+//! - `net.say {"text": "…"}`: words to everyone in the world, as the host or as a guest.
+//! - `net.leave`: stop hosting (every guest is told the host left) or leave the hosted world.
 //! - `net.state`: who is connected, where each guest and puppet stands, how often this
 //!   game's prediction was corrected, and why a link ended if one did.
 
@@ -35,6 +37,8 @@ pub fn plugin(app: &mut App) {
     method(app, "net.host", host);
     method(app, "net.join", join);
     method(app, "net.state", state);
+    method(app, "net.say", say);
+    method(app, "net.leave", leave);
 }
 
 #[derive(Deserialize)]
@@ -64,7 +68,7 @@ fn host(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         .get_resource::<Planet>()
         .map(realm_of)
         .unwrap_or_default();
-    world.insert_resource(Host::new(config, parts(), Box::new(wire), beside, realm));
+    world.insert_resource(Host::new(config, parts(), Box::new(wire), beside, realm).named("host"));
     Ok(json!({ "hosting": address.to_string() }))
 }
 
@@ -108,6 +112,41 @@ fn join(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     Ok(json!({ "joining": address }))
 }
 
+#[derive(Deserialize)]
+struct SayAsk {
+    text: String,
+}
+
+fn say(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let SayAsk { text } = parse_some(params)?;
+    if let Some(mut host) = world.get_resource_mut::<Host>() {
+        host.say(&text);
+    } else if let Some(mut link) = world.get_resource_mut::<Link>() {
+        link.say(&text);
+    } else {
+        return Err(refused(
+            "This game neither hosts nor has joined a world: there is nobody to say it to.",
+        ));
+    }
+    Ok(json!("said"))
+}
+
+fn leave(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
+    if let Some(mut host) = world.remove_resource::<Host>() {
+        host.close();
+        return Ok(json!("stopped hosting: every guest was told the host left"));
+    }
+    if let Some(mut link) = world.remove_resource::<Link>() {
+        link.leave();
+        let mut puppets = world.query_filtered::<Entity, With<Puppet>>();
+        for puppet in puppets.iter(world).collect::<Vec<_>>() {
+            world.despawn(puppet);
+        }
+        return Ok(json!("left the hosted world"));
+    }
+    Err(refused("This game neither hosts nor has joined a world."))
+}
+
 fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
     let place = |transform: &Transform| json!(transform.translation.to_array());
     let mut mine = world.query_filtered::<&Transform, IsLocalPlayer>();
@@ -131,6 +170,7 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "tick": host.map(|host| host.server().tick()).or(link.and_then(Link::tick)),
         "guests": guests,
         "joined": link.is_some(),
+        "players": host.map(Host::players).or(link.map(|link| link.players().to_vec())),
         "ended": world.get_resource::<Ended>().map(|ended| ended.0.clone()),
         "corrections": link.map(Link::corrections),
         "puppets": puppets,

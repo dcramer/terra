@@ -92,6 +92,8 @@ pub enum Event {
     Asked { peer: Peer, bytes: Vec<u8> },
     /// A welcomed client is gone, for any reason: its body leaves the world (D637).
     Left { peer: Peer },
+    /// A welcomed client said something, which everyone has been told.
+    Said { peer: Peer, text: String },
 }
 
 struct Part {
@@ -161,6 +163,8 @@ struct Leaving {
 }
 
 struct Session {
+    /// The name it gave, once its hello was proven.
+    name: String,
     /// The number its hello must be signed with.
     challenge: [u8; 32],
     welcomed: bool,
@@ -189,6 +193,7 @@ struct Session {
 impl Session {
     fn new(challenge: [u8; 32]) -> Session {
         Session {
+            name: String::new(),
             challenge,
             welcomed: false,
             room: RoomId(0),
@@ -226,6 +231,9 @@ pub struct Server {
     scratch: replicate::Scratch,
     /// Packets that could not be read, both lanes.
     pub malformed: u64,
+    /// The host's own player's name, where the host plays too (D638): told to whoever
+    /// comes, with the others'.
+    pub host_name: Option<String>,
 }
 
 impl Server {
@@ -247,6 +255,7 @@ impl Server {
             inbox: Vec::new(),
             scratch: replicate::Scratch::default(),
             malformed: 0,
+            host_name: None,
         }
     }
 
@@ -277,7 +286,7 @@ impl Server {
                         self.sessions.insert(peer, Session::new(challenge));
                     }
                 }
-                FromClients::Left(peer) => self.forget(peer, events),
+                FromClients::Left(peer) => self.forget(transport, peer, events),
                 FromClients::Packet(peer, Lane::Ordered, bytes) => {
                     self.ordered(transport, peer, &bytes, events);
                 }
@@ -287,14 +296,51 @@ impl Server {
         self.inbox = inbox;
     }
 
-    fn forget(&mut self, peer: Peer, events: &mut Vec<Event>) {
-        if self
+    /// A connection is gone: if it was let in, the others are told it left.
+    fn forget(
+        &mut self,
+        transport: &mut impl ServerTransport,
+        peer: Peer,
+        events: &mut Vec<Event>,
+    ) {
+        let Some(session) = self
             .sessions
             .remove(&peer)
-            .is_some_and(|session| session.welcomed)
-        {
-            events.push(Event::Left { peer });
+            .filter(|session| session.welcomed)
+        else {
+            return;
+        };
+        self.tell_all(
+            transport,
+            &Down::Roster {
+                name: session.name,
+                here: false,
+            },
+        );
+        events.push(Event::Left { peer });
+    }
+
+    /// A message on the ordered lane to every client let in.
+    fn tell_all(&self, transport: &mut impl ServerTransport, message: &Down) {
+        let bytes = message.encoded();
+        for (&peer, _) in self.sessions.iter().filter(|(_, session)| session.welcomed) {
+            transport.send(peer, Lane::Ordered, &bytes);
         }
+    }
+
+    /// The host's own words, or the game's, to everyone: as a player's are.
+    pub fn say(&mut self, transport: &mut impl ServerTransport, name: &str, text: &str) {
+        let said = Down::Said {
+            name: name.to_string(),
+            text: text.to_string(),
+        };
+        self.tell_all(transport, &said);
+    }
+
+    /// The names of the clients let in.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        let here = self.sessions.values().filter(|session| session.welcomed);
+        here.map(|session| session.name.as_str())
     }
 
     fn ordered(
@@ -326,6 +372,9 @@ impl Server {
                     // Not the holder of that key, or a hello heard on another connection.
                     self.refuse(transport, peer, Reason::Refused);
                 } else {
+                    if let Some(session) = self.sessions.get_mut(&peer) {
+                        session.name = name.clone();
+                    }
                     events.push(Event::Hello {
                         peer,
                         identity,
@@ -334,6 +383,11 @@ impl Server {
                 }
             }
             Ok(Up::Ask(bytes)) if session.welcomed => events.push(Event::Asked { peer, bytes }),
+            Ok(Up::Say(text)) if session.welcomed => {
+                let name = session.name.clone();
+                self.say(transport, &name, &text);
+                events.push(Event::Said { peer, text });
+            }
             // Out of turn or unreadable on the lane that loses nothing: not a game of ours.
             _ => {
                 self.malformed += 1;
@@ -343,7 +397,7 @@ impl Server {
                     &Down::Closing(Reason::Malformed).encoded(),
                 );
                 transport.drop_peer(peer);
-                self.forget(peer, events);
+                self.forget(transport, peer, events);
             }
         }
     }
@@ -378,6 +432,7 @@ impl Server {
         let Some(session) = self.sessions.get_mut(&peer) else {
             return;
         };
+        let first = !session.welcomed;
         // Let in, or crossing from another room: either way it holds nothing of this room
         // yet, and nothing of the last is owed it.
         session.welcomed = true;
@@ -401,6 +456,34 @@ impl Server {
             realm: realm.to_vec(),
         };
         transport.send(peer, Lane::Ordered, &welcome.encoded());
+        if first {
+            // Who is here, each way: the newcomer is told of the others, and they of it.
+            let name = self
+                .sessions
+                .get(&peer)
+                .map(|session| session.name.clone())
+                .unwrap_or_default();
+            let came = Down::Roster { name, here: true }.encoded();
+            let others = self
+                .sessions
+                .iter()
+                .filter(|(other, session)| **other != peer && session.welcomed);
+            for (&other, session) in others {
+                let theirs = Down::Roster {
+                    name: session.name.clone(),
+                    here: true,
+                };
+                transport.send(peer, Lane::Ordered, &theirs.encoded());
+                transport.send(other, Lane::Ordered, &came);
+            }
+            if let Some(host) = &self.host_name {
+                let host = Down::Roster {
+                    name: host.clone(),
+                    here: true,
+                };
+                transport.send(peer, Lane::Ordered, &host.encoded());
+            }
+        }
     }
 
     /// Turns a client away, with the reason it is shown.

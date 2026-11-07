@@ -112,6 +112,11 @@ pub struct Host {
     realm: Vec<u8>,
     guests: HashMap<Peer, Entity>,
     ids: HashMap<Entity, EntityId>,
+    /// Who each guest is, and where those who left were standing: one who comes back is put
+    /// there (D592, D637). Kept while the world is hosted; the save keeps it longer (Play).
+    identities: HashMap<Peer, [u8; 32]>,
+    names: HashMap<Peer, String>,
+    left: HashMap<[u8; 32], Vec3>,
     /// Guests whose bodies the walk has not yet made: welcomed once it has.
     arriving: Vec<(Peer, Entity)>,
     events: Vec<Event>,
@@ -136,10 +141,45 @@ impl Host {
             realm,
             guests: HashMap::new(),
             ids: HashMap::new(),
+            identities: HashMap::new(),
+            names: HashMap::new(),
+            left: HashMap::new(),
             arriving: Vec::new(),
             events: Vec::new(),
             asked: Vec::new(),
         }
+    }
+
+    /// Names the host's own player, for the list of who is here and for what it says.
+    pub fn named(mut self, name: &str) -> Host {
+        self.server.host_name = Some(name.to_string());
+        self
+    }
+
+    /// The host's own words, to everyone.
+    pub fn say(&mut self, text: &str) {
+        let name = self
+            .server
+            .host_name
+            .clone()
+            .unwrap_or_else(|| "host".to_string());
+        info!("Chat: {name}: {text}");
+        self.server.say(&mut self.wire, &name, text);
+        self.wire.flush();
+    }
+
+    /// The names of everyone here: the host's own player and each guest.
+    pub fn players(&self) -> Vec<String> {
+        let host = self.server.host_name.iter().cloned();
+        host.chain(self.server.names().map(str::to_string))
+            .collect()
+    }
+
+    /// The host is leaving: every guest is told why, and the session is over (D51).
+    pub fn close(&mut self) {
+        self.server
+            .close(&mut self.wire, terra_net::proto::Reason::HostLeft);
+        self.wire.flush();
     }
 
     pub fn server(&self) -> &Server {
@@ -171,7 +211,26 @@ pub fn plugin(app: &mut App) {
             link::show.in_set(Sim::End).run_if(joined),
         ),
     )
-    .add_systems(Update, link::pace.run_if(joined));
+    .add_systems(Update, link::pace.run_if(joined))
+    .add_systems(Last, farewell);
+}
+
+/// The game is closing: a host's guests are told the host left, and a joined game leaves, so
+/// neither is left waiting on silence.
+fn farewell(
+    mut exits: MessageReader<AppExit>,
+    host: Option<ResMut<Host>>,
+    link: Option<ResMut<link::Link>>,
+) {
+    if exits.read().next().is_none() {
+        return;
+    }
+    if let Some(mut host) = host {
+        host.close();
+    }
+    if let Some(mut link) = link {
+        link.leave();
+    }
 }
 
 /// Before the walk: the server takes what arrived. A client let in gets a body where guests
@@ -180,7 +239,7 @@ pub fn plugin(app: &mut App) {
 pub fn hear(
     mut host: ResMut<Host>,
     mut commands: Commands,
-    mut guests: Query<(&mut Intent, &mut View), With<Guest>>,
+    mut guests: Query<(&mut Intent, &mut View, &Transform), With<Guest>>,
 ) {
     let host = &mut *host;
     let mut events = std::mem::take(&mut host.events);
@@ -188,13 +247,22 @@ pub fn hear(
     host.server.poll(&mut host.wire, &mut events);
     for event in events.drain(..) {
         match event {
-            Event::Hello { peer, .. } => {
-                let up = host.start.normalize_or(Vec3::Y);
+            Event::Hello {
+                peer,
+                identity,
+                name,
+            } => {
+                // Back where it left, if it has been here before (D592, D637).
+                let place = host.left.remove(&identity).unwrap_or(host.start);
+                host.identities.insert(peer, identity);
+                info!("{name} joined the world.");
+                host.names.insert(peer, name);
+                let up = place.normalize_or(Vec3::Y);
                 let forward = up.any_orthonormal_vector();
                 let body = (
                     Player,
                     Guest(peer),
-                    Transform::from_translation(host.start),
+                    Transform::from_translation(place),
                     // Its figure is its child, drawn only under something visible.
                     Visibility::default(),
                     // And dressed only once it has an outfit: with none of its own it wears its
@@ -214,16 +282,29 @@ pub fn hear(
                 host.arriving.push((peer, entity));
             }
             Event::Left { peer } => {
-                if let Some(entity) = host.guests.remove(&peer) {
-                    commands.entity(entity).despawn();
+                let name = host.names.remove(&peer).unwrap_or_default();
+                info!("{name} left the world.");
+                let Some(entity) = host.guests.remove(&peer) else {
+                    continue;
+                };
+                // Its body leaves at once (D637); where it stood is kept for its return.
+                if let (Some(identity), Ok((_, _, transform))) =
+                    (host.identities.remove(&peer), guests.get(entity))
+                {
+                    host.left.insert(identity, transform.translation);
                 }
+                commands.entity(entity).despawn();
             }
             Event::Asked { peer, bytes } => host.asked.push((peer, bytes)),
+            Event::Said { peer, text } => {
+                let name = host.names.get(&peer).map_or("", String::as_str);
+                info!("Chat: {name}: {text}");
+            }
         }
     }
     host.events = events;
     for (&peer, &entity) in &host.guests {
-        let Ok((mut intent, mut view)) = guests.get_mut(entity) else {
+        let Ok((mut intent, mut view, _)) = guests.get_mut(entity) else {
             continue;
         };
         let sent = host.server.intent(peer).map(Steering::decoded);

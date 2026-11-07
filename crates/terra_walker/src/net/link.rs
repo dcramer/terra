@@ -83,6 +83,8 @@ pub struct Link {
     /// any. And why the link is over, once it is.
     realm: Vec<u8>,
     over: Option<String>,
+    /// Who is in the world, as the server has said.
+    players: Vec<String>,
     /// What the server said that is the layers' above to act on (operations, events, the
     /// welcome, the end): drained by them each tick.
     pub events: Vec<Heard>,
@@ -112,8 +114,25 @@ impl Link {
             heard: Vec::new(),
             realm,
             over: None,
+            players: Vec::new(),
             events: Vec::new(),
         }
+    }
+
+    /// Says something to everyone in the world.
+    pub fn say(&mut self, text: &str) {
+        self.client.say(&mut self.wire, text);
+    }
+
+    /// The names of the others in the world.
+    pub fn players(&self) -> &[String] {
+        &self.players
+    }
+
+    /// Leaves: the host sees this player go at once.
+    pub fn leave(&mut self) {
+        self.wire.close();
+        self.wire.flush();
     }
 
     pub fn client(&self) -> &Client {
@@ -150,6 +169,13 @@ impl Link {
                     (self.answered, self.begun) = (0, false);
                 }
                 Heard::Closed(reason) => self.over = Some(reason.message().to_string()),
+                Heard::Said { name, text } => info!("Chat: {name}: {text}"),
+                Heard::Roster { name, here: true } => self.players.push(name.clone()),
+                Heard::Roster { name, here: false } => {
+                    if let Some(at) = self.players.iter().position(|player| player == name) {
+                        self.players.remove(at);
+                    }
+                }
                 Heard::Entered(_) | Heard::Gone(_) => continue,
                 _ => {}
             }

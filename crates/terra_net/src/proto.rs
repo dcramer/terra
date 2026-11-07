@@ -18,6 +18,8 @@ pub const MOST_PARTS: usize = 8;
 pub const MOST_INTENTS: usize = 8;
 /// The most events a state packet carries.
 pub const MOST_EVENTS: usize = 15;
+/// The longest thing a player says at once, bytes.
+pub const MOST_SAY: usize = 256;
 /// The longest name a player gives, bytes.
 pub const MOST_NAME: usize = 32;
 
@@ -98,6 +100,8 @@ pub enum Up {
     },
     /// An operation asked for: the server checks it and, if it stands, orders it.
     Ask(Vec<u8>),
+    /// Words for everyone in the world.
+    Say(String),
 }
 
 impl Wire for Up {
@@ -109,20 +113,24 @@ impl Wire for Up {
                 name,
                 signature,
             } => {
-                to.ranged(0, 1);
+                to.ranged(0, 2);
                 version.write(to);
                 identity.write(to);
                 name.write(to);
                 signature.write(to);
             }
             Up::Ask(bytes) => {
-                to.ranged(1, 1);
+                to.ranged(1, 2);
                 to.run(bytes);
+            }
+            Up::Say(text) => {
+                to.ranged(2, 2);
+                text.write(to);
             }
         }
     }
     fn read(from: &mut Reader) -> Result<Self, Malformed> {
-        Ok(match from.ranged(1)? {
+        Ok(match from.ranged(2)? {
             0 => {
                 let (version, identity) = (u64::read(from)?, <[u8; 32]>::read(from)?);
                 let name = String::read(from)?;
@@ -136,7 +144,14 @@ impl Wire for Up {
                     signature: <[u8; 64]>::read(from)?,
                 }
             }
-            _ => Up::Ask(from.run()?.to_vec()),
+            1 => Up::Ask(from.run()?.to_vec()),
+            _ => {
+                let text = String::read(from)?;
+                if text.len() > MOST_SAY {
+                    return Err(Malformed::Long);
+                }
+                Up::Say(text)
+            }
         })
     }
 }
@@ -166,6 +181,17 @@ pub enum Down {
     /// The first thing a server says: the number a hello must be signed with
     /// ([`crate::identity`]).
     Challenge([u8; 32]),
+    /// What a player said, to everyone.
+    Said {
+        name: String,
+        text: String,
+    },
+    /// A player is in the world, or has left it: the list of who is here, kept by its
+    /// changes.
+    Roster {
+        name: String,
+        here: bool,
+    },
 }
 
 impl Wire for Down {
@@ -177,14 +203,14 @@ impl Wire for Down {
                 you,
                 realm,
             } => {
-                to.ranged(0, 5);
+                to.ranged(0, 7);
                 tick.write(to);
                 room.0.write(to);
                 you.0.write(to);
                 to.run(realm);
             }
             Down::Refuse(reason) => {
-                to.ranged(1, 5);
+                to.ranged(1, 7);
                 reason.write(to);
             }
             Down::Op {
@@ -192,24 +218,34 @@ impl Wire for Down {
                 number,
                 bytes,
             } => {
-                to.ranged(2, 5);
+                to.ranged(2, 7);
                 region.write(to);
                 to.varint(u64::from(*number));
                 to.run(bytes);
             }
-            Down::Settled => to.ranged(3, 5),
+            Down::Settled => to.ranged(3, 7),
             Down::Closing(reason) => {
-                to.ranged(4, 5);
+                to.ranged(4, 7);
                 reason.write(to);
             }
             Down::Challenge(challenge) => {
-                to.ranged(5, 5);
+                to.ranged(5, 7);
                 challenge.write(to);
+            }
+            Down::Said { name, text } => {
+                to.ranged(6, 7);
+                name.write(to);
+                text.write(to);
+            }
+            Down::Roster { name, here } => {
+                to.ranged(7, 7);
+                name.write(to);
+                to.bool(*here);
             }
         }
     }
     fn read(from: &mut Reader) -> Result<Self, Malformed> {
-        Ok(match from.ranged(5)? {
+        Ok(match from.ranged(7)? {
             0 => Down::Welcome {
                 tick: u32::read(from)?,
                 room: RoomId(u16::read(from)?),
@@ -224,7 +260,15 @@ impl Wire for Down {
             },
             3 => Down::Settled,
             4 => Down::Closing(Reason::read(from)?),
-            _ => Down::Challenge(<[u8; 32]>::read(from)?),
+            5 => Down::Challenge(<[u8; 32]>::read(from)?),
+            6 => Down::Said {
+                name: String::read(from)?,
+                text: String::read(from)?,
+            },
+            _ => Down::Roster {
+                name: String::read(from)?,
+                here: from.bool()?,
+            },
         })
     }
 }
@@ -277,6 +321,7 @@ mod tests {
                 signature: [5; 64],
             },
             Up::Ask(vec![1, 2, 3]),
+            Up::Say("hæ".to_string()),
         ];
         for up in ups {
             assert_eq!(Up::decoded(&up.encoded()), Ok(up));
@@ -297,6 +342,14 @@ mod tests {
             Down::Settled,
             Down::Closing(Reason::HostLeft),
             Down::Challenge([3; 32]),
+            Down::Said {
+                name: "Ása".to_string(),
+                text: "hæ".to_string(),
+            },
+            Down::Roster {
+                name: "Ása".to_string(),
+                here: false,
+            },
         ];
         for down in downs {
             assert_eq!(Down::decoded(&down.encoded()), Ok(down));

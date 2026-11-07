@@ -255,7 +255,7 @@ mod tests {
                         server.order(RoomId(0), [1.0, 2.0, 3.0], b"dig");
                     }
                     Event::Left { peer } => left.push(peer),
-                    Event::Asked { .. } => {}
+                    Event::Asked { .. } | Event::Said { .. } => {}
                 }
             }
             server.step(&mut wire);

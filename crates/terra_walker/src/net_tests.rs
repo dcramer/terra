@@ -571,3 +571,43 @@ fn a_game_of_another_world_is_told_so_and_leaves() {
     let mut guests = host.query::<&Guest>();
     assert_eq!(guests.iter(&host).count(), 0);
 }
+
+/// One who leaves and comes back is put where it stood (D592, D637), and when the host leaves
+/// every guest is told so in words.
+#[test]
+fn a_guest_returns_to_where_it_left_and_is_told_when_the_host_leaves() {
+    let (mut world, _, network) = hosted();
+    let mut bot = Bot::join(&network, Some(Action::Forward));
+    run(&mut world, &network, &mut bot, 16 + 96);
+    let mut guests = world.query::<(&Guest, &Transform)>();
+    let stood = guests.single(&world).expect("one guest").1.translation;
+    let start = world
+        .resource::<Planet>()
+        .ground_at(Vec3::new(0.0, 2100.0, 3.0));
+    assert!(stood.distance(start) > 4.0, "it walked before it left");
+    {
+        use terra_net::transport::ClientTransport;
+        bot.wire.close();
+    }
+    run(&mut world, &network, &mut bot, 4);
+    assert_eq!(guests.iter(&world).count(), 0);
+    // The same player again (the bot's one identity), holding nothing: where it stood.
+    let mut back = Bot::join(&network, None);
+    run(&mut world, &network, &mut back, 16 + 32);
+    let returned = guests.single(&world).expect("it came back").1.translation;
+    assert!(
+        returned.distance(stood) < 0.2,
+        "it came back {} m from where it left",
+        returned.distance(stood)
+    );
+    assert_eq!(world.resource::<Host>().players(), ["bot"]);
+    // The host leaves.
+    world.resource_mut::<Host>().close();
+    run(&mut world, &network, &mut back, 2);
+    assert!(
+        back.heard
+            .contains(&Heard::Closed(terra_net::proto::Reason::HostLeft)),
+        "{:?}",
+        back.heard.last()
+    );
+}

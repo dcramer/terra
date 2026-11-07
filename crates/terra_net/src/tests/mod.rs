@@ -230,6 +230,7 @@ impl Table {
                     *purse += 1;
                     self.server.set_as(id, PURSE, &*purse);
                 }
+                Event::Said { .. } => {}
                 Event::Left { peer } => {
                     if let Some(id) = self.players.remove(&peer) {
                         self.server.despawn(id);
@@ -287,7 +288,11 @@ impl Table {
                     }
                     Heard::Ready => seat.ready_after = Some(seat.ticks),
                     Heard::Closed(reason) => seat.closed = Some(reason),
-                    Heard::Entered(_) | Heard::Gone(_) | Heard::Happened { .. } => {}
+                    Heard::Entered(_)
+                    | Heard::Gone(_)
+                    | Heard::Happened { .. }
+                    | Heard::Said { .. }
+                    | Heard::Roster { .. } => {}
                 }
             }
             seat.ticks += 1;

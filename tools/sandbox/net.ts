@@ -3,7 +3,8 @@
 // host's world walks the joined player from its intents, the joined game predicts its own
 // player and draws the host. Checked with no picture, by what each game says (`net.state`):
 // each holds the other, the joined player walks, and where it stands is the same in both
-// games to a centimetre. Says how often the joined game's prediction was corrected: a
+// games to a centimetre; then each lists the other, and the host leaving is told to the
+// joined game in words. Says how often the joined game's prediction was corrected: a
 // reading, since on a loaded machine frames carry several ticks and intents come late.
 //
 //   node tools/sandbox/net.ts [--shots DIR] [--walk FRAMES]
@@ -25,7 +26,7 @@ const GAME_PORT = 47000 + (process.pid % 2000);
 const SAVES = ["shots/net-host.ron", "shots/net-join.ron"];
 
 type Place = [number, number, number];
-type State = { mine: Place | null; guests: { at: Place }[]; puppets: { at: Place }[]; corrections: number | null; clients: number | null; tick: number | null };
+type State = { mine: Place | null; guests: { at: Place }[]; puppets: { at: Place }[]; corrections: number | null; clients: number | null; tick: number | null; players: string[] | null; ended: string | null };
 
 /// One `remote.ts` command to a copy (by its remote port; none: the one last started).
 function remote(port: number | undefined, ...words: string[]): string {
@@ -110,6 +111,19 @@ try {
     still(host, theirs.guests[0].at, resolve(SHOTS, "host-sees-guest.png"));
     still(joiner, theirs.mine!, resolve(SHOTS, "joiner-sees-host.png"));
     console.log(`✓ stills of each game's other player in ${SHOTS}`);
+  }
+  if (!failed) {
+    // Who is here, a word each way, and the host leaving.
+    const here = [state(host).players, state(joiner).players].map((players) => (players ?? []).join(","));
+    remote(joiner, "call", "net.say", JSON.stringify({ text: "is anyone there?" }));
+    remote(host, "call", "net.say", JSON.stringify({ text: "i am" }));
+    await sleep(1);
+    remote(host, "call", "net.leave");
+    await until("the joined game was never told the host left", () => state(joiner).ended !== null);
+    const ended = state(joiner).ended!;
+    if (here[0] !== "host,friend" || here[1] !== "host") failed = `the host lists "${here[0]}" and the joined game "${here[1]}", not host,friend and host (terra_net's roster)`;
+    else if (!ended.includes("host left")) failed = `the joined game was told "${ended}" when the host left, not that the host left`;
+    else console.log(`✓ each lists the other, words went both ways, and when the host left the joined game was told: "${ended}"`);
   }
 } catch (error) {
   failed = (error as Error).message;

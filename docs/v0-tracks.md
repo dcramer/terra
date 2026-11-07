@@ -78,7 +78,7 @@ The largest risk. The design is [netcode.md](netcode.md) (D34, D651, D652, D636)
   - Sending by area, a snapshot then changes, others shown between ticks, late join, leaving and rejoining mid-fight, and a version check on connect.
   - Each player's character kept by the server (D592) under an identity, a key kept on the player's machine. Direct address first, Steam's relay later (D34). When the host leaves, the session ends for everyone with a plain message and the world is saved, as the developers confirmed; there is no handing over to another player.
   - Every action checked: in reach, owned, allowed (D51).
-  - Text chat and a player list.
+  - Text chat and a player list: built in the protocol and by the remote (`net.say`, `net.state`'s players); what shows them on screen is the game's to design.
 - **Done when**: engine.md's test passes (two peers end the same, a late joiner catches up), then four clients for 30 minutes at 100 ms and 1% loss show no lasting mismatch, with the bytes per player per second reported. Both pass in one process on the in-memory network, on a toy game and on the real mover (3.1 kB/s down, 1.3 kB/s up a player); they are yet to be run in the game, which is not yet a client of its own server.
 
 ## Sound (7)
