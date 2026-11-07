@@ -64,33 +64,47 @@ pub struct Steering {
     pub view: View,
 }
 
-fn write_vec3(vector: Vec3, to: &mut Writer) {
-    vector.to_array().write(to);
+/// The bits of a direction's axis on the wire, and of a pitch: a step of a thirtieth of a
+/// degree, which no eye or aim tells. Both ends act on the direction as it reads back
+/// ([`Steering::wired`]), so the step costs prediction nothing.
+pub(crate) const WAY_BITS: u32 = 12;
+const MOST_PITCH: f32 = std::f32::consts::FRAC_PI_2;
+
+pub(crate) fn write_way(way: Vec3, to: &mut Writer) {
+    for along in way.to_array() {
+        to.quantised(along, -1.0, 1.0, WAY_BITS);
+    }
 }
 
-/// A vector, refused where it is no number: it is a stranger's.
-fn read_vec3(from: &mut Reader) -> Result<Vec3, Malformed> {
-    let vector = Vec3::from_array(<[f32; 3]>::read(from)?);
-    if vector.is_finite() {
-        Ok(vector)
-    } else {
-        Err(Malformed::Range)
+/// A direction read back to unit length; one along nothing (far short of a unit before it is
+/// made one) is refused.
+pub(crate) fn read_way(from: &mut Reader) -> Result<Vec3, Malformed> {
+    let mut way = Vec3::ZERO;
+    for axis in 0..3 {
+        way[axis] = from.quantised(-1.0, 1.0, WAY_BITS)?;
+    }
+    (way.length_squared() > 0.25)
+        .then(|| way.normalize())
+        .ok_or(Malformed::Range)
+}
+
+impl Steering {
+    /// The steering as it reads back from the wire: what both ends act on.
+    pub fn wired(&self) -> Steering {
+        Steering::decoded(&self.encoded()).unwrap_or_else(|_| self.clone())
     }
 }
 
 impl Wire for Steering {
     fn write(&self, to: &mut Writer) {
         self.intent.write(to);
-        write_vec3(self.view.forward, to);
-        self.view.pitch.write(to);
+        write_way(self.view.forward, to);
+        to.quantised(self.view.pitch, -MOST_PITCH, MOST_PITCH, WAY_BITS);
     }
     fn read(from: &mut Reader) -> Result<Self, Malformed> {
         let intent = Intent::read(from)?;
-        let forward = read_vec3(from)?;
-        let pitch = f32::read(from)?;
-        if !pitch.is_finite() {
-            return Err(Malformed::Range);
-        }
+        let forward = read_way(from)?;
+        let pitch = from.quantised(-MOST_PITCH, MOST_PITCH, WAY_BITS)?;
         Ok(Steering {
             intent,
             view: View { forward, pitch },

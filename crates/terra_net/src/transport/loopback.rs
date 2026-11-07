@@ -89,13 +89,16 @@ struct Link {
     open: bool,
 }
 
+/// The next draw of a link's faults, from 0 up to 1: by its seed and how many it has taken.
+pub(crate) fn draw(seed: u64, draws: &mut u64) -> f64 {
+    *draws += 1;
+    let bits = splitmix64(seed ^ draws.wrapping_mul(0x9e37_79b9_7f4a_7c15));
+    (bits >> 11) as f64 / (1u64 << 53) as f64
+}
+
 impl Link {
-    /// The next draw of its faults, from 0 up to 1.
     fn draw(&mut self) -> f64 {
-        self.draws += 1;
-        let bits =
-            splitmix64(self.conditions.seed ^ self.draws.wrapping_mul(0x9e37_79b9_7f4a_7c15));
-        (bits >> 11) as f64 / (1u64 << 53) as f64
+        draw(self.conditions.seed, &mut self.draws)
     }
 }
 

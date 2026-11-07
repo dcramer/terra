@@ -81,7 +81,7 @@ struct JoinAsk {
 
 /// A scripted run's identity, from its name: the same name is the same player. A player's own
 /// is a secret made once and kept on their machine (D592), which the title screen will give.
-fn scripted_identity(name: &str) -> Identity {
+pub fn scripted_identity(name: &str) -> Identity {
     let mut secret = [0; 32];
     for (index, chunk) in secret.chunks_exact_mut(8).enumerate() {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();

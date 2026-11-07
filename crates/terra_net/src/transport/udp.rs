@@ -172,6 +172,15 @@ impl UdpClient {
         })
     }
 
+    /// The bytes a second it has sent and received of late, as the carrier counts them: its
+    /// own framing included, the socket's and the internet's not.
+    pub fn rates(&self) -> (f64, f64) {
+        (
+            self.renet.bytes_sent_per_sec(),
+            self.renet.bytes_received_per_sec(),
+        )
+    }
+
     /// Whether the server has accepted the connection: nothing sent before it is carried.
     pub fn connected(&self) -> bool {
         self.renet.is_connected()

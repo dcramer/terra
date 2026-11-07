@@ -128,8 +128,9 @@ pub fn read(
     }
 }
 
-/// An intent on the wire (docs/netcode.md): exact, so a server runs what the player's own
-/// game ran. A held key is the same intent tick after tick, which goes up as a bit.
+/// An intent on the wire (docs/netcode.md): what is held and pressed exact, an aim from its
+/// exact place along a direction to the wire's step, so a server runs what the player's own
+/// game ran once that game acts on it as it reads back (`net::Steering::wired`). A held key is the same intent tick after tick, which goes up as a bit.
 impl terra_net::wire::Wire for Intent {
     fn write(&self, to: &mut terra_net::wire::Writer) {
         to.varint(self.held);
@@ -139,7 +140,7 @@ impl terra_net::wire::Wire for Intent {
         to.bool(self.aim.is_some());
         if let Some(aim) = self.aim {
             aim.origin.to_array().write(to);
-            aim.direction.to_array().write(to);
+            crate::net::write_way(*aim.direction, to);
         }
         to.bool(self.busy);
         to.bool(self.choosing);
@@ -152,7 +153,7 @@ impl terra_net::wire::Wire for Intent {
         let wheel = ((wheel >> 1) as i32) ^ -((wheel & 1) as i32);
         let aim = if from.bool()? {
             let origin = Vec3::from_array(<[f32; 3]>::read(from)?);
-            let direction = Vec3::from_array(<[f32; 3]>::read(from)?);
+            let direction = crate::net::read_way(from)?;
             // A stranger's numbers: an aim from nowhere or along nothing is refused.
             let direction = Dir3::new(direction).map_err(|_| Malformed::Range)?;
             if !origin.is_finite() {

@@ -107,6 +107,12 @@ impl Entity {
     }
 }
 
+/// How many packets carry an intent (D651): three, so two lost in a row lose nothing. Every
+/// packet not yet acknowledged was first sent, and at a round trip of 100 ms that is seven
+/// intents a packet, three quarters of what a player sends, where a third lost in a row is
+/// one in a million at 1% loss and costs one correction.
+const REPEATS: usize = 3;
+
 /// How many events' numbers are remembered: more than are ever unacknowledged at once.
 const HEARD_KEPT: usize = 64;
 
@@ -367,8 +373,9 @@ impl Client {
         Ok(())
     }
 
-    /// Its intent for a tick, to go up with the next packets until the server holds it. Ticks
-    /// are given in order, one each; a gap starts the run again.
+    /// Its intent for a tick, to go up with this packet and the next two, or fewer if the
+    /// server is known to hold it sooner. Ticks are given in order, one each; a gap starts
+    /// the run again.
     pub fn intent(&mut self, tick: u32, bytes: Vec<u8>) {
         if self
             .intents
@@ -378,7 +385,7 @@ impl Client {
             self.intents.clear();
         }
         self.intents.push_back((tick, bytes));
-        if self.intents.len() > MOST_INTENTS {
+        if self.intents.len() > REPEATS {
             self.intents.pop_front();
         }
     }

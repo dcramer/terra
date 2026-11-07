@@ -3,6 +3,7 @@
 //! them in memory, for a game alone with its own server and for tests; UDP (`renet`) and
 //! Steam's relay are other carriers of the same seam.
 
+pub mod conditioned;
 pub mod loopback;
 #[cfg(feature = "udp")]
 pub mod udp;

@@ -220,7 +220,8 @@ fn a_guest_sending_nothing_stands_still_and_nonsense_steering_is_refused() {
     let steering = Steering {
         intent: Intent::default(),
         view: View {
-            forward: Vec3::new(f32::NAN, 0.0, 0.0),
+            // Along nothing: no way to look.
+            forward: Vec3::ZERO,
             pitch: 0.0,
         },
     };
@@ -235,7 +236,16 @@ fn a_guest_sending_nothing_stands_still_and_nonsense_steering_is_refused() {
             pitch: 0.25,
         },
     };
-    assert_eq!(Steering::decoded(&good.encoded()), Ok(good));
+    // It reads back to the wire's step, and the same from then on: what both ends act on.
+    let once = good.wired();
+    assert_eq!(once.wired(), once);
+    assert_eq!(once.intent, good.intent);
+    assert!(once.view.forward.distance(Vec3::X) < 0.001 && (once.view.pitch - 0.25).abs() < 0.001);
+    assert!(
+        good.encoded().len() <= 10,
+        "a steering is {} bytes",
+        good.encoded().len()
+    );
 }
 
 /// A game that joined: a world of its own on the same planet, this machine's player standing

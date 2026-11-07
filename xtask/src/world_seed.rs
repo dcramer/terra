@@ -51,6 +51,10 @@ const ALLOWED: &[(&str, &str)] = &[
         "a link's dice: which packets a test's network loses, not the world",
     ),
     (
+        "crates/terra_net/src/transport/conditioned.rs",
+        "a link's dice, as the loopback's: which packets a soak's link loses",
+    ),
+    (
         "crates/terra_game/src/play/music.rs",
         "the music's dice: what is heard, not the world",
     ),

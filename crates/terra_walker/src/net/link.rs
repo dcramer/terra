@@ -209,10 +209,18 @@ impl Link {
             world.get::<Intent>(player),
             world.get::<View>(player),
         ) {
+            // As the wire carries it: the walk here must be given what the host's is.
             let steering = Steering {
                 intent: intent.clone(),
                 view: *view,
-            };
+            }
+            .wired();
+            if let Some(mut intent) = world.get_mut::<Intent>(player) {
+                *intent = steering.intent.clone();
+            }
+            if let Some(mut view) = world.get_mut::<View>(player) {
+                *view = steering.view;
+            }
             self.client.intent(tick, steering.encoded());
             self.steering = Some(steering);
         }
