@@ -1,4 +1,5 @@
-//! Still dark water for any scene: a marsh's channels, a ruin's pool, a mere. Seen from an
+//! Still dark water for the ruin's pool, its last user: the marsh's channels (iso-kit j10)
+//! and the forest's pond (j28) are the kit's water (kit/water.rs). Seen from an
 //! action RPG's camera, 55 degrees down, real water reflects only two to four percent of
 //! what is above it, so it reads near black (Diablo IV's and V Rising's pools); what makes
 //! it water is what it mirrors: a faint band of the sky, broken by ripples, and the narrow
