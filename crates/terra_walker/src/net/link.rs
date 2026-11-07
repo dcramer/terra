@@ -26,7 +26,7 @@ use terra_net::client::{Client, Event as Heard, SHOWN_SENDS_BACK};
 use terra_net::clock::Clock;
 use terra_net::identity::Identity;
 use terra_net::predict::History;
-use terra_net::proto::EntityId;
+use terra_net::proto::{EntityId, Reason};
 use terra_net::transport::ClientTransport;
 use terra_net::wire::Wire;
 
@@ -55,6 +55,9 @@ pub struct Puppet {
 pub struct Ended(pub String);
 
 /// What a player is told when the host's world is not the one this game made.
+/// Said when a connection ends before the server ever welcomed this game.
+const NO_ANSWER: &str =
+    "No answer from that address. Check it, and that the host's game is hosting.";
 const OTHER_WORLD: &str = "That world is made from another seed or size than this game's. Start this game on the host's seed, then join again.";
 
 /// How often the server sends state, ticks (its `send_every`): others are shown
@@ -83,6 +86,11 @@ pub struct Link {
     /// any. And why the link is over, once it is.
     realm: Vec<u8>,
     over: Option<String>,
+    /// The realm the server welcomed this game to, once it has.
+    welcomed: Option<Vec<u8>>,
+    /// The link was kept waiting, the world's clock held (a title screen, a load): the next
+    /// tick starts the clock and the body again from the server's newest word.
+    waited: bool,
     /// Who is in the world, as the server has said.
     players: Vec<String>,
     /// What the server said that is the layers' above to act on (operations, events, the
@@ -114,6 +122,8 @@ impl Link {
             heard: Vec::new(),
             realm,
             over: None,
+            welcomed: None,
+            waited: false,
             players: Vec::new(),
             events: Vec::new(),
         }
@@ -159,9 +169,16 @@ impl Link {
         self.clock.rate()
     }
 
-    fn listen(&mut self, world: &mut World) {
+    /// The realm the server welcomed this game to (`net::realm_of`'s bytes), once it has:
+    /// all a game needs to make the land it joined.
+    pub fn realm(&self) -> Option<&[u8]> {
+        self.welcomed.as_deref()
+    }
+
+    /// Takes what the server sent, so much time having passed on the wire.
+    fn hear(&mut self, passed: std::time::Duration) {
         let mut heard = std::mem::take(&mut self.heard);
-        self.wire.advance(super::TICK);
+        self.wire.advance(passed);
         self.client.poll(&mut self.wire, &mut heard);
         for event in heard.drain(..) {
             match &event {
@@ -169,9 +186,14 @@ impl Link {
                     if !self.realm.is_empty() && *realm != self.realm {
                         self.over = Some(OTHER_WORLD.to_string());
                     }
+                    self.welcomed = Some(realm.clone());
                     self.clock.start(*tick);
                     self.history.clear();
                     (self.answered, self.begun) = (0, false);
+                }
+                // Lost before any welcome: nobody was there to answer.
+                Heard::Closed(Reason::Lost) if self.welcomed.is_none() => {
+                    self.over = Some(NO_ANSWER.to_string());
                 }
                 Heard::Closed(reason) => self.over = Some(reason.message().to_string()),
                 Heard::Said { name, text } => info!("Chat: {name}: {text}"),
@@ -189,6 +211,27 @@ impl Link {
         self.heard = heard;
         if self.events.len() > MOST_EVENTS_KEPT {
             self.events.drain(..MOST_EVENTS_KEPT / 2);
+        }
+    }
+
+    /// Keeps the link while the world's clock is held: the server is heard and answered (its
+    /// packets acknowledged, the connection kept), and no tick is walked or sent.
+    fn wait(&mut self, passed: std::time::Duration) {
+        self.hear(passed);
+        self.wire.flush();
+        self.waited = true;
+    }
+
+    fn listen(&mut self, world: &mut World) {
+        self.hear(super::TICK);
+        if std::mem::take(&mut self.waited)
+            && let Some(stamp) = self.client.stamp()
+        {
+            // Ticks passed on the server that this game did not walk: its clock and its
+            // body begin again from the server's newest word, as at the welcome.
+            self.clock.start(stamp.tick);
+            self.history.clear();
+            (self.answered, self.begun) = (0, false);
         }
         if self
             .client
@@ -323,12 +366,35 @@ pub fn listen(world: &mut World) {
         return;
     };
     link.listen(world);
-    // Over, by the server's word or because its world is not this game's: the link goes, its
-    // puppets with it, and why is kept for whoever asks.
+    keep(world, link);
+}
+
+/// While the world's clock is held (a title screen, a load), each frame: the link is kept,
+/// by the time that truly passed.
+pub fn wait(world: &mut World) {
+    let passed = world.resource::<Time<Real>>().delta();
+    let Some(mut link) = world.remove_resource::<Link>() else {
+        return;
+    };
+    link.wait(passed);
+    keep(world, link);
+}
+
+/// Whether the world's clock is held, so no tick comes to keep the link.
+pub fn held(time: Res<Time<Virtual>>) -> bool {
+    time.is_paused()
+}
+
+/// Puts the link back, unless it is over, by the server's word or because its world is not
+/// this game's: then it goes, its puppets with it, and why is kept for whoever asks.
+fn keep(world: &mut World, mut link: Link) {
     if let Some(why) = link.over.take() {
         link.wire.close();
         for puppet in link.puppets.values() {
-            world.despawn(*puppet);
+            // Gone already if the world they stood in was left.
+            if let Ok(puppet) = world.get_entity_mut(*puppet) {
+                puppet.despawn();
+            }
         }
         warn!("Left the hosted world: {why}");
         world.insert_resource(Ended(why));

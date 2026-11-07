@@ -13,26 +13,17 @@
 //!   of its own the host has yet to order back, and why a link ended if one did.
 
 use super::link::{Ended, Link, Puppet};
-use super::{Guest, Host, parts, realm_of};
+use super::session;
+use super::{Guest, Host, realm_of};
 use crate::IsLocalPlayer;
 use bevy::prelude::*;
 use bevy::remote::{BrpResult, builtin_methods::parse_some};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::hash::{BuildHasher, Hash, Hasher};
-use std::net::{Ipv4Addr, SocketAddr};
+use std::hash::{Hash, Hasher};
 use terra_net::identity::Identity;
-use terra_net::server::Config;
-use terra_net::transport::udp::{UdpClient, UdpServer};
 use terra_world::planet::Planet;
 use terra_world::remote::{method, refused};
-use terra_world::start::Start;
-
-/// The protocol's version: a game of another is refused. A hash of the wire's schema and the
-/// game's data is to take its place (docs/netcode.md).
-pub const VERSION: u64 = 1;
-/// The most clients a hosted world lets in.
-const MOST_GUESTS: usize = 16;
 
 pub fn plugin(app: &mut App) {
     method(app, "net.host", host);
@@ -49,27 +40,7 @@ struct HostAsk {
 
 fn host(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let HostAsk { port } = parse_some(params)?;
-    if world.contains_resource::<Host>() || world.contains_resource::<Link>() {
-        return Err(refused("This game already hosts or has joined a world."));
-    }
-    let Some(start) = world.get_resource::<Start>() else {
-        return Err(refused(
-            "There is no world to host yet: its start is not chosen.",
-        ));
-    };
-    let beside = start.translation + start.right() * 2.0;
-    let wire = UdpServer::bind((Ipv4Addr::UNSPECIFIED, port).into(), MOST_GUESTS)
-        .map_err(|why| refused(format!("Port {port} could not be opened: {why}.")))?;
-    let address = wire.address();
-    let mut config = Config::new(VERSION);
-    // The server's challenges are drawn from this (D592): the operating system's randomness,
-    // by the keys the standard library seeds its hashers with.
-    config.secret = std::collections::hash_map::RandomState::new().hash_one(port);
-    let realm = world
-        .get_resource::<Planet>()
-        .map(realm_of)
-        .unwrap_or_default();
-    world.insert_resource(Host::new(config, parts(), Box::new(wire), beside, realm).named("host"));
+    let address = session::open(world, port, "host").map_err(refused)?;
     Ok(json!({ "hosting": address.to_string() }))
 }
 
@@ -93,23 +64,13 @@ pub fn scripted_identity(name: &str) -> Identity {
 
 fn join(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let JoinAsk { address, name } = parse_some(params)?;
-    if world.contains_resource::<Host>() || world.contains_resource::<Link>() {
-        return Err(refused("This game already hosts or has joined a world."));
-    }
-    let server: SocketAddr = address
-        .parse()
-        .map_err(|_| refused(format!("{address} is not an address like 127.0.0.1:47000.")))?;
-    let identity = scripted_identity(&name);
-    let public = identity.public();
-    let number = u64::from_le_bytes(public[..8].try_into().expect("eight of thirty-two bytes"));
-    let wire = UdpClient::connect(server, number)
-        .map_err(|why| refused(format!("No socket could be opened to {address}: {why}.")))?;
+    let server = session::address(&address).map_err(refused)?;
+    // A scripted run has made its world already: the host's must be the same.
     let realm = world
         .get_resource::<Planet>()
         .map(realm_of)
         .unwrap_or_default();
-    world.remove_resource::<Ended>();
-    world.insert_resource(Link::join(Box::new(wire), VERSION, &identity, &name, realm));
+    session::join(world, server, &scripted_identity(&name), &name, realm).map_err(refused)?;
     Ok(json!({ "joining": address }))
 }
 
@@ -133,19 +94,9 @@ fn say(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 }
 
 fn leave(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
-    if let Some(mut host) = world.remove_resource::<Host>() {
-        host.close();
-        return Ok(json!("stopped hosting: every guest was told the host left"));
-    }
-    if let Some(mut link) = world.remove_resource::<Link>() {
-        link.leave();
-        let mut puppets = world.query_filtered::<Entity, With<Puppet>>();
-        for puppet in puppets.iter(world).collect::<Vec<_>>() {
-            world.despawn(puppet);
-        }
-        return Ok(json!("left the hosted world"));
-    }
-    Err(refused("This game neither hosts nor has joined a world."))
+    session::close(world)
+        .map(|what| json!(what))
+        .ok_or_else(|| refused("This game neither hosts nor has joined a world."))
 }
 
 fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {

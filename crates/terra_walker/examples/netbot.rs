@@ -23,7 +23,8 @@ use terra_net::wire::Wire;
 use terra_walker::View;
 use terra_walker::controls::Action;
 use terra_walker::intent::Intent;
-use terra_walker::net::remote::{VERSION, scripted_identity};
+use terra_walker::net::remote::scripted_identity;
+use terra_walker::net::session::VERSION;
 use terra_walker::net::{OWN, Steering};
 
 const TICK: Duration = Duration::from_micros(15_625);

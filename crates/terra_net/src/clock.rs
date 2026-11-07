@@ -63,11 +63,16 @@ pub struct Clock {
 }
 
 impl Clock {
-    /// Welcomed at a tick of the server's.
+    /// Welcomed at a tick of the server's, or beginning again from one after ticks the client
+    /// did not run (its game was loading). As after a jump, no stamp is believed until the
+    /// server holds an intent of this run: one beginning again is still told of the run
+    /// before, whose intents are by now seconds old, and would jump to answer them.
     pub fn start(&mut self, server_tick: u32) {
+        let first = server_tick + FIRST_LEAD;
         *self = Clock {
-            next: Some(server_tick + FIRST_LEAD),
+            next: Some(first),
             fresh: true,
+            hold: Some((first, server_tick + MOST_HOLD)),
             ..Clock::default()
         };
     }

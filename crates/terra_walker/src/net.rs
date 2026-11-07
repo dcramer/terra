@@ -17,6 +17,7 @@
 pub mod ground;
 pub mod link;
 pub mod remote;
+pub mod session;
 pub mod worn;
 
 use crate::intent::Intent;
@@ -245,7 +246,13 @@ pub fn plugin(app: &mut App) {
             link::show.in_set(Sim::End).run_if(joined),
         ),
     )
-    .add_systems(Update, link::pace.run_if(joined))
+    .add_systems(
+        Update,
+        (
+            link::pace.run_if(joined),
+            link::wait.run_if(joined).run_if(link::held),
+        ),
+    )
     .add_systems(Last, farewell)
     .init_resource::<ground::Ground>()
     .init_resource::<worn::Said>()

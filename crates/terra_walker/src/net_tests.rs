@@ -383,6 +383,23 @@ impl Together {
         }
     }
 
+    /// The joined game's clock held for so many of the host's ticks (a title screen, a load):
+    /// it walks nothing and only keeps its link, a frame a tick, while the host plays on.
+    fn hold(&mut self, ticks: u32, keeps: bool) {
+        let mut real = Time::<Real>::default();
+        for _ in 0..ticks {
+            self.network.advance(f64::from(TICK));
+            if keeps {
+                real.advance_by(std::time::Duration::from_secs_f32(TICK));
+                self.client.insert_resource(real);
+                self.client.run_system_once(link::wait).unwrap();
+            }
+            self.host.run_system_once(hear).unwrap();
+            self.host.run_system_once(walk).unwrap();
+            self.host.run_system_once(tell).unwrap();
+        }
+    }
+
     /// The check (D632's faults are beside it): the ticks from one on where the joined game's
     /// first prediction of its player was over a millimetre from where the host put it.
     fn mispredicted(&self, from: u32) -> Vec<u32> {
@@ -821,4 +838,46 @@ fn each_player_is_dressed_as_its_player_is_in_the_others_game() {
     use terra_net::wire::Wire;
     let long = worn::Wearing(vec!["x".repeat(65)]);
     assert!(worn::Wearing::decoded(&long.encoded()).is_err());
+}
+
+/// A game that joins from its title screen holds its clock while it makes the land the host
+/// welcomed it to (v0's Front): the link is kept all the while, the realm is known, and when
+/// its ticks begin again its walk is the host's from the first second.
+#[test]
+fn a_link_kept_while_the_clock_is_held_walks_with_the_host_again() {
+    let mut pair = Together::new(rough());
+    pair.run(0..128);
+    assert_eq!(
+        pair.client.resource::<link::Link>().realm(),
+        Some(&b"realm"[..]),
+        "the realm the host welcomed it to is known"
+    );
+    // Ten seconds held.
+    pair.hold(640, true);
+    assert!(
+        pair.client.contains_resource::<link::Link>(),
+        "the link was lost while held: {:?}",
+        pair.client
+            .get_resource::<link::Ended>()
+            .map(|ended| &ended.0)
+    );
+    pair.run(768..1408);
+    let resumed = pair.host.resource::<Host>().server().tick() - 640 + 64;
+    assert!(pair.checked(resumed) > 400, "{}", pair.checked(resumed));
+    assert_eq!(pair.mispredicted(resumed), Vec::<u32>::new());
+}
+
+/// The planted fault (D632): held without keeping its link, the game's clock is ten seconds
+/// behind the host's when its ticks begin again, and the same check must fail it.
+#[test]
+fn a_link_not_kept_while_held_fails_the_check() {
+    let mut pair = Together::new(rough());
+    pair.run(0..128);
+    pair.hold(640, false);
+    pair.run(768..1408);
+    let resumed = pair.host.resource::<Host>().server().tick() - 640 + 64;
+    assert!(
+        pair.checked(resumed) < 400 || !pair.mispredicted(resumed).is_empty(),
+        "a clock ten seconds behind walked with the host"
+    );
 }
