@@ -9,7 +9,11 @@
 //! is baked from the clip itself at startup, as a trail system samples its sockets, by
 //! seeking the knight through it a sixtieth of a second a frame and reading the sword (held
 //! on the hand bone, held.rs) after each pose is applied; then the clip goes back where it
-//! stood. The trail at any clip time is the baked path over the 0.2 s before it.
+//! stood. The trail at any clip time is the baked path over the 0.2 s before it. The path is
+//! kept in the knight's own frame, as a trail's sockets ride the body, so it follows him
+//! wherever he stands and faces: in play (play.rs) it is drawn from his swing's clip time
+//! (`Swinging`), and play's rig waits for the bake (`Blade::settled`) before taking his
+//! player over.
 //!
 //! The strip's look and its light are the biome's `slash` preset (biomes/effects/slash.ron,
 //! drawn by kit/effects.wesl's trail mode): a thin white-hot edge near the tip, a streaked
@@ -51,16 +55,32 @@ enum Bake {
     Done,
 }
 
-/// The blade's path through the swing: (clip time, inner point, outer point), in the world.
+/// The blade's path through the swing: (clip time, inner point, outer point), in the
+/// knight's frame.
 #[derive(Resource, Default)]
-struct Blade {
+pub(crate) struct Blade {
+    knight: Option<Entity>,
     player: Option<Entity>,
     sword: Option<Entity>,
+    /// Frames the knight stood found without a sword in his hand.
+    looked: u32,
     waited: u32,
     bake: Bake,
     path: Vec<(f32, Vec3, Vec3)>,
     shown: f32,
 }
+
+impl Blade {
+    /// Whether the bake is over (or will never start: no sword in his hand after half a
+    /// second of looking), so the knight's player may be taken over.
+    pub(crate) fn settled(&self) -> bool {
+        matches!(self.bake, Bake::Done) || (self.sword.is_none() && self.looked > 30)
+    }
+}
+
+/// A swing the player plays (play.rs): its attack clip's time, from which the trail draws.
+#[derive(Component)]
+pub(crate) struct Swinging(pub f32);
 
 #[derive(Component)]
 enum Part {
@@ -118,10 +138,10 @@ fn find(
     stage: Res<Stage>,
     bodies: Query<(Entity, &Transform), (With<WorldAssetRoot>, Without<ChildOf>)>,
     children: Query<&Children>,
-    players: Query<&AnimationPlayer>,
+    players: Query<&AnimationPlayer, Without<AnimationTransitions>>,
     held: Query<(), With<Held>>,
 ) {
-    if blade.player.is_some() && blade.sword.is_some() {
+    if (blade.player.is_some() && blade.sword.is_some()) || blade.settled() {
         return;
     }
     let Some((knight, _)) = bodies
@@ -130,6 +150,7 @@ fn find(
     else {
         return;
     };
+    // His staged clip's player, never play's (its rig adds transitions).
     blade.player = children.iter_descendants(knight).find(|e| {
         players
             .get(*e)
@@ -138,6 +159,10 @@ fn find(
     blade.sword = children
         .iter_descendants(knight)
         .find(|e| held.contains(*e));
+    blade.knight = Some(knight);
+    if blade.player.is_some() && blade.sword.is_none() {
+        blade.looked += 1;
+    }
 }
 
 /// Seeks the knight through the swing a step a frame, reading the blade after each pose,
@@ -172,8 +197,11 @@ fn bake(
             }
         }
         Bake::Run { next, back, speed } => {
-            if let Ok(g) = swords.get(sword) {
-                let at = |s: f32| g.transform_point(Vec3::Y * BLADE * s);
+            let body = blade.knight.and_then(|k| swords.get(k).ok());
+            if let (Ok(g), Some(body)) = (swords.get(sword), body) {
+                // Into the knight's frame from the sword's, through the world.
+                let local = body.affine().inverse();
+                let at = |s: f32| local.transform_point3(g.transform_point(Vec3::Y * BLADE * s));
                 let t = a.seek_time();
                 blade.path.push((t, at(INNER), at(OUTER)));
             }
@@ -254,22 +282,32 @@ fn show(
     mut parts: Query<(&Part, Option<&mut Transform>, Option<&mut PointLight>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     walking: Option<Res<crate::ruin::walk::Walking>>,
+    (bodies, swings): (Query<&GlobalTransform>, Query<&Swinging>),
 ) {
-    // No trail while the hero walks in to where it was baked (walk.rs).
+    // No staged trail while the hero walks in, or plays (walk.rs, play.rs): then only his
+    // own swing's.
     let walks = walking.is_some_and(|w| w.now);
+    let swing = blade.knight.and_then(|k| swings.get(k).ok()).map(|s| s.0);
     let t = match (&blade.bake, blade.player) {
-        (Bake::Done, Some(p)) if !walks => players
+        (Bake::Done, _) if walks => swing.unwrap_or(-1.0),
+        (Bake::Done, Some(p)) => players
             .get(p)
             .ok()
             .and_then(|p| p.playing_animations().next().map(|(_, a)| a.seek_time()))
             .unwrap_or(-1.0),
         _ => -1.0,
     };
-    if t == blade.shown {
+    if t == blade.shown && swing.is_none() {
         return;
     }
     blade.shown = t;
-    let points = trail(&blade.path, t);
+    let Some(body) = blade.knight.and_then(|k| bodies.get(k).ok()) else {
+        return;
+    };
+    let points: Vec<_> = trail(&blade.path, t)
+        .into_iter()
+        .map(|(i, o, age)| (body.transform_point(i), body.transform_point(o), age))
+        .collect();
     for (part, tr, light) in &mut parts {
         match part {
             Part::Trail(mesh) => {

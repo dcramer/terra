@@ -13,6 +13,7 @@
 use crate::Args;
 use crate::camera::MainCamera;
 use crate::kit::biome::{Biome, Layout};
+use crate::ruin::effects::slash::{Blade, Swinging};
 use crate::ruin::fight::{Pose, Posed};
 use bevy::input::InputSystems;
 use bevy::prelude::*;
@@ -68,6 +69,11 @@ pub fn plugin(app: &mut App) {
     app.add_systems(Startup, (ground, street_hero))
         .add_systems(PreUpdate, script.after(InputSystems))
         .add_systems(Update, (adopt, rig, control, follow).chain());
+    // The street stages no fight, so nothing else hangs the sword on its hero (held.rs).
+    let layout = app.world().get_resource::<Args>().and_then(|a| a.layout);
+    if layout == Some(Layout::Street) {
+        app.add_plugins(crate::ruin::held::plugin);
+    }
 }
 
 /// A ground direction (x, z) for screen input (x right, y up the screen) under a camera
@@ -167,6 +173,13 @@ fn street_hero(
     } else {
         0.0
     };
+    // The stage held.rs finds its knight on, to hang his sword.
+    commands.insert_resource(crate::ruin::effects::Stage {
+        knight: at,
+        foe: at,
+        target: at,
+        floor: y,
+    });
     let body = crate::scene::model(&mut commands, &asset, path, at.extend(y).xzy(), 0.0, 1.0);
     commands.entity(body).insert((
         Hero,
@@ -213,7 +226,12 @@ fn rig(
     heroes: Query<(Entity, &Pose), (With<Hero>, With<Posed>, Without<Rig>)>,
     children: Query<&Children>,
     mut players: Query<&mut AnimationPlayer>,
+    blade: Option<Res<Blade>>,
 ) {
+    // The slash bakes its blade's path from his staged clip first (ruin/effects/slash.rs).
+    if blade.is_some_and(|b| !b.settled()) {
+        return;
+    }
     for (body, pose) in &heroes {
         let (Some(gltf), Some(player)) =
             (gltfs.get(&pose.gltf), player_of(body, &children, &players))
@@ -294,7 +312,7 @@ fn control(
         Option<ResMut<crate::ruin::walk::Walking>>,
     ),
     (gltfs, mut graphs): (Res<Assets<Gltf>>, ResMut<Assets<AnimationGraph>>),
-    mut hero: Query<(&mut Transform, &mut Rig), With<Hero>>,
+    mut hero: Query<(Entity, &mut Transform, &mut Rig), With<Hero>>,
     foes: Query<(Entity, &Transform, &Pose), (Without<Hero>, Without<Fallen>)>,
     children: Query<&Children>,
     mut players: Query<&mut AnimationPlayer>,
@@ -304,7 +322,7 @@ fn control(
     if let Some(mut w) = walking {
         w.now = true;
     }
-    let (Some(ground), Ok((mut tr, mut rig))) = (ground, hero.single_mut()) else {
+    let (Some(ground), Ok((body, mut tr, mut rig))) = (ground, hero.single_mut()) else {
         return;
     };
     let dt = time.delta_secs();
@@ -336,6 +354,8 @@ fn control(
     }
     if let Some((face, landed)) = rig.swing {
         let t = p.animation(rig.attack).map_or(SWING.1, |a| a.seek_time());
+        // The slash trail draws from it (ruin/effects/slash.rs).
+        commands.entity(body).insert(Swinging(t));
         if !landed && t >= BLOW {
             rig.swing = Some((face, true));
             for (foe, ftr, pose) in &foes {
@@ -358,6 +378,7 @@ fn control(
         }
         rig.swing = None;
         rig.playing = None;
+        commands.entity(body).remove::<Swinging>();
     }
     let Ok(mut p) = players.get_mut(rig.player) else {
         return;
@@ -434,12 +455,19 @@ fn follow(
     time: Res<Time>,
     hero: Query<&Transform, (With<Hero>, With<Rig>)>,
     mut camera: Query<&mut Transform, (With<MainCamera>, Without<Hero>)>,
+    mut on: Local<bool>,
 ) {
     let (Ok(h), Ok(mut c)) = (hero.single(), camera.single_mut()) else {
         return;
     };
     let to = h.translation + Vec3::Y * 1.2 + crate::ruin::camera::offset();
-    let k = 1.0 - (-FOLLOW * time.delta_secs()).exp();
+    // On him at once the first time, not easing in from the staged view through the scene.
+    let k = if *on {
+        1.0 - (-FOLLOW * time.delta_secs()).exp()
+    } else {
+        1.0
+    };
+    *on = true;
     c.translation = c.translation.lerp(to, k);
 }
 

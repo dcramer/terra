@@ -14,7 +14,7 @@ mod fire;
 
 mod grass;
 pub(crate) mod ground;
-mod held;
+pub(crate) mod held;
 mod life;
 mod light;
 mod litter;

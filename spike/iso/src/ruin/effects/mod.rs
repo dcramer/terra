@@ -8,7 +8,7 @@ mod flame;
 mod hit;
 pub mod kit;
 mod mark;
-mod slash;
+pub(crate) mod slash;
 mod spell;
 
 use bevy::prelude::*;
