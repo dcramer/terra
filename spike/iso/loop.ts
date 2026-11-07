@@ -7,7 +7,7 @@
 // How to use it: the iso-art skill's "The loop a job follows"; tests: loop.test.ts.
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, extname, join, resolve } from "node:path";
 import { decodeAny, measure, type Rgb, type Stats } from "../../tools/iso-art/stats.ts";
@@ -234,7 +234,44 @@ function loadHistory(say: (l: string) => void): History {
 
 function saveHistory(h: History) {
   mkdirSync(KIT, { recursive: true });
-  writeFileSync(HISTORY, JSON.stringify(h, null, 1));
+  writeHistory(HISTORY, h);
+}
+
+/** Writes the history whole through a temporary file and a rename, so a reader never sees half. */
+function writeHistory(file: string, h: History) {
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(h, null, 1));
+  renameSync(tmp, file);
+}
+
+/**
+ * Reserves a round's folder `<kit>/rounds/<base>`, or `<base>-2`, `-3` when that is taken in the
+ * history or on disk. The mkdir is not recursive, so of two shoots started in the same minute
+ * only one gets each name (iso-kit j35: both took 261107-0250 when it was chosen from the history).
+ */
+export function reserveRound(kit: string, base: string, taken: (name: string) => boolean = () => false): string {
+  mkdirSync(join(kit, "rounds"), { recursive: true });
+  for (let i = 1; ; i++) {
+    const name = i === 1 ? base : `${base}-${i}`;
+    if (taken(name)) continue;
+    try {
+      mkdirSync(join(kit, "rounds", name));
+      return name;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    }
+  }
+}
+
+/**
+ * Applies a change to the history as it is on disk now, not as it was read: a shoot writes some
+ * minutes after it read, and a concurrent shoot's round or a record in between must survive, so
+ * each writer merges only its own round's entry and the kept stills it changed (iso-kit j35).
+ */
+export function updateHistory(file: string, change: (h: History) => void) {
+  const h: History = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : { kept: {}, rounds: {} };
+  change(h);
+  writeHistory(file, h);
 }
 
 /** Copies a still at a width (ffmpeg's Lanczos), or as it is when it already has that width. */
@@ -324,10 +361,8 @@ function shoot(argv: string[], say: (l: string) => void) {
   const unknown = biomes.filter((b) => !all.includes(b));
   if (unknown.length || biomes.length === 0) fail(`no biome file for ${unknown.join(", ") || "--biomes (empty)"}: the biomes are spike/iso/biomes/*.ron (${all.join(", ")}); name them with --biomes a,b or leave it out for all`);
   const h = loadHistory(say);
-  let round = stamp(new Date());
-  for (let i = 2; h.rounds[round]; i++) round = `${stamp(new Date())}-${i}`;
+  const round = reserveRound(KIT, stamp(new Date()), (n) => !!h.rounds[n]);
   const dir = join(KIT, "rounds", round);
-  mkdirSync(dir, { recursive: true });
   const log = join(dir, "shoot.log");
   say(`round ${round}: shooting ${biomes.join(", ")}${film ? " with films" : ""} on the worker${dirty ? " (uncommitted changes as a patch)" : ""}; log ${log}`);
   const fd = openSync(log, "w");
@@ -361,8 +396,9 @@ function shoot(argv: string[], say: (l: string) => void) {
     rnd.biomes[b] = e;
     if (e.judge) judges++;
   }
-  h.rounds[round] = rnd;
-  saveHistory(h);
+  updateHistory(HISTORY, (now) => {
+    now.rounds[round] = rnd;
+  });
   const ties = Object.values(rnd.biomes).filter((e) => e.changed === false).length;
   if (judges) say(`next: run the briefs of the ${judges} changed biome${judges > 1 ? "s" : ""} in ${join(dir, "briefs")} (the lead, as subagents), record each answer, then: node spike/iso/loop.ts verdict ${round}`);
   else say(`every biome ties its kept still (${ties}): nothing to judge; node spike/iso/loop.ts verdict ${round} keeps it`);
@@ -448,7 +484,9 @@ function record(argv: string[], say: (l: string) => void) {
       say(`a slight answer against the change: a second pair, the order swapped, confirms it; brief ${q.brief}`);
     }
   } else fail(`record takes "pair" or "score": record <round> <biome> pair <A|B|same> <slight|clear|strong>, or record <round> <biome> score <overall> "<gaps>"`);
-  saveHistory(h);
+  updateHistory(HISTORY, (now) => {
+    now.rounds[round].biomes[biome] = e!;
+  });
 }
 
 function judgeVerdict(argv: string[], say: (l: string) => void) {
@@ -474,8 +512,11 @@ function judgeVerdict(argv: string[], say: (l: string) => void) {
     }
     say(`KEEP ${round}: no biome lost; its stills are the kept ones now (${join(KIT, "kept")})`);
   } else say(`REVERT ${round}: ${v.losers.join(", ")} lost; undo the change shot in it (${rnd!.rev}${rnd!.dirty ? " with uncommitted changes" : ""}: git revert, never a force-push); the kept stills stay`);
-  rnd!.verdict = { result: v.result!, losers: v.losers, at: new Date().toISOString() };
-  saveHistory(h);
+  const said = { result: v.result!, losers: v.losers, at: new Date().toISOString() };
+  updateHistory(HISTORY, (now) => {
+    now.rounds[round].verdict = said;
+    if (v.result === "KEEP") for (const b of Object.keys(rnd!.biomes)) now.kept[b] = h.kept[b];
+  });
 }
 
 /** Makes a round's stills the kept ones unjudged, when how the stills are shot changed (the
@@ -493,8 +534,11 @@ function rebase(argv: string[], say: (l: string) => void) {
     copyFileSync(e.still, still);
     h.kept[b] = { round, still, stats: e.stats };
   }
-  rnd!.verdict = { result: "KEEP", losers: [], at: new Date().toISOString(), rebased: why };
-  saveHistory(h);
+  const said = { result: "KEEP" as const, losers: [], at: new Date().toISOString(), rebased: why };
+  updateHistory(HISTORY, (now) => {
+    now.rounds[round].verdict = said;
+    for (const b of Object.keys(rnd!.biomes)) now.kept[b] = h.kept[b];
+  });
   say(`KEEP ${round} unjudged as the kept stills of ${Object.keys(rnd!.biomes).join(", ")}: ${why}`);
 }
 

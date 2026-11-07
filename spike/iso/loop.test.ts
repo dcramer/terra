@@ -2,8 +2,11 @@
 // biome file and of the refs' stats, and the line a biome prints. Run: node --test spike/iso/loop.test.ts
 
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
-import { blindOrder, delta, isChanged, outcome, type Pair, parseBiome, pixelShare, refRanges, runNotes, type Side, statsLine, testResult, verdict, winnerOf } from "./loop.ts";
+import { blindOrder, delta, type History, isChanged, outcome, type Pair, parseBiome, pixelShare, refRanges, reserveRound, type Round, runNotes, type Side, statsLine, testResult, updateHistory, verdict, winnerOf } from "./loop.ts";
 
 const pair = (a: Side, winner?: Side | "same", margin?: Pair["margin"]): Pair => ({ folder: "f", brief: "b", a, winner, margin });
 const changed = (...pairs: Pair[]) => ({ changed: true, pairs });
@@ -108,4 +111,34 @@ test("a run log's budgets and shader errors reach the round", () => {
     "weather budget (neon-street): rain 5600 streaks",
     "WARN bevy_shader::shader_cache: Shader `w.wesl` has an unresolved import: error: module not found: `bevy_pbr::mesh_view_bindings`",
   ]);
+});
+
+test("two shoots in one minute get their own rounds, and neither's history entry is lost", () => {
+  const kit = mkdtempSync(join(tmpdir(), "iso-loop-"));
+  const file = join(kit, "history.json");
+  const entry = (still: string) => ({ still, stats: {}, pairs: [] }) as unknown as Round["biomes"][string];
+  const round = (b: string): Round => ({ at: "t", rev: "r", dirty: true, job: "j", biomes: { [b]: entry(`${b}.png`) } });
+  writeFileSync(file, JSON.stringify({ kept: {}, rounds: { old: round("forest") } }));
+  // Both read the history at their start, before either wrote.
+  const seen: History = JSON.parse(readFileSync(file, "utf8"));
+  const first = reserveRound(kit, "261107-0250", (n) => !!seen.rounds[n]);
+  const second = reserveRound(kit, "261107-0250", (n) => !!seen.rounds[n]);
+  assert.equal(first, "261107-0250");
+  assert.equal(second, "261107-0250-2");
+  assert.equal(reserveRound(kit, "old", (n) => !!seen.rounds[n]), "old-2", "a name in the history is taken even with no folder");
+  // A record lands in between; then each shoot writes minutes after it read.
+  updateHistory(file, (h) => {
+    h.rounds.old.biomes.forest.score = { overall: 5, gaps: "g" };
+  });
+  updateHistory(file, (h) => {
+    h.rounds[first] = round("ruin");
+  });
+  updateHistory(file, (h) => {
+    h.rounds[second] = round("marsh");
+  });
+  const now: History = JSON.parse(readFileSync(file, "utf8"));
+  assert.deepEqual(Object.keys(now.rounds).sort(), ["261107-0250", "261107-0250-2", "old"]);
+  assert.ok(now.rounds[first].biomes.ruin && now.rounds[second].biomes.marsh);
+  assert.equal(now.rounds.old.biomes.forest.score?.overall, 5);
+  rmSync(kit, { recursive: true });
 });
