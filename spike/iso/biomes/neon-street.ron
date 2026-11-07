@@ -107,7 +107,7 @@
     ),
     // Rain falling (kit/weather.rs, iso-kit j19): streaks seen only in the lamps' and signs'
     // light, splashes on the paving.
-    weather: (wind: (0.6, 0.2), rain: 0.7, drops: (bright: 0.06, splashes: 2.0)),
+    weather: (wind: (0.6, 0.2), rain: 0.7, drops: (bright: 0.06, splashes: 1.5)),
     ground: (
         // The pavements: Poly Haven's Concrete Pavement flags at their 1.8 m.
         laid: (

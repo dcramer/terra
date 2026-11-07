@@ -102,11 +102,17 @@ fn vertex(v: Vertex) -> Out {
     let a = fract(ph);
     let xz = look.lo.xz + hash2(v.seed.xz * 97.0 + k * 0.618) * size.xz;
     let fl = floor_at(xz);
-    let p = vec3(xz.x, fl.x + 0.005, xz.y);
-    let r = mix(0.025, 0.09, sqrt(a)) * look.drops.y;
-    let right = normalize(cross(vec3(0.0, 1.0, 0.0), eye - p));
-    let world = p + right * r * v.uv.x + vec3(0.0, r * 0.8 * v.uv.y, 0.0);
-    out.colour = lit(p + vec3(0.0, 0.05, 0.0)) * look.drops.x * 3.0 / 3.14159265 * view.exposure
+    // Lying on the floor (2 cm over its sampled surface, clear of the paving's relief): seen
+    // from the ARPG's camera a standing crown is foreshortened to a sub-pixel line (iso-kit
+    // j20), where a drop's hit reads from above as a bright fleck spreading to a ring. A
+    // drop's crown is a few cm across: at 5 to 18 cm the rings read as a sheet of bubbles
+    // (round 261107-0056).
+    let p = vec3(xz.x, fl.x + 0.02, xz.y);
+    let r = mix(0.012, 0.04, sqrt(a)) * look.drops.y;
+    let world = p + vec3(r * v.uv.x, 0.0, r * (2.0 * v.uv.y - 1.0));
+    // A crown of droplets glints back the lamp over it, 25 times a streak's share: at three
+    // it was dimmer than the wet paving under it and did not show (iso-kit j20).
+    out.colour = lit(p + vec3(0.0, 0.05, 0.0)) * look.drops.x * 25.0 / 3.14159265 * view.exposure
         * (1.0 - a) * (1.0 - a);
     out.position = select(position_world_to_clip(world), HIDDEN, fl.y > 0.5);
     return out;
@@ -120,9 +126,11 @@ fn fragment(in: Out) -> @location(0) vec4<f32> {
         let along = sin(3.14159265 * in.uv.y);
         return vec4(in.colour * across * across * along, 0.0);
     }
-    // A splash: a crown of droplets on a thin ring's upper half.
-    let q = vec2(in.uv.x, in.uv.y);
-    let ring = exp(-pow((length(q) - 0.75) / 0.18, 2.0));
+    // A splash from above: the hit's bright fleck inside a ring of thrown droplets.
+    let q = vec2(in.uv.x, 2.0 * in.uv.y - 1.0);
+    let d = length(q);
+    let ring = exp(-pow((d - 0.7) / 0.15, 2.0));
     let drops = step(0.55, fract(sin(floor(atan2(q.y, q.x) * 6.0) * 91.7) * 4375.85));
-    return vec4(in.colour * ring * (0.4 + 0.6 * drops), 0.0);
+    let fleck = exp(-pow(d / 0.22, 2.0));
+    return vec4(in.colour * (ring * (0.4 + 0.6 * drops) + fleck), 0.0);
 }

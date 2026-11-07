@@ -22,10 +22,12 @@ use crate::terrain::{fbm, smooth};
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::{FogVolume, VolumetricFog, VolumetricLight};
-use bevy::mesh::{Indices, PrimitiveTopology};
+use bevy::mesh::{Indices, MeshVertexBufferLayoutRef, PrimitiveTopology};
+use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
 use bevy::render::render_resource::{
-    AsBindGroup, Extent3d, ShaderType, TextureDimension, TextureFormat,
+    AsBindGroup, Extent3d, RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError,
+    TextureDimension, TextureFormat,
 };
 use bevy::shader::ShaderRef;
 use serde::Deserialize;
@@ -101,7 +103,7 @@ impl Default for Layer {
 
 /// The streaks and splashes at full rain, and the lamps a drop is lit by.
 pub const STREAKS: usize = 8000;
-pub const SPLASHES: usize = 2000;
+pub const SPLASHES: usize = 6000;
 pub const LAMPS: usize = 16;
 
 /// The layout's floor under the weather: the ground's height on a grid over its span, and
@@ -309,6 +311,17 @@ impl Material for Rain {
     }
     fn enable_prepass() -> bool {
         false
+    }
+    /// Both faces: a quad turned in the vertex shader faces the eye either way round, and a
+    /// splash lying on the floor faced down and was culled (iso-kit j20, round 261107-0054).
+    fn specialize(
+        _pipeline: &MaterialPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        descriptor.primitive.cull_mode = None;
+        Ok(())
     }
 }
 
