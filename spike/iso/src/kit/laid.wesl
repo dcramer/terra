@@ -22,10 +22,11 @@ struct Params {
     look: vec4<f32>,
     masks: vec4<f32>,
     vary: vec4<f32>,
-    courses: array<vec4<f32>, 4>,
-    joints: array<vec4<f32>, 4>,
+    courses: array<vec4<f32>, 6>,
+    joints: array<vec4<f32>, 6>,
     shape: vec4<f32>,
     wear: vec4<f32>,
+    seams: vec4<f32>,
     mark_at: array<vec4<f32>, 24>,
     mark_turn: array<vec4<f32>, 24>,
     mark_rep: array<vec4<f32>, 24>,
@@ -139,7 +140,7 @@ struct Flag {
 // two (and a half again, so the flags vary in size), broken across with its far side sunk
 // and tilted its own way, or lost a corner or the whole to soil; more of them by the walls'
 // feet, where the walls fell on them. Distances in metres (`uv_m` the metres a uv unit).
-fn flag(uv: vec2<f32>, uv_m: f32, p: vec2<f32>, feet: f32) -> Flag {
+fn flag(uv: vec2<f32>, uv_m: f32, px: f32, p: vec2<f32>, feet: f32) -> Flag {
     let u = unit(uv);
     let r = u32(u.z);
     let c = u32(u.w + 0.5);
@@ -166,6 +167,17 @@ fn flag(uv: vec2<f32>, uv_m: f32, p: vec2<f32>, feet: f32) -> Flag {
     var key = u.xy * vec2<f32>(5.31, 7.17) + u.zw * vec2<f32>(1.73, 3.11) + 0.5;
     let w = laid.wear;
     let worn = 1.0 + feet * 1.5;
+
+    // The unit's own joints opened `seams.x` metres (Wear.gap; 0: the scan's hairline,
+    // under a pixel at the camera), drawn at least a pixel (`px` metres) wide and as dark as
+    // the share of the pixel the joint covers, a box filter's coverage, so it neither
+    // vanishes nor shimmers.
+    var open = 0.0;
+    if laid.seams.x > 0.0 {
+        let e = min(min(q.x, sz.x - q.x), min(q.y, sz.y - q.y));
+        let half = 0.5 * max(laid.seams.x, px);
+        open = (1.0 - smoothstep(half * 0.5, half, e)) * min(1.0, laid.seams.x / max(px, 1e-4));
+    }
 
     // Split across its longer side, a third to two thirds along, and a half split again.
     var seam = 8.0;
@@ -199,7 +211,7 @@ fn flag(uv: vec2<f32>, uv_m: f32, p: vec2<f32>, feet: f32) -> Flag {
         }
     }
     seam += (noise(p * 37.0) - 0.5) * 0.006;
-    var joint = 1.0 - smoothstep(0.004, 0.012, seam);
+    var joint = max(1.0 - smoothstep(0.004, 0.012, seam), open);
     var bevel = 1.0 - smoothstep(0.004, 0.05, seam);
 
     // Broken across: a wandering crack, the far side sunk and tilted its own way.
@@ -286,12 +298,13 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var rough_k = 1.0;
     let feet = source(laid.masks.w, in);
     let uv_m = length(dpdx(p)) / max(length(dpdx(in.uv)), 1e-6);
+    let px = max(length(dpdx(p)), length(dpdy(p)));
     var tilt_n = vec3<f32>(0.0);
     var gone = 0.0;
     var gone_rim = 0.0;
     var joint_all = joint;
     if laid.shape.x > 0.5 {
-        let f = flag(in.uv, uv_m, p, feet);
+        let f = flag(in.uv, uv_m, px, p, feet);
         joint_all = max(joint, f.joint);
         let key = f.key;
         let inner = 1.0 - joint_all;

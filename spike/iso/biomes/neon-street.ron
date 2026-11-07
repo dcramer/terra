@@ -24,15 +24,17 @@
         // twos and threes strung from the north fronts at 5.6 to 6.4 m down to the low south
         // shops' eaves, hanging half a metre; a pair of feeds along the north face over the
         // shops; grey downpipes at the 9 m front's ends and a conduit up from the utility box.
+        // Their radii 0.8 to 1.1 cm (iso-kit j49, the judge's "thick even black strokes
+        // slicing the frame"), and the single wire moved off the left walker.
         cables: [
-            (from: (-7.8, 5.7, -6.9), to: (-3.2, 3.4, 6.9), sag: 0.45, radius: 0.014,
+            (from: (-7.8, 5.7, -6.9), to: (-3.2, 3.4, 6.9), sag: 0.45, radius: 0.009,
              count: 3, every: (0.28, 0.1, 0.0)),
-            (from: (0.3, 5.9, -6.9), to: (3.6, 3.3, 6.9), sag: 0.55, radius: 0.017,
+            (from: (0.3, 5.9, -6.9), to: (3.6, 3.3, 6.9), sag: 0.55, radius: 0.011,
              count: 2, every: (0.4, -0.12, 0.0)),
-            (from: (6.6, 6.4, -6.9), to: (10.8, 3.3, 6.9), sag: 0.4, radius: 0.014,
+            (from: (6.6, 6.4, -6.9), to: (10.8, 3.3, 6.9), sag: 0.4, radius: 0.009,
              count: 2, every: (0.3, 0.08, 0.0)),
-            (from: (-4.0, 5.8, -6.9), to: (7.5, 3.4, 6.9), sag: 0.6, radius: 0.011),
-            (from: (-9.0, 3.6, -6.72), to: (6.0, 3.55, -6.72), sag: 0.14, radius: 0.012,
+            (from: (-1.2, 5.9, -6.9), to: (8.5, 3.4, 6.9), sag: 0.6, radius: 0.008),
+            (from: (-9.0, 3.6, -6.6), to: (6.0, 3.55, -6.6), sag: 0.14, radius: 0.009,
              count: 2, every: (0.0, -0.07, 0.03)),
             (from: (-8.72, 9.0, -6.84), to: (-8.72, 0.15, -6.84), radius: 0.05,
              colour: Srgb(0.2, 0.2, 0.19), rough: 0.5),
@@ -114,6 +116,8 @@
         // under the signs; heights are whole 3 m storeys. Behind the glass each bay is a room
         // 2.2 m deep (kit/rooms.rs, iso-kit j37): lit warm or cold, some by a TV's blue
         // alone, some with blinds or curtains part drawn, some dark or shuttered, by a hash.
+        // A lit shop window's light spills out onto the pavement before it, a warm pool
+        // 2.2 m out (rooms `spill`, iso-kit j49), dark between the shops.
         fronts: [
             (side: North, along: (-35.0, -9.0), height: 15.0, material: "concrete_wall_006",
              metres: 2.0, roof: "asphalt_02",
@@ -126,7 +130,8 @@
                     wall: (scan: "concrete_wall_006", contrast: 1.2, streaks: 0.7, foot: 0.6),
                     rooms: (tv: 0.2, blinds: 0.25, curtains: 0.25, shut: 0.3,
                             cloth: [Srgb(0.55, 0.12, 0.1), Srgb(0.75, 0.62, 0.4)],
-                            shutters: [Srgb(0.42, 0.45, 0.43), Srgb(0.45, 0.35, 0.25)]))),
+                            shutters: [Srgb(0.42, 0.45, 0.43), Srgb(0.45, 0.35, 0.25)],
+                            spill: (30000.0, 2.2), windows: [2]))),
             (side: North, along: (-9.0, 6.0), height: 9.0, material: "rusty_corrugated_iron",
              metres: 2.0, tint: (0.7, 0.7, 0.72), roof: "asphalt_02",
              bays: (model: "models/iso/city/facade-apartments.glb",
@@ -138,7 +143,8 @@
                     wall: (scan: "concrete_wall_006", contrast: 1.4, streaks: 0.8, foot: 0.7),
                     rooms: (tv: 0.25, blinds: 0.3, curtains: 0.15, shut: 0.45,
                             cloth: [Srgb(0.2, 0.35, 0.3)],
-                            shutters: [Srgb(0.3, 0.38, 0.42), Srgb(0.42, 0.45, 0.43)]))),
+                            shutters: [Srgb(0.3, 0.38, 0.42), Srgb(0.42, 0.45, 0.43)],
+                            spill: (30000.0, 2.2), windows: [2]))),
             (side: North, along: (6.0, 35.0), height: 21.0, material: "concrete_wall_006",
              metres: 2.0, tint: (0.85, 0.8, 0.74), roof: "asphalt_02",
              bays: (model: "models/iso/city/facade-apartments.glb",
@@ -151,7 +157,8 @@
                     wall: (scan: "concrete_wall_006", contrast: 1.2, streaks: 0.7, foot: 0.6),
                     rooms: (tv: 0.2, blinds: 0.3, curtains: 0.2, shut: 0.25,
                             cloth: [Srgb(0.75, 0.62, 0.4), Srgb(0.3, 0.2, 0.45)],
-                            shutters: [Srgb(0.42, 0.45, 0.43)]))),
+                            shutters: [Srgb(0.42, 0.45, 0.43)],
+                            spill: (30000.0, 2.2), windows: [2]))),
             (side: South, along: (-35.0, -4.0), height: 4.0, material: "concrete_wall_006",
              metres: 2.0, roof: "asphalt_02"),
             (side: South, along: (-4.0, 35.0), height: 3.6, material: "rusty_corrugated_iron",
@@ -163,24 +170,26 @@
         lamps: (every: 16.0, start: -24.0, height: 6.5, reach: 1.6,
                 colour: Srgb(1.0, 0.62, 0.25), lumens: 600000.0, angle: 42.0, range: 10.5,
                 shadows: true),
-        // Textures from text by ffmpeg (assets/models/iso/city/README.md, signs). Each lights
-        // the wall and pavement under it out to 6 to 6.5 m, so its pool falls off to dark
-        // before the next sign's, and casts the props' and the frames' shadows (iso-kit j40).
+        // Textures from text by ffmpeg (assets/models/iso/city/README.md, signs). Each a
+        // spot down onto the pavement under it (`pool`: its cone's half angle, metres out,
+        // lumens) and a short glow on the wall about it (`lumens`, `range`), so the face
+        // above and between the signs falls dark (iso-kit j42). The cones 58-62 degrees
+        // spread the BAR's and the drug sign's light into one teal wash over the pavement
+        // and road (judge 261107-0426): at 30-34 each is a pool some 6 m across, its core
+        // half that, dark between them; the glows lift the wall about each sign.
         signs: [
             (texture: "models/iso/city/signs/ramen.png", side: North, at: -12.0, height: 6.5,
              size: (0.9, 3.15), blade: true, colour: Srgb(1.0, 0.16, 0.55), nits: 30.0,
-             lumens: 100000.0, range: 7.0, shadows: true),
+             lumens: 25000.0, range: 3.5, shadows: true, pool: (32.0, 2.0, 120000.0)),
             (texture: "models/iso/city/signs/bar.png", side: North, at: -3.0, height: 4.6,
-             size: (2.9, 1.1), colour: Srgb(0.1, 0.82, 1.0), nits: 30.0, lumens: 20000.0,
-             range: 2.5, shadows: true, pool: (62.0, 2.2, 150000.0)),
-            // A spot down onto the pavement, the wall's glow only about the sign (iso-kit
-            // j42): the face above and between the signs falls dark.
+             size: (2.9, 1.1), colour: Srgb(0.1, 0.82, 1.0), nits: 30.0, lumens: 45000.0,
+             range: 3.5, shadows: true, pool: (34.0, 2.0, 150000.0)),
             (texture: "models/iso/city/signs/drug.png", side: North, at: 3.6, height: 5.6,
-             size: (1.0, 2.0), colour: Srgb(0.22, 1.0, 0.42), nits: 30.0, lumens: 8000.0,
-             range: 2.5, shadows: true, pool: (58.0, 2.0, 70000.0)),
+             size: (1.0, 2.0), colour: Srgb(0.22, 1.0, 0.42), nits: 30.0, lumens: 25000.0,
+             range: 3.2, shadows: true, pool: (30.0, 1.8, 70000.0)),
             (texture: "models/iso/city/signs/24h.png", side: North, at: 9.0, height: 4.4,
-             size: (2.2, 1.0), colour: Srgb(1.0, 0.19, 0.09), nits: 30.0, lumens: 80000.0,
-             range: 6.0, shadows: true),
+             size: (2.2, 1.0), colour: Srgb(1.0, 0.19, 0.09), nits: 30.0, lumens: 25000.0,
+             range: 3.2, shadows: true, pool: (32.0, 1.8, 100000.0)),
         ],
         props: [
             (model: "models/iso/city/rollershutter-door.glb", side: North, line: Wall,
@@ -263,6 +272,21 @@
             grit: 0.2,
             damp: 0.7,
             feet: Site("walls"),
+            // The scan's six courses of flags in a running bond, off its colour map, so
+            // each flag is its own (iso-kit j49, the judge's "no paving joints"): its value
+            // and roughness its own, a few relaid off-tone, one in ten cracked across, and
+            // the joints opened 1.5 cm and grimed, where the scan's 8 mm hairline fell under
+            // a pixel at the camera.
+            courses: [
+                (0.0, [0.166, 0.5, 0.833]),
+                (0.168, [0.0, 0.334, 0.668]),
+                (0.335, [0.166, 0.5, 0.833]),
+                (0.502, [0.0, 0.334, 0.668]),
+                (0.669, [0.166, 0.5, 0.833]),
+                (0.835, [0.0, 0.334, 0.668]),
+            ],
+            spread: (0.18, 0.4),
+            wear: (split: 0.06, tilt: 0.03, broken: 0.1, gap: 0.015),
             // The flags' stains and repairs (iso-kit j46): the road's trench run on across
             // the north pavement to the wall, relaid darker; bin juice under the bins, drips
             // under the air conditioners, spills and a shop's doorstep worn dark.

@@ -188,6 +188,11 @@ pub struct Wear {
     pub broken: f32,
     #[serde(default)]
     pub missing: f32,
+    /// How wide (m) each unit's joints have opened, grimed or holding water (0: the scan's
+    /// own, a hairline under a pixel at the camera); drawn at least a pixel wide and as
+    /// dark as the share of the pixel it covers, so it neither vanishes nor shimmers.
+    #[serde(default)]
+    pub gap: f32,
 }
 
 /// A mark on a laid floor: a rectangle `size` metres (along its own x and z) centred `at`

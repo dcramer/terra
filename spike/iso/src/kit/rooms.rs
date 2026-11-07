@@ -41,6 +41,15 @@ pub struct Rooms {
     pub cloth: Vec<Colour>,
     #[serde(default)]
     pub shutters: Vec<Colour>,
+    /// A lit shop's light spilling out of its window onto the pavement: a spot of `spill.0`
+    /// lumens (at the room's brightness; half behind blinds or curtains) from the glass's
+    /// head down to `spill.1` metres out, in the room's colour, unshadowed (the ARPGs' and
+    /// city games' pool before a lit shop front). Only from the street storey's bays whose
+    /// `ground` scene is one of `windows`, so a plain wall or a door spills nothing.
+    #[serde(default)]
+    pub spill: (f32, f32),
+    #[serde(default)]
+    pub windows: Vec<usize>,
 }
 
 fn screen() -> Colour {
@@ -358,8 +367,55 @@ pub fn spawn(
             };
             front.shell(commands, materials, &bay);
             front.dress(commands, materials, &bay);
+            if let Some((at, foot, lumens, colour)) = spill(b, r, c, st, x, wall, side, &bay) {
+                commands.spawn((
+                    SpotLight {
+                        color: colour,
+                        intensity: lumens,
+                        range: (at - foot).length() + 2.5,
+                        radius: 0.4,
+                        inner_angle: 25f32.to_radians(),
+                        outer_angle: 55f32.to_radians(),
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    Transform::from_translation(at).looking_at(foot, Vec3::X),
+                ));
+            }
         }
     }
+}
+
+/// A street-storey shop's spill (`Rooms::spill`): where its spot sits (at the glass's head,
+/// just out of the face) and aims (on the pavement `spill.1` out), its lumens and colour;
+/// none for a dark, shut or screen-lit room, an upper storey or a bay with no window.
+#[allow(clippy::too_many_arguments)]
+fn spill(
+    b: &Bays,
+    r: &Rooms,
+    column: usize,
+    storey: usize,
+    x: f32,
+    wall: f32,
+    side: Side,
+    bay: &Bay,
+) -> Option<(Vec3, Vec3, f32, Color)> {
+    let scene = b.ground.get(column % b.ground.len().max(1))?;
+    if storey != 0 || r.spill.0 <= 0.0 || !r.windows.contains(scene) {
+        return None;
+    }
+    let share = match bay.rm.kind {
+        Kind::Lit => 1.0,
+        Kind::Blinds | Kind::Curtains => 0.5,
+        _ => return None,
+    };
+    let l = bay.light?;
+    let top = l.red.max(l.green).max(l.blue).max(1e-6);
+    let colour = Color::linear_rgb(l.red / top, l.green / top, l.blue / top);
+    let s = side.z();
+    let at = Vec3::new(x, b.storey * 0.8, s * (wall - 0.3));
+    let foot = Vec3::new(x, 0.0, s * (wall - r.spill.1));
+    Some((at, foot, r.spill.0 * share * bay.rm.bright, colour))
 }
 
 #[cfg(test)]
@@ -430,5 +486,40 @@ mod tests {
             room(&none, &r, along, c, 3).kind,
             Kind::Lit | Kind::Tv | Kind::Blinds | Kind::Curtains
         )));
+    }
+
+    /// A lit shop's window spills its light out and down onto the pavement before it; a
+    /// dark or shut one, an upper storey and a bay whose scene is not a window spill none.
+    #[test]
+    fn a_lit_shop_spills_onto_the_pavement() {
+        let b = front();
+        let mut r = b.rooms.clone().unwrap();
+        r.spill = (20000.0, 2.0);
+        r.windows = vec![0];
+        let count = |r: &Rooms| {
+            let (mut lit, mut none) = (0, 0);
+            for c in 0..40 {
+                for st in 0..2 {
+                    let rm = room(&b, r, (6.0, 126.0), c, st);
+                    let on = matches!(rm.kind, Kind::Lit | Kind::Blinds | Kind::Curtains);
+                    let light = on.then_some(LinearRgba::rgb(1.0, 0.7, 0.4) * 8.0);
+                    let x = c as f32 * 3.0;
+                    let bay = Bay { x, w: 3.0, y0: st as f32 * 3.0, nits: 8.0, rm, light };
+                    match spill(&b, r, c, st, x, 6.9, Side::North, &bay) {
+                        Some((at, foot, lumens, _)) => {
+                            assert!(st == 0 && on && lumens > 0.0);
+                            assert!(at.z < -6.0 && foot.z > at.z && foot.y < at.y, "{at} {foot}");
+                            lit += 1;
+                        }
+                        None => none += 1,
+                    }
+                }
+            }
+            (lit, none)
+        };
+        let (lit, none) = count(&r);
+        assert!(lit > 10 && none > lit, "{lit} spill, {none} not");
+        r.windows = vec![3];
+        assert_eq!(count(&r).0, 0, "a plain wall spills nothing");
     }
 }

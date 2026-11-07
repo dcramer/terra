@@ -50,6 +50,8 @@ pub struct Params {
     /// The units' wear (biome.rs `Wear`): x the share split, y the tilt (radians), z the
     /// share broken, w the share gone.
     pub wear: Vec4,
+    /// x how wide (m) the units' joints have opened (`Wear.gap`, 0: the scan's own).
+    pub seams: Vec4,
     /// Each mark's centre (x, z) and half size.
     pub mark_at: [Vec4; MARKS],
     /// Each mark's turn's cos and sin and its repeats' spacing.
@@ -58,8 +60,9 @@ pub struct Params {
     pub mark_rep: [Vec4; MARKS],
 }
 
-/// Most courses and joints a course a scan's units are told apart by.
-pub const COURSES: usize = 4;
+/// Most courses and joints a course a scan's units are told apart by (six: a street's
+/// flags in a running bond, iso-kit j49).
+pub const COURSES: usize = 6;
 const JOINTS: usize = 7;
 /// Most marks a laid floor carries (laid.wesl's arrays are as long): a city road's lines,
 /// crossings, patches and stains (iso-kit j46: 16 left no room for its oil and trenches).
@@ -212,6 +215,7 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
             laid.wear.broken,
             laid.wear.missing,
         ),
+        seams: Vec4::new(laid.wear.gap, 0.0, 0.0, 0.0),
         ..default()
     };
     let bad_mark = |m: &Mark| {
@@ -414,7 +418,7 @@ mod tests {
         assert!(e.contains("rising") && e.contains("Fix:"), "{e}");
         l.courses = vec![(0.0, vec![0.7, 0.2])];
         assert!(params(&l, &PLACE).is_err());
-        l.courses = vec![(0.0, vec![]); 5];
+        l.courses = vec![(0.0, vec![]); COURSES + 1];
         assert!(params(&l, &PLACE).is_err());
     }
 
@@ -455,5 +459,24 @@ mod tests {
         assert!(p.wear.x > 0.0 && p.wear.y > 0.0 && p.wear.z > 0.0 && p.wear.w > 0.0);
         assert!(p.wear.x <= 1.0 && p.wear.z <= 1.0 && p.wear.w <= 1.0 && p.wear.y < 0.2);
         assert_eq!(params(&laid(None, None), &PLACE).unwrap().wear, Vec4::ZERO);
+    }
+
+    /// The street's flags (six courses of a running bond, iso-kit j49) are each told apart:
+    /// two points a flag's width apart along a course lie on different flags, and the
+    /// joints open to a width the shader reads; a floor naming no gap keeps the scan's.
+    #[test]
+    fn the_streets_flags_are_told_apart() {
+        let b = super::super::biome::Biome::load("neon-street").unwrap();
+        let l = b.ground.laid.expect("the street lays its pavements");
+        let p = params(&l, &PLACE).unwrap();
+        assert_eq!(p.shape.x as usize, l.courses.len());
+        assert!(l.courses.len() > 4, "the scan's six courses");
+        let a = unit(Vec2::new(0.25, 0.08), &l.courses);
+        let b2 = unit(Vec2::new(0.6, 0.08), &l.courses);
+        let c = unit(Vec2::new(0.25, 0.25), &l.courses);
+        assert_ne!(a, b2, "along a course");
+        assert_ne!(a, c, "across courses");
+        assert!(p.seams.x > 0.005 && p.seams.x < 0.05, "{}", p.seams.x);
+        assert_eq!(params(&laid(None, None), &PLACE).unwrap().seams, Vec4::ZERO);
     }
 }
