@@ -32,10 +32,10 @@ The fields after `light` but `ground` and the marsh's `water` are parsed and car
 
 ## The water (`src/kit/water.rs`, `water.wesl`)
 
-- A biome's `water: (kind, level, deep, absorb, shore, film, scum, pads, mirror, ripples, streaks, rain)` is one face (`spawn_face` on a mesh from `surface`, its depth in the second UV), the marsh's first; the forest's pond is still pool.rs.
+- A biome's `water: (kind, level, deep, absorb, shore, film, scum, pads, mirror, ripples, streaks, rain)` is one face (`spawn_face` on a mesh from `surface`, its depth in the second UV), the marsh's first; the forest's pond is still pool.rs. A street's puddles are faces `level` over the road and each pavement where `puddled` stands (`Street::standing`), one mirror at the road's.
 - The body absorbs per channel by depth (Beer-Lambert, `absorb` a metre) and scatters `deep`, lit as the ground; premultiplied, so the bed shows through the shallows. `shore` fades it in at the bank; `film` is a fixed depth for wet floors.
 - The mirror is planar (Unreal's and Unity's flat water): a camera mirrored under the face's level renders the scene into a half-size HDR texture before the main one, the faces on layer 9 it does not see; the face samples it where it projects, moved by the ripples' slope (`mirror.distort`), at Fresnel's 2% times `lift`; `sky` and `nits` its clear colour. Lights light a layer-9 face: Bevy 0.20 filters lights per view, not per mesh.
-- Ripples are one tiling slope map read at `fine` and `broad` metres drifting downwind (`weather.wind`); `calm` stills the margin. The key's lane and each `Glint`'s streak are pool.wesl's anisotropic Beckmann lobe (`streaks`).
+- Ripples are one tiling slope map read at `fine` and `broad` metres drifting downwind (`weather.wind`); `calm` stills the margin. The key's lane and each `Glint`'s streak are pool.wesl's anisotropic Beckmann lobe (`streaks`); a `Glint` is a point or spot light, the six brightest at the eye kept (`seen`).
 
 ## Adding a biome
 

@@ -305,6 +305,21 @@ pub fn surface(lo: Vec2, hi: Vec2, step: f32, level: f32, ground: impl Fn(Vec2) 
     .with_inserted_indices(Indices::U32(idx))
 }
 
+/// The `LIGHTS` that shine brightest at the eye (lumens over the distance squared), when
+/// more glint than the shader reads: a street's lamps far down the road give way to the
+/// signs in the frame.
+pub fn seen(
+    mut lights: Vec<(Vec3, f32, LinearRgba, f32)>,
+    eye: Vec3,
+) -> Vec<(Vec3, f32, LinearRgba, f32)> {
+    if lights.len() > LIGHTS {
+        let at_eye = |l: &(Vec3, f32, LinearRgba, f32)| l.3 / l.0.distance_squared(eye).max(1.0);
+        lights.sort_by(|a, b| at_eye(b).total_cmp(&at_eye(a)));
+        lights.truncate(LIGHTS);
+    }
+    lights
+}
+
 /// Packs the lights as the shader reads them: the brightest `LIGHTS`, place and range,
 /// then colour times lumens.
 pub fn pack(mut lights: Vec<(Vec3, f32, LinearRgba, f32)>) -> (u32, [Vec4; LIGHTS * 2]) {
@@ -469,21 +484,30 @@ fn follow(
     camera.clear_color = clear;
 }
 
-/// Each frame, every face's mirror camera matrix, the glinting lights as they now stand and
-/// burn (they flicker and drift), and the time, at a fixed 30 a frame so a still and a film
-/// are the same water.
+/// Each frame, every face's mirror camera matrix, the glinting lights (point and spot, each
+/// mirrored as a point) as they now stand and burn (they flicker and drift), and the time,
+/// at a fixed 30 a frame so a still and a film are the same water.
+#[allow(clippy::type_complexity)]
 fn feed(
     frame: Res<FrameCount>,
     maps: Res<Maps>,
     lights: Query<(&GlobalTransform, &PointLight), With<Glint>>,
+    spots: Query<(&GlobalTransform, &SpotLight), With<Glint>>,
+    eye: Query<&GlobalTransform, (With<MainCamera>, Without<Mirror>)>,
     mirror: Query<(&Transform, &Projection), With<Mirror>>,
     mut waters: ResMut<Assets<KitWater>>,
 ) {
     let found: Vec<_> = lights
         .iter()
         .map(|(t, l)| (t.translation(), l.range, l.color.to_linear(), l.intensity))
+        .chain(
+            spots
+                .iter()
+                .map(|(t, l)| (t.translation(), l.range, l.color.to_linear(), l.intensity)),
+        )
         .collect();
-    let (n, packed) = pack(found);
+    let eye = eye.single().map_or(Vec3::ZERO, |t| t.translation());
+    let (n, packed) = pack(seen(found, eye));
     let clip = mirror
         .single()
         .ok()
@@ -561,7 +585,10 @@ mod tests {
         let rise = (0..n * (n - 1))
             .map(|k| s[k].distance(s[k + n]))
             .fold(0.0f32, f32::max);
-        assert!(step.max(rise) < 0.4, "too coarse to judge a seam: {step}, {rise}");
+        assert!(
+            step.max(rise) < 0.4,
+            "too coarse to judge a seam: {step}, {rise}"
+        );
         for j in 0..n {
             let seam = s[j * n + n - 1].distance(s[j * n]);
             assert!(seam <= step * 1.5, "row {j}: seam {seam} over {step}");
@@ -600,6 +627,27 @@ mod tests {
         assert_eq!(n as usize, LIGHTS);
         assert_eq!(packed[0].x, (LIGHTS + 2) as f32);
         assert_eq!(packed[1].x, (LIGHTS + 2) as f32 * 100.0);
+    }
+
+    /// Past what the shader reads, a dim light by the eye outranks a bright one far off;
+    /// at or under it every light is kept.
+    #[test]
+    fn the_lights_seen_brightest_are_kept() {
+        let far = |k: usize| (Vec3::X * (100.0 + k as f32), 9.0, LinearRgba::WHITE, 1e5);
+        let near = (Vec3::new(3.0, 4.0, 0.0), 9.0, LinearRgba::RED, 1e3);
+        let mut lights: Vec<_> = (0..LIGHTS).map(far).collect();
+        assert_eq!(seen(lights.clone(), Vec3::ZERO).len(), LIGHTS);
+        lights.push(near);
+        let kept = seen(lights, Vec3::ZERO);
+        assert_eq!(kept.len(), LIGHTS);
+        assert!(
+            kept.iter().any(|l| l.2 == LinearRgba::RED),
+            "the near light was dropped"
+        );
+        assert!(
+            kept.iter().all(|l| l.0.x < 100.0 + LIGHTS as f32 - 1.0),
+            "the farthest light was kept"
+        );
     }
 
     /// A biome's water reaches the face: a still night pond and a street's thin film.

@@ -11,10 +11,13 @@
 //! faces and the south fronts' roofs. The paving carries three maps for the laid floors
 //! (`SITES`): `gutter` (by the kerb's face, where the road's camber runs the rain),
 //! `puddled` (low patches where water stands) and `walls` (where a wall or kerb rises).
+//! The biome's `water` stands in the `puddled` patches as the kit's water (kit/water.rs),
+//! its `level` over the road and the pavements: the mirror and the lights' streaks.
 
 use super::biome::{Biome, Laid};
 use super::laid::{LaidMaterial, Place};
 use super::light::Colour;
+use super::water::{Glint, KitWater};
 use crate::Args;
 use crate::forest::Rng;
 use crate::scene::{material, model};
@@ -269,6 +272,13 @@ impl Street {
         smooth(0.64, 0.7, patch + lower)
     }
 
+    /// How deep water stands at a point (m), as the water's face reads it: up to 6 cm in a
+    /// puddle's middle, 0 at its edge (`puddled` a half), under the face's cut (5 cm) on the
+    /// dry, so no face is drawn there.
+    pub fn standing(&self, p: Vec2) -> f32 {
+        (self.puddled(p) - 0.5) * 0.12
+    }
+
     /// How near a rising wall a point is: a front's foot on the pavements, the kerb's face on
     /// the road; 1 at the foot, gone a metre out.
     pub fn walls(&self, p: Vec2) -> f32 {
@@ -352,7 +362,7 @@ impl Sheets {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins(super::laid::plugin)
+    app.add_plugins((super::laid::plugin, super::water::plugin))
         .add_systems(Startup, spawn);
 }
 
@@ -367,6 +377,7 @@ fn spawn(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut laid: ResMut<Assets<LaidMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    mut waters: ResMut<Assets<KitWater>>,
 ) {
     fn stop(refs: &str, e: String) -> ! {
         panic!("biome {refs:?}: {e}")
@@ -446,6 +457,32 @@ fn spawn(
             Mesh3d(meshes.add(sheets.mesh())),
             MeshMaterial3d(laid.add(super::laid::material(&asset, floor, &place))),
         ));
+    }
+
+    // The puddles: the biome's water over the road and each pavement where `puddled` says.
+    // One mirror serves every face, at the first's level (the road's): the pavements' sit
+    // the kerb's rise over it, a few centimetres' error in what they mirror.
+    if let Some(water) = &biome.water {
+        let wind = biome
+            .weather
+            .as_ref()
+            .map_or(Vec2::ZERO, |w| Vec2::new(w.wind.0, w.wind.1));
+        for (z0, z1, floor) in [(-half, half, 0.0), (-wall, -kerb, rise), (kerb, wall, rise)] {
+            let level = floor + water.level;
+            let face =
+                super::water::surface(Vec2::new(x0, z0), Vec2::new(-x0, z1), CELL, level, |p| {
+                    level - st.standing(p)
+                });
+            super::water::spawn_face(
+                &mut commands,
+                &mut meshes,
+                &mut waters,
+                water,
+                wind,
+                Some(&*light),
+                face,
+            );
+        }
     }
 
     fronts(&mut commands, &asset, &mut meshes, &mut materials, &st);
@@ -631,6 +668,7 @@ fn lamps(
             },
             Transform::from_translation(lamp - Vec3::Y * 0.1)
                 .looking_at(lamp - Vec3::Y * 5.0, Vec3::Z),
+            Glint,
         ));
         x += lp.every;
         k += 1;
@@ -710,6 +748,7 @@ fn signs(
                 ..default()
             },
             Transform::from_translation(lamp),
+            Glint,
         ));
     }
 }
