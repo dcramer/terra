@@ -87,6 +87,8 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ("assets/data/kinds/", &["terra_items", "terra_bake"]),
     ("assets/data/parts/", &["terra_items", "terra_bake"]),
     // The sword-and-shield move set, read by the fight's tests.
+    // The duel scripts, which a test of terra_motion's reads every one of (`script.rs`).
+    ("assets/data/duels/", &["terra_motion"]),
     ("assets/data/moves/", &["terra_motion"]),
     // The movers' kinds (D53), read by the mover, the controller course and the walk.
     ("assets/data/movers.ron", &["terra_motion", "terra_walker"]),
