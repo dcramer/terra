@@ -27,6 +27,13 @@
             // Wet mud by the water: darker and glossier.
             (material: "brown_mud_02", mask: Site("mud"), wets: 1.0),
             (material: "roots", mask: Site("roots"), tint: (1.3, 1.3, 1.3)),
+            // The trodden clearing and the paths off it: earth with grit and pebbles kicked
+            // up, in patches through the litter (judge 261107-0250: "one flat dark-brown
+            // sheet ... no path wear"; fine detail 0.111 against the refs' 0.149).
+            // At amount 0.9 and a band 0.38 to 0.62 the litter won the height blend nearly
+            // everywhere (round 261107-0343): only the camp's earth showed it.
+            (material: "rocks_ground_01", mask: Wear, amount: 1.6, tint: (1.4, 1.32, 1.22),
+                breakup: (0.3, 1.4, 0.3, 0.55)),
         ],
         // The camp's fire (scene::FIRE).
         scorch: [(0.0, 3.0)],

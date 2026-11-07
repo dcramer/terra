@@ -127,7 +127,18 @@ fn cover(
     let leaves = (woods * (1.0 - rock)).max(bare * 0.7);
     let wet = wet.max(bare * 0.12);
     let grass = (1.0 - woods * 0.85) * (1.0 - rock) * (1.0 - wet) * (1.0 - bare * 0.85);
-    let roots = woods * terrain::smooth(0.6, 0.75, terrain::fbm(p * 0.3, 37)) * (1.0 - rock);
+    // Roots in the wood's patches, and bared about each trunk (forest judge 261107-0250: no
+    // roots on the floor): within about 2.5 m, in lobes where the buttress roots run.
+    let trunk = trees
+        .iter()
+        .map(|t| t.at)
+        .chain(crate::wood::dress::OAKS.iter().map(|o| o.0))
+        .map(|t| p.distance(t))
+        .fold(f32::MAX, f32::min);
+    let lobes = terrain::smooth(0.35, 0.6, terrain::fbm(p * 1.4, 39));
+    let flare = terrain::smooth(2.6, 0.8, trunk) * (0.45 + 0.55 * lobes);
+    let roots =
+        (woods * terrain::smooth(0.6, 0.75, terrain::fbm(p * 0.3, 37))).max(flare) * (1.0 - rock);
     (
         [grass, leaves, moss, rock],
         [wet, roots],

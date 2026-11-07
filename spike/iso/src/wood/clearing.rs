@@ -33,6 +33,8 @@ const LEAF_TRIES: f32 = 14.0;
 /// lays leaves 8 to 13 cm long, a beech's 4 to 6 (forest judge 261106-2239: at 0.3 to
 /// 0.6 they lay the size of the hero's head).
 const LEAF_CARD: (f32, f32) = (0.18, 0.3);
+/// Twig cards tried a square metre of the box (the box is 12 m square).
+const TWIG_TRIES: f32 = 1.6;
 const STONES: usize = 12;
 const FERNS: usize = 10;
 const SHORE_STONES: usize = 7;
@@ -146,6 +148,31 @@ fn spawn(
                 cell,
                 Color::srgb(v, v * 0.92, v * 0.85),
             );
+        }
+    }
+    // Twigs and sticks over the whole clearing, middle too, and a thin scatter of mouldered
+    // leaves in its trodden heart (judge 261107-0250: "no twigs ... nothing else"): grey
+    // brown, 0.25 to 0.45 m a card, so a stick is 15 to 30 cm.
+    for _ in 0..(area * TWIG_TRIES) as usize {
+        let p = at(&mut rng);
+        if terrain::pond(p) > -0.04 || p.distance(crate::scene::FIRE) < 1.2 {
+            continue;
+        }
+        let t = trodden(p);
+        if rng.f() < 0.25 + 0.75 * smooth(0.02, 0.3, t) {
+            // Dead wood dries pale: at 0.45 to 0.8 and 0.25 to 0.45 m they did not show
+            // (round 261107-0343).
+            let v = rng.range(0.8, 1.2);
+            let (cell, size, tint) = if rng.f() < 0.7 {
+                (7, rng.range(0.35, 0.6), Color::srgb(v, v * 0.9, v * 0.8))
+            } else {
+                (
+                    1,
+                    rng.range(0.15, 0.25),
+                    Color::srgb(v * 0.8, v * 0.7, v * 0.6),
+                )
+            };
+            cards.add(&land, p, size, rng.range(0.0, 6.28), cell, tint);
         }
     }
     let linear = |file: &str| {

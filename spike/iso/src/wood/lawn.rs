@@ -7,7 +7,7 @@
 //! whose gaps fall to near black. The fight's trodden ground stays bare, so the cast reads.
 
 use super::clearing::trodden;
-use crate::forest::{BUTTERCUP, CAMPION, Cards, DAISY, Rng, Spot};
+use crate::forest::{BRAMBLE, BUTTERCUP, CAMPION, Cards, DAISY, Rng, Spot};
 use crate::terrain::{self, Land, smooth};
 use bevy::prelude::*;
 
@@ -35,6 +35,48 @@ pub enum Kind {
     Tuft,
     /// Matted dead grass (`mat`): no leaves beneath.
     Mat,
+    /// A shrub of leafy sprigs, one of `SPRIGS` (the forest's undergrowth): many hand-sized
+    /// leaves on each card, where a `Leaves` clump is a few broad leaves (forest judge
+    /// 261107-0250: "big flat leaf cards ... oversized against the hero").
+    Sprig(usize),
+}
+
+/// The forest's shrubs (`Kind::Sprig`): each one's atlas cells (diagonal in their cell,
+/// the stem's foot at the lower left, as the fern's), how many sprigs a clump, how far
+/// they lean from upright (radians) and its radius range (m; a sprig runs 1.2 to 1.7 of
+/// it): a bramble's arching mound, a hazel's or bilberry's upright sprigs, holly low.
+/// At 0.5 to 1 m a card a bramble's or hazel's leaf is 6 to 12 cm, a hand's.
+struct Shrub {
+    cells: [Vec2; 2],
+    count: (f32, f32),
+    lean: (f32, f32),
+    radius: (f32, f32),
+}
+
+const SPRIGS: [Shrub; 3] = [
+    Shrub {
+        cells: [BRAMBLE, BRAMBLE],
+        count: (8.0, 13.0),
+        lean: (0.9, 1.4),
+        radius: (0.35, 0.6),
+    },
+    Shrub {
+        cells: [Vec2::new(0.75, 0.0), Vec2::new(0.0, 0.25)],
+        count: (6.0, 10.0),
+        lean: (0.3, 0.85),
+        radius: (0.38, 0.62),
+    },
+    Shrub {
+        cells: [Vec2::new(0.25, 0.75), Vec2::new(0.75, 0.0)],
+        count: (5.0, 8.0),
+        lean: (0.6, 1.15),
+        radius: (0.28, 0.45),
+    },
+];
+
+/// A size between `lo` and `hi`, log-uniform, so small ones are as common as large.
+fn spread(rng: &mut Rng, (lo, hi): (f32, f32)) -> f32 {
+    lo * (hi / lo).powf(rng.f())
 }
 
 /// One clump: where, how wide (m), its kind, its tint and whether a flower stands in it.
@@ -78,24 +120,79 @@ pub fn clumps(land: &Land, trees: &[Spot]) -> Vec<Clump> {
         let open = smooth(0.55, 0.95, crate::scene::canopy(p, trees));
         let hue = terrain::fbm(p * 0.21, 73);
         let deep = Vec3::new(0.34, 0.56, 0.5).lerp(Vec3::new(0.4, 0.6, 0.38), hue);
-        let warm = Vec3::new(0.7, 0.78, 0.42).lerp(Vec3::new(0.6, 0.74, 0.4), hue);
+        // In the sun a green leaf, not a lime one (judge 261107-0250: "lime-yellow where
+        // the sun hits"): j23's warm (0.7, 0.78, 0.42) less red, more blue.
+        let warm = Vec3::new(0.56, 0.7, 0.46).lerp(Vec3::new(0.5, 0.68, 0.46), hue);
         let tint = deep.lerp(warm, open * 0.7) * rng.range(0.45, 0.9) * (0.75 + 0.25 * open);
+        // Shrubs of hand-sized leaves in the main, ferns at true size (fronds 0.6 to 1.2 m),
+        // grass, and a few broad-leaved herbs at a burdock's 0.25 to 0.4 m; each clump its own
+        // size (log-uniform) and turn, so none repeats.
         let pick = rng.f();
-        let kind = if pick < 0.5 {
-            Kind::Leaves
-        } else if pick < 0.8 {
-            Kind::Fern
+        let (kind, radius) = if pick < 0.45 {
+            let s = (rng.f() * 3.0) as usize % 3;
+            (Kind::Sprig(s), spread(&mut rng, SPRIGS[s].radius))
+        } else if pick < 0.75 {
+            (Kind::Fern, spread(&mut rng, (0.42, 0.6)))
+        } else if pick < 0.9 {
+            (Kind::Tuft, spread(&mut rng, (0.25, 0.45)))
         } else {
-            Kind::Tuft
+            (Kind::Leaves, spread(&mut rng, (0.2, 0.3)))
         };
         let flower = (open > 0.6 && rng.f() < 0.08)
             .then(|| [DAISY, BUTTERCUP, CAMPION][(rng.f() * 3.0) as usize % 3]);
         out.push(Clump {
             at: p,
-            radius: rng.range(0.3, 0.55) * (0.8 + 0.4 * mass),
+            radius: radius * (0.9 + 0.2 * mass),
             kind,
             tint,
             flower,
+        });
+    }
+    out
+}
+
+/// What holds on the fight's trodden ground (judge 261107-0250: "one flat dark-brown sheet
+/// ... no tufts"): small grass tufts, plantain-sized rosettes and young ferns, patchy, most
+/// at the clearing's rim and in its middle's islands, none within reach of the cast.
+pub fn floor(land: &Land) -> Vec<Clump> {
+    let mut rng = Rng::new(0x7f1_00e);
+    let (lo, hi) = (Vec2::new(-3.0, -1.0), Vec2::new(10.0, 12.0));
+    let area = (hi.x - lo.x) * (hi.y - lo.y);
+    let cast = [super::KNIGHT, super::FOE, super::TARGET, super::SECOND];
+    let mut out = Vec::new();
+    for _ in 0..(area * 4.0) as usize {
+        let p = lo + Vec2::new(rng.f(), rng.f()) * (hi - lo);
+        let t = trodden(p);
+        let islands = smooth(0.35, 0.6, terrain::fbm(p * 0.8, 151));
+        let holds = smooth(0.0, 0.12, t) * (smooth(0.75, 0.35, t) + 0.6 * islands).min(1.0);
+        if rng.f() > holds * 0.6
+            || terrain::pond(p) > -0.08
+            || p.distance(crate::scene::FIRE) < 1.6
+            || cast.iter().any(|c| c.distance(p) < 0.9)
+            || land.slope(p) > 0.6
+        {
+            continue;
+        }
+        let hue = terrain::fbm(p * 0.4, 153);
+        // Trodden, dusty and half dry: duller and browner than the lawn's. At a tuft's 0.1 to
+        // 0.2 m and a tint under 0.5 they vanished into the earth (round 261107-0343): the
+        // rush's blades thinner than a pixel, mipped under the alpha cut.
+        let tint =
+            Vec3::new(0.55, 0.65, 0.42).lerp(Vec3::new(0.66, 0.64, 0.4), hue) * rng.range(0.7, 1.1);
+        let pick = rng.f();
+        let (kind, radius) = if pick < 0.55 {
+            (Kind::Tuft, spread(&mut rng, (0.18, 0.32)))
+        } else if pick < 0.8 {
+            (Kind::Leaves, spread(&mut rng, (0.11, 0.18)))
+        } else {
+            (Kind::Fern, spread(&mut rng, (0.22, 0.35)))
+        };
+        out.push(Clump {
+            at: p,
+            radius,
+            kind,
+            tint,
+            flower: None,
         });
     }
     out
@@ -119,7 +216,12 @@ fn build(c: &Clump, land: &Land, rng: &mut Rng, leaves: &mut Cards, stems: &mut 
     } else {
         3
     };
-    // Dark leaves lying flat beneath, so the gaps between the clump's leaves fall dark.
+    // Dark leaves lying flat beneath, so the gaps between the clump's leaves fall dark: a
+    // shrub's its own sprigs, not one broad leaf the clump's width.
+    let beneath = match c.kind {
+        Kind::Sprig(s) => SPRIGS[s].cells[0],
+        _ => LEAF,
+    };
     for k in 0..under {
         let yaw = spin + k as f32 * 2.1 + rng.f();
         let out = Vec3::new(yaw.cos(), 0.0, yaw.sin());
@@ -131,7 +233,7 @@ fn build(c: &Clump, land: &Land, rng: &mut Rng, leaves: &mut Cards, stems: &mut 
             root + b * 0.5 + Vec3::Y * 0.01,
             a,
             b,
-            LEAF,
+            beneath,
             |_| Vec3::Y,
             dark,
             rgba(c.tint * UNDER),
@@ -165,6 +267,25 @@ fn build(c: &Clump, land: &Land, rng: &mut Rng, leaves: &mut Cards, stems: &mut 
                 let across = Vec3::new(-out.z, 0.0, out.x) * len;
                 let (a, b) = ((along + across) * 0.5, (along - across) * 0.5);
                 leaves.graded(root + along * 0.5, a, b, FROND, up, foot, tip);
+            }
+        }
+        Kind::Sprig(s) => {
+            let shrub = &SPRIGS[s];
+            let n = rng.range(shrub.count.0, shrub.count.1) as usize;
+            for k in 0..n {
+                let yaw = spin + k as f32 * std::f32::consts::TAU / n as f32 + rng.range(-0.4, 0.4);
+                let tilt = rng.range(shrub.lean.0, shrub.lean.1);
+                let out = Vec3::new(yaw.cos(), 0.0, yaw.sin());
+                let dir = out * tilt.sin() + Vec3::Y * tilt.cos();
+                let len = c.radius * rng.range(1.2, 1.7);
+                let along = dir * len;
+                let across = Vec3::new(-out.z, 0.0, out.x) * len;
+                let (a, b) = ((along + across) * 0.5, (along - across) * 0.5);
+                let cell = shrub.cells[(rng.f() * 2.0) as usize % 2];
+                // Each sprig a little lighter or darker, so the mass has depth.
+                let v = rng.range(0.8, 1.15);
+                let (f, t) = (rgba(c.tint * FOOT * v), rgba(c.tint * v));
+                leaves.graded(root + along * 0.5, a, b, cell, up, f, t);
             }
         }
         Kind::Mat => {}
@@ -248,7 +369,8 @@ fn spawn(
             .iter()
             .map(|&(at, scale, yaw)| Spot { at, scale, yaw }),
     );
-    let all = clumps(&land, &trees);
+    let mut all = clumps(&land, &trees);
+    all.extend(floor(&land));
     draw(
         &mut commands,
         &asset,

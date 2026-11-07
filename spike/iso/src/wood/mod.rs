@@ -5,7 +5,7 @@
 //! a moose walking the far bank, birds crossing, pollen in the sun (life.rs).
 
 pub mod clearing;
-mod dress;
+pub mod dress;
 mod fight;
 pub mod lawn;
 mod life;
