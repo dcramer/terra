@@ -9,14 +9,16 @@
 // reading, since on a loaded machine frames carry several ticks and intents come late.
 //
 //   node tools/sandbox/net.ts [--shots DIR] [--walk FRAMES]
-//   node tools/sandbox/net.ts --soak MINUTES [--bots 4]
+//   node tools/sandbox/net.ts --soak MINUTES [--bots 4] [--headless [--realms 2]]
 //
 // --soak is the Server track's bar against a running game (docs/v0-tracks.md): one copy
 // hosting and so many players with no game behind them (terra_walker's netbot example, D73:
 // a machine runs two copies of the game at most), each over UDP made 100 ms there and back
 // with 1% lost, walking by a script for so many minutes. Each must end where the host has
 // it, to a centimetre, never having gone a second without word; the bytes a second a player
-// are said.
+// are said. --headless soaks the instance host with no window and no game (terra_walker's
+// nethost example, D640), on a seed's real land, so it needs no GPU and its ticks keep time:
+// it also says the host's tick time, ticks begun late, and what an empty realm costs.
 //
 // --shots keeps a still from each game of the other player. Node 22.18 or later; no
 // dependencies. Both copies run in real time: two games' ticks must pass at one rate.
@@ -83,8 +85,8 @@ function still(port: number, feet: Place, file: string) {
 type Report = { name: string; at?: Place; closed?: string; answers?: number; longest_silence_ticks?: number; up_bytes_s?: number; down_bytes_s?: number };
 
 /// A bot, started: its report when it gives it, and its leaving.
-function bot(name: string, minutes: number): { report: Promise<Report>; left: Promise<number | null> } {
-  const run = spawn(resolve(ROOT, "target/debug/examples/netbot"), [`127.0.0.1:${GAME_PORT}`, name, String(minutes), "50", "0.01"], { cwd: ROOT });
+function bot(name: string, minutes: number, build = "debug"): { report: Promise<Report>; left: Promise<number | null> } {
+  const run = spawn(resolve(ROOT, `target/${build}/examples/netbot`), [`127.0.0.1:${GAME_PORT}`, name, String(minutes), "50", "0.01"], { cwd: ROOT });
   let out = "";
   const report = new Promise<Report>((done, fail) => {
     run.stdout.on("data", (chunk) => {
@@ -130,12 +132,55 @@ async function soak(minutes: number, bots: number): Promise<string> {
   return "";
 }
 
+type Hosted = { guests: Place[]; ticks: number; late_ticks: number; tick_us_mean: number; tick_us_worst: number; realms: number; empty_realm_tick_us: number; realm_mb: number };
+
+/// The soak against the instance host with no window: see the head of this file.
+async function headless(minutes: number, bots: number, realms: number): Promise<string> {
+  const built = spawnSync("cargo", ["build", "-q", "--release", "-p", "terra_walker", "--example", "netbot", "--example", "nethost"], { cwd: ROOT, encoding: "utf8" });
+  if (built.status !== 0) return `the host and bot did not build:\n${built.stderr}`;
+  // The host says where its guests stand 1.5 s before the bots leave: they have stood for 8 s.
+  const host = spawn(resolve(ROOT, "target/release/examples/nethost"), [String(GAME_PORT), "7", "2000", String(minutes * 60 - 1.5), String(realms)], { cwd: ROOT });
+  let [out, err] = ["", ""];
+  host.stdout.on("data", (chunk) => (out += chunk));
+  host.stderr.on("data", (chunk) => (err += chunk));
+  const ended = new Promise<number | null>((done) => host.on("exit", done));
+  try {
+    for (let waited = 0; !out.includes("listening"); waited += 0.2) {
+      if (waited > 120 || host.exitCode !== null) return `the host never listened: ${err || "it said nothing"}`;
+      await sleep(0.2);
+    }
+    const players = Array.from({ length: bots }, (_, index) => bot(`bot${index + 1}`, minutes, "release"));
+    const reports = await Promise.all(players.map((player) => player.report));
+    await ended;
+    const line = out.split("\n").find((line) => line.startsWith("{"));
+    if (!line) return `the host ended without its report: ${err || "it said nothing"}`;
+    const theirs = JSON.parse(line) as Hosted;
+    const closed = reports.find((report) => report.closed);
+    if (closed) return `the host ended ${closed.name}'s connection: "${closed.closed}"`;
+    if (theirs.guests.length !== bots) return `the host has ${theirs.guests.length} guests of ${bots} at the end`;
+    const worst = Math.max(...reports.map((report) => Math.min(...theirs.guests.map((guest) => apart(guest, report.at!)))));
+    const silence = Math.max(...reports.map((report) => report.longest_silence_ticks!));
+    const mean = (pick: (report: Report) => number) => reports.reduce((sum, report) => sum + pick(report), 0) / bots;
+    if (worst > 0.01) return `a bot ends ${worst.toFixed(3)} m from where the host has it: a lasting mismatch`;
+    if (silence > 64) return `a bot went ${silence} ticks without word of the server: over a second`;
+    const late = theirs.late_ticks / theirs.ticks;
+    if (late > 0.01) return `${theirs.late_ticks} of the host's ${theirs.ticks} ticks began late: it does not keep time (its mean tick ${theirs.tick_us_mean} us of 15625)`;
+    console.log(
+      `✓ soak, no window: ${bots} players for ${minutes} minutes at 100 ms and 1% loss each end where the host has them (${(worst * 1000).toFixed(1)} mm at worst), the longest silence ${silence} ticks; ${mean((r) => r.down_bytes_s!).toFixed(0)} B/s down and ${mean((r) => r.up_bytes_s!).toFixed(0)} B/s up a player; the host's tick ${theirs.tick_us_mean} us (worst ${theirs.tick_us_worst}), ${theirs.late_ticks} of ${theirs.ticks} late; ${theirs.realms} realms, an empty one ${theirs.empty_realm_tick_us} us a tick and ${theirs.realm_mb} MB`,
+    );
+    return "";
+  } finally {
+    host.kill();
+  }
+}
+
 const ports: number[] = [];
 let failed = "";
 const SOAK = option("--soak");
 try {
   if (SOAK) {
-    failed = await soak(Number(SOAK), Number(option("--bots") ?? 4));
+    const bots = Number(option("--bots") ?? 4);
+    failed = args.includes("--headless") ? await headless(Number(SOAK), bots, Number(option("--realms") ?? 2)) : await soak(Number(SOAK), bots);
     throw new Error(failed || "done");
   }
   ports.push(start(SAVES[0], []));
