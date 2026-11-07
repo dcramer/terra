@@ -1,0 +1,14 @@
+[package]
+name = "terra_net"
+description = "How a server and its clients talk (docs/netcode.md, D34, D651-D636): the wire's bit packer, a transport seam with an in-memory transport, acknowledgements, interest by area, and the server's and client's state machines over entities of versioned parts and ordered operations. Knows no game type. No engine dependencies."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The loopback's seeded faults and the grids' quick maps (`terra_gen::hash`).
+terra_gen.workspace = true
+
+[lints]
+workspace = true
