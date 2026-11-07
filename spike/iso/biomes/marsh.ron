@@ -80,7 +80,11 @@
             density: 0.3, scale: (0.03, 0.12), on: Mud, clump: (4.0, 1.0, 0.5), sink: 0.01,
             over: (-0.1, 0.3), seed: 5),
     ],
-    weather: (wind: (0.86, 0.5)),
+    // A thin ground mist (kit/weather.rs, iso-kit j20): low banks thickest over the open
+    // water and in the hollows, lit only by the fire, lantern and wisps in it: moonlit
+    // (round 261107-0052, mist 0.25) it laid a cold grey veil over the water and reeds, the
+    // sheets' fault (traps.md: j44 and j45 lost as milky haze).
+    weather: (wind: (0.86, 0.5), mist: 0.4, layer: (height: 0.4, drift: 0.9, keylit: false)),
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
 )
