@@ -63,7 +63,7 @@ First numbers, each a reading until its test has a planted fault (D632); they se
 | Server, per client per tick, to pick and pack | 20 µs | 3.9 µs |
 | A late joiner correct around itself, on loopback | under 1 s | under 1 s (asserted) |
 
-Against the running game (`node tools/sandbox/net.ts --soak 30`, 2026-11-06: one hosted copy at 62 fps and four players with no game behind them over UDP at 100 ms and 1% loss, for 30 minutes of the clock): each ended where the host had it (0.0 mm at worst), the longest silence 8 ticks, 5.1 kB/s down and 5.0 kB/s up a player by the carrier's count, its framing included. The up is over its 4 kB/s target: a steering is under 10 bytes and goes in three packets, 64 packets a second; sending every second tick would halve it and is not yet tried.
+Against the running game (`node tools/sandbox/net.ts --soak 30`, 2026-11-06: one hosted copy at 75 fps and four players with no game behind them over UDP at 100 ms and 1% loss, for 30 minutes of the clock): each ended where the host had it (0.1 mm at worst), the longest silence 8 ticks, 4.7 kB/s down and 3.7 kB/s up a player by the carrier's count, its framing included: both within their targets. The up was 13.1 kB/s at first, then 5.0; a steering is under 10 bytes and goes in three packets, 32 packets a second.
 
 On the real mover (four men walking, sprinting and jumping for 30 simulated minutes, 100 ms, 1% loss): 3.1 kB/s down and 1.3 kB/s up a player, a body shown in 19 bytes, and no correction at all once the clocks have their margin.
 
