@@ -50,10 +50,11 @@
             (0.32, 0.42, 0.15)]),
             density: 5.0, scale: (0.18, 0.45), clump: (3.0, 0.7, 0.4), over: (0.05, 9.0),
             seed: 6),
-        // Sedge tussocks on the hummocks' grass, olive to straw.
-        (plant: (kind: Tuft, tint: [(0.34, 0.5, 0.14), (0.28, 0.48, 0.18), (0.5, 0.4, 0.16),
-            (0.62, 0.47, 0.18)]),
-            density: 7.0, scale: (0.2, 0.5), on: Site("grass"), clump: (5.0, 1.2, 0.4),
+        // Sedge tussocks on the hummocks' grass, olive to straw, matted (round 261107-0030:
+        // as tufts, each over three broad leaves, they read as a carpet of leaf rosettes).
+        (plant: (kind: Mat, tint: [(0.38, 0.5, 0.16), (0.46, 0.46, 0.17), (0.56, 0.44, 0.18),
+            (0.64, 0.48, 0.2)]),
+            density: 7.0, scale: (0.24, 0.55), on: Site("grass"), clump: (5.0, 1.2, 0.4),
             over: (0.05, 9.0), seed: 1),
         // Ferns in the moss's cushions, and a few real ferns among them.
         (plant: (kind: Fern, tint: [(0.18, 0.46, 0.22), (0.3, 0.52, 0.16)]),
@@ -63,12 +64,8 @@
             on: Site("moss"), clump: (4.0, 1.0, 0.7), tilt: 6.0, over: (0.08, 9.0), seed: 2),
         // Low shrubs over the leaf litter: bog myrtle's green to a bilberry's red-brown.
         (plant: (kind: Leaves, tint: [(0.24, 0.44, 0.16), (0.46, 0.26, 0.14)]),
-            density: 4.5, scale: (0.26, 0.65), on: Site("leaves"), clump: (7.0, 1.5, 0.5),
+            density: 2.5, scale: (0.26, 0.65), on: Site("leaves"), clump: (7.0, 1.5, 0.6),
             over: (0.08, 9.0), seed: 3),
-        // And in dark masses anywhere on the dry land, as the old lawn's quarter of shrubs.
-        (plant: (kind: Leaves, tint: [(0.2, 0.36, 0.13), (0.24, 0.44, 0.16), (0.4, 0.24, 0.12)]),
-            density: 1.6, scale: (0.26, 0.6), clump: (6.0, 1.4, 0.8), over: (0.1, 9.0),
-            seed: 7),
         // The bank's mat: dead rush, straw to wet brown, thick at the water's line, a few
         // marsh marigolds in it, lodged over the water's line.
         (plant: (kind: Mat, tint: [(0.48, 0.38, 0.18), (0.34, 0.28, 0.13), (0.24, 0.25, 0.11)],
