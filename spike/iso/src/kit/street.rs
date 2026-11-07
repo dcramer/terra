@@ -172,7 +172,8 @@ pub enum Line {
 
 /// A model (under `assets/`) at each x of `at` on `side`'s `line`, moved `out` metres away
 /// from the road (into it when negative; from the middle on `Road`), turned `turn` degrees
-/// from facing the road, scaled `scale`.
+/// from facing the road, scaled `scale`; a rigged one (a person on the pavement) held in its
+/// `pose`, a clip of its GLB by name and the time in it (the ruin's `Pose`).
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Prop {
@@ -186,6 +187,8 @@ pub struct Prop {
     pub turn: f32,
     #[serde(default = "one")]
     pub scale: f32,
+    #[serde(default)]
+    pub pose: Option<(String, f32)>,
 }
 
 fn deep() -> f32 {
@@ -391,8 +394,11 @@ pub fn plugin(app: &mut App) {
         super::water::plugin,
         super::scatter::plugin,
         super::weather::plugin,
+        super::facade::plugin,
     ))
-    .add_systems(Startup, (spawn, strew));
+    .add_systems(Startup, (spawn, strew))
+    // Rigged props stand in their clips (the ruin's poser).
+    .add_systems(Update, crate::ruin::fight::pose);
 }
 
 /// How far down the street the scatter is strewn each side of the focus (m): the frame and
@@ -575,7 +581,17 @@ fn spawn(
         for x in &p.at {
             let at = st.spot(p.side, p.line, *x, p.out);
             let yaw = p.side.facing() + p.turn.to_radians();
-            model(&mut commands, &asset, &p.model, at, yaw, p.scale);
+            let body = model(&mut commands, &asset, &p.model, at, yaw, p.scale);
+            if let Some((clip, time)) = &p.pose {
+                // The pose names its clip for the life of the app: a few names, once, at
+                // startup.
+                commands.entity(body).insert(crate::ruin::fight::Pose {
+                    gltf: asset.load(p.model.clone()),
+                    clip: Box::leak(clip.clone().into_boxed_str()),
+                    at: *time,
+                    once: false,
+                });
+            }
         }
     }
 }

@@ -138,9 +138,11 @@ fn rim(commands: &mut Commands, place: Vec2) {
 }
 
 #[derive(Component)]
-struct Posed;
+pub struct Posed;
 
-fn pose(
+/// Each posed body's clip played from its time, held there in a still; the street's rigged
+/// props take it too (kit/street.rs).
+pub fn pose(
     mut commands: Commands,
     args: Res<Args>,
     gltfs: Res<Assets<Gltf>>,

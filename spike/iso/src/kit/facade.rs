@@ -44,6 +44,112 @@ pub struct Bays {
     pub colours: Vec<Colour>,
     #[serde(default)]
     pub nits: f32,
+    /// The front's plaster painted: the GLB's materials named with `plaster` tinted so; none,
+    /// as they come. Each front its own, so a street reads as several buildings.
+    #[serde(default)]
+    pub paint: Option<Colour>,
+    /// How far grime darkens and browns a column of bays at most (0 to 1), each column its
+    /// own share of it by a hash of the front and the column, the street storey's half again.
+    #[serde(default)]
+    pub grime: f32,
+    #[serde(default = "plaster")]
+    pub plaster: String,
+}
+
+fn plaster() -> String {
+    "plaster".into()
+}
+
+/// A module whose plaster is to be painted: its materials' name and the tint, its meshes'
+/// materials so named swapped for tinted copies once its scene is in (traps.md: a module's
+/// material matched and replaced; Bevy 0.20 labels a GLB's materials `GltfMaterial`, so
+/// they are matched by the meshes' `GltfMaterialName`).
+#[derive(Component)]
+pub struct Paint {
+    plaster: String,
+    tint: LinearRgba,
+}
+
+pub fn plugin(app: &mut App) {
+    app.add_systems(Update, paint);
+}
+
+/// Grime's colour, multiplied in: a sooty brown.
+const GRIME: (f32, f32, f32) = (0.42, 0.37, 0.3);
+/// Grime comes in this many steps, so a front's bays share a few materials.
+const STEPS: f32 = 4.0;
+
+impl Bays {
+    /// The tint of the plaster in column `column`, storey `storey` of the front over
+    /// `along`: the paint, weathered by the column's share of the grime (a hash of the
+    /// front's start and the column, in `STEPS`), the street storey's half again.
+    pub fn tint(&self, along: (f32, f32), column: usize, storey: usize) -> Option<LinearRgba> {
+        let paint = self.paint?.color().to_linear();
+        let h = crate::terrain::hash(column as i32, along.0.to_bits() as i32, 0x9a1e);
+        let share = (0.25 + 0.75 * ((h * STEPS).floor() + 1.0) / STEPS).min(1.0);
+        let g = (self.grime * share * if storey == 0 { 1.5 } else { 1.0 }).clamp(0.0, 1.0);
+        let k = |p: f32, d: f32| p * (1.0 - g + g * d);
+        Some(LinearRgba::rgb(
+            k(paint.red, GRIME.0),
+            k(paint.green, GRIME.1),
+            k(paint.blue, GRIME.2),
+        ))
+    }
+}
+
+/// The tinted copies made: one a source material and tint.
+type Made =
+    std::collections::HashMap<(AssetId<StandardMaterial>, [u32; 4]), Handle<StandardMaterial>>;
+
+/// Each painted module's plaster swapped for its tinted copy, one copy a tint.
+fn paint(
+    mut commands: Commands,
+    roots: Query<(Entity, &Paint)>,
+    children: Query<&Children>,
+    mut meshes: Query<(
+        &mut MeshMaterial3d<StandardMaterial>,
+        Option<&bevy::gltf::GltfMaterialName>,
+    )>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut made: Local<Made>,
+) {
+    for (root, p) in &roots {
+        let mut seen = false;
+        for e in children.iter_descendants(root) {
+            let Ok((mut m, name)) = meshes.get_mut(e) else {
+                continue;
+            };
+            seen = true;
+            if !name.is_some_and(|n| n.contains(p.plaster.as_str())) {
+                continue;
+            }
+            let key = (m.0.id(), p.tint.to_f32_array().map(f32::to_bits));
+            let h = match made.get(&key) {
+                Some(h) => h.clone(),
+                None => {
+                    let Some(src) = materials.get(&m.0) else {
+                        seen = false;
+                        break;
+                    };
+                    let mut c = src.clone();
+                    let b = c.base_color.to_linear();
+                    c.base_color = Color::linear_rgba(
+                        b.red * p.tint.red,
+                        b.green * p.tint.green,
+                        b.blue * p.tint.blue,
+                        b.alpha,
+                    );
+                    let h = materials.add(c);
+                    made.insert(key, h.clone());
+                    h
+                }
+            };
+            m.0 = h;
+        }
+        if seen {
+            commands.entity(root).remove::<Paint>();
+        }
+    }
 }
 
 fn three() -> f32 {
@@ -127,13 +233,21 @@ pub fn spawn(
     let s = side.z();
     let turn = Quat::from_rotation_y(side.facing());
     let scene = |i: usize| asset.load(GltfAssetLabel::Scene(i).from_asset(b.model.clone()));
-    let mut module = |i: usize, at: Vec3, k: f32| {
-        commands.spawn((
+    // A module, its plaster painted as its column and storey weather (`Bays::tint`); the
+    // end piers the paint itself.
+    let mut module = |i: usize, at: Vec3, k: f32, tint: Option<LinearRgba>| {
+        let mut e = commands.spawn((
             WorldAssetRoot(scene(i)),
             Transform::from_translation(at)
                 .with_rotation(turn)
                 .with_scale(Vec3::new(k, 1.0, 1.0)),
         ));
+        if let Some(tint) = tint {
+            e.insert(Paint {
+                plaster: b.plaster.clone(),
+                tint,
+            });
+        }
     };
     let storeys = (height / b.storey).round().max(1.0) as usize;
     let face = s * wall;
@@ -145,13 +259,21 @@ pub fn spawn(
             } else {
                 b.upper[c % b.upper.len()]
             };
-            module(i, Vec3::new(x, st as f32 * b.storey, face), k);
+            let tint = b.tint(along, c, st);
+            module(i, Vec3::new(x, st as f32 * b.storey, face), k, tint);
         }
-        module(b.top, Vec3::new(x, storeys as f32 * b.storey, face), k);
+        let tint = b.tint(along, c, storeys);
+        module(
+            b.top,
+            Vec3::new(x, storeys as f32 * b.storey, face),
+            k,
+            tint,
+        );
     }
+    let clean = b.paint.map(|p| p.color().to_linear());
     for x in [along.0, along.1] {
         for st in 0..storeys {
-            module(b.pier, Vec3::new(x, st as f32 * b.storey, face), 1.0);
+            module(b.pier, Vec3::new(x, st as f32 * b.storey, face), 1.0, clean);
         }
     }
     if b.colours.is_empty() {
@@ -205,7 +327,39 @@ mod tests {
             shops: (0.0, 0.0),
             colours: vec![],
             nits: 0.0,
+            paint: None,
+            grime: 0.0,
+            plaster: "plaster".into(),
         }
+    }
+
+    /// A painted front weathers a column of bays apart from the next by its grime alone, the
+    /// same each run, its street storey dirtier; with no grime every bay is its paint.
+    #[test]
+    fn columns_weather_apart_and_repeat() {
+        let mut b = bays(3.0);
+        b.paint = Some(Colour::Srgb(0.9, 0.8, 0.6));
+        let paint = Colour::Srgb(0.9, 0.8, 0.6).color().to_linear();
+        assert_eq!(b.tint((-9.0, 6.0), 3, 2), Some(paint));
+        b.grime = 0.4;
+        let col: Vec<_> = (0..10)
+            .map(|c| b.tint((-9.0, 6.0), c, 2).unwrap())
+            .collect();
+        let again: Vec<_> = (0..10)
+            .map(|c| b.tint((-9.0, 6.0), c, 2).unwrap())
+            .collect();
+        assert_eq!(col, again);
+        let mut kinds = col.iter().map(|c| c.red.to_bits()).collect::<Vec<_>>();
+        kinds.sort();
+        kinds.dedup();
+        assert!(kinds.len() >= 3, "ten columns took {} grimes", kinds.len());
+        for (c, t) in col.iter().enumerate() {
+            assert!(t.red < paint.red && t.blue < paint.blue);
+            let low = b.tint((-9.0, 6.0), c, 0).unwrap();
+            assert!(low.red < t.red, "column {c}'s street storey is no dirtier");
+        }
+        b.paint = None;
+        assert_eq!(b.tint((-9.0, 6.0), 3, 2), None);
     }
 
     /// Bays fill a front's span from end to end with no gap or overlap, each stretched

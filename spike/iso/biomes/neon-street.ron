@@ -79,20 +79,23 @@
              bays: (model: "models/iso/city/facade-apartments.glb",
                     ground: [2, 1, 2, 3, 0, 2, 3, 2, 1], upper: [5, 4, 5, 6], top: 8, pier: 9,
                     lit: 0.3, shops: (0.85, 8.0), nits: 6.0,
-                    colours: [Srgb(1.0, 0.72, 0.42), Srgb(0.62, 0.8, 1.0)])),
+                    colours: [Srgb(1.0, 0.72, 0.42), Srgb(0.62, 0.8, 1.0)],
+                    paint: Srgb(0.78, 0.5, 0.4), grime: 0.35)),
             (side: North, along: (-9.0, 6.0), height: 9.0, material: "rusty_corrugated_iron",
              metres: 2.0, tint: (0.7, 0.7, 0.72), roof: "asphalt_02",
              bays: (model: "models/iso/city/facade-apartments.glb",
                     ground: [3, 2, 1, 3, 2], upper: [6, 7], top: 8, pier: 9,
                     lit: 0.35, shops: (0.85, 8.0), nits: 5.0,
-                    colours: [Srgb(1.0, 0.72, 0.42)])),
+                    colours: [Srgb(1.0, 0.72, 0.42)],
+                    paint: Srgb(0.9, 0.84, 0.68), grime: 0.45)),
             (side: North, along: (6.0, 35.0), height: 21.0, material: "concrete_wall_006",
              metres: 2.0, tint: (0.85, 0.8, 0.74), roof: "asphalt_02",
              bays: (model: "models/iso/city/facade-apartments.glb",
                     ground: [2, 2, 3, 0, 3, 2, 1, 2, 0, 2], upper: [4, 5, 4, 7], top: 8, pier: 9,
                     lit: 0.25, shops: (0.85, 8.0), nits: 6.0,
                     colours: [Srgb(1.0, 0.72, 0.42), Srgb(0.62, 0.8, 1.0),
-                              Srgb(1.0, 0.9, 0.75)])),
+                              Srgb(1.0, 0.9, 0.75)],
+                    paint: Srgb(0.6, 0.66, 0.72), grime: 0.35)),
             (side: South, along: (-35.0, -4.0), height: 4.0, material: "concrete_wall_006",
              metres: 2.0, roof: "asphalt_02"),
             (side: South, along: (-4.0, 35.0), height: 3.6, material: "rusty_corrugated_iron",
@@ -128,6 +131,12 @@
              turn: 30.0),
             (model: "models/iso/city/manhole-cover.glb", side: North, line: Road, at: [4.0],
              out: 1.2),
+            // People, for the street's scale (the iso hero, 1.85 m, held in his clips):
+            // one walking the pavement under the pharmacy's sign, one crossing at the zebra.
+            (model: "models/iso/knight.glb", side: North, line: Wall, at: [3.0], out: 1.0,
+             turn: 75.0, pose: ("walk", 0.4)),
+            (model: "models/iso/knight.glb", side: North, line: Road, at: [-1.5], out: 1.2,
+             turn: 15.0, pose: ("walk", 1.5)),
         ],
     ),
     light: (preset: "city-night-rain"),
@@ -151,7 +160,7 @@
     ),
     // Rain falling (kit/weather.rs, iso-kit j19): streaks seen only in the lamps' and signs'
     // light, splashes on the paving.
-    weather: (wind: (0.6, 0.2), rain: 0.7, drops: (bright: 0.06, splashes: 1.5)),
+    weather: (wind: (0.6, 0.2), rain: 0.7, drops: (bright: 0.06, splashes: 0.7)),
     ground: (
         // The pavements: Poly Haven's Concrete Pavement flags laid at 2.7 m, so each is a
         // street's 900 x 450 mm flag (its 1.8 m made them 600 x 300 mm block pavers), their
