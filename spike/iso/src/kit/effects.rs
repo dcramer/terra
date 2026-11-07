@@ -36,7 +36,7 @@ pub const QUADS: usize = 400;
 pub const LIGHTS: usize = 8;
 
 /// The staged fight's effects, played where no biome names its own (the glade's view).
-pub const FIGHT: [&str; 4] = ["slash", "hit-spark", "smoke-puff", "spell-burst"];
+pub const FIGHT: [&str; 5] = ["slash", "hit-spark", "smoke-puff", "spell-burst", "bolt"];
 
 /// One effect, as its file says.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -156,6 +156,9 @@ pub struct Puffs {
 
 /// A trail's look (slash.rs): the edge's and the smear's nits, where across the edge lies
 /// (0 the hilt, 1 the tip), its width, the smear's share, and the tail's exponent.
+/// A `streak` (spell.rs's bolts) is a projectile's trail instead: the hot line down its
+/// middle (`width` its share of the half-width), the smear a halo about it narrowing down
+/// the trail; `edge` is the slash's alone.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Trail {
@@ -163,11 +166,14 @@ pub struct Trail {
     pub core_nits: f32,
     pub rim: Colour,
     pub rim_nits: f32,
+    #[serde(default)]
     pub edge: f32,
     pub width: f32,
     pub smear: f32,
     pub tail: f32,
     pub soft: f32,
+    #[serde(default)]
+    pub streak: bool,
 }
 
 impl Preset {
@@ -375,13 +381,15 @@ impl Material for Glow {
 }
 
 impl Glow {
-    /// A trail's material from its preset (slash.rs).
+    /// A trail's material from its preset (slash.rs, spell.rs): effects.wesl's mode 2, or
+    /// mode 3 for a streak.
     pub fn trail(t: &Trail, seed: f32) -> Glow {
+        let mode = if t.streak { 3.0 } else { 2.0 };
         Glow {
             look: Look {
                 core: nits(t.core, t.core_nits).extend(t.edge),
                 rim: nits(t.rim, t.rim_nits).extend(t.width),
-                shape: Vec4::new(1.0, t.soft, 2.0, t.smear),
+                shape: Vec4::new(1.0, t.soft, mode, t.smear),
                 lit: Vec4::new(t.tail, 0.0, 0.0, seed),
             },
         }
@@ -546,6 +554,11 @@ fn spawn(
                 };
                 quad_of(&mut commands, kind);
             }
+        }
+        // A trail's lamps ride the trail its scene draws (slash.rs lights the slash's along its
+        // edge): the kit spawns none for it, so no dark light is left standing.
+        if p.trail.is_some() {
+            continue;
         }
         for (j, l) in p.lamps.iter().enumerate() {
             let base = if l.ground {
@@ -740,6 +753,18 @@ mod tests {
             assert!(l <= last, "brighter at {i}0 ms");
             last = l;
         }
+    }
+
+    /// The bolts' trail is a streak (a hot line in a halo, effects.wesl's mode 3), the slash's
+    /// the edged smear (mode 2): a bolt drawn as the slash would be a crescent again.
+    #[test]
+    fn a_bolt_trails_a_streak_and_a_slash_an_edge() {
+        let mode = |name: &str| {
+            let p = Preset::load(name).unwrap();
+            Glow::trail(&p.trail.unwrap(), 0.0).look.shape.z
+        };
+        assert_eq!(mode("bolt"), 3.0);
+        assert_eq!(mode("slash"), 2.0);
     }
 
     /// Every preset parses, and every biome's effects load within the kit's budget.

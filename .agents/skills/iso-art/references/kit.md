@@ -44,10 +44,10 @@ The fields after `light` but `ground`, `scatter` (marsh and street) and the mars
 
 ## The effects (`src/kit/effects.rs`, `effects.wesl`)
 
-- A biome's `effects: [(preset, at)]` names presets in `biomes/effects/<name>.ron` (slash, hit-spark, smoke-puff, spell-burst, steam, embers); none listed, the staged fight's four. An unknown name stops the run naming the folder's presets.
-- A preset: its `cue` (Blow, Bolt, Swing, Loop(s)), `at` (Strike, Bark, Hero, Ground, or the file's `at`), `still` (the age a still shows), `life`; a `flash` (core in a halo), `lamps` (a light, `ground` a pool), `sparks` (streaks stretched by a `shutter`, falling), `puffs` (smoke lit by the lights at it plus the key and sky), a `trail` (slash.rs's strip). Values are nits and lumens, times the view's exposure.
-- Cues: hit.rs writes `Cues.blow` as the blow lands, spell.rs `Cues.bolt` as a bolt strikes; a Swing's lamps stay dark in the kit (slash.rs's light rides the edge).
-- One shader, three modes (glow, lit puff, trail: a hot edge, a smear dissolving into streaks down its age, premultiplied), each soft against the depth prepass (Lorach 2007); a view drawing them or the fight's decals needs `DepthPrepass` (the water's mirror camera too).
+- A biome's `effects: [(preset, at)]` names presets in `biomes/effects/<name>.ron` (slash, bolt, hit-spark, smoke-puff, spell-burst, steam, embers); none listed, the staged fight's five. An unknown name stops the run naming the folder's presets.
+- A preset: its `cue` (Blow, Bolt, Swing, Loop(s)), `at` (Strike, Bark, Hero, Ground, or the file's `at`), `still` (the age a still shows), `life`; a `flash` (core in a halo), `lamps` (a light, `ground` a pool), `sparks` (streaks stretched by a `shutter`, falling), `puffs` (smoke lit by the lights at it plus the key and sky), a `trail` (slash.rs's strip; `streak: true` a projectile's, spell.rs's bolts: a hot line in a halo narrowing down it). Values are nits and lumens, times the view's exposure.
+- Cues: hit.rs writes `Cues.blow` as the blow lands, spell.rs `Cues.bolt` as a bolt strikes; the kit spawns no lamp for a trail preset (slash.rs lights the slash's at the edge; the bolts carry their own two).
+- One shader, four modes (glow, lit puff, trail: a hot edge, a smear dissolving into streaks down its age, premultiplied; streak), each soft against the depth prepass (Lorach 2007); a view drawing them or the fight's decals needs `DepthPrepass` (the water's mirror camera too).
 - Budget: 400 quads and 8 lights a biome, printed at startup.
 
 ## Adding a biome

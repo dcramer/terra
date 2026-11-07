@@ -1,8 +1,9 @@
 //! The hero's spell: a volley of three arcane bolts from his off hand at the tree monster,
 //! as Path of Exile's and Diablo IV's are drawn: each bolt a small white-hot core drawn out
-//! along its flight inside a thin blue halo (the bloom does the rest), a sharp streak behind
-//! it (a white inner ribbon in a blue outer one) fading to nothing, its own light casting a
-//! blue pool on the stones under it, and a frost mark where it lands. The impact itself (a
+//! along its flight inside a thin blue halo (the bloom does the rest), a streak behind it
+//! (the biome's `bolt` preset, kit/effects.wesl's streak: a hot line in a soft halo, its
+//! tail eroded, no hard border) fading to nothing, its own light casting a blue pool on the
+//! stones under it, and a frost mark where it lands. The impact itself (a
 //! white-hot flash in a blue halo, sparks thrown back off the bark, its lights: Last Epoch's
 //! "a number of lights" in a skill) is the biome's `spell-burst` preset (kit/effects.rs),
 //! cued by `Cues::bolt` at each strike; the bolts all end at the same place, the stage's
@@ -12,7 +13,7 @@
 use super::Stage;
 use super::kit::{Cam, Clock, glow};
 use super::mark::{Mark, mark, mark_image};
-use crate::kit::effects::Cues;
+use crate::kit::effects::{Cues, Effects, Glow};
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -43,10 +44,10 @@ const BOLT_LM: f32 = 18_000.0;
 /// falls to a fifth a metre out, a tight cold pool under the spell (d4-lightning).
 const POOL_LM: f32 = 15_000.0;
 const POOL_UP: f32 = 0.5;
-/// The trails' widths at the bolt (m): the outer blue streak and the white one inside it.
-/// 0.11 and 0.035 were a hairline at 70 px a metre; as wide as the head, tapering to the tail.
-const OUTER: f32 = 0.24;
-const INNER: f32 = 0.07;
+/// The trail's strip width (m), the same down its length: the streak's halo fades well inside
+/// it and narrows down the trail itself (effects.wesl). The two ribbons it replaces were 0.24
+/// and 0.07 wide at the bolt, tapering to the tail.
+const WIDTH: f32 = 0.4;
 /// The frost mark under the impact: its size (m) and life (s).
 const MARK: f32 = 1.5;
 const MARK_LIFE: f32 = 1.6;
@@ -95,6 +96,8 @@ fn spawn(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
     mut decals: ResMut<Assets<super::mark::Decal>>,
+    mut glows: ResMut<Assets<Glow>>,
+    fx: Res<Effects>,
     land: Option<Res<crate::terrain::Land>>,
     stage: Res<Stage>,
 ) {
@@ -105,13 +108,6 @@ fn spawn(
     let card = meshes.add(Rectangle::new(1.0, 1.0));
     let core = materials.add(glow(LinearRgba::rgb(32.0, 36.0, 44.0), None));
     let halo = materials.add(glow(LinearRgba::rgb(0.35, 0.85, 3.4), Some(soft.clone())));
-    let ribbon_of = |c: LinearRgba| StandardMaterial {
-        double_sided: true,
-        cull_mode: None,
-        ..glow(c, None)
-    };
-    let outer = materials.add(ribbon_of(LinearRgba::rgb(0.9, 2.2, 8.0)));
-    let inner = materials.add(ribbon_of(LinearRgba::rgb(6.0, 9.0, 16.0)));
     let off = Transform::from_scale(Vec3::ZERO);
     for i in 0..BOLTS {
         commands.spawn((Mesh3d(ball.clone()), MeshMaterial3d(core.clone()), off, Bolt(i, Part::Core)));
@@ -138,15 +134,16 @@ fn spawn(
             Transform::default(),
             Bolt(i, Part::Pool),
         ));
-        for (material, width) in [(&outer, OUTER), (&inner, INNER)] {
-            let mesh = meshes.add(ribbon(&[], Vec3::ZERO, width));
+        // A biome without a `bolt` preset draws the bolts without trails.
+        if let Some(look) = fx.get("bolt").and_then(|p| p.trail.as_ref()) {
+            let mesh = meshes.add(ribbon(&[], Vec3::ZERO, WIDTH));
             commands.spawn((
                 Mesh3d(mesh.clone()),
-                MeshMaterial3d(material.clone()),
+                MeshMaterial3d(glows.add(Glow::trail(look, 0.5 + i as f32 * 1.7))),
                 Transform::default(),
                 NoFrustumCulling,
                 bevy::light::NotShadowCaster,
-                Bolt(i, Part::Trail(mesh, width)),
+                Bolt(i, Part::Trail(mesh, WIDTH)),
             ));
         }
         let ground = stage.ground(land.as_deref(), path(stage, i, 1.0).xz());
@@ -164,25 +161,22 @@ fn spawn(
     }
 }
 
-/// A ribbon `width` wide at the bolt through `points` (tail first) facing the camera at
-/// `eye`, widening and brightening from nothing at the tail to the bolt.
+/// The trail's strip `width` wide through `points` (tail first) facing the camera at `eye`:
+/// u its age (0 at the bolt, 1 at the tail), v across it, as effects.wesl's streak reads.
 fn ribbon(points: &[Vec3], eye: Vec3, width: f32) -> Mesh {
     let n = points.len();
     let mut pos = Vec::with_capacity(n * 2);
-    let mut col = Vec::with_capacity(n * 2);
+    let mut uv = Vec::with_capacity(n * 2);
     let mut idx = Vec::new();
     for (j, &p) in points.iter().enumerate() {
         let next = points[(j + 1).min(n - 1)];
         let prev = points[j.saturating_sub(1)];
         let along = (next - prev).normalize_or(Vec3::X);
         let side = along.cross(eye - p).normalize_or(Vec3::Y);
-        let k = j as f32 / (n - 1).max(1) as f32;
-        let w = width * k.powf(0.7);
-        pos.push((p + side * w * 0.5).to_array());
-        pos.push((p - side * w * 0.5).to_array());
-        // k cubed left the trail's back half invisible: fading slower, it reads as a trail.
-        let a = k.powf(1.6);
-        col.extend([[1.0, 1.0, 1.0, a]; 2]);
+        let age = 1.0 - j as f32 / (n - 1).max(1) as f32;
+        pos.push((p + side * width * 0.5).to_array());
+        pos.push((p - side * width * 0.5).to_array());
+        uv.extend([[age, 0.0], [age, 1.0]]);
         if j + 1 < n {
             let b = (j * 2) as u32;
             idx.extend([b, b + 1, b + 2, b + 1, b + 3, b + 2]);
@@ -192,7 +186,7 @@ fn ribbon(points: &[Vec3], eye: Vec3, width: f32) -> Mesh {
     Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
         .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
         .with_inserted_indices(Indices::U32(idx))
 }
 

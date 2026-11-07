@@ -90,7 +90,7 @@ fn spawn(
         bevy::light::NotShadowCaster,
         Part::Trail(mesh),
     ));
-    // The kit leaves a Swing's lamps dark (kit/effects.rs `age`): the slash's rides the edge.
+    // The kit spawns no lamp for a trail (kit/effects.rs `spawn`): the slash's rides the edge.
     if let Some(l) = preset.lamps.first() {
         commands.spawn((
             PointLight {

@@ -10,6 +10,8 @@
 // Mode 2, a trail (u the age, v across from the hilt to the edge): a hot edge, a smear of
 // motion inside it streaked along the swing, its tail dissolved into the streaks, drawn
 // premultiplied (the body hides a little of what is behind it).
+// Mode 3, a streak (a projectile's trail, u the age from the head, v across): a hot line
+// down the middle in a halo narrowing down the trail, the tail eroded as mode 2's.
 // Every mode fades where it nears what is behind it (a soft particle, the depth prepass's
 // view depth against its own), so a puff or a trail never cuts a hard line into the floor.
 
@@ -89,6 +91,26 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         // Premultiplied: the body hides some of what is behind it, so it stays orange-red over
         // a sunlit floor rather than washing to peach as a purely additive strip did.
         let cover = max(0.7 * body, 0.3 * hot) * along * strength;
+        return vec4(rgb * along * strength * view.exposure, cover);
+    }
+    if mode == 3 {
+        let age = in.uv.x;
+        let v = in.uv.y;
+        let x = abs(v * 2.0 - 1.0);
+        let s = look.lit.w;
+        let n = 0.62 * noise(vec2(age * 4.0 + s, v * 7.0)) + 0.38 * noise(vec2(age * 13.0, v * 19.0 + s));
+        let t = 0.88 * pow(age, 1.25) - 0.08;
+        let kept = smoothstep(t - 0.06, t + 0.14, n);
+        let along = pow(max(1.0 - age, 0.0), look.lit.x);
+        // The halo narrows down the trail as it cools, a Gaussian across, gone before the
+        // strip's border so no edge of it shows.
+        let xh = x / mix(1.0, 0.45, age);
+        let halo = exp(-3.0 * xh * xh) * (1.0 - smoothstep(0.7, 1.0, xh)) * kept;
+        // The hot line down the middle, thinning and cooling first.
+        let c = x / max(look.rim.w * mix(1.0, 0.5, age), 0.001);
+        let hot = exp(-c * c) * (1.0 - smoothstep(0.2, 0.8, age)) * min(0.75 + 0.5 * n, 1.0);
+        let rgb = look.rim.rgb * halo * look.shape.w * (0.8 + 0.4 * n) + look.core.rgb * hot;
+        let cover = 0.25 * halo * along * strength;
         return vec4(rgb * along * strength * view.exposure, cover);
     }
     let p = in.uv * 2.0 - 1.0;
