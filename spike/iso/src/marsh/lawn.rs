@@ -4,7 +4,7 @@
 //! the water's face, and keeps the path, the cast, the fire and the stones clear.
 
 use super::dress::{FIRE, PROPS};
-use super::land::{cover, path, shape};
+use super::land::{cover, shape, trodden};
 use super::{FOE, KNIGHT, LEVEL, TARGET};
 use crate::kit::biome::Biome;
 use crate::kit::scatter::{self, Budget, Ground};
@@ -21,7 +21,8 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(scatter::plugin).add_systems(Startup, spawn);
 }
 
-/// Whether `p` is kept clear: the path, the cast's ground, the fire, the stones and stumps.
+/// Whether `p` is kept clear: the path's trampled middle (its edges broken by the mats and
+/// reed, land.rs `trodden`), the cast's ground, the fire, the stones and stumps.
 pub fn kept(p: Vec2) -> bool {
     let props = PROPS.iter().any(|&(path, at, _, scale, _)| {
         let keep = if path.contains("rock") {
@@ -31,7 +32,7 @@ pub fn kept(p: Vec2) -> bool {
         };
         at.distance(p) < keep
     });
-    path(p) > 0.02
+    trodden(p) > 0.02
         || [KNIGHT, FOE, TARGET].iter().any(|c| c.distance(p) < CAST)
         || FIRE.distance(p) < 1.2
         || props
@@ -135,7 +136,7 @@ mod tests {
             for p in &all {
                 let q = p.at.xz();
                 assert!(
-                    path(q) <= 0.02 && KNIGHT.distance(q) >= CAST,
+                    trodden(q) <= 0.02 && KNIGHT.distance(q) >= CAST,
                     "set {i} at {q}"
                 );
                 let over = height(q) - LEVEL;

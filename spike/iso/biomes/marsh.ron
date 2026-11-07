@@ -26,6 +26,11 @@
             // and brown (untinted the scan's pale pebbles read as grey-blue gravel under the
             // moon, round 261107-0507).
             (material: "brown_mud_02", mask: Site("mud"), tint: (0.6, 0.5, 0.38), wets: 1.0),
+            // Peat: the same mud darker and browner in drifts a few metres long, at its own
+            // scale so its stones do not repeat the mud's, so the path's tone is patchy along
+            // it (round 261107-0607's judge: "one even blue-grey gravel sheet").
+            (material: "brown_mud_02", mask: Site("mud"), amount: 1.3, metres: 1.9,
+                tint: (0.4, 0.29, 0.18), wets: 1.0, breakup: (0.35, 1.3, 0.45, 0.6)),
             (material: "roots", mask: Site("roots"), tint: (1.3, 1.3, 1.3)),
             // The banks: a ragged band of wet black mud about a metre wide along every water
             // (the Mud rule, kit/ground.rs: full within 0.6 m, gone by 1.9 m, its edge
