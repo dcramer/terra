@@ -1,15 +1,11 @@
-//! The forest's pond as the kit's water (kit/water.rs, iso-kit j28), its look the biome
-//! file's `water` (biomes/forest.ron), as the marsh's channels are: clear by day over its
-//! bed, a planar mirror of the canopy and the sky, ripples on the wind, the bank fading in.
-//! Before, pool.rs's own look read a flat sheet under confetti glints (judge round
-//! 261106-2239) and the glade's (water.rs) a flat blue-grey slab (judge forest-r1). The sun
+//! The forest's pond as still dark water (pool.rs) in place of the glade's (water.rs, which
+//! read a flat blue-grey slab at the ARPG camera: judge forest-r1). By day the sky's mirror
+//! is the water's colour, and the sun's glitter path is what shows it is water. The sun
 //! itself (az -40, el 52) never glints from this camera (j13), so as games fake a sun's
 //! glitter, a `Glint` light stands where the camera's rays off the pond's middle point to,
-//! on a render layer no camera sees: the water's shader draws its lane and nothing is lit
-//! by it.
+//! on a render layer no camera sees: the pool's shader mirrors it and nothing is lit by it.
 
-use crate::kit::biome::Biome;
-use crate::kit::water::{Glint, KitWater};
+use crate::pool::{self, Glint, Look};
 use crate::terrain::{Land, POND, WATER};
 use crate::water::WaterMaterial;
 use bevy::prelude::*;
@@ -18,18 +14,57 @@ use bevy::prelude::*;
 /// right (px 785,472 of 960x540).
 pub const GLITTER: Vec2 = Vec2::new(11.0, 6.0);
 /// How far up the camera's mirrored ray the glint light stands (m): far, as the sun is, so
-/// the lane spreads over the pond and only the ripples choose where it glints.
+/// the glitter spreads over the whole pond and only the ripples choose where it glints (at
+/// 40 m it was one patch of blobs round its mirror).
 const SUN_AWAY: f32 = 400.0;
-/// The glint light's lumens: about 800 lux at the water.
+/// The glint light's lumens: about 800 lux at the water, a white-hot glitter core of about 5
+/// linear at EV 8 through the lobe (pool.rs: s = 600, Fresnel about 0.02).
 const SUN_LUMENS: f32 = 1.6e9;
-/// A layer no camera renders, so the glint light lights nothing: not the kit water's own
-/// (`kit::water::LAYER`, 9), which the main camera sees and whose lights light the scene.
-const UNSEEN: usize = 10;
+/// A layer no camera renders, so the glint light lights nothing.
+const UNSEEN: usize = 9;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins(crate::kit::water::plugin)
+    app.add_plugins(pool::plugin)
         .add_systems(Startup, spawn)
         .add_systems(PostStartup, hide_glade_water);
+}
+
+/// The water by day, as le-river-beam's river: clear and green over its bed, the canopy's
+/// green in its mirror, the sun's glitter many small sharp glints. At r4 the glint's broad
+/// lobe (600) over gentle ripples (0.04) drew one round dappled spotlight on a grey slab
+/// (judge forest-r4); at r8 the sky's blue over a near-black deep read milky, and smooth
+/// ripples under a near glint light drew big white blobs in a repeating patch (the lead's
+/// judge, 2026-11-06). So the broad ripples are gentle, the fine ones (`body`) make the
+/// glints, and the glint light stands far, as the sun does.
+pub fn look() -> Look {
+    Look {
+        deep: Vec4::new(0.04, 0.05, 0.024, 0.6),
+        shallow: Vec4::new(0.05, 0.07, 0.035, 0.8),
+        sky: Vec4::new(170.0, 190.0, 110.0, 1.8),
+        horizon: Vec4::new(90.0, 110.0, 70.0, 0.6),
+        wave: Vec4::new(0.86, 0.5, 0.03, 0.0),
+        look: Vec4::new(0.0, 4_000.0, 2.0, 0.15),
+        lights: default(),
+    }
+}
+
+/// Clear by day: the deep hides about four fifths of the bed; the breeze's fine ripples,
+/// 11 cm long, ruffled in 3 m cat's paws (le-river-beam's glints are 2 px, 3,200 a
+/// megapixel; these 3 px, 3,700: forest-r9).
+pub fn body() -> pool::Body {
+    pool::Body {
+        ripple: Vec4::new(0.0094, 0.106, 3.0, 0.7),
+        clear: Vec4::new(0.78, 0.0, 0.0, 0.0),
+    }
+}
+
+/// The margin: a soft fade onto the bank's mud, the mirrored sky broken into the far
+/// trees' blots.
+pub fn edge() -> pool::Edge {
+    pool::Edge {
+        fade: Vec4::new(0.3, 0.8, 0.0, 0.0),
+        ..default()
+    }
 }
 
 /// Where the glint light stands: up the ray from the camera to `GLITTER`, mirrored in the
@@ -43,34 +78,16 @@ pub fn sun_glint(camera: Vec3) -> Vec3 {
 fn spawn(
     mut commands: Commands,
     land: Res<Land>,
-    biome: Res<Biome>,
-    light: Res<crate::kit::light::Light>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut waters: ResMut<Assets<KitWater>>,
+    mut pools: ResMut<Assets<pool::PoolMaterial>>,
 ) {
-    let Some(water) = biome.water.as_ref() else {
-        panic!(
-            "the forest's biome file has no `water`: its pond needs one (biomes/forest.ron, \
-             `water: (kind: Pond, level: -0.55, ...)`, kit.md \"The water\"; D634)"
-        );
-    };
-    let wind = biome
-        .weather
-        .as_ref()
-        .map_or(crate::foliage::WIND, |w| Vec2::new(w.wind.0, w.wind.1));
     let half = Vec2::new(9.5, 8.0);
-    let face = crate::kit::water::surface(POND - half, POND + half, 0.25, water.level, |p| {
-        land.height(p)
-    });
-    crate::kit::water::spawn_face(
-        &mut commands,
-        &mut meshes,
-        &mut waters,
-        water,
-        wind,
-        Some(&light),
-        face,
-    );
+    let face = pool::surface(POND - half, POND + half, 0.25, WATER, |p| land.height(p));
+    commands.spawn((
+        Mesh3d(meshes.add(face)),
+        MeshMaterial3d(pools.add(pool::with_body(look(), edge(), default(), body()))),
+        bevy::light::NotShadowCaster,
+    ));
     let focus = super::FOCUS
         .extend(crate::terrain::shape(super::FOCUS) + 1.2)
         .xzy();
@@ -120,21 +137,5 @@ mod tests {
             (s - g).dot(g - c) > 0.0,
             "the glint light at {l} is on the camera's side"
         );
-    }
-
-    /// The biome file's water stands where the land's bowl is carved for it, so the face
-    /// fills the pond to its bank and the bed shows through the shallows.
-    #[test]
-    fn the_water_fills_the_pond() {
-        let b = Biome::load("forest").unwrap_or_else(|e| panic!("{e}"));
-        let w = b.water.expect("forest.ron has no `water`");
-        assert!(
-            (w.level - WATER).abs() < 1e-4,
-            "forest.ron's water level {} is not the pond's (terrain.rs WATER {WATER})",
-            w.level
-        );
-        // Over the pond's middle, open water deep enough to hide most of the bed.
-        let depth = w.level - crate::terrain::shape(POND);
-        assert!(depth > 0.5, "the pond's middle is {depth} m deep");
     }
 }

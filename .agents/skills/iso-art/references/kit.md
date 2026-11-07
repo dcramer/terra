@@ -13,7 +13,7 @@ Unknown fields are refused; a parse error names the file, line, column, field an
 - `ground: (layers: [...], broad, scorch)`: up to eight layers, each a scan of the `materials/ground` stack by name (`kit/ground.rs` `STACK`, true sizes) with `mask`, `amount`, `tint`, `breakup` (drifts), `wets`, `triplanar`; one without a material only wets. Drawn by the kit for the forest and marsh (below).
 - `scatter: [(models | plant, density, scale, on, clump, tilt, sink, over, seed)]` (below), `decals: [(texture, count, size, on)]`, `water: (kind, level, deep)`, `weather: (wind, rain, snow, mist)`, `effects: [(preset, at)]`, `life: [(kind, count)]`.
 
-The fields after `light` but `ground`, `scatter` (marsh and street) and the marsh's and forest's `water` are parsed and carried, each naming the iso-kit job that draws it; the ruin, forest and marsh still draw those from their own code.
+The fields after `light` but `ground`, `scatter` (marsh and street) and the marsh's `water` are parsed and carried, each naming the iso-kit job that draws it; the ruin, forest and marsh still draw those from their own code.
 
 ## The kit's modules
 
@@ -32,7 +32,7 @@ The fields after `light` but `ground`, `scatter` (marsh and street) and the mars
 
 ## The water (`src/kit/water.rs`, `water.wesl`)
 
-- A biome's `water: (kind, level, deep, absorb, shore, film, scum, pads, mirror, ripples, streaks, rain)` is one face (`spawn_face` on a mesh from `surface`, its depth in the second UV), the marsh's first, the forest's pond since iso-kit j28 (its sun's lane off a stand-in `Glint` on layer 10, unseen: a light on the faces' layer 9 lights the whole scene); only the ruin's pool is still pool.rs. A street's puddles are faces `level` over the road and each pavement where `puddled` stands (`Street::standing`), one mirror at the road's.
+- A biome's `water: (kind, level, deep, absorb, shore, film, scum, pads, mirror, ripples, streaks, rain)` is one face (`spawn_face` on a mesh from `surface`, its depth in the second UV), the marsh's first; the forest's pond is still pool.rs. A street's puddles are faces `level` over the road and each pavement where `puddled` stands (`Street::standing`), one mirror at the road's.
 - The body absorbs per channel by depth (Beer-Lambert, `absorb` a metre) and scatters `deep`, lit as the ground; premultiplied, so the bed shows through the shallows. `shore` fades it in at the bank; `film` is a fixed depth for wet floors.
 - The mirror is planar (Unreal's and Unity's flat water): a camera mirrored under the face's level renders the scene into a half-size HDR texture before the main one, the faces on layer 9 it does not see; the face samples it where it projects, moved by the ripples' slope (`mirror.distort`), at Fresnel's 2% times `lift`; `sky` and `nits` its clear colour; `smear` (a fraction of the frame, 0.04 on the street) streaks it up and down the view in 12 tent-weighted taps, fully on a thin film, a quarter on a deep puddle, as rough wet asphalt stretches a sign or a window (no crisp mirrored text). Lights light a layer-9 face: Bevy 0.20 filters lights per view, not per mesh.
 - Ripples are one tiling slope map read at `fine` and `broad` metres drifting downwind (`weather.wind`); `calm` stills the margin. The key's lane and each `Glint`'s streak are pool.wesl's anisotropic Beckmann lobe (`streaks`); a `Glint` is a point or spot light, the six brightest at the eye kept (`seen`).

@@ -6,8 +6,8 @@
 (
     kind: [Day, Water],
     refs: "forest",
-    // Its scatter and life are still wood/'s and the glade's own code; they move here as
-    // the kit's jobs land (j7 on).
+    // Its scatter, water and life are still wood/'s and the glade's own code; they move
+    // here as the kit's jobs land (j7 on).
     layout: Forest,
     light: (preset: "forest-day"),
     // The kit's ground (kit/ground.rs) over the glade's own maps (terrain.rs `SITES`).
@@ -30,26 +30,6 @@
         ],
         // The camp's fire (scene::FIRE).
         scorch: [(0.0, 3.0)],
-    ),
-    // The pond, the kit's water (kit/water.rs, wood/pond.rs, iso-kit j28): clear by day, as
-    // the refs' trees-into-water, its bed showing in the shallows and the deep (0.75 m at the
-    // middle, terrain.rs) hiding about four fifths of it; a dark green-brown body lit as the
-    // ground, so the crowns' shade lies on it; the canopy and the forest-day sky in its
-    // mirror; the breeze's ripples, and the sun's lane off a stand-in glint (pond.rs).
-    water: (
-        kind: Pond,
-        level: -0.55,
-        deep: Linear(0.025, 0.035, 0.02),
-        absorb: (3.5, 2.2, 2.0),
-        shore: 0.1,
-        film: 0.0,
-        // A broad lane (along 0.15, across 0.06, steep 0.12) and glitter 0.3 drew a milky
-        // sheet under rain-like dashes over the whole pond, its mean sRGB 168, 161, 137
-        // against the bridge pond ref's 59, 71, 77 (round 261107-0155): a calm face, a
-        // narrow lane, a little glitter, no dashes.
-        mirror: (lift: 2.0, distort: 0.12),
-        ripples: (fine: 0.9, broad: 4.5, steep: 0.06, calm: 0.6),
-        streaks: (along: 0.06, across: 0.025, cell: 0.1, glitter: 0.15, gain: 0.6, dash: 1.0),
     ),
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
