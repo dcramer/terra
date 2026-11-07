@@ -11,7 +11,8 @@
 //!   seed derived for its purpose. What is heard and not part of the world (a sound's dice),
 //!   a look's grain baked once, and the seed of seed 1's pinned demos are listed in
 //!   [`ALLOWED`] with why.
-//! - **No system randomness**: `thread_rng`, `rand::random` and the like, anywhere. The clock
+//! - **No system randomness**: `thread_rng`, `rand::random` and the like, anywhere but for a
+//!   secret, listed in [`SECRETS`] with why. The clock
 //!   is the shared crates' rule (`check`); a Bevy crate times itself with it.
 //! - **No hash keyed by place alone**: a `terra_gen::hash` call whose arguments name no seed
 //!   (`hash::unit3(0, x, y, z)`) draws the same at the same place in every world. World
@@ -35,6 +36,13 @@ const SYSTEM_RANDOMNESS: [&str; 8] = [
     "from_entropy",
     "fastrand::",
 ];
+
+/// Where the system's randomness is the point: a secret, which must not be repeatable and
+/// never reaches the world. The file, and why. Nothing else may read it.
+const SECRETS: &[(&str, &str)] = &[(
+    "crates/terra_walker/src/net/remote.rs",
+    "a hosted server's challenge secret (D592): a hello overheard on one run must not pass on another, and the world's seed is public",
+)];
 
 /// Seeds written in that are not the world's, each with why it may be: the file, and why.
 const ALLOWED: &[(&str, &str)] = &[
@@ -477,7 +485,12 @@ fn unseeded(path: &str, text: &str, used: &mut [bool]) -> Vec<String> {
 fn breaches(path: &str, text: &str) -> Vec<String> {
     let mut found = Vec::new();
     for (number, line) in code_lines(text) {
-        if let Some(what) = SYSTEM_RANDOMNESS.iter().find(|what| line.contains(*what)) {
+        let secret = SECRETS.iter().any(|(file, _)| *file == path);
+        if let Some(what) = SYSTEM_RANDOMNESS
+            .iter()
+            .find(|what| line.contains(*what))
+            .filter(|_| !secret)
+        {
             found.push(format!(
                 "{path}:{number}: {what} reads the system's randomness: derive a seed from the world's instead (terra_gen::Seed::derive)"
             ));

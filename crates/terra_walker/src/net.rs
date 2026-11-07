@@ -39,6 +39,14 @@ pub const PERSON: Kind = Kind(1);
 /// The one room, until realms are instances a server holds several of (instances.md).
 pub const ROOM: RoomId = RoomId(0);
 
+/// What a room's welcome says of its world (D596): the planet's seed and size, which are all
+/// a game needs to make the same land, and what a joining game must already have made.
+pub fn realm_of(planet: &terra_world::planet::Planet) -> Vec<u8> {
+    let mut realm = planet.seed().0.to_le_bytes().to_vec();
+    realm.extend_from_slice(&planet.radius_m().to_bits().to_le_bytes());
+    realm
+}
+
 /// The walker's parts, in the order of their numbers: the first of the game's schema.
 pub fn parts() -> Vec<PartSpec> {
     let part = |audience| PartSpec {

@@ -44,6 +44,11 @@ function start(save: string, more: string[]): number {
 }
 
 const state = (port: number) => JSON.parse(remote(port, "call", "net.state")) as State;
+/// A copy's frames and seconds so far, for its frame rate over a stretch.
+const clock = (port: number) => JSON.parse(remote(port, "call", "sandbox.status")) as { frame: number; seconds: number };
+/// Under this many frames a second a game cannot run its 64 ticks a second (six a frame at
+/// most, D138), so two copies' ticks no longer pass at one rate and corrections say nothing.
+const REAL_TIME_FPS = 64 / 6;
 const apart = (a: Place, b: Place) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const sleep = (seconds: number) => new Promise((done) => setTimeout(done, seconds * 1000));
 
@@ -77,6 +82,7 @@ try {
   console.log("✓ joined: the host has a guest and the joined game holds the host");
 
   const began = state(joiner).mine!;
+  const before = ports.map(clock);
   remote(joiner, "press", `w:${WALK}`);
   let last = began;
   await sleep(1);
@@ -88,13 +94,16 @@ try {
   });
   await sleep(1);
   const [theirs, ours] = [state(host), state(joiner)];
+  const fps = ports.map(clock).map((now, index) => (now.frame - before[index].frame) / (now.seconds - before[index].seconds));
+  const slow = Math.min(...fps) < REAL_TIME_FPS * 1.5;
+  const pace = `host ${fps[0].toFixed(0)} fps, joined ${fps[1].toFixed(0)} fps${slow ? ": too few for real time on this machine now, so the corrections say nothing" : ""}`;
   const walked = apart(ours.mine!, began);
   const between = apart(ours.mine!, theirs.guests[0].at);
   const puppet = apart(ours.puppets[0].at, theirs.mine!);
   if (walked < 3) failed = `the joined player walked ${walked.toFixed(2)} m on ${WALK} frames of forward: its intents are not reaching the host's walk (terra_walker::net's hear)`;
   else if (between > 0.01) failed = `the joined game has its player ${between.toFixed(3)} m from where the host has it: the prediction is not being held to the host's answers (net::link's listen)`;
   else if (puppet > 0.01) failed = `the joined game draws the host ${puppet.toFixed(3)} m from where the host stands (net::link's show)`;
-  else console.log(`✓ walked ${walked.toFixed(1)} m: both games have the joined player in one place (${(between * 1000).toFixed(1)} mm apart) and the host drawn where it stands (${(puppet * 1000).toFixed(1)} mm); ${ours.corrections} corrections (a reading)`);
+  else console.log(`✓ walked ${walked.toFixed(1)} m: both games have the joined player in one place (${(between * 1000).toFixed(1)} mm apart) and the host drawn where it stands (${(puppet * 1000).toFixed(1)} mm); ${ours.corrections} corrections (a reading; ${pace})`);
 
   if (SHOTS && !failed) {
     mkdirSync(SHOTS, { recursive: true });

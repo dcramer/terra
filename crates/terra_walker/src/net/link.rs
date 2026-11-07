@@ -50,6 +50,13 @@ pub struct Puppet {
     pub shown: Shown,
 }
 
+/// Why this game's link to a hosted world ended, in words for the player.
+#[derive(Resource, Clone, Debug, PartialEq, Eq)]
+pub struct Ended(pub String);
+
+/// What a player is told when the host's world is not the one this game made.
+const OTHER_WORLD: &str = "That world is made from another seed or size than this game's. Start this game on the host's seed, then join again.";
+
 /// How often the server sends state, ticks (its `send_every`): others are shown
 /// [`SHOWN_SENDS_BACK`] of them in the past.
 const SEND_EVERY: u32 = 2;
@@ -72,6 +79,10 @@ pub struct Link {
     steering: Option<Steering>,
     puppets: HashMap<EntityId, Entity>,
     heard: Vec<Heard>,
+    /// The world this game has made (`net::realm_of`), which the host's must be; empty for
+    /// any. And why the link is over, once it is.
+    realm: Vec<u8>,
+    over: Option<String>,
     /// What the server said that is the layers' above to act on (operations, events, the
     /// welcome, the end): drained by them each tick.
     pub events: Vec<Heard>,
@@ -84,6 +95,7 @@ impl Link {
         version: u64,
         identity: &Identity,
         name: &str,
+        realm: Vec<u8>,
     ) -> Link {
         let mut client = Client::new();
         client.hello(&mut wire, version, identity, name);
@@ -98,6 +110,8 @@ impl Link {
             steering: None,
             puppets: HashMap::new(),
             heard: Vec::new(),
+            realm,
+            over: None,
             events: Vec::new(),
         }
     }
@@ -127,11 +141,15 @@ impl Link {
         self.client.poll(&mut self.wire, &mut heard);
         for event in heard.drain(..) {
             match &event {
-                Heard::Welcome { tick, .. } => {
+                Heard::Welcome { tick, realm, .. } => {
+                    if !self.realm.is_empty() && *realm != self.realm {
+                        self.over = Some(OTHER_WORLD.to_string());
+                    }
                     self.clock.start(*tick);
                     self.history.clear();
                     (self.answered, self.begun) = (0, false);
                 }
+                Heard::Closed(reason) => self.over = Some(reason.message().to_string()),
                 Heard::Entered(_) | Heard::Gone(_) => continue,
                 _ => {}
             }
@@ -266,6 +284,17 @@ pub fn listen(world: &mut World) {
         return;
     };
     link.listen(world);
+    // Over, by the server's word or because its world is not this game's: the link goes, its
+    // puppets with it, and why is kept for whoever asks.
+    if let Some(why) = link.over.take() {
+        link.wire.close();
+        for puppet in link.puppets.values() {
+            world.despawn(*puppet);
+        }
+        warn!("Left the hosted world: {why}");
+        world.insert_resource(Ended(why));
+        return;
+    }
     world.insert_resource(link);
 }
 

@@ -6,11 +6,11 @@
 //!   metres east of the world's start.
 //! - `net.join {"address": "127.0.0.1:47000", "name": "guest"}`: this game joins the world
 //!   hosted there. It must have made the same world (the same `--seed`).
-//! - `net.state`: who is connected, where each guest and puppet stands, and how often this
-//!   game's prediction was corrected.
+//! - `net.state`: who is connected, where each guest and puppet stands, how often this
+//!   game's prediction was corrected, and why a link ended if one did.
 
-use super::link::{Link, Puppet};
-use super::{Guest, Host, parts};
+use super::link::{Ended, Link, Puppet};
+use super::{Guest, Host, parts, realm_of};
 use crate::IsLocalPlayer;
 use bevy::prelude::*;
 use bevy::remote::{BrpResult, builtin_methods::parse_some};
@@ -21,6 +21,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use terra_net::identity::Identity;
 use terra_net::server::Config;
 use terra_net::transport::udp::{UdpClient, UdpServer};
+use terra_world::planet::Planet;
 use terra_world::remote::{method, refused};
 use terra_world::start::Start;
 
@@ -59,13 +60,11 @@ fn host(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     // The server's challenges are drawn from this (D592): the operating system's randomness,
     // by the keys the standard library seeds its hashers with.
     config.secret = std::collections::hash_map::RandomState::new().hash_one(port);
-    world.insert_resource(Host::new(
-        config,
-        parts(),
-        Box::new(wire),
-        beside,
-        Vec::new(),
-    ));
+    let realm = world
+        .get_resource::<Planet>()
+        .map(realm_of)
+        .unwrap_or_default();
+    world.insert_resource(Host::new(config, parts(), Box::new(wire), beside, realm));
     Ok(json!({ "hosting": address.to_string() }))
 }
 
@@ -100,7 +99,12 @@ fn join(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let number = u64::from_le_bytes(public[..8].try_into().expect("eight of thirty-two bytes"));
     let wire = UdpClient::connect(server, number)
         .map_err(|why| refused(format!("No socket could be opened to {address}: {why}.")))?;
-    world.insert_resource(Link::join(Box::new(wire), VERSION, &identity, &name));
+    let realm = world
+        .get_resource::<Planet>()
+        .map(realm_of)
+        .unwrap_or_default();
+    world.remove_resource::<Ended>();
+    world.insert_resource(Link::join(Box::new(wire), VERSION, &identity, &name, realm));
     Ok(json!({ "joining": address }))
 }
 
@@ -127,6 +131,7 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "tick": host.map(|host| host.server().tick()).or(link.and_then(Link::tick)),
         "guests": guests,
         "joined": link.is_some(),
+        "ended": world.get_resource::<Ended>().map(|ended| ended.0.clone()),
         "corrections": link.map(Link::corrections),
         "puppets": puppets,
     }))

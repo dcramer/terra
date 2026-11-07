@@ -255,11 +255,13 @@ fn joined(network: &Network, conditions: Conditions) -> (World, Entity) {
     time.advance_by(Duration::from_secs_f32(TICK));
     world.insert_resource(time);
     let identity = Identity::from_secret([6; 32]);
+    let wire = Box::new(network.connect(conditions));
     world.insert_resource(link::Link::join(
-        Box::new(network.connect(conditions)),
+        wire,
         VERSION,
         &identity,
         "guest",
+        b"realm".to_vec(),
     ));
     let view = View {
         forward: Vec3::X,
@@ -532,4 +534,40 @@ fn a_nudge_is_corrected_within_a_round_trip_and_starts_no_chain() {
         "mispredicted on {wrong:?}, nudged on {nudged}"
     );
     assert!(corrections <= 3, "{corrections} corrections for one nudge");
+}
+
+/// A game that made another world than the host's is not kept in it: the land would not be
+/// the same under the two. The link ends at the welcome, with words for the player.
+#[test]
+fn a_game_of_another_world_is_told_so_and_leaves() {
+    let (mut host, _, network) = hosted();
+    let (mut client, _) = joined(&network, Conditions::PERFECT);
+    let identity = Identity::from_secret([8; 32]);
+    let wire = Box::new(network.connect(Conditions::PERFECT));
+    client.insert_resource(link::Link::join(
+        wire,
+        VERSION,
+        &identity,
+        "lost",
+        b"another".to_vec(),
+    ));
+    for _ in 0..40 {
+        network.advance(f64::from(TICK));
+        client.run_system_once(link::listen).unwrap();
+        if client.contains_resource::<link::Link>() {
+            client.run_system_once(link::record).unwrap();
+        }
+        host.run_system_once(hear).unwrap();
+        host.run_system_once(walk).unwrap();
+        host.run_system_once(tell).unwrap();
+    }
+    assert!(
+        !client.contains_resource::<link::Link>(),
+        "it stayed in a world that is not its own"
+    );
+    let why = &client.resource::<link::Ended>().0;
+    assert!(why.contains("another seed"), "{why}");
+    // The host sees it go: one who left is no guest.
+    let mut guests = host.query::<&Guest>();
+    assert_eq!(guests.iter(&host).count(), 0);
 }
