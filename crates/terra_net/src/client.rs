@@ -177,9 +177,12 @@ impl Client {
                         you,
                         realm,
                     }) => {
-                        // Let in, or crossed to another room: what it held was the last's.
-                        self.entities.clear();
-                        self.tombs.clear();
+                        // Let in, or crossed to another room: what it holds from before
+                        // this tick was the last room's. State of the new room may have
+                        // come first (the lanes are apart, and this one waits on a resend):
+                        // that is from this tick on, and is kept.
+                        self.entities.retain(|_, entity| entity.seen >= tick);
+                        self.tombs.retain(|_, at| *at >= tick);
                         self.floor = tick;
                         events.push(Event::Welcome {
                             tick,

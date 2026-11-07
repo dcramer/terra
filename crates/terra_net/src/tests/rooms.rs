@@ -271,3 +271,106 @@ fn the_round_trip_is_measured_and_sets_how_soon_a_lost_part_is_sent_again() {
         .expect("acknowledged by now");
     assert!((6.0..9.5).contains(&measured), "{measured} ticks");
 }
+
+/// A client's link whose ordered lane is slow: what arrives on it is held back so many polls,
+/// as a reliable lane's is when its packet is lost and sent again, while state flows.
+struct SlowOrdered {
+    inner: LoopbackClient,
+    held: Vec<(u32, FromServer)>,
+    polls: u32,
+    delay: u32,
+}
+
+impl ClientTransport for SlowOrdered {
+    fn poll(&mut self, into: &mut Vec<FromServer>) {
+        self.polls += 1;
+        let mut arrived = Vec::new();
+        self.inner.poll(&mut arrived);
+        for arrival in arrived {
+            match arrival {
+                FromServer::Packet(Lane::Ordered, _) => {
+                    self.held.push((self.polls + self.delay, arrival))
+                }
+                state => into.push(state),
+            }
+        }
+        while self.held.first().is_some_and(|(due, _)| *due <= self.polls) {
+            into.push(self.held.remove(0).1);
+        }
+    }
+    fn send(&mut self, lane: Lane, bytes: &[u8]) {
+        self.inner.send(lane, bytes);
+    }
+    fn close(&mut self) {
+        self.inner.close();
+    }
+}
+
+/// The welcome is on the ordered lane and state on the other, so state of a room can come
+/// before the welcome to it. What came first is the room's and must be kept: the server has
+/// had it acknowledged and will not say again what the things are. (Found by the walker's
+/// two-world test: a client that dropped it never heard of its own body again.)
+#[test]
+fn state_that_comes_before_the_welcome_is_kept() {
+    let network = Network::new();
+    let mut wire = network.server();
+    let part = PartSpec {
+        audience: Audience::Public,
+        weight: 1.0,
+    };
+    let mut server = Server::new(Config::new(VERSION), vec![part]);
+    let lamp = server.spawn(HERE, CREATURE, [0.0; 3]);
+    let mut tap = SlowOrdered {
+        inner: network.connect(Conditions::PERFECT),
+        held: Vec::new(),
+        polls: 0,
+        delay: 0,
+    };
+    let mut client = Client::new();
+    client.hello(&mut tap, VERSION, &Identity::from_secret([2; 32]), "guest");
+    let (mut events, mut heard, mut you) = (Vec::new(), Vec::new(), None);
+    for tick in 0..96u32 {
+        network.advance(TICK_S);
+        server.poll(&mut wire, &mut events);
+        for event in events.drain(..) {
+            if let Event::Hello { peer, .. } = event {
+                let body = server.spawn(HERE, PLAYER, [1.0, 0.0, 0.0]);
+                server.set(body, 0, b"body");
+                server.welcome(&mut wire, peer, HERE, body, b"room");
+                you = Some(body);
+                // From here the ordered lane is slow: the welcome comes twenty polls late.
+                tap.delay = 20;
+            }
+        }
+        server.set(lamp, 0, &tick.to_le_bytes());
+        server.step(&mut wire);
+        client.poll(&mut tap, &mut heard);
+        client.send(&mut tap);
+    }
+    let you = you.expect("it said hello");
+    // State came first, by twenty ticks.
+    let welcome = heard
+        .iter()
+        .position(|heard| matches!(heard, Heard::Welcome { .. }))
+        .expect("welcomed");
+    let entered = heard
+        .iter()
+        .position(|heard| *heard == Heard::Entered(you))
+        .expect("its body came");
+    assert!(
+        entered < welcome,
+        "the test's premise: state before the welcome"
+    );
+    // And it is all still held, and still told: its own body, and the lamp as it is now.
+    assert!(
+        client.entity(you).is_some_and(|entity| entity.mine),
+        "its own body was dropped at the welcome"
+    );
+    let lit = &client
+        .entity(lamp)
+        .expect("the lamp")
+        .part(0)
+        .expect("its part")
+        .newer;
+    assert!(server.tick() - u32::from_le_bytes(lit.bytes[..4].try_into().expect("a tick")) < 4);
+}

@@ -9,8 +9,12 @@
 //! - [`tell`], at the tick's end: every player's mover body as its parts ([`SHOWN`] to all,
 //!   [`OWN`] to its player), then the server's sends.
 //!
+//! A game that joins another's world is [`link`]'s side.
+//!
 //! The server is `terra_net`'s and knows nothing of Bevy; this is the thin side. A client that
 //! joins need not be a game at all (D73): the tests' is a few lines.
+
+pub mod link;
 
 use crate::intent::Intent;
 use crate::movement::{Movers, walk};
@@ -144,13 +148,18 @@ impl Host {
 
 pub fn plugin(app: &mut App) {
     let hosted = resource_exists::<Host>;
+    let joined = resource_exists::<link::Link>;
     app.add_systems(
         FixedUpdate,
         (
             hear.in_set(Sim::Act).before(walk).run_if(hosted),
             tell.in_set(Sim::End).run_if(hosted),
+            link::listen.in_set(Sim::Act).before(walk).run_if(joined),
+            link::record.in_set(Sim::Act).after(walk).run_if(joined),
+            link::show.in_set(Sim::End).run_if(joined),
         ),
-    );
+    )
+    .add_systems(Update, link::pace.run_if(joined));
 }
 
 /// Before the walk: the server takes what arrived. A client let in gets a body where guests

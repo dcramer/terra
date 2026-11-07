@@ -40,7 +40,7 @@ pub struct LocalPlayer;
 pub type IsLocalPlayer = (With<Player>, With<LocalPlayer>);
 
 /// How a body moves over the planet.
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Motion {
     /// Speed over the ground, as a direction and metres a second.
     pub velocity: Vec3,
@@ -81,7 +81,7 @@ impl Motion {
 
 /// What a player's hands and feet are doing besides walking: using a tool, swinging,
 /// rolling, flinching from a blow, or guarding.
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Stance {
     /// Seconds since the tool was last used.
     pub since_acting: f32,

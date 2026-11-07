@@ -20,6 +20,7 @@ use std::collections::{HashMap, HashSet};
 use terra_bases::{self as build, Site};
 use terra_build_layout::solids::Slab;
 use terra_build_layout::walk::Walking;
+use terra_motion::mover::net::Own;
 use terra_motion::mover::{self, Block, Bodies, Capsule, Capsules, Ground, Kind, Obstacles, Sdf};
 use terra_world::flora;
 use terra_world::planet::{HeightMemo, Planet};
@@ -93,6 +94,9 @@ pub struct Movers {
     memo: HeightMemo,
     props: Props,
     lists: Lists,
+    /// Bodies to be set to a server's answer by the next walk, which alone can ask the
+    /// ground (`net::link`).
+    answers: Vec<(Entity, Own)>,
 }
 
 impl Default for Movers {
@@ -105,6 +109,7 @@ impl Default for Movers {
             memo: HeightMemo::default(),
             props: Props::default(),
             lists: Lists::default(),
+            answers: Vec::new(),
         }
     }
 }
@@ -113,6 +118,25 @@ impl Movers {
     /// A player's body as the mover has it.
     pub fn body(&self, player: Entity) -> Option<&mover::Body> {
         self.bodies.get(*self.ids.get(&player)?)
+    }
+
+    /// Has the next walk set a player's body to a server's answer for it (D651).
+    pub fn correct(&mut self, player: Entity, own: Own) {
+        self.answers.retain(|(who, _)| *who != player);
+        self.answers.push((player, own));
+    }
+
+    /// Puts a player's body back as it was kept: a replay's start.
+    pub fn restore(&mut self, player: Entity, body: mover::Body) {
+        if self.ids.get(&player) == Some(&body.id) {
+            self.bodies.put(body);
+        }
+    }
+
+    /// The players' kind, for a test to change.
+    #[cfg(test)]
+    pub(crate) fn kind_mut(&mut self) -> &mut Kind {
+        &mut self.kind
     }
 
     /// The players' kind (a man's, D136).
@@ -385,6 +409,25 @@ type PropsChanged = (
     Or<(Changed<Transform>, Changed<Visibility>)>,
 );
 
+/// A player's body for this tick: set first to the server's answer for it where one waits
+/// (`Movers::correct`, D651), which only here, with the ground to ask, can be done.
+fn answered<'a>(
+    answers: &mut Vec<(Entity, Own)>,
+    bodies: &'a mut Bodies,
+    player: Entity,
+    id: u32,
+    world: &mover::World,
+) -> &'a mover::Body {
+    if let Some(at) = answers.iter().position(|(who, _)| *who == player) {
+        let (_, own) = answers.swap_remove(at);
+        if let Some(mut body) = bodies.remove(id) {
+            body.correct(&own, world);
+            bodies.put(body);
+        }
+    }
+    bodies.get(id).expect("each player's body")
+}
+
 /// Moves every player by what they mean to do, through the mover: held up by the ground and
 /// their base, stopped by walls, props, trees, bodies and roofs, floated by deep water. A body
 /// with no stamina, as in the walker on its own, never tires.
@@ -487,7 +530,7 @@ pub(crate) fn walk(
                     .add(movers.next - 1, kind, feet, motion.facing, &world);
                 movers.next - 1
             });
-            let body = movers.bodies.get(id).expect("each player's body");
+            let body = answered(&mut movers.answers, &mut movers.bodies, entity, id, &world);
             // Moved outside the walk (a respawn, a warp, a nudge): it is put where it was moved
             // to, still if it went far or lies where it fell.
             let moved = body.feet.distance(feet);

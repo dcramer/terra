@@ -3,7 +3,9 @@
 //! is run. Every state packet says how many ticks early the newest intent came
 //! ([`Stamp::margin`]); the client runs a little faster when that is under its target and a
 //! little slower when over, at most [`MOST_NUDGE`] either way, as Overwatch and Rocket League
-//! do. A margin far from the target is not walked to but jumped.
+//! do. A margin far from the target is not walked to but jumped, the whole way on the first
+//! reading: a welcome that came late (it rides the ordered lane) leaves the clock a third of
+//! a second behind, and creeping there would cost seconds of late intents.
 
 use crate::proto::Stamp;
 
@@ -35,6 +37,9 @@ pub struct Clock {
     /// The newest stamp's tick taken, and the tick stamps are ignored until.
     heard: Option<u32>,
     hold_until: u32,
+    /// No margin has been read since the start or the last jump: the next is taken as it
+    /// is, not eased toward, so a clock far out jumps the whole way at once.
+    fresh: bool,
 }
 
 impl Clock {
@@ -45,7 +50,8 @@ impl Clock {
             margin: LEAST_MARGIN,
             jitter: 0.0,
             heard: None,
-            hold_until: server_tick + HOLD_TICKS,
+            hold_until: 0,
+            fresh: true,
         };
     }
 
@@ -69,8 +75,13 @@ impl Clock {
             return false;
         }
         let margin = f32::from(stamp.margin);
-        self.jitter += ((margin - self.margin).abs() - self.jitter) * EASE;
-        self.margin += (margin - self.margin) * EASE;
+        if self.fresh {
+            self.fresh = false;
+            self.margin = margin;
+        } else {
+            self.jitter += ((margin - self.margin).abs() - self.jitter) * EASE;
+            self.margin += (margin - self.margin) * EASE;
+        }
         let over = self.margin - self.target();
         if over.abs() <= JUMP_PAST {
             return false;
@@ -78,6 +89,7 @@ impl Clock {
         self.next = Some(next.saturating_add_signed(-(over as i32)));
         self.margin = self.target();
         self.hold_until = stamp.tick + HOLD_TICKS;
+        self.fresh = true;
         true
     }
 

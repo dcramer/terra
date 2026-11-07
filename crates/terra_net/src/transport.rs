@@ -71,3 +71,18 @@ pub trait ClientTransport {
     /// As [`ServerTransport::flush`].
     fn flush(&mut self) {}
 }
+
+impl<T: ClientTransport + ?Sized> ClientTransport for Box<T> {
+    fn poll(&mut self, into: &mut Vec<FromServer>) {
+        (**self).poll(into);
+    }
+    fn send(&mut self, lane: Lane, bytes: &[u8]) {
+        (**self).send(lane, bytes);
+    }
+    fn close(&mut self) {
+        (**self).close();
+    }
+    fn flush(&mut self) {
+        (**self).flush();
+    }
+}
