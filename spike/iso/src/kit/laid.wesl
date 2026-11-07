@@ -25,6 +25,9 @@ struct Params {
     courses: array<vec4<f32>, 4>,
     joints: array<vec4<f32>, 4>,
     shape: vec4<f32>,
+    mark_at: array<vec4<f32>, 16>,
+    mark_turn: array<vec4<f32>, 16>,
+    mark_rep: array<vec4<f32>, 16>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(106)
@@ -110,6 +113,20 @@ fn unit(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(tile, f32(r), c);
 }
 
+// How far `p` lies outside mark `k`'s nearest repeat (negative inside), in metres, and
+// where it lies in that repeat's own frame (kit/laid.rs's `mark_edge`, tested there).
+fn mark_edge(k: u32, p: vec2<f32>) -> vec3<f32> {
+    let a = laid.mark_at[k];
+    let b = laid.mark_turn[k];
+    let c = laid.mark_rep[k];
+    let d = p - a.xy;
+    var q = vec2<f32>(d.x * b.x + d.y * b.y, -d.x * b.y + d.y * b.x);
+    let half = fract(c.xy);
+    q -= clamp(floor(q / b.zw - half + 0.5) + half, -c.xy, c.xy) * b.zw;
+    let e = abs(q) - a.zw;
+    return vec3<f32>(max(e.x, e.y), q);
+}
+
 // A mask's weight at the fragment (kit/laid.rs's `source`).
 fn source(s: f32, in: VertexOutput) -> f32 {
     switch u32(s) {
@@ -174,6 +191,40 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let crack = (1.0 - smoothstep(0.012, 0.035, wall)) * cracked;
     colour *= mix(1.0, laid.look.y, crack);
 
+    // The marks, in their order: a patch's fresh darker surface sealed at its edge in a
+    // tar band; a stain (tyres' rubber, dripped oil) darker and smoother, soft-edged and
+    // streaked along its length; paint, crisp-edged, worn through in flecks and patches,
+    // the surface's grain showing in it.
+    var paint = 0.0;
+    var mark_rough = 1.0;
+    let grain_v = dot(grain, vec3<f32>(0.333));
+    for (var k = 0u; k < u32(laid.shape.y); k++) {
+        let m = mark_edge(k, p);
+        let row = laid.mark_rep[k];
+        let kind = u32(row.z + 0.5);
+        let amount = row.w;
+        let seed = f32(k) * 7.3;
+        if kind == 3u {
+            let inside = (1.0 - smoothstep(-0.004, 0.004, m.x)) * amount;
+            colour *= mix(1.0, 0.68, inside);
+            mark_rough *= mix(1.0, 0.85, inside);
+            let band = 1.0 - smoothstep(0.02, 0.045, abs(m.x + 0.01) + (noise(m.yz * 9.0 + seed) - 0.5) * 0.03);
+            colour *= mix(1.0, 0.3, band * amount);
+            mark_rough *= mix(1.0, 0.45, band * amount);
+        } else if kind == 2u {
+            let streak = noise(m.yz * vec2<f32>(0.35, 4.5) + seed) * 0.6 + noise(m.yz * vec2<f32>(1.6, 11.0) + seed) * 0.4;
+            let s = (1.0 - smoothstep(-0.12, 0.08, m.x)) * smoothstep(0.25, 0.7, streak) * amount;
+            colour *= 1.0 - 0.5 * s;
+            mark_rough *= 1.0 - 0.4 * s;
+        } else {
+            let wear = noise(m.yz * vec2<f32>(0.9, 2.5) + seed) * 0.55 + noise(m.yz * 14.0 + seed) * 0.45;
+            let cover = (1.0 - smoothstep(-0.003, 0.003, m.x)) * smoothstep(0.0, 0.2, wear - (1.0 - amount));
+            let tint = select(vec3<f32>(0.6, 0.6, 0.58), vec3<f32>(0.62, 0.45, 0.07), kind == 1u);
+            colour = mix(colour, tint * mix(1.0, grain_v, 0.6), cover);
+            paint = max(paint, cover);
+        }
+    }
+
     // Moss: out of the joints first, then over the units where it is mossiest.
     let tuft = noise(p * 2.3) * 0.6 + noise(p * 7.7 + 2.0) * 0.4;
     mossy = min(mossy + feet * 0.4, 1.0);
@@ -197,7 +248,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let damp_patch = smoothstep(0.58, 0.72, dp) * laid.vary.w * (1.0 - dirty);
     colour *= mix(1.0, 0.7, damp_patch);
     var rough = clamp(pbr_input.material.perceptual_roughness * rough_k, 0.05, 1.0);
-    rough = mix(rough, 1.0, dirty) * mix(1.0, 0.55, damp_patch);
+    rough = mix(rough, 1.0, dirty) * mix(1.0, 0.55, damp_patch) * mark_rough;
+    rough = mix(rough, 0.55, paint);
     pbr_input.material.perceptual_roughness = mix(mix(rough, rough * 0.6, damp), 0.09, wet);
     // Standing water is flat: the units' relief shows only faintly through it.
     pbr_input.N = normalize(mix(pbr_input.N, pbr_input.world_normal, wet * 0.85));

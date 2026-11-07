@@ -153,6 +153,45 @@ pub struct Laid {
     /// Where the floor meets walls: grime, dirt and moss heavier there (none when `None`).
     #[serde(default)]
     pub feet: Option<Mask>,
+    /// What lies on the floor at set places, as a road carries it (kit/laid.rs `marks`):
+    /// painted lines and crossings, wheel paths' and oil's stains, patched repairs.
+    #[serde(default)]
+    pub marks: Vec<Mark>,
+}
+
+/// A mark on a laid floor: a rectangle `size` metres (along its own x and z) centred `at`
+/// (world x, z), turned `turn` degrees about up, repeated `count` times `every` metres
+/// along its own x and z about its centre (a dashed line, a zebra's stripes); `amount` how
+/// fresh its paint or how deep its stain (0 to 1).
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Mark {
+    pub kind: MarkKind,
+    pub at: (f32, f32),
+    pub size: (f32, f32),
+    #[serde(default)]
+    pub turn: f32,
+    #[serde(default)]
+    pub every: (f32, f32),
+    #[serde(default = "once")]
+    pub count: (u32, u32),
+    #[serde(default = "one")]
+    pub amount: f32,
+}
+
+/// What a mark is: road paint (white, yellow) worn in the wheel paths with the surface's
+/// grain through it; a stain (tyres' rubber and dripped oil, darker and smoother, its edge
+/// soft); a patch (a repair of fresh, darker surface, its edge sealed in a tar band).
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkKind {
+    White,
+    Yellow,
+    Stain,
+    Patch,
+}
+
+fn once() -> (u32, u32) {
+    (1, 1)
 }
 
 fn joints() -> f32 {

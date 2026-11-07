@@ -30,6 +30,32 @@
             dirt: 0.3,
             damp: 0.9,
             feet: Site("walls"),
+            // A city road's marks (kit/laid.rs), the road along x, its lanes' middles at z
+            // ±1.75: three patched repairs; dripped oil down each lane's middle and the
+            // wheel paths' rubber either side; worn white centre dashes (3 m every 9 m), a
+            // zebra crossing (seven 0.5 m stripes a metre apart) with a stop line each side,
+            // and double yellow lines along both kerbs.
+            marks: [
+                (kind: Patch, at: (-7.5, 1.4), size: (3.2, 1.1), amount: 0.9),
+                (kind: Patch, at: (7.5, -1.6), size: (1.6, 1.4), turn: 4.0, amount: 0.8),
+                (kind: Patch, at: (-10.5, -2.4), size: (0.9, 0.7), turn: -6.0, amount: 0.7),
+                (kind: Stain, at: (0.0, 0.0), size: (80.0, 0.7), every: (0.0, 3.5),
+                 count: (1, 2), amount: 0.6),
+                (kind: Stain, at: (0.0, 1.75), size: (80.0, 0.45), every: (0.0, 1.7),
+                 count: (1, 2), amount: 0.45),
+                (kind: Stain, at: (0.0, -1.75), size: (80.0, 0.45), every: (0.0, 1.7),
+                 count: (1, 2), amount: 0.45),
+                (kind: White, at: (3.0, 0.0), size: (3.0, 0.12), every: (9.0, 0.0),
+                 count: (9, 1), amount: 0.75),
+                (kind: White, at: (-1.5, 0.0), size: (3.0, 0.5), every: (0.0, 1.0),
+                 count: (1, 7), amount: 0.8),
+                (kind: White, at: (-4.0, 1.75), size: (0.3, 3.3), amount: 0.7),
+                (kind: White, at: (1.0, -1.75), size: (0.3, 3.3), amount: 0.7),
+                (kind: Yellow, at: (0.0, 0.0), size: (80.0, 0.1), every: (0.0, 6.5),
+                 count: (1, 2), amount: 0.65),
+                (kind: Yellow, at: (0.0, 0.0), size: (80.0, 0.1), every: (0.0, 6.1),
+                 count: (1, 2), amount: 0.65),
+            ],
         ),
         kerbs: (
             material: "granite_tile_04",
