@@ -6,8 +6,16 @@
 //! - [`transport`]: the seam to whatever carries bytes, and the in-memory carrier.
 //! - [`ack`]: which unreliable packets arrived.
 //! - [`interest`]: what is near a place.
+//! - [`proto`]: the names and messages that cross.
+//! - [`server`], [`client`]: the two ends.
 
 pub mod ack;
+pub mod client;
 pub mod interest;
+pub mod proto;
+pub mod server;
 pub mod transport;
 pub mod wire;
+
+#[cfg(test)]
+mod tests;

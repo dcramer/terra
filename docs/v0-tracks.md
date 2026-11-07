@@ -69,10 +69,10 @@ An animation pipeline gives a body that moves; nothing in the list says what it 
 
 The largest risk. The design is [netcode.md](netcode.md) (D34, D651, D652, D636), from the survey in research/2026-11-06-netcode.md; `terra_net` follows its build order.
 
-- **Have**: the fixed tick (D138), rules in plain crates (D28), operations in order (D21), the same world on every machine (D30), and the plan to use `renet` with our own messages (D34).
+- **Have**: the fixed tick (D138), rules in plain crates (D28), operations in order (D21), the same world on every machine (D30). `terra_net` (netcode.md's build step 1): the wire, the transport seam with an in-memory transport that shapes latency and loss from a seed, acknowledgements, interest by area, and the server's and client's ends over entities of parts and ordered operations; engine.md's test passes on a toy game, and four clients soak for 30 simulated minutes at 100 ms and 1% loss with no lasting mismatch (6.2 kB/s down, 2.4 kB/s up a player, readings).
 - **Need**:
   - The design built (netcode.md): written 2026-11-06 for the developers to read (D49); D34 stands on its survey.
-  - `terra_net`, and a server started inside the game. The same server running with no window is for scripted runs now (D51); offering it to players comes later.
+  - netcode.md's build steps 2 to 5: the clock and prediction on the real mover, the UDP transport and connecting, then a server started inside the game. The same server running with no window is for scripted runs now (D51); offering it to players comes later.
   - **Always a client.** Even solo, the drawn game is a client of a server. Otherwise there are two code paths.
   - **Two realms at once.** One player can be in each realm, so a host's server runs both while its own client draws one. instances.md's split (a headless `App` per instance on the server, the client's world in the main `World`) means a host holds its realm twice. Measure that memory before building on it.
   - Sending by area, a snapshot then changes, others shown between ticks, late join, leaving and rejoining mid-fight, and a version check on connect.
