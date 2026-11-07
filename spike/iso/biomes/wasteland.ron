@@ -1,0 +1,148 @@
+// The wasteland (uc-wasteland j2): an old two-lane highway through a dead roadside town in
+// the desert, by day, the kit's non-fantasy second after the neon street ("make sure that
+// we can do non-fantasy as well", the developer). Its refs (refs/wasteland/refs.md): an
+// abandoned gas station's cracked apron in Arizona, a derelict lot's broken asphalt, a junk
+// lot from above, overgrown concrete ruins; Wasteland 3's camp for junk at the camera. The
+// same Street layout as the neon street (kit/street.rs): the road is sun-bleached asphalt
+// broken and patched, its lines worn to traces; the verges are sun-baked mud cracked into
+// plates; the north side a concrete garage, a rusted iron shed and a block with its
+// windows out; the south a corrugated fence and a low broken wall; utility poles with
+// sagging lines; junk (tyres, barrels, cans, a covered car) gathered at the walls, dry
+// grass in the gutters. Scans: concrete_debris, mud_cracked_dry_03, rusty_corrugated_iron
+// (Poly Haven, CC0, assets/materials/README.md); props from assets/models/iso/city/.
+(
+    kind: [Day],
+    refs: "wasteland",
+    layout: Street,
+    street: (
+        road: 7.0,
+        walk: 4.0,
+        kerb: (0.3, 0.1),
+        length: 70.0,
+        focus: (0.0, -2.0),
+        cables: [
+            // Two leaning timber poles on the south verge, a third north, the lines sagging
+            // between them and one dropped low.
+            (from: (-9.0, 8.5, 6.2), to: (-9.0, 0.0, 6.2), radius: 0.13,
+             colour: Srgb(0.33, 0.27, 0.2), rough: 0.9),
+            (from: (9.5, 8.3, 6.3), to: (9.2, 0.0, 6.0), radius: 0.13,
+             colour: Srgb(0.3, 0.25, 0.19), rough: 0.9),
+            (from: (2.0, 8.0, -7.6), to: (2.0, 0.0, -7.6), radius: 0.12,
+             colour: Srgb(0.32, 0.26, 0.2), rough: 0.9),
+            (from: (-9.0, 8.2, 6.2), to: (9.4, 8.0, 6.25), sag: 0.9, radius: 0.012,
+             count: 3, every: (0.0, 0.0, 0.35)),
+            (from: (-9.0, 7.6, 6.2), to: (2.0, 7.4, -7.6), sag: 1.1, radius: 0.012),
+            (from: (2.0, 7.7, -7.6), to: (9.4, 2.2, 6.0), sag: 1.6, radius: 0.012),
+        ],
+        asphalt: (
+            material: "asphalt_02",
+            metres: 3.0,
+            joints: 0.7,
+            cracks: 0.6,
+            grain: (0.25, 0.8),
+            dirt: 0.8,
+            grit: 0.6,
+            feet: Site("walls"),
+            grime: (blotch: 0.4, spots: 1.0, size: 0.3, earth: 0.6),
+            marks: [
+                (kind: Patch, at: (-6.0, 1.2), size: (3.6, 1.4), turn: 3.0, amount: 0.9),
+                (kind: Patch, at: (4.5, -1.7), size: (2.2, 1.6), turn: -5.0, amount: 0.85),
+                (kind: Patch, at: (10.5, 0.8), size: (1.2, 2.6), turn: 12.0, amount: 0.8),
+                (kind: Patch, at: (-1.5, -2.4), size: (0.8, 0.7), turn: 20.0, amount: 0.7),
+                (kind: Stain, at: (0.0, 1.75), size: (80.0, 0.6), every: (0.0, 3.5),
+                 count: (1, 2), amount: 0.45),
+                (kind: Stain, at: (1.8, 0.4), size: (1.6, 1.0), turn: 10.0, amount: 0.8),
+                (kind: Stain, at: (-8.4, -1.3), size: (1.1, 0.8), amount: 0.7),
+                (kind: Yellow, at: (0.0, 0.0), size: (3.0, 0.12), every: (6.0, 0.0),
+                 count: (12, 1), amount: 0.35),
+                (kind: White, at: (0.0, 3.2), size: (80.0, 0.12), every: (0.0, 6.4),
+                 count: (1, 2), amount: 0.3),
+            ],
+        ),
+        kerbs: (
+            material: "concrete_pavement",
+            metres: 2.7,
+            joints: 0.4,
+            cracks: 0.7,
+            grain: (0.3, 0.6),
+            dirt: 0.9,
+            grit: 0.7,
+            grime: (blotch: 0.5, earth: 0.7),
+            wear: (split: 0.2, tilt: 0.05, broken: 0.35, gap: 0.03),
+        ),
+        fronts: [
+            // North: a garage of grey block, a rusted iron shed, a block with its glass out.
+            (side: North, along: (-30.0, -7.0), height: 4.6, material: "concrete_wall_006",
+             metres: 2.0, tint: (0.92, 0.86, 0.78), roof: "concrete_debris",
+             windows: (storey: 4.0, from: 1.1, every: 3.4, size: (1.6, 1.4), lit: 0.0,
+                       colours: [Srgb(0.6, 0.5, 0.4)], nits: 0.0)),
+            (side: North, along: (-7.0, 5.5), height: 3.4, depth: 8.0,
+             material: "rusty_corrugated_iron", metres: 2.0, roof: "rusty_corrugated_iron"),
+            (side: North, along: (5.5, 30.0), height: 7.4, material: "concrete_wall_006",
+             metres: 2.0, tint: (0.86, 0.8, 0.72), roof: "concrete_debris",
+             windows: (storey: 3.3, from: 1.0, every: 3.0, size: (1.3, 1.5), lit: 0.0,
+                       colours: [Srgb(0.6, 0.5, 0.4)], nits: 0.0)),
+            // South: a corrugated fence and a low broken wall the camera looks over.
+            (side: South, along: (-30.0, -2.0), height: 2.2, depth: 0.2,
+             material: "rusty_corrugated_iron", metres: 2.0),
+            (side: South, along: (-2.0, 30.0), height: 1.1, depth: 0.4,
+             material: "concrete_wall_006", metres: 2.0, tint: (0.9, 0.84, 0.76)),
+        ],
+        props: [
+            (model: "models/iso/city/rollershutter-door.glb", side: North, line: Wall,
+             at: [-19.0, -12.5], out: -0.2),
+            (model: "models/iso/city/old-tyre.glb", side: North, line: Wall,
+             at: [-5.6, -5.0, 3.6], out: 0.3, turn: 15.0),
+            (model: "models/iso/city/wheel-rim.glb", side: North, line: Wall, at: [-4.2],
+             out: 0.4, turn: 60.0),
+            (model: "models/iso/city/oil-barrel.glb", side: North, line: Wall,
+             at: [-2.6, -1.9, 7.2], out: 0.35),
+            (model: "models/iso/city/jerrycan.glb", side: North, line: Wall, at: [-1.2, 8.1],
+             out: 0.25, turn: 25.0),
+            (model: "models/iso/city/generator.glb", side: North, line: Wall, at: [1.0],
+             out: 0.5, turn: 8.0),
+            (model: "models/iso/city/barrel-stove.glb", side: North, line: Wall, at: [10.5],
+             out: 0.6),
+            (model: "models/iso/city/propane-tank.glb", side: North, line: Wall, at: [12.0]),
+            (model: "models/iso/city/military-crate.glb", side: North, line: Wall,
+             at: [-9.5, 13.4], out: 0.2, turn: 6.0),
+            (model: "models/iso/city/covered-car.glb", side: North, line: Road, at: [-9.0],
+             out: 2.4, turn: 85.0),
+            (model: "models/iso/city/road-barrier.glb", side: South, line: Road, at: [6.0],
+             out: 2.0, turn: 12.0),
+            (model: "models/iso/city/old-tyre.glb", side: South, line: Kerb, at: [-4.0, 3.0],
+             out: 0.6, turn: 40.0),
+            (model: "models/iso/city/oil-barrel.glb", side: South, line: Wall,
+             at: [-7.5, -6.8, 11.0], out: 0.4),
+            (model: "models/iso/city/trash-bag.glb", side: South, line: Wall, at: [-3.0, 8.5],
+             out: 0.2, turn: 30.0),
+        ],
+    ),
+    light: (preset: "desert-day"),
+    weather: (wind: (1.4, 0.3)),
+    ground: (
+        // The verges: sun-baked mud cracked into plates, sand drifted in, broken through.
+        laid: (
+            material: "mud_cracked_dry_03",
+            metres: 1.5,
+            joints: 0.7,
+            sand: 0.5,
+            cracks: 0.8,
+            grain: (0.3, 0.6),
+            dirt: 0.9,
+            grit: 0.7,
+            feet: Site("walls"),
+            grime: (blotch: 0.5, earth: 0.8, litter: 0.3),
+        ),
+    ),
+    scatter: [
+        (plant: (kind: Tuft, tint: [(0.62, 0.55, 0.36), (0.48, 0.44, 0.3), (0.42, 0.42, 0.26)]),
+            density: 2.5, scale: (0.5, 1.1), on: Site("gutter"), clump: (3.0, 0.6, 0.85),
+            seed: 3),
+        (plant: (kind: Tuft, tint: [(0.6, 0.53, 0.34), (0.45, 0.43, 0.28)]),
+            density: 1.8, scale: (0.6, 1.4), on: Site("walls"), clump: (4.0, 0.8, 0.8),
+            seed: 11),
+        (models: ["models/iso/city/cardboard-box.glb"], density: 0.08, scale: (0.6, 1.2),
+            on: Site("walls"), clump: (5.0, 1.0, 0.92), tilt: 12.0, sink: 0.01, seed: 7),
+    ],
+)

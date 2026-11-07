@@ -1,0 +1,27 @@
+// A dry afternoon over a dead roadside town (the wasteland, uc-wasteland j2): a low sun
+// from the west-south-west, warm, over a pale sky's fill, with brown dust haze in the
+// distance. The refs (refs/wasteland/refs.md) are day and low sun throughout: the gas
+// station's apron at p50 0.207, p95 0.431, the derelict lot's 0.233 and 0.552, saturation
+// 0.21 to 0.54. Started from forest-day's exposure (sun 4,200 lux at EV 7.5 over a 300-nit
+// sky) with the sun lower and warmer for long shadows off the junk, the sky's fill less
+// blue, and a smaller penumbra (a sun's, 0.3 m at the caster) for the hard desert shade.
+(
+    hour: Day,
+    key: (
+        toward: Angles(elevation: 34.0, azimuth: -70.0),
+        colour: Srgb(1.0, 0.9, 0.76),
+        lux: 4200.0,
+        shadows: (cascades: 2, first: 30.0, far: 70.0, soft: 0.3),
+    ),
+    sky: (colour: Srgb(0.78, 0.84, 0.95), nits: 260.0),
+    ev100: 7.5,
+    curve: TonyMcMapface,
+    grade: (saturation: 1.1, mid_saturation: 1.1),
+    // Dust far off; none toward the sun's own glare.
+    haze: Some((
+        colour: Srgba(0.74, 0.64, 0.5, 0.5),
+        toward_key: Srgba(0.0, 0.0, 0.0, 0.0),
+        start: 4.0,
+        end: 80.0,
+    )),
+)
