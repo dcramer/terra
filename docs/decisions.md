@@ -618,6 +618,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D636](decisions/D636.md) | The wire is our own bit packer with a total reader, and `terra_net` knows no game type | Tech | Agent | Decided | `terra_net` is plain Rust, generic over what the rules… |
 | [D638](decisions/D638.md) | Every game is a client of a server it or another runs (an integrated server); the listen server of today is the interim | Tech | Agent | Decided | **The destination**: the simulation runs in a server… |
 | [D639](decisions/D639.md) | Host and Join on the title screen: one connection kept through the load, a profile beside the worlds | Tech | Agent | Decided | The title screen offers **Host** (a page of the player's… |
+| [D640](decisions/D640.md) | The instance host is a switch over realm servers: each realm a headless `App` with its own server, a connection routed to one | Tech | Agent | Decided | **Each realm instance is whole in itself**… |
 | [D651](decisions/D651.md) | The server's tick answers intent; a client predicts its own body and shows the rest in the past | Tech | Agent | Decided | A client sends its intent for each numbered tick (D138)… |
 | [D652](decisions/D652.md) | State is sent as the most recent, by area and priority within a byte budget; world changes as ordered operations kept by region | Tech | Agent | Decided | A thing on the wire is an entity made of parts… |
 

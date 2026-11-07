@@ -5,6 +5,7 @@
 
 pub mod conditioned;
 pub mod loopback;
+pub mod switch;
 #[cfg(feature = "udp")]
 pub mod udp;
 

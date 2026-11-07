@@ -22,7 +22,7 @@ Not lockstep, though D30 makes every machine compute alike: a drop-in world cann
 | Module | Holds |
 |---|---|
 | `wire` | A bit packer and the `Wire` trait (D636): ranged integers, quantised floats, varints. The reader is total: any bytes give a value or an error, never a panic, and every length is capped |
-| `transport` | The seam (D34): two lanes, `Ordered` (reliable, in order) and `State` (unreliable), as a server's and a client's trait. `loopback`: in memory, with latency, jitter, loss, duplication and reordering drawn from a seed on a clock the test advances, so a run repeats exactly. `udp` (a feature): `renet` with `renet_netcode`. Neither reads a clock: the caller says how much time passed |
+| `transport` | The seam (D34): two lanes, `Ordered` (reliable, in order) and `State` (unreliable), as a server's and a client's trait. `loopback`: in memory, with latency, jitter, loss, duplication and reordering drawn from a seed on a clock the test advances, so a run repeats exactly. `udp` (a feature): `renet` with `renet_netcode`. `switch`: one carrier shared by many servers, a client one branch's at a time (D640). None reads a clock: the caller says how much time passed |
 | `ack` | Sequence numbers with an ack and a 32-packet ack field in every `State` packet (Fiedler), ours because the transport's unreliable lane reports none |
 | `clock` | The client's estimate of the server's tick and how far ahead of it to run |
 | `interest` | Which cells a client is sent, on a hashed grid of cubes over the realm, round or under ground alike |
