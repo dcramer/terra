@@ -3,10 +3,10 @@
 (
     cue: Blow,
     at: Strike,
-    still: 0.05,
+    still: 0.1,
     life: 0.4,
     flash: (core: Srgb(1.0, 0.95, 0.85), core_nits: 5000.0, rim: Srgb(1.0, 0.55, 0.2), rim_nits: 450.0,
-        size: 0.9, core_size: 0.12, falloff: 7.0, swell: 0.4, fall: 0.08),
+        size: 0.9, core_size: 0.12, falloff: 7.0, swell: 0.4, fall: 0.1),
     lamps: [
         (lm: 50000.0, colour: Srgb(1.0, 0.8, 0.55), up: 0.2, range: 6.0, fall: 0.14),
         (lm: 22000.0, colour: Srgb(1.0, 0.62, 0.32), up: 0.5, ground: true, range: 2.5, fall: 0.2),

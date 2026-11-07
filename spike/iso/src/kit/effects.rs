@@ -312,11 +312,14 @@ pub fn spark_at(from: Vec3, v0: Vec3, gravity: f32, a: f32) -> (Vec3, Vec3) {
 }
 
 /// The illuminance (lux, linear rgb) the lights leave at `p`: each point light's lumens over
-/// 4π d², within its reach, plus the key's and the sky's (a puff scatters half of each).
-pub fn lit_at(p: Vec3, points: &[(Vec3, Vec3, f32, f32)], light: Option<&Light>) -> Vec3 {
+/// 4π d², within its reach, plus the key's and the sky's (a puff scatters half of each). A
+/// puff is a volume `r` in radius, not a point: a light at or inside it lights it as one about
+/// `r` away (d² + r², the mean over the puff to first order), so smoke round a hit's light
+/// glows warm instead of burning out to a flat disc.
+pub fn lit_at(p: Vec3, r: f32, points: &[(Vec3, Vec3, f32, f32)], light: Option<&Light>) -> Vec3 {
     let mut e = Vec3::ZERO;
     for &(at, colour, lm, range) in points {
-        let d2 = at.distance_squared(p).max(0.09);
+        let d2 = (at.distance_squared(p) + r * r).max(0.09);
         if d2 < range * range && lm > 0.0 {
             e += colour * lm / (4.0 * std::f32::consts::PI * d2);
         }
@@ -681,7 +684,7 @@ fn play(
                         f.size.0 + (f.size.1 - f.size.0) * (1.0 - (1.0 - k) * (1.0 - k)),
                     );
                     let alb = nits(f.albedo, 1.0);
-                    let e = lit_at(at, &points, light.as_deref());
+                    let e = lit_at(at, tr.scale.x * 0.5, &points, light.as_deref());
                     let lit = alb * e / std::f32::consts::PI
                         + nits(f.glow, f.glow_nits) * (1.0 - k).powi(3);
                     let born = (a / 0.06).min(1.0);
@@ -789,16 +792,25 @@ mod tests {
     #[test]
     fn smoke_is_lit_by_the_lights_at_it() {
         let lm = 4.0 * std::f32::consts::PI * 100.0;
-        let e = lit_at(Vec3::ZERO, &[(Vec3::Y, Vec3::ONE, lm, 5.0)], None);
+        let e = lit_at(Vec3::ZERO, 0.0, &[(Vec3::Y, Vec3::ONE, lm, 5.0)], None);
         assert!((e.x - 100.0).abs() < 0.01, "{e}");
         assert_eq!(
-            lit_at(Vec3::ZERO, &[(Vec3::Y * 6.0, Vec3::ONE, lm, 5.0)], None),
+            lit_at(
+                Vec3::ZERO,
+                0.0,
+                &[(Vec3::Y * 6.0, Vec3::ONE, lm, 5.0)],
+                None
+            ),
             Vec3::ZERO
         );
         assert_eq!(
-            lit_at(Vec3::ZERO, &[(Vec3::Y, Vec3::ONE, 0.0, 5.0)], None),
+            lit_at(Vec3::ZERO, 0.0, &[(Vec3::Y, Vec3::ONE, 0.0, 5.0)], None),
             Vec3::ZERO
         );
+        // A light inside a puff a metre in radius lights it as one a metre off, not as one
+        // at its heart: what is near the light is not burned out.
+        let inside = lit_at(Vec3::ZERO, 1.0, &[(Vec3::ZERO, Vec3::ONE, lm, 5.0)], None);
+        assert!((inside.x - 100.0).abs() < 0.01, "{inside}");
     }
 
     /// A still shows each effect at its chosen moment; a film plays it from its cue, and a
