@@ -2,9 +2,10 @@
 (
     cue: Blow,
     at: Strike,
-    still: 0.05,
+    // A still shows the dust a beat after the blow (at the blow's 0.05 s it is not yet born).
+    still: 0.15,
     life: 1.2,
-    puffs: (count: 8, size: (0.25, 0.9), life: (0.6, 1.1), rise: 0.35, spread: 0.3,
-        albedo: Srgb(0.55, 0.52, 0.48), density: 0.45, delay: 0.08,
-        glow: Srgb(1.0, 0.5, 0.2), glow_nits: 20.0, grain: 0.6, soft: 0.3),
+    puffs: (count: 10, size: (0.35, 1.1), life: (0.6, 1.1), rise: 0.35, spread: 0.3,
+        albedo: Srgb(0.55, 0.52, 0.48), density: 0.6, delay: 0.04,
+        glow: Srgb(1.0, 0.5, 0.2), glow_nits: 60.0, grain: 0.6, soft: 0.3),
 )

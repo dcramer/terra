@@ -2,7 +2,8 @@
 // lit motion trail, a thin white-hot edge near the tip, a streaked orange-red smear inside it
 // darkening down the trail and dissolving into its streaks, and a light riding the edge.
 // Started at the texture slash.rs drew before it (iso-kit j16): its hot edge ~10 and body ~1.2
-// in linear light at the ruin's ev100 8 (exposure 1/307), edge at 0.925 of the strip.
+// in linear light at the ruin's ev100 8 (exposure 1/307); the edge at the blade's tip (0.85 of
+// the strip, which reaches 1.12 blades out) and the body fading past it, not cut.
 (
     cue: Swing,
     at: Strike,
@@ -10,5 +11,5 @@
     life: 0.2,
     lamps: [(lm: 28000.0, colour: Srgb(1.0, 0.62, 0.3), up: 0.0, range: 5.0, fall: 1.0)],
     trail: (core: Srgb(1.0, 0.92, 0.8), core_nits: 3000.0, rim: Srgb(1.0, 0.48, 0.14), rim_nits: 370.0,
-        edge: 0.925, width: 0.032, smear: 1.0, tail: 0.8, soft: 0.2),
+        edge: 0.85, width: 0.05, smear: 1.0, tail: 0.8, soft: 0.2),
 )

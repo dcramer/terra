@@ -74,12 +74,14 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let t = 0.88 * pow(age, 1.25) - 0.08;
         let kept = smoothstep(t - 0.06, t + 0.14, n);
         let along = pow(max(1.0 - age, 0.0), look.lit.x);
-        // The body: from nothing at the hilt, thickening outward, gone just past the edge.
-        let body = smoothstep(0.04, look.core.w * 0.72, v) * (1.0 - smoothstep(0.965, 1.0, v)) * kept;
+        // The body: from nothing at the hilt, thickening outward, fading out past the edge
+        // (a motion blur's soft border, not a ribbon's cut).
+        let out = 1.0 - smoothstep(look.core.w, 1.0, v);
+        let body = smoothstep(0.04, look.core.w * 0.72, v) * out * kept;
         // The hot edge near the tip, and a hot head at the blade.
         let d = (v - look.core.w) / max(look.rim.w, 0.001);
         let rim = exp(-d * d) * (1.0 - smoothstep(0.25, 0.85, age)) * min(0.75 + 0.5 * n, 1.0);
-        let head = exp(-(age / 0.05) * (age / 0.05)) * smoothstep(0.25, 0.85, v) * (1.0 - smoothstep(0.965, 1.0, v));
+        let head = exp(-(age / 0.05) * (age / 0.05)) * smoothstep(0.25, 0.85, v) * out;
         let hot = min(rim + 0.7 * head, 1.0);
         // The body darkens to a deep red down the trail.
         let deep = look.rim.rgb * mix(vec3(1.0), vec3(0.55, 0.18, 0.45), age);
