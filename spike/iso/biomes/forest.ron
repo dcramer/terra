@@ -31,8 +31,10 @@
             // up, in patches through the litter (judge 261107-0250: "one flat dark-brown
             // sheet ... no path wear"; fine detail 0.111 against the refs' 0.149).
             // At amount 0.9 and a band 0.38 to 0.62 the litter won the height blend nearly
-            // everywhere (round 261107-0343): only the camp's earth showed it.
-            (material: "rocks_ground_01", mask: Wear, amount: 1.6, tint: (1.4, 1.32, 1.22),
+            // everywhere (round 261107-0343): only the camp's earth showed it. Its grey grit
+            // under the sky's blue fill read "blue-grey gravel, not packed brown dirt"
+            // (judge 261107-0358-2): tinted toward a loam's warm brown.
+            (material: "rocks_ground_01", mask: Wear, amount: 1.6, tint: (1.45, 1.2, 0.9),
                 breakup: (0.3, 1.4, 0.3, 0.55)),
         ],
         // The camp's fire (scene::FIRE).

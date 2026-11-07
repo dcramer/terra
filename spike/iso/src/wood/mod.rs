@@ -57,29 +57,70 @@ pub fn plugin(app: &mut App) {
         .add_systems(PostUpdate, day);
 }
 
-/// By day the camp fire is out but for its coals and smoke (judge forest-r1: a fire burning
-/// at noon): its halo card is taken from the ruin's flipbook fire before the fires are found
-/// (kit::Found) and hidden, and its light reaches only the coals.
+/// The camp's cooking fire by day: burnt low (judge forest-r1: a night's blaze at noon read
+/// wrong), so its flame is small, 0.8 m at its tallest (at 0.6 m it hid among its logs,
+/// round 261107-0434).
+const DAY_FIRE: f32 = 0.42;
+
+/// By day the camp fire burns low: the ruin's flipbook fire (ruin/effects/flame.rs: flame
+/// cards, a white-hot core over the coals, embers) at a cooking fire's size, found by its
+/// halo card before the fires are (kit::Found), the halo itself hidden (no glowing air in
+/// sunlight); its smoke a thin pale grey drifting off on the breeze, thinning as it
+/// spreads, not the night's dark column lit orange (judge 261107-0358-2: "a flat orange
+/// star-disc with a brown smoke smudge, no flame or ember core"); its light a warm pool on
+/// the ground about it, from higher up so it spreads, casting none of the clearing's
+/// shadows.
 fn smoulder(
-    mut commands: Commands,
     args: Res<crate::Args>,
-    halos: Query<Entity, With<crate::motes::Halo>>,
-    mut lights: Query<(&mut PointLight, &bevy::camera::visibility::RenderLayers)>,
+    land: Res<crate::terrain::Land>,
+    mut plume: ResMut<crate::ruin::effects::Plume>,
+    mut halos: Query<(&mut Transform, &mut Visibility), With<crate::motes::Halo>>,
+    mut lights: Query<
+        (
+            &mut PointLight,
+            &mut Transform,
+            &bevy::camera::visibility::RenderLayers,
+        ),
+        Without<crate::motes::Halo>,
+    >,
 ) {
     if args.hour != crate::scene::Hour::Day {
         return;
     }
-    for e in &halos {
-        commands
-            .entity(e)
-            .remove::<crate::motes::Halo>()
-            .insert(Visibility::Hidden);
+    let ground = land.height(crate::scene::FIRE);
+    // kit.rs reads a fire's bed as the halo less 0.35 of its size, its size the halo's
+    // scale over 2.6.
+    for (mut t, mut vis) in &mut halos {
+        t.translation.y = ground + 0.08 + 0.35 * DAY_FIRE;
+        t.scale = Vec3::splat(2.6 * DAY_FIRE);
+        *vis = Visibility::Hidden;
     }
+    *plume = crate::ruin::effects::Plume {
+        embers: 28.0,
+        puffs: 36.0,
+        smoke_life: (5.0, 7.0),
+        wide: (0.8, 5.5),
+        climb: 1.0,
+        // At 0.2 and a grey of 0.15 it did not show at all (round 261107-0434).
+        alpha: 0.38,
+        // Unlit: as it reaches the screen. Pale against the shade, barely warm low.
+        lit: Vec3::new(0.26, 0.2, 0.15),
+        dark: Vec3::new(0.22, 0.225, 0.235),
+        cool: 0.2,
+        wind: Vec2::new(0.3, -0.13),
+        ..*plume
+    };
     let fire = bevy::camera::visibility::RenderLayers::layer(crate::camp::FIRE_CASTS);
-    for (mut light, layers) in &mut lights {
+    for (mut light, mut t, layers) in &mut lights {
         if layers.intersects(&fire) {
-            light.range = 1.4;
+            // From 1.8 m up its pool was a faint red wash over 3 m (round 261107-0434); in
+            // the night's red-orange it lay a dark red stain on the earth by day (0436): a
+            // low fire's amber.
+            light.color = Color::srgb(1.0, 0.7, 0.42);
+            light.range = 3.5;
+            light.radius = 0.3;
             light.shadow_maps_enabled = false;
+            t.translation.y = ground + 1.3;
         }
     }
 }

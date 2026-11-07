@@ -28,11 +28,12 @@ const SHADE_OAK: Vec2 = Vec2::new(0.3, 11.6);
 const BREAK: f32 = 3.5;
 /// Litter cards tried a square metre of the clearing's box, small stones and ferns in all,
 /// and stones at the pond's waterline.
-const LEAF_TRIES: f32 = 14.0;
-/// A litter card's side (m): an oak leaf is about 0.45 of an atlas cell, so 0.18 to 0.3 m
-/// lays leaves 8 to 13 cm long, a beech's 4 to 6 (forest judge 261106-2239: at 0.3 to
-/// 0.6 they lay the size of the hero's head).
-const LEAF_CARD: (f32, f32) = (0.18, 0.3);
+const LEAF_TRIES: f32 = 60.0;
+/// A litter card's side (m). At the camera a card's cluster reads as one leaf, not its
+/// leaves: at 0.18 to 0.3 m they lay as 0.2 m orange cut-outs, "confetti ... twice an oak
+/// leaf" (judge 261107-0358-2); at 0.08 to 0.14 a cluster reads an oak or beech leaf's 6 to
+/// 12 cm (forest judge 261106-2239: at 0.3 to 0.6 they lay the size of the hero's head).
+const LEAF_CARD: (f32, f32) = (0.08, 0.14);
 /// Twig cards tried a square metre of the box (the box is 12 m square).
 const TWIG_TRIES: f32 = 1.6;
 const STONES: usize = 12;
@@ -56,12 +57,24 @@ pub fn trodden(p: Vec2) -> f32 {
     t * (0.8 + 0.2 * smooth(0.3, 0.6, fbm(p * 0.9, 139)))
 }
 
-/// How thick the leaves lie: at the clearing's rim most, blown off its middle, a thin fall
-/// on the grass about.
+/// How thick the leaves lie (0..1): in drifts, as the wind leaves them in a wood in summer
+/// (last autumn's fall, most of it mouldered into the floor): banked against the oaks' roots
+/// and along the clearing's rim where the trodden ground meets the grass, patchy at two
+/// sizes so they lie in heaps, not an even sprinkle, and scuffed off the trodden heart.
 fn leafy(p: Vec2) -> f32 {
     let t = trodden(p);
-    let rim = smooth(0.03, 0.3, t) * smooth(0.95, 0.45, t);
-    0.15 + 0.6 * rim + 0.25 * smooth(0.55, 0.7, fbm(p * 0.5, 141))
+    let rim = smooth(0.03, 0.3, t) * smooth(0.8, 0.4, t);
+    let drift = smooth(0.42, 0.66, fbm(p * 0.9, 141)) * (0.55 + 0.45 * fbm(p * 3.1, 143));
+    let roots = super::dress::OAKS
+        .iter()
+        .map(|(o, ..)| {
+            let d = o.distance(p);
+            smooth(0.45, 0.75, d) * smooth(2.4, 1.0, d)
+        })
+        .fold(0.0, f32::max);
+    let heaped = (0.75 * rim + 0.9 * roots) * (0.4 + 0.6 * drift) + 0.35 * drift;
+    let trodden_off = 1.0 - 0.9 * smooth(0.5, 0.85, t);
+    (0.03 + heaped).min(1.0) * trodden_off
 }
 
 /// Flat cards on the ground, each a cell of the litter atlas, each corner on the land.
@@ -139,14 +152,26 @@ fn spawn(
         }
         if rng.f() < leafy(p) {
             let cell = LEAVES[(rng.f() * 4.0) as usize % 4];
-            let v = rng.range(0.6, 1.0);
+            // A summer wood's litter is last year's, mouldered: brown, olive and near-black
+            // brown, sunk to about the floor's own value so it reads as texture in it, a few
+            // still-dry ones a little warmer (at v 0.6 to 1.0 on the atlas's tan leaves they
+            // came out saturated orange under the sun: "too orange for a green summer wood").
+            // The tint cuts the atlas's red against its green (linear R/G about 0.6), or a
+            // darker leaf stays as orange (round 261107-0434, grey tints).
+            let v = rng.range(0.55, 0.9);
+            let tint = match rng.f() {
+                f if f < 0.4 => Color::srgb(v * 0.42, v * 0.5, v * 0.4),
+                f if f < 0.7 => Color::srgb(v * 0.38, v * 0.52, v * 0.34),
+                f if f < 0.9 => Color::srgb(v * 0.3, v * 0.34, v * 0.3),
+                _ => Color::srgb(v * 0.6, v * 0.6, v * 0.48),
+            };
             cards.add(
                 &land,
                 p,
                 rng.range(LEAF_CARD.0, LEAF_CARD.1),
                 rng.range(0.0, 6.28),
                 cell,
-                Color::srgb(v, v * 0.92, v * 0.85),
+                tint,
             );
         }
     }
@@ -161,15 +186,21 @@ fn spawn(
         let t = trodden(p);
         if rng.f() < 0.25 + 0.75 * smooth(0.02, 0.3, t) {
             // Dead wood dries pale: at 0.45 to 0.8 and 0.25 to 0.45 m they did not show
-            // (round 261107-0343).
+            // (round 261107-0343). The twig cell's own oak leaf lay 0.2 m and pale beige at
+            // 0.35 to 0.6 m untinted, the mouldered cell's as orange cut-outs (round
+            // 261107-0434): smaller, the leaf dulled.
             let v = rng.range(0.8, 1.2);
             let (cell, size, tint) = if rng.f() < 0.7 {
-                (7, rng.range(0.35, 0.6), Color::srgb(v, v * 0.9, v * 0.8))
+                (
+                    7,
+                    rng.range(0.28, 0.42),
+                    Color::srgb(v * 0.75, v * 0.7, v * 0.6),
+                )
             } else {
                 (
                     1,
-                    rng.range(0.15, 0.25),
-                    Color::srgb(v * 0.8, v * 0.7, v * 0.6),
+                    rng.range(0.1, 0.16),
+                    Color::srgb(v * 0.4, v * 0.46, v * 0.38),
                 )
             };
             cards.add(&land, p, size, rng.range(0.0, 6.28), cell, tint);
@@ -187,8 +218,9 @@ fn spawn(
             base_color_texture: Some(asset.load("materials/litter/cards.png")),
             normal_map_texture: Some(linear("normal.png")),
             alpha_mode: AlphaMode::Mask(0.5),
-            perceptual_roughness: 0.85,
-            reflectance: 0.3,
+            // Dry, matte litter: no sheen to lift it off the floor in the sun.
+            perceptual_roughness: 0.92,
+            reflectance: 0.2,
             ..default()
         })),
         bevy::light::NotShadowCaster,
@@ -308,6 +340,41 @@ fn sun_break(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The litter lies in drifts: on average thicker banked about the oaks' roots and along
+    /// the clearing's rim than on its trodden heart, and unevenly, not a sprinkle.
+    #[test]
+    fn the_leaves_drift_at_roots_and_rim_off_the_path() {
+        let (mut heart, mut rim, mut roots) = (Vec::new(), Vec::new(), Vec::new());
+        let mut all = Vec::new();
+        for i in 0..120 {
+            for j in 0..120 {
+                let p = MIDDLE + Vec2::new(i as f32, j as f32) * 0.1 - Vec2::splat(6.0);
+                let (t, l) = (trodden(p), leafy(p));
+                all.push(l);
+                if t > 0.75 {
+                    heart.push(l);
+                } else if t > 0.08 && t < 0.3 {
+                    rim.push(l);
+                }
+                let near = super::super::dress::OAKS.iter().any(|(o, ..)| {
+                    let d = o.distance(p);
+                    d > 0.8 && d < 1.4
+                });
+                if near && t < 0.05 {
+                    roots.push(l);
+                }
+            }
+        }
+        let mean = |v: &[f32]| v.iter().sum::<f32>() / v.len().max(1) as f32;
+        let (h, r, o) = (mean(&heart), mean(&rim), mean(&roots));
+        assert!(!heart.is_empty() && !rim.is_empty() && !roots.is_empty());
+        assert!(r > 2.0 * h, "rim {r} against the trodden heart {h}");
+        assert!(o > 2.0 * h, "roots {o} against the trodden heart {h}");
+        let thick = all.iter().filter(|&&l| l > 0.5).count() as f32 / all.len() as f32;
+        let bare = all.iter().filter(|&&l| l < 0.1).count() as f32 / all.len() as f32;
+        assert!(thick > 0.03 && bare > 0.2, "thick {thick} bare {bare}: no drifts");
+    }
 
     /// The ground is trodden under every one of the cast, not in the pond or among the far
     /// oaks; and the shade oak is the one whose crown's shadow (9 m up, under the day's sun at

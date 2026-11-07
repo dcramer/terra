@@ -52,10 +52,11 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
             },
         ));
         if name == "knight" {
-            // In a film he walks in up the clearing past the fallen one, clear of the
-            // two creatures on his left (ruin/walk.rs).
+            // In a film he walks in up the clearing on the fallen one's right, clear of
+            // the two creatures on his left (ruin/walk.rs) and of the ferns at the
+            // clearing's left front, which hid him till frame 100 from (1.6, 8.6) (j44).
             commands.entity(body).insert(crate::ruin::walk::WalkIn {
-                from: Vec2::new(1.6, 8.6),
+                from: Vec2::new(5.0, 8.8),
                 to: place,
                 floor: crate::ruin::walk::Floor::Shape(shape),
                 fight: true,

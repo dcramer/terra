@@ -205,7 +205,9 @@ fn main() {
             rim::plugin,
             water::plugin,
             wildlife::plugin,
-            (motes::plugin, smoke::plugin),
+            // The camp fire's smoke is the ruin's flipbook fire's (wood::smoulder), not the
+            // glade's column (smoke.rs).
+            motes::plugin,
             wood::plugin,
         ))
         .add_systems(PostStartup, |args: Res<Args>, mut commands: Commands| {
