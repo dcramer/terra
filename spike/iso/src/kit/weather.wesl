@@ -4,7 +4,7 @@
 // small crown at the floor, flicked up and fading over its life, then somewhere else. Each
 // is lit by the lamps near it (weather.rs `lit`, kept the same) and added over the frame.
 
-import bevy_pbr::{
+import bevy_pbr::render::{
     mesh_view_bindings::view,
     view_transformations::position_world_to_clip,
 };
