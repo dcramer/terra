@@ -5,10 +5,10 @@
 //! the sedge as the ruin's grass.
 
 use super::land::{from_path, path, shape, wet};
-use crate::terrain::smooth;
 use super::{FOE, KNIGHT, LEVEL, TARGET};
 use crate::forest::Rng;
 use crate::ruin::ambient::grass::{WindMaterial, material};
+use crate::terrain::smooth;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
@@ -39,7 +39,15 @@ struct Blades {
 impl Blades {
     /// One blade from `foot`, `tall` high and `width` wide, leaning by `lean` at its tip,
     /// its colour from root (dark) to tip by `tint(t)`.
-    fn blade(&mut self, foot: Vec3, tall: f32, width: f32, yaw: f32, lean: Vec3, tint: impl Fn(f32) -> [f32; 4]) {
+    fn blade(
+        &mut self,
+        foot: Vec3,
+        tall: f32,
+        width: f32,
+        yaw: f32,
+        lean: Vec3,
+        tint: impl Fn(f32) -> [f32; 4],
+    ) {
         let side = Vec3::new(yaw.cos(), 0.0, yaw.sin()) * width;
         let n = (Vec3::Y * 0.6 + side.cross(Vec3::Y).normalize() * 0.4).normalize();
         let base = self.pos.len() as u32;
@@ -58,7 +66,8 @@ impl Blades {
         }
         for k in 0..segs as u32 {
             let a = base + k * 2;
-            self.idx.extend_from_slice(&[a, a + 1, a + 3, a, a + 3, a + 2]);
+            self.idx
+                .extend_from_slice(&[a, a + 1, a + 3, a, a + 3, a + 2]);
         }
     }
 
@@ -70,20 +79,25 @@ impl Blades {
             let o = Vec3::new(a.cos(), 0.0, a.sin()) * r;
             for y in [0.0, l] {
                 self.pos.push((top + o + Vec3::Y * y).to_array());
-                self.nor.push((o.normalize() * 0.7 + Vec3::Y * 0.3).normalize().to_array());
+                self.nor
+                    .push((o.normalize() * 0.7 + Vec3::Y * 0.3).normalize().to_array());
                 self.col.push([0.14, 0.07, 0.03, 1.0]);
             }
             let (a0, a1) = (b + k as u32 * 2, b + ((k as u32 + 1) % 4) * 2);
-            self.idx.extend_from_slice(&[a0, a1, a1 + 1, a0, a1 + 1, a0 + 1]);
+            self.idx
+                .extend_from_slice(&[a0, a1, a1 + 1, a0, a1 + 1, a0 + 1]);
         }
     }
 
     fn mesh(self) -> Mesh {
-        Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
-            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nor)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
-            .with_inserted_indices(Indices::U32(self.idx))
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::default(),
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nor)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
+        .with_inserted_indices(Indices::U32(self.idx))
     }
 }
 
@@ -130,11 +144,23 @@ fn spawn(
             let dry = rng.f() * 0.6;
             // Broad enough to read as leaves at the camera (a pixel is about 1 cm): thinner
             // ones alias into dark hair.
-            reeds.blade(foot, tall, rng.range(0.016, 0.03), rng.f() * 6.283, lean, |t| {
-                let g = 0.4 + 1.0 * t;
-                let tip = crate::terrain::smooth(0.5, 1.0, t) * (0.4 + dry);
-                [g * (0.15 + 0.34 * tip), g * (0.2 + 0.12 * tip), g * (0.06 + 0.07 * tip), 1.0]
-            });
+            reeds.blade(
+                foot,
+                tall,
+                rng.range(0.016, 0.03),
+                rng.f() * 6.283,
+                lean,
+                |t| {
+                    let g = 0.4 + 1.0 * t;
+                    let tip = crate::terrain::smooth(0.5, 1.0, t) * (0.4 + dry);
+                    [
+                        g * (0.15 + 0.34 * tip),
+                        g * (0.2 + 0.12 * tip),
+                        g * (0.06 + 0.07 * tip),
+                        1.0,
+                    ]
+                },
+            );
             if rng.f() < 0.15 {
                 reeds.head(foot + Vec3::Y * tall * 0.84 + lean * 0.7);
             }
@@ -155,7 +181,12 @@ fn spawn(
             let dry = rng.f();
             sedge.blade(foot, tall, rng.range(0.008, 0.016), yaw, lean, |t| {
                 let g = 0.3 + 0.7 * t;
-                [g * (0.2 + 0.22 * dry), g * (0.22 + 0.08 * dry), g * (0.07 + 0.04 * dry), 1.0]
+                [
+                    g * (0.2 + 0.22 * dry),
+                    g * (0.22 + 0.08 * dry),
+                    g * (0.07 + 0.04 * dry),
+                    1.0,
+                ]
             });
         }
     }

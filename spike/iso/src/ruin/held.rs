@@ -83,12 +83,11 @@ fn hold(
 }
 
 /// Keeps each held thing at its grip with its bone's world scale taken out.
-fn fit(
-    mut held: Query<(&ChildOf, &mut Transform), With<Held>>,
-    bones: Query<&GlobalTransform>,
-) {
+fn fit(mut held: Query<(&ChildOf, &mut Transform), With<Held>>, bones: Query<&GlobalTransform>) {
     for (parent, mut tr) in &mut held {
-        let Ok(bone) = bones.get(parent.parent()) else { continue };
+        let Ok(bone) = bones.get(parent.parent()) else {
+            continue;
+        };
         let want = grip(bone.scale().x);
         if tr.scale.distance(want.scale) > 1e-4 {
             *tr = want;

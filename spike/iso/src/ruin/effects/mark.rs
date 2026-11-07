@@ -9,7 +9,7 @@ use super::kit::{Noise, image, smooth};
 use bevy::pbr::decal::{ForwardDecal, ForwardDecalMaterial, ForwardDecalMaterialExt};
 use bevy::prelude::*;
 
-pub type Decal =ForwardDecalMaterial<StandardMaterial>;
+pub type Decal = ForwardDecalMaterial<StandardMaterial>;
 
 /// A mark: how long since its hit (negative: not yet), its life (s), the rim's glow at
 /// once and the residue's colour (linear), and its own material to fade.
@@ -75,7 +75,11 @@ pub fn mark(
 /// whole ring: "the rings look like UI circles", the lead's judges) and flecks. A window
 /// takes everything to nothing well inside the card, so its square never shows.
 pub fn mark_image() -> Image {
-    let (broad, fine, grit) = (Noise::new(8, 0xa11c), Noise::new(16, 0xa11d), Noise::new(32, 0xa11e));
+    let (broad, fine, grit) = (
+        Noise::new(8, 0xa11c),
+        Noise::new(16, 0xa11d),
+        Noise::new(32, 0xa11e),
+    );
     let n = 128;
     image(n, n, |x, y| {
         let p = (Vec2::new(x as f32, y as f32) + 0.5) / n as f32 * 2.0 - 1.0;
@@ -86,8 +90,10 @@ pub fn mark_image() -> Image {
         let streaks = fine.at(Vec2::new(a * 16.0, r * 1.5));
         let edge = 0.5 + 0.24 * (lobes - 0.5) * 2.0 + 0.12 * (streaks - 0.5) * 2.0;
         let rough = grit.at(p * 9.0 + 5.0);
-        let cover = (1.0 - smooth(edge - 0.22, edge + 0.04, r + (rough - 0.5) * 0.12)) * (1.0 - smooth(0.78, 0.92, r));
-        let rim = (-((r - edge * 0.82) / 0.05).powi(2)).exp() * smooth(0.45, 0.7, broad.at(Vec2::new(a * 8.0, 3.5)));
+        let cover = (1.0 - smooth(edge - 0.22, edge + 0.04, r + (rough - 0.5) * 0.12))
+            * (1.0 - smooth(0.78, 0.92, r));
+        let rim = (-((r - edge * 0.82) / 0.05).powi(2)).exp()
+            * smooth(0.45, 0.7, broad.at(Vec2::new(a * 8.0, 3.5)));
         let rays = smooth(0.55, 0.85, streaks) * (1.0 - smooth(0.1, edge, r));
         let flecks = smooth(0.7, 0.85, rough) * cover;
         let heat = (0.15 + 0.85 * rim.max(rays).max(flecks)).min(1.0) * cover;
@@ -109,7 +115,11 @@ fn fade(mut marks: Query<(&Mark, &mut Visibility)>, mut decals: ResMut<Assets<De
     for (m, mut vis) in &mut marks {
         let k = m.age / m.life;
         let on = (0.0..1.0).contains(&k);
-        let want = if on { Visibility::Inherited } else { Visibility::Hidden };
+        let want = if on {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
         if *vis != want {
             *vis = want;
         }
@@ -169,7 +179,12 @@ mod tests {
                     .unwrap_or(1.0)
             })
             .collect();
-        let (lo, hi) = reach.iter().fold((1.0f32, 0.0f32), |(l, h), &r| (l.min(r), h.max(r)));
-        assert!(hi - lo > 0.2, "the edge reaches {lo} to {hi} of the half-size");
+        let (lo, hi) = reach
+            .iter()
+            .fold((1.0f32, 0.0f32), |(l, h), &r| (l.min(r), h.max(r)));
+        assert!(
+            hi - lo > 0.2,
+            "the edge reaches {lo} to {hi} of the half-size"
+        );
     }
 }

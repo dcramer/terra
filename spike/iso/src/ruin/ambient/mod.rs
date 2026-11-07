@@ -15,10 +15,5 @@ use bevy::prelude::*;
 pub const WIND: Vec2 = Vec2::new(0.86, 0.5);
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins((
-        fog::plugin,
-        dust::plugin,
-        grass::plugin,
-        banner::plugin,
-    ));
+    app.add_plugins((fog::plugin, dust::plugin, grass::plugin, banner::plugin));
 }

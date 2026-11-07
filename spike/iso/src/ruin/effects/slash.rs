@@ -43,7 +43,11 @@ const OUTER: f32 = 1.12;
 enum Bake {
     #[default]
     Wait,
-    Run { next: usize, back: f32, speed: f32 },
+    Run {
+        next: usize,
+        back: f32,
+        speed: f32,
+    },
     Done,
 }
 
@@ -78,7 +82,9 @@ fn spawn(
     fx: Res<Effects>,
 ) {
     // A biome without a slash draws none (kit/effects.rs lists the presets it loaded).
-    let Some(preset) = fx.get("slash") else { return };
+    let Some(preset) = fx.get("slash") else {
+        return;
+    };
     let Some(look) = &preset.trail else { return };
     let material = glows.add(Glow::trail(look, 0.37));
     let mesh = meshes.add(strip(&[]));
@@ -124,10 +130,14 @@ fn find(
     else {
         return;
     };
-    blade.player = children
+    blade.player = children.iter_descendants(knight).find(|e| {
+        players
+            .get(*e)
+            .is_ok_and(|p| p.playing_animations().next().is_some())
+    });
+    blade.sword = children
         .iter_descendants(knight)
-        .find(|e| players.get(*e).is_ok_and(|p| p.playing_animations().next().is_some()));
-    blade.sword = children.iter_descendants(knight).find(|e| held.contains(*e));
+        .find(|e| held.contains(*e));
 }
 
 /// Seeks the knight through the swing a step a frame, reading the blade after each pose,
@@ -140,8 +150,12 @@ fn bake(
     let (Some(player), Some(sword)) = (blade.player, blade.sword) else {
         return;
     };
-    let Ok(mut p) = players.get_mut(player) else { return };
-    let Some((_, a)) = p.playing_animations_mut().next() else { return };
+    let Ok(mut p) = players.get_mut(player) else {
+        return;
+    };
+    let Some((_, a)) = p.playing_animations_mut().next() else {
+        return;
+    };
     let steps = ((TO - FROM) / STEP).ceil() as usize + 1;
     match blade.bake {
         Bake::Wait => {
@@ -150,7 +164,11 @@ fn bake(
             if blade.waited > 4 {
                 let (back, speed) = (a.seek_time(), a.speed());
                 a.set_speed(0.0).seek_to(FROM);
-                blade.bake = Bake::Run { next: 1, back, speed };
+                blade.bake = Bake::Run {
+                    next: 1,
+                    back,
+                    speed,
+                };
             }
         }
         Bake::Run { next, back, speed } => {
@@ -161,7 +179,11 @@ fn bake(
             }
             if next < steps {
                 a.seek_to((FROM + next as f32 * STEP).min(TO));
-                blade.bake = Bake::Run { next: next + 1, back, speed };
+                blade.bake = Bake::Run {
+                    next: next + 1,
+                    back,
+                    speed,
+                };
             } else {
                 a.seek_to(back).set_speed(speed);
                 blade.path.sort_by(|x, y| x.0.total_cmp(&y.0));
@@ -215,12 +237,15 @@ fn strip(points: &[(Vec3, Vec3, f32)]) -> Mesh {
         }
     }
     let normals = vec![[0.0, 1.0, 0.0]; pos.len()];
-    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
-        .with_inserted_indices(Indices::U32(idx))
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
+    .with_inserted_indices(Indices::U32(idx))
 }
 
 fn show(
@@ -250,7 +275,9 @@ fn show(
                 }
             }
             Part::Light(lm) => {
-                let (Some(mut tr), Some(mut light)) = (tr, light) else { continue };
+                let (Some(mut tr), Some(mut light)) = (tr, light) else {
+                    continue;
+                };
                 match points.last() {
                     Some(&(i, o, age)) => {
                         tr.translation = i.lerp(o, 0.7);
@@ -290,10 +317,17 @@ mod tests {
         let (bi, bo) = blade_at(&path, t);
         assert!(i.distance(bi) < 1e-4 && o.distance(bo) < 1e-4 && age < 1e-4);
         let first = pts[0];
-        assert!((first.2 - 1.0).abs() < 1e-3, "oldest point's age {}", first.2);
+        assert!(
+            (first.2 - 1.0).abs() < 1e-3,
+            "oldest point's age {}",
+            first.2
+        );
         assert!(first.1.distance(blade_at(&path, t - AGE).1) < 1e-4);
         assert!(trail(&path, FROM - 0.1).is_empty());
-        assert!(trail(&path, TO + AGE + 0.01).iter().all(|p| p.2 >= 1.0 - 1e-4));
+        assert!(
+            trail(&path, TO + AGE + 0.01)
+                .iter()
+                .all(|p| p.2 >= 1.0 - 1e-4)
+        );
     }
-
 }

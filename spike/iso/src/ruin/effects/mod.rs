@@ -88,6 +88,11 @@ mod tests {
     /// before the stage was data.
     #[test]
     fn the_ruins_strike_is_between_knight_and_ogre() {
-        assert!(Stage::default().strike().distance(Vec3::new(1.0, 1.5, -0.7)) < 1e-5);
+        assert!(
+            Stage::default()
+                .strike()
+                .distance(Vec3::new(1.0, 1.5, -0.7))
+                < 1e-5
+        );
     }
 }

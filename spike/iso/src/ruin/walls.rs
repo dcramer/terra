@@ -122,7 +122,14 @@ pub fn spawn(
             let h = rng.range(0.45, 0.6);
             let r = PILLAR_R * rng.range(0.94, 1.02);
             let broken = if k + 1 == drums { 0.12 } else { 0.0 };
-            drum(&mut b, &mut rng, Vec3::new(p.x, y, p.y), h - 0.015, r, broken);
+            drum(
+                &mut b,
+                &mut rng,
+                Vec3::new(p.x, y, p.y),
+                h - 0.015,
+                r,
+                broken,
+            );
             y += h;
         }
     }
@@ -147,7 +154,11 @@ pub fn spawn(
     let mut lying = Blocks::default();
     drum(&mut lying, &mut rng, Vec3::Y * -0.25, 0.5, PILLAR_R, 0.0);
     let at = Vec3::new(PILLARS[1].x - 1.8, PILLAR_R - 0.02, PILLARS[1].y - 0.4);
-    b.append(lying, Transform::from_translation(at).with_rotation(rolled), TILE);
+    b.append(
+        lying,
+        Transform::from_translation(at).with_rotation(rolled),
+        TILE,
+    );
     commands.spawn((
         Mesh3d(meshes.add(b.mesh())),
         MeshMaterial3d(materials.add(material(&asset, "castle_wall_varriation", Color::WHITE))),
@@ -175,7 +186,14 @@ fn fallen(b: &mut Blocks, rng: &mut Rng, at: Vec2, big: f32) {
     );
     let shift = Vec2::new(rng.f(), rng.f());
     let tint = stone(rng);
-    b.add(Vec3::new(at.x, size.y * 0.3, at.y), size, rot, TILE, shift, tint);
+    b.add(
+        Vec3::new(at.x, size.y * 0.3, at.y),
+        size,
+        rot,
+        TILE,
+        shift,
+        tint,
+    );
 }
 
 /// The colour of the wall's skin at `p`: darker and damp toward the foot, varied along the
@@ -238,10 +256,30 @@ fn wall(b: &mut Blocks, rng: &mut Rng, a: Vec2, z: Vec2, seed: u32, top: impl Fn
         let (p, q) = (&cuts[i], &cuts[i + 1]);
         let (stand_p, stand_q) = (p.h > GONE, q.h > GONE);
         if stand_p && stand_q {
-            face(b, [p.foot[0], q.foot[0], q.side[0], p.side[0]], out_a, false);
-            face(b, [p.foot[1], q.foot[1], q.side[1], p.side[1]], -out_a, false);
-            face(b, [p.side[0], q.side[0], q.ridge, p.ridge], out_a + Vec3::Y, true);
-            face(b, [p.side[1], q.side[1], q.ridge, p.ridge], -out_a + Vec3::Y, true);
+            face(
+                b,
+                [p.foot[0], q.foot[0], q.side[0], p.side[0]],
+                out_a,
+                false,
+            );
+            face(
+                b,
+                [p.foot[1], q.foot[1], q.side[1], p.side[1]],
+                -out_a,
+                false,
+            );
+            face(
+                b,
+                [p.side[0], q.side[0], q.ridge, p.ridge],
+                out_a + Vec3::Y,
+                true,
+            );
+            face(
+                b,
+                [p.side[1], q.side[1], q.ridge, p.ridge],
+                -out_a + Vec3::Y,
+                true,
+            );
         }
         // The broken ends: where the wall stops, its section shows.
         let ends = [
@@ -251,8 +289,18 @@ fn wall(b: &mut Blocks, rng: &mut Rng, a: Vec2, z: Vec2, seed: u32, top: impl Fn
             (i + 1 == n && stand_q, q, run),
         ];
         for (_, cut, out) in ends.into_iter().filter(|e| e.0) {
-            face(b, [cut.foot[0], cut.foot[1], cut.side[1], cut.side[0]], out, false);
-            face(b, [cut.side[0], cut.side[1], cut.ridge, cut.ridge], out, true);
+            face(
+                b,
+                [cut.foot[0], cut.foot[1], cut.side[1], cut.side[0]],
+                out,
+                false,
+            );
+            face(
+                b,
+                [cut.side[0], cut.side[1], cut.ridge, cut.ridge],
+                out,
+                true,
+            );
         }
         // Rubble at the foot, both sides, most where the wall is lowest; stones on its top.
         let s = len * i as f32 / n as f32;
@@ -265,7 +313,11 @@ fn wall(b: &mut Blocks, rng: &mut Rng, a: Vec2, z: Vec2, seed: u32, top: impl Fn
             fallen(b, rng, at, big);
         }
         if stand_p && rng.f() < 0.06 {
-            let size = Vec3::new(rng.range(0.25, 0.5), rng.range(0.15, 0.25), rng.range(0.2, 0.4));
+            let size = Vec3::new(
+                rng.range(0.25, 0.5),
+                rng.range(0.15, 0.25),
+                rng.range(0.2, 0.4),
+            );
             let rot = Quat::from_euler(
                 EulerRot::YXZ,
                 rng.range(0.0, 3.0),
@@ -289,7 +341,10 @@ fn drum(b: &mut Blocks, rng: &mut Rng, foot: Vec3, h: f32, r: f32, broken: f32) 
             let a = turn + k as f32 * std::f32::consts::TAU / SIDES as f32;
             let o = Vec3::new(a.cos(), 0.0, a.sin()) * r * rng.range(0.97, 1.03);
             let chip = broken * rng.f();
-            (foot + o, foot + o * (1.0 - chip * 0.6) + Vec3::Y * (h - chip))
+            (
+                foot + o,
+                foot + o * (1.0 - chip * 0.6) + Vec3::Y * (h - chip),
+            )
         })
         .collect();
     let crown = foot + Vec3::Y * (h - broken * 0.3);

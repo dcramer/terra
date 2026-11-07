@@ -194,7 +194,9 @@ fn flame(big: &Noise, fine: &Noise, sway: &Noise, u: f32, v: f32, p: f32) -> [f3
     let mut c = ramp[0].1;
     for w in ramp.windows(2) {
         if heat >= w[0].0 {
-            c = w[0].1.lerp(w[1].1, ((heat - w[0].0) / (w[1].0 - w[0].0)).min(1.0));
+            c = w[0]
+                .1
+                .lerp(w[1].1, ((heat - w[0].0) / (w[1].0 - w[0].0)).min(1.0));
         }
     }
     let c = c * (0.3 + 0.7 * heat);
@@ -415,8 +417,17 @@ mod tests {
         assert!(root[3] > 0.9 && root[0] > 0.7, "root {root:?}");
         assert!(side[3] < 0.05, "side {side:?}");
         // Across the card, less of the tip burns than of the root.
-        let cover = |v: f32| (0..32).map(|i| flame(&b, &f, &s, i as f32 / 32.0, v, 0.3)[3]).sum::<f32>();
-        assert!(cover(0.92) < 0.5 * cover(0.2), "{} {}", cover(0.92), cover(0.2));
+        let cover = |v: f32| {
+            (0..32)
+                .map(|i| flame(&b, &f, &s, i as f32 / 32.0, v, 0.3)[3])
+                .sum::<f32>()
+        };
+        assert!(
+            cover(0.92) < 0.5 * cover(0.2),
+            "{} {}",
+            cover(0.92),
+            cover(0.2)
+        );
     }
 
     /// The ruin's braziers smoke and spark where the camera sees it: each ember at least the
@@ -436,7 +447,10 @@ mod tests {
             rise: plume.rise.0 * size / 0.7,
         };
         let (_, _, young, long) = ember_shape(&e, &plume, 0.1, 1.0);
-        assert!(young >= 0.065 && long >= young, "young ember {young} x {long} m");
+        assert!(
+            young >= 0.065 && long >= young,
+            "young ember {young} x {long} m"
+        );
         let (p, _, old, _) = ember_shape(&e, &plume, e.life * 0.95, 1.0);
         assert!(p.y > 1.2 && p.dot(wind) > 0.3, "the ember ends at {p}");
         assert!(old < 0.4 * young, "the ember fades: {old} of {young}");
@@ -449,10 +463,22 @@ mod tests {
         };
         let (low, w0, c0, a0) = puff_at(&puff, &plume, puff.life * 0.15);
         let (high, w1, c1, _) = puff_at(&puff, &plume, puff.life * 0.85);
-        assert!(high.y - low.y > 2.0 && high.y > 2.5, "the column climbs {low} to {high}");
-        assert!((high - low).dot(wind) > 0.8, "the column leans downwind: {low} to {high}");
-        assert!(w0 < 0.6 && w1 > 2.0 * w0, "narrow low, wider high: {w0} to {w1} m");
-        assert!(c0.x > 4.0 * c1.x && c0.x > c0.z * 3.0, "warm low {c0}, dark high {c1}");
+        assert!(
+            high.y - low.y > 2.0 && high.y > 2.5,
+            "the column climbs {low} to {high}"
+        );
+        assert!(
+            (high - low).dot(wind) > 0.8,
+            "the column leans downwind: {low} to {high}"
+        );
+        assert!(
+            w0 < 0.6 && w1 > 2.0 * w0,
+            "narrow low, wider high: {w0} to {w1} m"
+        );
+        assert!(
+            c0.x > 4.0 * c1.x && c0.x > c0.z * 3.0,
+            "warm low {c0}, dark high {c1}"
+        );
         assert!(a0 > 0.25, "the smoke shows low: alpha {a0}");
     }
 

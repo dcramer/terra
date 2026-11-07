@@ -51,7 +51,11 @@ pub fn plugin(app: &mut App) {
     let args = app.world().resource::<Args>().clone();
     let name = args.asset.clone().unwrap_or_default();
     // The fight's plugin hangs the sword on the body standing at its stage's knight place.
-    let knight = if name == "knight" { Vec2::ZERO } else { Vec2::splat(1e4) };
+    let knight = if name == "knight" {
+        Vec2::ZERO
+    } else {
+        Vec2::splat(1e4)
+    };
     app.insert_resource(crate::ruin::effects::Stage {
         knight,
         ..default()
@@ -65,8 +69,15 @@ pub fn plugin(app: &mut App) {
 struct Subject;
 
 /// What the box is measured from: each part's place, a mesh's box, a skin's joints.
-type Parts<'w, 's> =
-    Query<'w, 's, (&'static GlobalTransform, Option<&'static Aabb>, Option<&'static SkinnedMesh>)>;
+type Parts<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static GlobalTransform,
+        Option<&'static Aabb>,
+        Option<&'static SkinnedMesh>,
+    ),
+>;
 
 /// One shot: a clip (none for an asset without clips) at a time, saved to a file.
 struct Shot {
@@ -185,7 +196,10 @@ fn step(
         }
         let rank = |n: &str| {
             let l = n.to_lowercase();
-            ORDER.iter().position(|o| l.contains(o)).unwrap_or(ORDER.len())
+            ORDER
+                .iter()
+                .position(|o| l.contains(o))
+                .unwrap_or(ORDER.len())
         };
         named.sort_by(|a, b| (rank(&a.0), &a.0).cmp(&(rank(&b.0), &b.0)));
         let (graph, nodes) = AnimationGraph::from_clips(named.iter().map(|(_, h)| h.clone()));
@@ -200,17 +214,31 @@ fn step(
             .zip(nodes)
             .map(|((n, h), node)| (n.clone(), clips.get(h).map_or(0.0, |c| c.duration()), node))
             .collect();
-        let shot = args.shot.clone().expect("--asset needs --shot dir/NAME.png");
+        let shot = args
+            .shot
+            .clone()
+            .expect("--asset needs --shot dir/NAME.png");
         let dir = shot.parent().map(|d| d.to_path_buf()).unwrap_or_default();
-        let stem = shot.file_stem().and_then(|s| s.to_str()).unwrap_or("asset").to_string();
-        let still = state.clips.iter().position(|c| c.0.to_lowercase().contains("idle"));
+        let stem = shot
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("asset")
+            .to_string();
+        let still = state
+            .clips
+            .iter()
+            .position(|c| c.0.to_lowercase().contains("idle"));
         let still = still.or((!state.clips.is_empty()).then_some(0));
         state.shots.push(Shot {
             clip: still,
             at: 0.0,
             file: shot.to_string_lossy().into_owned(),
         });
-        let mut json = format!("{{\n \"asset\": \"{}\",\n \"still\": \"{}\",\n \"clips\": [", path(&name), shot.file_name().unwrap().to_string_lossy());
+        let mut json = format!(
+            "{{\n \"asset\": \"{}\",\n \"still\": \"{}\",\n \"clips\": [",
+            path(&name),
+            shot.file_name().unwrap().to_string_lossy()
+        );
         for (i, (clip, seconds, _)) in state.clips.clone().iter().enumerate() {
             let looped = LOOPS.iter().any(|l| clip.to_lowercase().contains(l));
             let mut files = Vec::new();
@@ -249,7 +277,11 @@ fn step(
             return;
         }
         let (min, max) = bounds(body, &children, &parts);
-        let room = if state.clips.is_empty() { 0.0 } else { max.y - min.y };
+        let room = if state.clips.is_empty() {
+            0.0
+        } else {
+            max.y - min.y
+        };
         let mid = (min + max) / 2.0;
         let half = Vec3::new(
             ((max.x - min.x) / 2.0).max(room),
@@ -260,21 +292,33 @@ fn step(
         let mut a = args.clone();
         a.size = size;
         let cam = arpg(&mut commands, &a, &mut images, mid, EV100);
-        commands.entity(cam).insert(Projection::from(PerspectiveProjection {
-            fov,
-            near: 1.0,
-            far: 120.0,
-            ..default()
-        }));
+        commands
+            .entity(cam)
+            .insert(Projection::from(PerspectiveProjection {
+                fov,
+                near: 1.0,
+                far: 120.0,
+                ..default()
+            }));
         let _ = write!(
             state.json,
             ",\n \"crop\": [{}, {}],\n \"box\": [[{:.3}, {:.3}, {:.3}], [{:.3}, {:.3}, {:.3}]],\n \"px_per_m\": {:.1}\n}}\n",
-            size.0, size.1, min.x, min.y, min.z, max.x, max.y, max.z,
+            size.0,
+            size.1,
+            min.x,
+            min.y,
+            min.z,
+            max.x,
+            max.y,
+            max.z,
             FRAME_H / 2.0 / (FOV / 2.0).to_radians().tan() / DISTANCE
         );
         let file = args.shot.clone().unwrap().with_extension("json");
         std::fs::write(&file, &state.json).expect("the view's json beside the still");
-        info!("asset view {name}: crop {size:?}, box {min} to {max}, {} clips", state.clips.len());
+        info!(
+            "asset view {name}: crop {size:?}, box {min} to {max}, {} clips",
+            state.clips.len()
+        );
         state.held = 0;
         return;
     }
@@ -374,11 +418,17 @@ fn film(
     exit: &mut MessageWriter<AppExit>,
 ) {
     let find = |gait: &str| {
-        let clip = state.clips.iter().find(|c| c.0.to_lowercase().contains(gait));
+        let clip = state
+            .clips
+            .iter()
+            .find(|c| c.0.to_lowercase().contains(gait));
         clip.map(|c| (c.1, c.2))
     };
     let (Some(walk), run) = (find("walk"), find("run")) else {
-        panic!("--film with --asset plays the walk and run, and {:?} has no walk", args.asset);
+        panic!(
+            "--film with --asset plays the walk and run, and {:?} has no walk",
+            args.asset
+        );
     };
     let Some(p) = state.player else { return };
     let frames = |secs: f32| (LAPS * secs * crate::FILM_FPS as f32).round() as u32;
@@ -392,7 +442,10 @@ fn film(
         if fades.get_main_animation().is_none() {
             player.stop_all();
             let zero = std::time::Duration::ZERO;
-            fades.play(&mut player, walk.1, zero).repeat().set_speed(0.0);
+            fades
+                .play(&mut player, walk.1, zero)
+                .repeat()
+                .set_speed(0.0);
         }
         return;
     }
@@ -433,11 +486,7 @@ fn pose(state: &mut State, players: &mut Query<&mut AnimationPlayer>) {
 
 /// The asset's world box: a skinned mesh by its joints (its mesh box is the bind pose's), any
 /// other by its box, with a margin for the flesh over a skeleton.
-fn bounds(
-    body: Entity,
-    children: &Query<&Children>,
-    parts: &Parts,
-) -> (Vec3, Vec3) {
+fn bounds(body: Entity, children: &Query<&Children>, parts: &Parts) -> (Vec3, Vec3) {
     let (mut min, mut max) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
     let mut skinned = false;
     for e in children.iter_descendants(body) {
@@ -496,7 +545,8 @@ fn crop(mid: Vec3, half: Vec3) -> ((u32, u32), f32) {
         w = w.max((k * v.x / -v.z).abs());
         h = h.max((k * v.y / -v.z).abs());
     }
-    let even = |v: f32, most: f32| (((2.0 * v + 48.0) / 16.0).ceil() * 16.0).clamp(160.0, most) as u32;
+    let even =
+        |v: f32, most: f32| (((2.0 * v + 48.0) / 16.0).ceil() * 16.0).clamp(160.0, most) as u32;
     let size = (even(w, 1920.0), even(h, FRAME_H));
     let fov = 2.0 * (size.1 as f32 / FRAME_H * (FOV / 2.0).to_radians().tan()).atan();
     (size, fov)
@@ -513,10 +563,16 @@ mod tests {
         let (size, fov) = crop(Vec3::new(0.0, 0.9, 0.0), Vec3::new(0.5, 0.9, 0.5));
         let crop_px = size.1 as f32 / 2.0 / (fov / 2.0).tan() / DISTANCE;
         let game_px = FRAME_H / 2.0 / (FOV / 2.0).to_radians().tan() / DISTANCE;
-        assert!((crop_px - game_px).abs() < 0.01, "{crop_px} against {game_px}");
+        assert!(
+            (crop_px - game_px).abs() < 0.01,
+            "{crop_px} against {game_px}"
+        );
         // A 1.8 m body seen 35 degrees off its side is about 1.5 m tall on screen.
         let tall = 1.8 * (90.0 - PITCH).to_radians().cos() * game_px;
-        assert!(size.1 as f32 > tall && (size.1 as f32) < tall + 160.0, "{size:?} for {tall} px");
+        assert!(
+            size.1 as f32 > tall && (size.1 as f32) < tall + 160.0,
+            "{size:?} for {tall} px"
+        );
     }
 
     /// A shot shows its own pose: nothing sets the next pose in the frame its screenshot is
@@ -525,10 +581,20 @@ mod tests {
     fn a_shot_is_taken_before_the_next_pose_is_set() {
         let acts: Vec<Act> = (1..=SETTLE + AFTER).map(act).collect();
         let shot = acts.iter().position(|a| *a == Act::Shoot).expect("a shot");
-        let posed = acts.iter().position(|a| *a == Act::Pose).expect("the next pose");
-        assert!(posed >= shot + 2, "the shot at frame {shot}, the next pose at {posed}");
+        let posed = acts
+            .iter()
+            .position(|a| *a == Act::Pose)
+            .expect("the next pose");
+        assert!(
+            posed >= shot + 2,
+            "the shot at frame {shot}, the next pose at {posed}"
+        );
         assert_eq!(acts.iter().filter(|a| **a != Act::Hold).count(), 2);
-        assert_eq!(*acts.last().unwrap(), Act::Pose, "the held count resets on the pose");
+        assert_eq!(
+            *acts.last().unwrap(),
+            Act::Pose,
+            "the held count resets on the pose"
+        );
     }
 
     /// The film walks three laps, runs three, then walks again; an asset with no run walks.
@@ -538,8 +604,17 @@ mod tests {
         let at: Vec<(u32, Gait)> = (0..2 * (walk + run))
             .filter_map(|n| switch(n, walk, run).map(|g| (n, g)))
             .collect();
-        let want = [(0, Gait::Walk), (walk, Gait::Run), (walk + run, Gait::Walk), (2 * walk + run, Gait::Run)];
+        let want = [
+            (0, Gait::Walk),
+            (walk, Gait::Run),
+            (walk + run, Gait::Walk),
+            (2 * walk + run, Gait::Run),
+        ];
         assert_eq!(at, want);
-        assert_eq!((0..500).filter_map(|n| switch(n, walk, 0)).count(), 3, "walk again each turn");
+        assert_eq!(
+            (0..500).filter_map(|n| switch(n, walk, 0)).count(),
+            3,
+            "walk again each turn"
+        );
     }
 }

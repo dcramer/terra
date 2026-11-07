@@ -107,10 +107,10 @@ fn canopy_map(
     args: Res<crate::Args>,
     mut images: ResMut<Assets<Image>>,
 ) {
+    use crate::kit::biome::Layout;
     use bevy::asset::RenderAssetUsages;
     use bevy::image::ImageSampler;
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-    use crate::kit::biome::Layout;
     let open = matches!(args.layout, Some(Layout::Ruin | Layout::Marsh));
     let wooded = land.filter(|_| !open);
     let trees = wooded.as_ref().map(|l| crate::forest::tree_spots(l));
@@ -418,7 +418,10 @@ mod tests {
             app.update();
             let rims = app.world().resource::<Assets<RimMaterial>>();
             let e = rims.get(&to).unwrap().base.emissive;
-            assert!((e.red - flash * 0.5).abs() < 1e-6, "flash {flash}: swapped {e:?}");
+            assert!(
+                (e.red - flash * 0.5).abs() < 1e-6,
+                "flash {flash}: swapped {e:?}"
+            );
         }
     }
 }

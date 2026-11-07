@@ -71,7 +71,11 @@ fn cover(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>) {
             } else {
                 let i = 1 + (rng.f() * 7.0) as usize % 7;
                 let s = rng.range(0.6, 1.1);
-                (format!("models/nature/forest/mossy_rock_b_{i}.glb"), s, 0.25 * s)
+                (
+                    format!("models/nature/forest/mossy_rock_b_{i}.glb"),
+                    s,
+                    0.25 * s,
+                )
             };
             let e = crate::scene::model(
                 &mut commands,
@@ -94,12 +98,22 @@ mod tests {
     /// The oaks stand on dry land, clear of the cast, the camp fire and the beasts' beats.
     #[test]
     fn the_oaks_stand_clear() {
-        let cast = [super::super::KNIGHT, super::super::FOE, super::super::TARGET];
+        let cast = [
+            super::super::KNIGHT,
+            super::super::FOE,
+            super::super::TARGET,
+        ];
         for (p, ..) in OAKS {
             assert!(terrain::pond(p) < -0.1, "the oak at {p} is in the pond");
-            assert!(p.distance(crate::scene::FIRE) > 3.5, "the oak at {p} is in the camp");
+            assert!(
+                p.distance(crate::scene::FIRE) > 3.5,
+                "the oak at {p} is in the camp"
+            );
             for c in cast {
-                assert!(c.distance(p) > 3.0, "the oak at {p} is on the fighter at {c}");
+                assert!(
+                    c.distance(p) > 3.0,
+                    "the oak at {p} is on the fighter at {c}"
+                );
             }
         }
         // Each patch has room for its plants.
@@ -110,7 +124,10 @@ mod tests {
                     free(lo + (hi - lo) * t)
                 })
                 .count();
-            assert!(room > 40, "the patch at {lo} has room at {room} of 400 points");
+            assert!(
+                room > 40,
+                "the patch at {lo} has room at {room} of 400 points"
+            );
         }
     }
 }

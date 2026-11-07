@@ -107,9 +107,7 @@ impl Noise {
 
     pub fn at(&self, p: Vec2) -> f32 {
         let n = self.period as i64;
-        let cell = |x: i64, y: i64| {
-            self.cells[(y.rem_euclid(n) * n + x.rem_euclid(n)) as usize]
-        };
+        let cell = |x: i64, y: i64| self.cells[(y.rem_euclid(n) * n + x.rem_euclid(n)) as usize];
         let (x0, y0) = (p.x.floor(), p.y.floor());
         let f = p - Vec2::new(x0, y0);
         let s = f * f * (Vec2::splat(3.0) - 2.0 * f);

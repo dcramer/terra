@@ -120,7 +120,10 @@ fn wander(p: f32, t: f32) -> Vec3 {
 
 /// A firefly's light at time `t`: dark most of its beat, then a short soft blink.
 fn blink(t: f32, beat: f32, phase: f32) -> f32 {
-    (std::f32::consts::TAU * (t * beat + phase)).sin().max(0.0).powi(4)
+    (std::f32::consts::TAU * (t * beat + phase))
+        .sin()
+        .max(0.0)
+        .powi(4)
 }
 
 fn motes(

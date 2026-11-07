@@ -40,27 +40,147 @@ fn lamp() -> Vec3 {
 /// Model, place, yaw (degrees), scale, how far sunk (m).
 pub const PROPS: [(&str, Vec2, f32, f32, f32); 20] = [
     // Stones at the path's edges and standing in the shallows, breaking the water's line.
-    ("models/nature/forest/mossy_rock_b_2.glb", Vec2::new(3.3, -1.7), 60.0, 0.2, 0.04),
-    ("models/nature/forest/mossy_rock_a_3.glb", Vec2::new(-1.8, -1.7), 200.0, 0.16, 0.03),
-    ("models/nature/forest/mossy_rock_b_4.glb", Vec2::new(-7.0, -2.8), 120.0, 0.25, 0.06),
-    ("models/nature/forest/mossy_rock_a_4.glb", Vec2::new(-0.6, 2.3), 15.0, 0.22, 0.08),
-    ("models/nature/forest/mossy_rock_b_5.glb", Vec2::new(2.6, 2.9), 300.0, 0.28, 0.1),
-    ("models/nature/forest/mossy_rock_b_1.glb", Vec2::new(5.0, 1.8), 80.0, 0.24, 0.12),
-    ("models/iso/dead-tree-a.glb", Vec2::new(-7.6, 2.9), 20.0, 1.0, 0.3),
-    ("models/iso/dead-tree-b.glb", Vec2::new(8.6, -4.8), 200.0, 1.0, 0.3),
-    ("models/iso/dead-tree-a.glb", Vec2::new(-5.4, -7.0), 110.0, 0.8, 0.3),
-    ("models/iso/dead-tree-b.glb", Vec2::new(9.8, 3.6), 290.0, 0.9, 0.3),
+    (
+        "models/nature/forest/mossy_rock_b_2.glb",
+        Vec2::new(3.3, -1.7),
+        60.0,
+        0.2,
+        0.04,
+    ),
+    (
+        "models/nature/forest/mossy_rock_a_3.glb",
+        Vec2::new(-1.8, -1.7),
+        200.0,
+        0.16,
+        0.03,
+    ),
+    (
+        "models/nature/forest/mossy_rock_b_4.glb",
+        Vec2::new(-7.0, -2.8),
+        120.0,
+        0.25,
+        0.06,
+    ),
+    (
+        "models/nature/forest/mossy_rock_a_4.glb",
+        Vec2::new(-0.6, 2.3),
+        15.0,
+        0.22,
+        0.08,
+    ),
+    (
+        "models/nature/forest/mossy_rock_b_5.glb",
+        Vec2::new(2.6, 2.9),
+        300.0,
+        0.28,
+        0.1,
+    ),
+    (
+        "models/nature/forest/mossy_rock_b_1.glb",
+        Vec2::new(5.0, 1.8),
+        80.0,
+        0.24,
+        0.12,
+    ),
+    (
+        "models/iso/dead-tree-a.glb",
+        Vec2::new(-7.6, 2.9),
+        20.0,
+        1.0,
+        0.3,
+    ),
+    (
+        "models/iso/dead-tree-b.glb",
+        Vec2::new(8.6, -4.8),
+        200.0,
+        1.0,
+        0.3,
+    ),
+    (
+        "models/iso/dead-tree-a.glb",
+        Vec2::new(-5.4, -7.0),
+        110.0,
+        0.8,
+        0.3,
+    ),
+    (
+        "models/iso/dead-tree-b.glb",
+        Vec2::new(9.8, 3.6),
+        290.0,
+        0.9,
+        0.3,
+    ),
     // The scanned rocks are boulders 2 to 3 m across at scale 1: stones here.
-    ("models/nature/forest/mossy_rock_a_2.glb", Vec2::new(-3.6, 0.9), 30.0, 0.3, 0.05),
-    ("models/nature/forest/mossy_rock_b_3.glb", Vec2::new(4.4, 0.2), 140.0, 0.35, 0.05),
-    ("models/nature/forest/mossy_rock_a_5.glb", Vec2::new(-6.2, -2.4), 250.0, 0.45, 0.1),
-    ("models/nature/forest/mossy_rock_b_6.glb", Vec2::new(0.9, 1.9), 75.0, 0.22, 0.03),
-    ("models/nature/forest/mossy_rock_a_1.glb", Vec2::new(5.6, -6.6), 10.0, 0.5, 0.1),
-    ("models/nature/forest/stump.glb", Vec2::new(-4.8, -0.6), 0.0, 1.0, 0.05),
-    ("models/nature/forest/stump.glb", Vec2::new(6.2, -2.8), 130.0, 0.8, 0.05),
-    ("models/props/Log.glb", Vec2::new(-2.4, 2.6), 70.0, 1.0, 0.12),
-    ("models/props/Log.glb", Vec2::new(3.6, 2.4), 160.0, 1.0, 0.18),
-    ("models/props/Log.glb", Vec2::new(-8.4, -4.2), 35.0, 1.0, 0.12),
+    (
+        "models/nature/forest/mossy_rock_a_2.glb",
+        Vec2::new(-3.6, 0.9),
+        30.0,
+        0.3,
+        0.05,
+    ),
+    (
+        "models/nature/forest/mossy_rock_b_3.glb",
+        Vec2::new(4.4, 0.2),
+        140.0,
+        0.35,
+        0.05,
+    ),
+    (
+        "models/nature/forest/mossy_rock_a_5.glb",
+        Vec2::new(-6.2, -2.4),
+        250.0,
+        0.45,
+        0.1,
+    ),
+    (
+        "models/nature/forest/mossy_rock_b_6.glb",
+        Vec2::new(0.9, 1.9),
+        75.0,
+        0.22,
+        0.03,
+    ),
+    (
+        "models/nature/forest/mossy_rock_a_1.glb",
+        Vec2::new(5.6, -6.6),
+        10.0,
+        0.5,
+        0.1,
+    ),
+    (
+        "models/nature/forest/stump.glb",
+        Vec2::new(-4.8, -0.6),
+        0.0,
+        1.0,
+        0.05,
+    ),
+    (
+        "models/nature/forest/stump.glb",
+        Vec2::new(6.2, -2.8),
+        130.0,
+        0.8,
+        0.05,
+    ),
+    (
+        "models/props/Log.glb",
+        Vec2::new(-2.4, 2.6),
+        70.0,
+        1.0,
+        0.12,
+    ),
+    (
+        "models/props/Log.glb",
+        Vec2::new(3.6, 2.4),
+        160.0,
+        1.0,
+        0.18,
+    ),
+    (
+        "models/props/Log.glb",
+        Vec2::new(-8.4, -4.2),
+        35.0,
+        1.0,
+        0.12,
+    ),
 ];
 
 pub fn plugin(app: &mut App) {
@@ -93,7 +213,14 @@ fn spawn(
     }
     // The camp fire: its ring and logs, the halo the flipbook finds, its light.
     let bed = FIRE.extend(shape(FIRE)).xzy();
-    model(&mut commands, &asset, "models/props/Campfire.glb", bed, 0.4, 0.7);
+    model(
+        &mut commands,
+        &asset,
+        "models/props/Campfire.glb",
+        bed,
+        0.4,
+        0.7,
+    );
     let soft = images.add(soft_image());
     let card = meshes.add(Rectangle::new(1.0, 1.0));
     commands.spawn((
@@ -150,7 +277,14 @@ fn spawn(
             .with_rotation(Quat::from_rotation_arc(Vec3::Y, ARM)),
     ));
     let lamp = lamp();
-    model(&mut commands, &asset, "models/props/Lantern.glb", lamp, 0.3, 1.0);
+    model(
+        &mut commands,
+        &asset,
+        "models/props/Lantern.glb",
+        lamp,
+        0.3,
+        1.0,
+    );
     // The lit housing inside the glass, and the flame just before it toward the eye (no
     // `Halo`: that would light a flipbook fire).
     let eye = crate::ruin::camera::offset().normalize();
@@ -194,18 +328,31 @@ mod tests {
     /// the lantern's post stands in the shallows.
     #[test]
     fn the_fire_is_dry_by_the_water_and_the_post_wet() {
-        assert!(shape(FIRE) > LEVEL + 0.03, "the fire is wet: {}", shape(FIRE));
+        assert!(
+            shape(FIRE) > LEVEL + 0.03,
+            "the fire is wet: {}",
+            shape(FIRE)
+        );
         let near = (1..=10).any(|i| shape(FIRE + Vec2::new(0.0, i as f32 * 0.1)) < LEVEL);
-        assert!(near, "no water within a metre toward the camera of the fire");
+        assert!(
+            near,
+            "no water within a metre toward the camera of the fire"
+        );
         let d = shape(LANTERN) - LEVEL;
-        assert!((-0.5..-0.05).contains(&d), "the post's foot is {d} under the face");
+        assert!(
+            (-0.5..-0.05).contains(&d),
+            "the post's foot is {d} under the face"
+        );
         // Its mirror image, 0.7 of the flame's height toward the camera from under the lamp
         // (hung from the crossarm), is on open water.
         let eye = crate::ruin::camera::offset();
         let flame = lamp() + Vec3::Y * 0.17;
         let under = Vec2::new(flame.x, flame.z);
         let image = under + Vec2::new(eye.x, eye.z).normalize() * 0.7 * (flame.y - LEVEL);
-        assert!(shape(image) < LEVEL - 0.1, "the lantern glints on the bank at {image}");
+        assert!(
+            shape(image) < LEVEL - 0.1,
+            "the lantern glints on the bank at {image}"
+        );
     }
 
     /// The lamp hangs clear of the pole and the water: under the crossarm's end, a reach
@@ -214,8 +361,15 @@ mod tests {
     fn the_lamp_hangs_from_the_crossarm_over_the_water() {
         let l = lamp();
         let reach = Vec2::new(l.x, l.z).distance(LANTERN);
-        assert!(reach > 0.4, "the lamp hangs {reach} m from the pole, in its post");
-        assert!(l.y - LEVEL > 0.8, "the lamp's foot is {} m over the water", l.y - LEVEL);
+        assert!(
+            reach > 0.4,
+            "the lamp hangs {reach} m from the pole, in its post"
+        );
+        assert!(
+            l.y - LEVEL > 0.8,
+            "the lamp's foot is {} m over the water",
+            l.y - LEVEL
+        );
         let top = shape(LANTERN) - SUNK + POST;
         assert!(l.y + 0.53 < top, "the lamp stands over the pole's top");
     }

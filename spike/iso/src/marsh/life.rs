@@ -38,7 +38,11 @@ impl Round {
         let a = self.rate * t + self.phase;
         let p = |a: f32| {
             let q = self.mid + Vec2::new(a.cos() * self.radii.x, a.sin() * self.radii.y);
-            if self.channel { Vec2::new(q.x, q.y + far(q.x) - far(self.mid.x)) } else { q }
+            if self.channel {
+                Vec2::new(q.x, q.y + far(q.x) - far(self.mid.x))
+            } else {
+                q
+            }
         };
         let here = p(a);
         let dir = if self.rate == 0.0 {
@@ -50,7 +54,11 @@ impl Round {
     }
 
     pub fn height(&self, p: Vec2) -> f32 {
-        let y = if self.floats { LEVEL - 0.04 } else { shape(p).max(LEVEL - self.wade) };
+        let y = if self.floats {
+            LEVEL - 0.04
+        } else {
+            shape(p).max(LEVEL - self.wade)
+        };
         y + self.lift
     }
 }
@@ -73,16 +81,101 @@ fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
     let fc = Vec2::new(-1.5, far(-1.5) - 0.2);
     let cast = [
         // The tree monster wading the far channel's length behind the fight.
-        (TREE_MONSTER, "walk", 1.0, Round { mid: fc, radii: Vec2::new(3.2, 0.45), rate: 0.12, phase: 1.2, wade: 0.4, ..still }),
+        (
+            TREE_MONSTER,
+            "walk",
+            1.0,
+            Round {
+                mid: fc,
+                radii: Vec2::new(3.2, 0.45),
+                rate: 0.12,
+                phase: 1.2,
+                wade: 0.4,
+                ..still
+            },
+        ),
         // A heron striking in the mere's shallows, one stalking round its far side.
-        (HERON, "Strike", 1.0, Round { mid: MERE + Vec2::new(-1.9, 0.6), wade: 0.25, ..still }),
-        (HERON, "Walk", 1.0, Round { mid: MERE, radii: Vec2::new(1.95, 1.8), rate: -0.08, phase: 4.6, wade: 0.25, ..still }),
+        (
+            HERON,
+            "Strike",
+            1.0,
+            Round {
+                mid: MERE + Vec2::new(-1.9, 0.6),
+                wade: 0.25,
+                ..still
+            },
+        ),
+        (
+            HERON,
+            "Walk",
+            1.0,
+            Round {
+                mid: MERE,
+                radii: Vec2::new(1.95, 1.8),
+                rate: -0.08,
+                phase: 4.6,
+                wade: 0.25,
+                ..still
+            },
+        ),
         // A third crossing high over the marsh, round again off the frame's edges.
-        (HERON, "Fly", 1.0, Round { mid: Vec2::new(0.0, -2.0), radii: Vec2::new(16.0, 7.0), rate: 0.16, phase: 3.5, lift: 5.0, floats: true, ..still }),
+        (
+            HERON,
+            "Fly",
+            1.0,
+            Round {
+                mid: Vec2::new(0.0, -2.0),
+                radii: Vec2::new(16.0, 7.0),
+                rate: 0.16,
+                phase: 3.5,
+                lift: 5.0,
+                floats: true,
+                ..still
+            },
+        ),
         // Mallards in a line along the far channel.
-        (MALLARD, "Swim", 0.9, Round { mid: Vec2::new(4.0, far(4.0)), radii: Vec2::new(2.6, 0.35), rate: 0.12, phase: 0.0, channel: true, floats: true, ..still }),
-        (MALLARD, "Swim", 0.9, Round { mid: Vec2::new(4.0, far(4.0)), radii: Vec2::new(2.6, 0.35), rate: 0.12, phase: -0.22, channel: true, floats: true, ..still }),
-        (MALLARD, "Dabble", 0.9, Round { mid: Vec2::new(4.0, far(4.0)), radii: Vec2::new(2.6, 0.35), rate: 0.12, phase: -0.5, channel: true, floats: true, ..still }),
+        (
+            MALLARD,
+            "Swim",
+            0.9,
+            Round {
+                mid: Vec2::new(4.0, far(4.0)),
+                radii: Vec2::new(2.6, 0.35),
+                rate: 0.12,
+                phase: 0.0,
+                channel: true,
+                floats: true,
+                ..still
+            },
+        ),
+        (
+            MALLARD,
+            "Swim",
+            0.9,
+            Round {
+                mid: Vec2::new(4.0, far(4.0)),
+                radii: Vec2::new(2.6, 0.35),
+                rate: 0.12,
+                phase: -0.22,
+                channel: true,
+                floats: true,
+                ..still
+            },
+        ),
+        (
+            MALLARD,
+            "Dabble",
+            0.9,
+            Round {
+                mid: Vec2::new(4.0, far(4.0)),
+                radii: Vec2::new(2.6, 0.35),
+                rate: 0.12,
+                phase: -0.5,
+                channel: true,
+                floats: true,
+                ..still
+            },
+        ),
     ];
     for (i, (path, clip, scale, round)) in cast.into_iter().enumerate() {
         let (p, dir) = round.at(0.0);
@@ -137,7 +230,11 @@ mod tests {
         };
         for i in 0..100 {
             let (p, _) = r.at(i as f32 * 0.6);
-            assert!(shape(p) < LEVEL - 0.1, "a mallard aground at {p}: {}", shape(p));
+            assert!(
+                shape(p) < LEVEL - 0.1,
+                "a mallard aground at {p}: {}",
+                shape(p)
+            );
         }
     }
 }

@@ -110,8 +110,18 @@ fn spawn(
     let halo = materials.add(glow(LinearRgba::rgb(0.35, 0.85, 3.4), Some(soft.clone())));
     let off = Transform::from_scale(Vec3::ZERO);
     for i in 0..BOLTS {
-        commands.spawn((Mesh3d(ball.clone()), MeshMaterial3d(core.clone()), off, Bolt(i, Part::Core)));
-        commands.spawn((Mesh3d(card.clone()), MeshMaterial3d(halo.clone()), off, Bolt(i, Part::Glow)));
+        commands.spawn((
+            Mesh3d(ball.clone()),
+            MeshMaterial3d(core.clone()),
+            off,
+            Bolt(i, Part::Core),
+        ));
+        commands.spawn((
+            Mesh3d(card.clone()),
+            MeshMaterial3d(halo.clone()),
+            off,
+            Bolt(i, Part::Glow),
+        ));
         commands.spawn((
             PointLight {
                 color: Color::srgb(0.4, 0.6, 1.0),
@@ -183,11 +193,14 @@ fn ribbon(points: &[Vec3], eye: Vec3, width: f32) -> Mesh {
         }
     }
     let normals = vec![[0.0, 1.0, 0.0]; pos.len()];
-    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-        .with_inserted_indices(Indices::U32(idx))
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_indices(Indices::U32(idx))
 }
 
 fn fly(
@@ -204,19 +217,28 @@ fn fly(
     stage: Res<Stage>,
 ) {
     let stage = &*stage;
-    let p = if clock.still { STILL } else { clock.t.rem_euclid(PERIOD) };
+    let p = if clock.still {
+        STILL
+    } else {
+        clock.t.rem_euclid(PERIOD)
+    };
     for (Bolt(i, part), tr, light, mark) in &mut parts {
         let (s, struck) = flight(*i, p);
         let flying = (0.0..1.0).contains(&s);
-        let head = path(stage, *i,s.clamp(0.0, 1.0));
+        let head = path(stage, *i, s.clamp(0.0, 1.0));
         match part {
             Part::Core => {
                 // Drawn out along the flight, as a fast thing reads.
                 let mut tr = tr.unwrap();
-                let ahead = path(stage, *i, (s + 0.02).min(1.0)) - path(stage, *i, (s - 0.02).max(0.0));
+                let ahead =
+                    path(stage, *i, (s + 0.02).min(1.0)) - path(stage, *i, (s - 0.02).max(0.0));
                 tr.translation = head;
                 tr.rotation = Quat::from_rotation_arc(Vec3::Z, ahead.normalize_or(Vec3::Z));
-                tr.scale = if flying { Vec3::new(CORE, CORE, CORE_LENGTH) } else { Vec3::ZERO };
+                tr.scale = if flying {
+                    Vec3::new(CORE, CORE, CORE_LENGTH)
+                } else {
+                    Vec3::ZERO
+                };
             }
             Part::Glow => {
                 let mut tr = tr.unwrap();
@@ -237,7 +259,13 @@ fn fly(
                 let tip = s.min(1.0);
                 let points: Vec<Vec3> = if s > 0.0 && tail < tip {
                     (0..TRAIL_POINTS)
-                        .map(|j| path(stage, *i,tail + (tip - tail) * j as f32 / (TRAIL_POINTS - 1) as f32))
+                        .map(|j| {
+                            path(
+                                stage,
+                                *i,
+                                tail + (tip - tail) * j as f32 / (TRAIL_POINTS - 1) as f32,
+                            )
+                        })
                         .collect()
                 } else {
                     Vec::new()
@@ -270,7 +298,11 @@ mod tests {
     #[test]
     fn the_still_shows_a_strike_and_bolts_in_flight() {
         let f: Vec<_> = (0..BOLTS).map(|i| flight(i, STILL)).collect();
-        assert!((0.0..0.2).contains(&f[0].1), "bolt 0 struck {} s ago", f[0].1);
+        assert!(
+            (0.0..0.2).contains(&f[0].1),
+            "bolt 0 struck {} s ago",
+            f[0].1
+        );
         assert!(f[1].0 > f[2].0 && f[2].0 > 0.1 && f[1].0 < 1.0);
     }
 
@@ -279,11 +311,19 @@ mod tests {
     #[test]
     fn the_pool_under_a_bolt_is_tight_and_bright() {
         let st = Stage::default();
-        let high = (0..=10).map(|j| path(&st, 1, j as f32 / 10.0).y - st.floor).fold(9.0, f32::min);
+        let high = (0..=10)
+            .map(|j| path(&st, 1, j as f32 / 10.0).y - st.floor)
+            .fold(9.0, f32::min);
         let under = POOL_LM / (POOL_UP * POOL_UP);
-        assert!(under > 4.0 * BOLT_LM / (high * high), "pool {under} vs bolt at {high} m");
+        assert!(
+            under > 4.0 * BOLT_LM / (high * high),
+            "pool {under} vs bolt at {high} m"
+        );
         let out = POOL_LM * POOL_UP / (1.0 + POOL_UP * POOL_UP).powf(1.5);
-        assert!(out < 0.25 * under, "a metre out the pool is {out} of {under}");
+        assert!(
+            out < 0.25 * under,
+            "a metre out the pool is {out} of {under}"
+        );
     }
 
     /// Each bolt leaves the hero and ends at the target, above the floor all the way.

@@ -120,8 +120,10 @@ fn weave() -> Image {
         let edge = u.min(1.0 - u).min(v);
         let border = smooth(0.07, 0.055, edge) * smooth(0.025, 0.04, edge);
         let r = Vec2::new((u - 0.5) * 1.0, (v - 0.36) * 2.0).length();
-        let ray = (std::f32::consts::TAU * 6.0 * (v - 0.36).atan2(u - 0.5) / std::f32::consts::TAU).sin();
-        let sun = smooth(0.17, 0.15, r) + smooth(0.3, 0.2, r) * smooth(0.13, 0.17, r) * smooth(0.4, 0.8, ray);
+        let ray =
+            (std::f32::consts::TAU * 6.0 * (v - 0.36).atan2(u - 0.5) / std::f32::consts::TAU).sin();
+        let sun = smooth(0.17, 0.15, r)
+            + smooth(0.3, 0.2, r) * smooth(0.13, 0.17, r) * smooth(0.4, 0.8, ray);
         let gold = Vec3::new(0.42, 0.3, 0.12) * dirt * (0.7 + 0.3 * n);
         c = c.lerp(gold, (border * 0.85 + sun * 0.5).min(1.0));
         [c.x, c.y, c.z, 1.0]

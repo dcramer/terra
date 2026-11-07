@@ -703,7 +703,8 @@ fn play(
                     let k = a / life;
                     let at = here + off + drift * a + Vec3::Y * f.rise * a;
                     tr.translation = at;
-                    tr.rotation = cam.rot * Quat::from_rotation_z(phase * std::f32::consts::TAU + a * 0.6);
+                    tr.rotation =
+                        cam.rot * Quat::from_rotation_z(phase * std::f32::consts::TAU + a * 0.6);
                     tr.scale = Vec3::splat(
                         f.size.0 + (f.size.1 - f.size.0) * (1.0 - (1.0 - k) * (1.0 - k)),
                     );

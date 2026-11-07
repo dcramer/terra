@@ -7,9 +7,9 @@
 use super::LEVEL;
 use super::land::{far, near};
 use crate::forest::Rng;
+use crate::kit::effects::{Glow, Look, Preset};
 use crate::motes::soft_image;
 use crate::pool::Glint;
-use crate::kit::effects::{Glow, Look, Preset};
 use crate::ruin::effects::kit::{Cam, Clock, glow};
 use bevy::prelude::*;
 
@@ -120,7 +120,11 @@ fn spawn(
     for c in 0..CLOUDS {
         let x = -7.0 + 3.4 * c as f32;
         // Over the water's edges, a cloud to each channel by turns.
-        let z = if c % 2 == 0 { near(x) - 1.4 } else { far(x) + 1.3 };
+        let z = if c % 2 == 0 {
+            near(x) - 1.4
+        } else {
+            far(x) + 1.3
+        };
         for _ in 0..MIDGES {
             let home = Vec3::new(
                 x + rng.range(-0.5, 0.5),
@@ -134,7 +138,11 @@ fn spawn(
                 bevy::light::NotShadowCaster,
                 Midge {
                     home,
-                    phase: Vec3::new(rng.range(0.0, 6.3), rng.range(0.0, 6.3), rng.range(0.0, 6.3)),
+                    phase: Vec3::new(
+                        rng.range(0.0, 6.3),
+                        rng.range(0.0, 6.3),
+                        rng.range(0.0, 6.3),
+                    ),
                 },
             ));
         }
@@ -205,7 +213,9 @@ mod tests {
     #[test]
     fn a_wisp_fades_but_never_dies() {
         let ks: Vec<f32> = (0..600).map(|i| bright(i as f32 * 0.05, 0.3)).collect();
-        let (lo, hi) = ks.iter().fold((9.0f32, 0.0f32), |(a, b), k| (a.min(*k), b.max(*k)));
+        let (lo, hi) = ks
+            .iter()
+            .fold((9.0f32, 0.0f32), |(a, b), k| (a.min(*k), b.max(*k)));
         assert!(lo > 0.1 && lo < 0.35, "dimmest {lo}");
         assert!(hi > 0.8 && hi <= 1.0, "brightest {hi}");
     }

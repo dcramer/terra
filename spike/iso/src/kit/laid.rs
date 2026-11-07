@@ -187,10 +187,20 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
         .find(|(n, _)| *n == "moss_004")
         .map_or(1.1, |s| s.1);
     let mut p = Params {
-        look: Vec4::new(laid.joints, laid.cracks, laid.grain.0.max(1e-3), laid.grain.1),
+        look: Vec4::new(
+            laid.joints,
+            laid.cracks,
+            laid.grain.0.max(1e-3),
+            laid.grain.1,
+        ),
         masks: Vec4::new(moss, wet, moss_m, feet),
         vary: Vec4::new(laid.spread.0, laid.spread.1, laid.dirt, laid.damp),
-        shape: Vec4::new(laid.courses.len() as f32, laid.marks.len() as f32, laid.grit, 0.0),
+        shape: Vec4::new(
+            laid.courses.len() as f32,
+            laid.marks.len() as f32,
+            laid.grit,
+            0.0,
+        ),
         ..default()
     };
     let bad_mark = |m: &Mark| {
@@ -218,9 +228,16 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
     let rising = |v: &[f32]| v.windows(2).all(|w| w[0] < w[1]);
     let starts: Vec<f32> = laid.courses.iter().map(|c| c.0).collect();
     if laid.courses.len() > COURSES
-        || laid.courses.iter().any(|c| c.1.len() > JOINTS || !rising(&c.1))
+        || laid
+            .courses
+            .iter()
+            .any(|c| c.1.len() > JOINTS || !rising(&c.1))
         || !rising(&starts)
-        || laid.courses.iter().flat_map(|c| c.1.iter().chain([&c.0])).any(|x| !(0.0..1.0).contains(x))
+        || laid
+            .courses
+            .iter()
+            .flat_map(|c| c.1.iter().chain([&c.0]))
+            .any(|x| !(0.0..1.0).contains(x))
     {
         return Err(format!(
             "laid courses {:?}: the kit tells apart at most {COURSES} courses of up to \
@@ -324,7 +341,10 @@ mod tests {
             assert!(at(&zebra, 0.0, z), "a stripe at z {z}");
         }
         for z in [0.0, -1.0, 1.0, 2.5] {
-            assert!(!at(&zebra, 0.0, z), "z {z} lies between the stripes or past them");
+            assert!(
+                !at(&zebra, 0.0, z),
+                "z {z} lies between the stripes or past them"
+            );
         }
         // Turned a right angle, a long thin mark runs along z.
         let turned = mark((4.0, 0.1), (0.0, 0.0), (1, 1), 90.0);
@@ -366,7 +386,10 @@ mod tests {
         // A scan whose first course starts below its top edge: above it is the last
         // course of the tile above.
         let low = vec![(0.1, vec![0.5]), (0.6, vec![0.3])];
-        assert_eq!(unit(Vec2::new(0.4, 0.05), &low), unit(Vec2::new(0.4, -0.2), &low));
+        assert_eq!(
+            unit(Vec2::new(0.4, 0.05), &low),
+            unit(Vec2::new(0.4, -0.2), &low)
+        );
     }
 
     /// Courses out of order or too many fail naming the fix.
@@ -400,7 +423,10 @@ mod tests {
     #[test]
     fn a_bad_mask_says_the_fix() {
         let e = params(&laid(Some(Mask::Site("lichen".into())), None), &PLACE).unwrap_err();
-        assert!(e.contains("lichen") && e.contains("mossy") && e.contains("Fix:"), "{e}");
+        assert!(
+            e.contains("lichen") && e.contains("mossy") && e.contains("Fix:"),
+            "{e}"
+        );
         let e = params(&laid(None, Some(Mask::Wet)), &PLACE).unwrap_err();
         assert!(e.contains("Wet") && e.contains("Fix:"), "{e}");
     }

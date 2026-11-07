@@ -7,10 +7,10 @@ mod command;
 mod foliage;
 mod forest;
 mod kit;
+mod marsh;
 mod mipmaps;
 mod motes;
 mod nav;
-mod marsh;
 mod party;
 mod pool;
 mod rest;
@@ -183,7 +183,8 @@ fn main() {
         return;
     }
     if args.layout == Some(Layout::Street) {
-        app.add_plugins((mipmaps::plugin, kit::street::plugin)).run();
+        app.add_plugins((mipmaps::plugin, kit::street::plugin))
+            .run();
         return;
     }
     if args.layout == Some(Layout::Marsh) {

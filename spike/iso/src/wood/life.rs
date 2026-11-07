@@ -127,14 +127,26 @@ fn spawn(
         let is_midge = i % 3 == 0;
         commands.spawn((
             Mesh3d(card.clone()),
-            MeshMaterial3d(if is_midge { midge.clone() } else { pollen.clone() }),
+            MeshMaterial3d(if is_midge {
+                midge.clone()
+            } else {
+                pollen.clone()
+            }),
             Transform::from_translation(home),
             bevy::light::NotShadowCaster,
             Speck {
                 home,
-                phase: Vec3::new(rng.range(0.0, 6.3), rng.range(0.0, 6.3), rng.range(0.0, 6.3)),
+                phase: Vec3::new(
+                    rng.range(0.0, 6.3),
+                    rng.range(0.0, 6.3),
+                    rng.range(0.0, 6.3),
+                ),
                 reach: if is_midge { 0.25 } else { 0.9 },
-                size: if is_midge { 0.03 } else { rng.range(0.035, 0.06) },
+                size: if is_midge {
+                    0.03
+                } else {
+                    rng.range(0.035, 0.06)
+                },
             },
         ));
     }

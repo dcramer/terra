@@ -122,7 +122,11 @@ fn blow(
     let (Some(knight), Some(ogre)) = (hit.knight, hit.ogre) else {
         return;
     };
-    let player = |body: Entity| children.iter_descendants(body).find(|e| players.contains(*e));
+    let player = |body: Entity| {
+        children
+            .iter_descendants(body)
+            .find(|e| players.contains(*e))
+    };
     let (Some(kp), Some(op)) = (player(knight), player(ogre)) else {
         return;
     };
@@ -190,7 +194,11 @@ fn show(
     mut materials: ResMut<Assets<StandardMaterial>>,
     stage: Res<Stage>,
 ) {
-    let a = if clock.still { STILL_AGE } else { clock.t - hit.at };
+    let a = if clock.still {
+        STILL_AGE
+    } else {
+        clock.t - hit.at
+    };
     for mut mark in &mut scuffs {
         mark.age = a;
     }
@@ -236,7 +244,10 @@ mod tests {
         assert!(w.green > 0.3 && w.green > 0.8 * w.red, "{w:?}");
         for i in 0..20 {
             let c = flash(i as f32 * 0.01);
-            assert!(c.red < 1.0 && c.green < 1.0 && c.blue < 1.0, "{c:?} at {i}0 ms");
+            assert!(
+                c.red < 1.0 && c.green < 1.0 && c.blue < 1.0,
+                "{c:?} at {i}0 ms"
+            );
         }
         assert!(r.red > 4.0 * r.green && r.red > 0.2, "{r:?}");
         assert_eq!(flash(0.2), LinearRgba::BLACK);
