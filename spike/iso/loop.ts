@@ -489,11 +489,23 @@ function record(argv: string[], say: (l: string) => void) {
   });
 }
 
+/** The biomes of `round` whose kept still is from a later round: a KEEP of `round` would put
+ * its older stills back over them and drop the newer win (lead 5 and 6 lost kept stills so). */
+export function newerKept(h: Pick<History, "kept" | "rounds">, round: string): string[] {
+  const at = h.rounds[round]?.at ?? "";
+  return Object.keys(h.rounds[round]?.biomes ?? {}).filter((b) => {
+    const k = h.kept[b]?.round;
+    return k !== undefined && k !== round && (h.rounds[k]?.at ?? "") > at;
+  });
+}
+
 function judgeVerdict(argv: string[], say: (l: string) => void) {
   const round = argv[0];
   const h = loadHistory(say);
   const rnd = h.rounds[round];
   if (!rnd) fail(`no round ${round}: \`node spike/iso/loop.ts history\` lists them`);
+  const later = newerKept(h, round);
+  if (later.length) fail(`${round} is older than the kept still of ${later.map((b) => `${b} (${h.kept[b].round})`).join(", ")}: a verdict on it would put its older stills back over the newer kept ones (D634's ratchet only moves forward). Judge the newest round; to restore an older round's stills on purpose, \`node spike/iso/loop.ts rebase ${round} "restore: <why>"\``);
   const v = verdict(rnd!.biomes);
   for (const [b, o] of Object.entries(v.out)) {
     const s = rnd!.biomes[b].score;

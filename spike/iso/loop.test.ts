@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { blindOrder, delta, type History, isChanged, outcome, type Pair, parseBiome, pixelShare, refRanges, reserveRound, type Round, runNotes, type Side, statsLine, testResult, updateHistory, verdict, winnerOf } from "./loop.ts";
+import { blindOrder, delta, type History, isChanged, newerKept, outcome, type Pair, parseBiome, pixelShare, refRanges, reserveRound, type Round, runNotes, type Side, statsLine, testResult, updateHistory, verdict, winnerOf } from "./loop.ts";
 
 const pair = (a: Side, winner?: Side | "same", margin?: Pair["margin"]): Pair => ({ folder: "f", brief: "b", a, winner, margin });
 const changed = (...pairs: Pair[]) => ({ changed: true, pairs });
@@ -141,4 +141,18 @@ test("two shoots in one minute get their own rounds, and neither's history entry
   assert.ok(now.rounds[first].biomes.ruin && now.rounds[second].biomes.marsh);
   assert.equal(now.rounds.old.biomes.forest.score?.overall, 5);
   rmSync(kit, { recursive: true });
+});
+
+test("a verdict on a round older than a biome's kept still is refused, a newer or the same round's is not", () => {
+  const entry = { still: "s", stats: {}, pairs: [] } as unknown as Round["biomes"][string];
+  const round = (at: string, ...bs: string[]): Round => ({ at, rev: "r", dirty: false, job: "j", biomes: Object.fromEntries(bs.map((b) => [b, entry])) });
+  const kept = (r: string) => ({ round: r, still: "k", stats: {} }) as unknown as History["kept"][string];
+  const h = {
+    rounds: { old: round("2026-11-07T05:00:00Z", "forest", "ruin"), mid: round("2026-11-07T06:00:00Z", "forest"), new: round("2026-11-07T07:00:00Z", "marsh") },
+    kept: { forest: kept("mid"), ruin: kept("j1"), marsh: kept("new") },
+  };
+  assert.deepEqual(newerKept(h, "old"), ["forest"], "mid's forest is newer than old's: keeping old would undo it");
+  assert.deepEqual(newerKept(h, "mid"), [], "the round that is kept may be judged again");
+  assert.deepEqual(newerKept(h, "new"), []);
+  assert.deepEqual(newerKept(h, "gone"), []);
 });
