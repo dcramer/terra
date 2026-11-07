@@ -300,8 +300,14 @@ impl Client {
             .map_or(0, |(tick, _)| *tick)
             .write(&mut to);
         to.ranged(self.intents.len() as u32, MOST_INTENTS as u32);
+        // One equal to the one before it is a bit: a key held is most ticks.
+        let mut before: Option<&Vec<u8>> = None;
         for (_, bytes) in &self.intents {
-            to.run(bytes);
+            to.bool(before == Some(bytes));
+            if before != Some(bytes) {
+                to.run(bytes);
+            }
+            before = Some(bytes);
         }
         transport.send(Lane::State, &to.finish());
     }

@@ -8,10 +8,13 @@
 //! - [`interest`]: what is near a place.
 //! - [`proto`]: the names and messages that cross.
 //! - [`server`], [`client`]: the two ends.
+//! - [`clock`], [`predict`]: a client's tick against its server's, and prediction by replay.
 
 pub mod ack;
 pub mod client;
+pub mod clock;
 pub mod interest;
+pub mod predict;
 pub mod proto;
 pub mod server;
 pub mod transport;

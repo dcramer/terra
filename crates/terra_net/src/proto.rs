@@ -5,7 +5,8 @@
 //! newest of the client's intents the server holds and how many ticks early it came, then
 //! items to the packet's end. An item is an entity gone, or some of its parts' bytes, with its
 //! kind while the client may not know it yet. A state packet up: the header, the newest
-//! intent's tick and the intents for the ticks up to it not yet known to have arrived.
+//! intent's tick and the intents for the ticks up to it not yet known to have arrived, one
+//! equal to the one before it as a single bit.
 
 use crate::interest::Cell;
 use crate::wire::{Malformed, Reader, Wire, Writer};

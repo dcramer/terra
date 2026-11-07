@@ -71,8 +71,11 @@ fn intents(session: &mut Session, from: &mut Reader, tick: u32) -> Result<(), Ma
         // Nothing to say, or stamped where no honest clock is: ignored.
         return Ok(());
     }
+    let mut before: &[u8] = &[];
     for at in newest + 1 - count..=newest {
-        let bytes = from.run()?;
+        // A bit says it is the one before it again.
+        let bytes = if from.bool()? { before } else { from.run()? };
+        before = bytes;
         if session.heard.is_none_or(|heard| at > heard) {
             session.heard = Some(at);
             session.intents.push_back((at, bytes.to_vec()));
