@@ -28,8 +28,6 @@ pub const WIND: Vec2 = Vec2::new(0.86, 0.5);
 pub const KNIGHT: Vec2 = Vec2::new(0.0, 0.0);
 pub const FOE: Vec2 = Vec2::new(1.9, -1.3);
 pub const TARGET: Vec2 = Vec2::new(-3.2, -2.5);
-/// The exposure: dusk's, between the ruin's night (8) and the forest's day (9).
-const EV100: f32 = 7.5;
 
 pub fn stage() -> Stage {
     Stage {
@@ -67,19 +65,16 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, crate::motes::face_halo);
 }
 
-/// The ruin's camera on the middle of the fight, with a dusk haze over the far marsh.
-fn camera(mut commands: Commands, args: Res<crate::Args>, mut images: ResMut<Assets<Image>>) {
+/// The ruin's camera on the middle of the fight, its exposure and the dusk haze over the far
+/// marsh the biome's light preset's.
+fn camera(
+    mut commands: Commands,
+    args: Res<crate::Args>,
+    light: Res<crate::kit::light::Light>,
+    mut images: ResMut<Assets<Image>>,
+) {
     let mid = (KNIGHT * 2.0 + FOE + TARGET) / 4.0;
     let focus = mid.extend(land::shape(mid).max(LEVEL) + 1.2).xzy();
-    let cam = crate::ruin::camera::arpg(&mut commands, &args, &mut images, focus, EV100);
-    let d = crate::ruin::camera::DISTANCE;
-    commands.entity(cam).insert(DistanceFog {
-        color: light::HAZE,
-        directional_light_color: light::SUN_HAZE,
-        directional_light_exponent: 12.0,
-        falloff: FogFalloff::Linear {
-            start: d - 3.0,
-            end: d + 34.0,
-        },
-    });
+    let cam = crate::ruin::camera::arpg(&mut commands, &args, &mut images, focus, light.ev100);
+    light.camera(&mut commands, cam, crate::ruin::camera::DISTANCE);
 }

@@ -164,13 +164,14 @@ pub fn edge() -> Edge {
 /// as dashes three times as long across the lane (at 4 cm, 0.6 of it, and full gain it was
 /// "a field of blown white speckles, like snow", the judge 2026-11-06); the fire, the
 /// lantern and the wisps streak the same way (vr-pond-slash's pond).
-pub fn sheen() -> Sheen {
-    use super::light::{MOON, MOON_COLOUR, MOON_LUX};
+/// The moon is the biome's key light (its preset).
+pub fn sheen(light: &crate::kit::light::Light) -> Sheen {
+    let c = light.key.colour.color().to_linear();
     Sheen {
-        toward: MOON.extend(8.0),
+        toward: light.key.toward.vector().extend(8.0),
         colour: Vec4::new(6.0, 33.0, 80.0, 0.3),
         lane: Vec4::new(0.1, 0.025, 0.09, 0.3),
-        moon: (MOON_COLOUR * MOON_LUX).extend(0.4),
+        moon: (Vec3::new(c.red, c.green, c.blue) * light.key.lux).extend(0.4),
         soft: Vec4::new(160.0, 0.5, 3.0, 0.0),
     }
 }
@@ -179,6 +180,7 @@ fn spawn(
     mut commands: Commands,
     asset: Res<AssetServer>,
     land: Res<Land>,
+    light: Res<crate::kit::light::Light>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut grounds: ResMut<Assets<GroundMaterial>>,
     mut pools: ResMut<Assets<PoolMaterial>>,
@@ -196,7 +198,7 @@ fn spawn(
     );
     commands.spawn((
         Mesh3d(meshes.add(face)),
-        MeshMaterial3d(pools.add(pool::with_sheen(look(), edge(), sheen()))),
+        MeshMaterial3d(pools.add(pool::with_sheen(look(), edge(), sheen(&light)))),
         bevy::light::NotShadowCaster,
     ));
 }

@@ -18,6 +18,8 @@ A still with no window: `cargo run -- --shot out/dusk.png --demo --hour dusk` (`
 
 The second scene, an action RPG's night fight in a ruined court (src/ruin/, experiment iso-art): `cargo run -- --scene ruin` (fixed camera, clips playing), or a still with every body held at its clip's set time: `cargo run -- --scene ruin --shot out/ruin.png`. From the repository root on the render worker: `cargo xtask remote-render --gpu --collect target/job/ruin.png -- cargo run --manifest-path spike/iso/Cargo.toml -- --scene ruin --shot target/job/ruin.png`.
 
+A biome is a data file on the shared kit (src/kit/, D634, experiment iso-kit): `cargo run -- --biome ruin` reads `biomes/ruin.ron` (its layout, its light preset from `biomes/light/`); `--scene ruin|forest|marsh` is the same.
+
 ## What it is
 
 - One fixed orthographic camera, 42° down and turned 28°, never rotated, as the Infinity Engine's painted backgrounds are; drawn live in 3D instead (PBR, cascaded and point-light shadows, SSAO, TAA, bloom, distance haze). Day, dusk (the blue hour) and night (`T`); AgX by day, Tony McMapface at dusk and night, which keeps a fire orange.

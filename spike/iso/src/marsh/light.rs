@@ -1,29 +1,8 @@
-//! Moonrise over the marsh: a cold moon up behind the fight to the north-west keys the
-//! hummocks and rims every body against the warm fire and lantern in front of them, the
-//! water mirrors it as a sheen over the frame's top, and a cold blue sky's fill keeps the
-//! shade under the reeds and trees near black, so the fire, the lantern and the wisps make
-//! the warm and cold pools (vr-pond-slash: p5 0.0036, p50 0.038, p95 0.184).
+//! Moonrise over the marsh: the moon, the sky's fill, the exposure and the far haze are the
+//! biome's light preset (biomes/light/marsh-dusk.ron, kit/light.rs, with why each number);
+//! here, the marsh's ground fog, and the test that keeps the moon's lane on the water.
 
-use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
-
-/// The moon on the ground, in lux, and the sky's fill, in nits: raised with their colours'
-/// turn bluer (iso-art j49) so each lights as brightly as before (luminance 1100 x 0.48 and
-/// 22 x 0.25 of their sRGB 0.6, 0.72, 1 and 0.35, 0.5, 1).
-pub const MOON_LUX: f32 = 1420.0;
-pub const SKY_NITS: f32 = 34.0;
-/// The sky fill's colour (sRGB): cold against the fires' amber, as V Rising's marsh.
-const SKY: Color = Color::srgb(0.22, 0.36, 1.0);
-/// Toward the moon: 42 degrees up behind the fight, left of the camera's line, so its
-/// mirror falls on the far channel's left reach a seventh down the frame, a fifth of the
-/// frame left of the caster, and its lane runs down the water toward the eye clear of the
-/// fight (`light::tests`; at 34 degrees it was over the frame's top and the water read flat,
-/// blind-marsh6; 10 degrees to the right it lay behind the caster and the bolts lost their
-/// contrast, the judge 2026-11-06).
-pub const MOON: Vec3 = Vec3::new(-0.492, 0.670, -0.556);
-/// Its light's colour (linear rgb, the key's and the lane's: sRGB 0.49, 0.64, 1; was 0.6,
-/// 0.72, 1 to iso-art j48).
-pub const MOON_COLOUR: Vec3 = Vec3::new(0.2, 0.37, 1.0);
 
 /// The marsh's ground fog: thin, cold and low, so it does not grey the deep blue water and
 /// the fight (the default's grey cards cut the frame's saturation, iso-art j24).
@@ -34,38 +13,13 @@ pub fn fog() -> crate::ruin::ambient::fog::FogLook {
         height: (0.05, 0.35),
     }
 }
-/// The haze over the far marsh, and its colour toward the moon.
-pub const HAZE: Color = Color::srgb(0.05, 0.07, 0.12);
-pub const SUN_HAZE: Color = Color::srgb(0.2, 0.26, 0.38);
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, spawn);
 }
 
-fn spawn(mut commands: Commands) {
-    commands.insert_resource(GlobalAmbientLight {
-        color: SKY,
-        brightness: SKY_NITS,
-        ..default()
-    });
-    commands.spawn((
-        DirectionalLight {
-            color: Color::linear_rgb(MOON_COLOUR.x, MOON_COLOUR.y, MOON_COLOUR.z),
-            illuminance: MOON_LUX,
-            shadow_maps_enabled: true,
-            soft_shadow_size: Some(1.0),
-            ..default()
-        },
-        CascadeShadowConfigBuilder {
-            num_cascades: 2,
-            minimum_distance: 1.0,
-            first_cascade_far_bound: 30.0,
-            maximum_distance: 60.0,
-            overlap_proportion: 0.2,
-        }
-        .build(),
-        Transform::from_translation(MOON).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
+fn spawn(mut commands: Commands, light: Res<crate::kit::light::Light>) {
+    light.spawn(&mut commands);
 }
 
 #[cfg(test)]
@@ -85,10 +39,13 @@ mod tests {
         let t = (FOV.to_radians() / 2.0).tan();
         // A flat face's mirror of the view ray through the frame at (sx, sy), -1..1.
         let ray = |sx: f32, sy: f32| (f + right * sx * t * 16.0 / 9.0 + up * sy * t).normalize();
-        let mirror = |d: Vec3| (d - 2.0 * d.dot(Vec3::Y) * Vec3::Y).dot(MOON);
+        // Toward the moon, as biomes/marsh.ron lights it.
+        let biome = crate::kit::biome::Biome::load("marsh").unwrap();
+        let moon = biome.light().unwrap().key.toward.vector();
+        let mirror = |d: Vec3| (d - 2.0 * d.dot(Vec3::Y) * Vec3::Y).dot(moon);
         assert!(
-            (MOON.length() - 1.0).abs() < 0.01,
-            "MOON is not a unit vector"
+            (moon.length() - 1.0).abs() < 0.01,
+            "the marsh's key light's toward is not a unit vector"
         );
         // The brightest point of the frame's mirror, on a grid.
         let (mut best, mut at) = (-1.0, (0.0, 0.0));

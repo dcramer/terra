@@ -110,7 +110,9 @@ fn canopy_map(
     use bevy::asset::RenderAssetUsages;
     use bevy::image::ImageSampler;
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-    let wooded = land.filter(|_| !args.ruin && !args.marsh);
+    use crate::kit::biome::Layout;
+    let open = matches!(args.layout, Some(Layout::Ruin | Layout::Marsh));
+    let wooded = land.filter(|_| !open);
     let trees = wooded.as_ref().map(|l| crate::forest::tree_spots(l));
     let mut data = Vec::with_capacity((TEXELS * TEXELS) as usize);
     for y in 0..TEXELS {

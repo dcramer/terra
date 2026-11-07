@@ -28,24 +28,6 @@ pub const SECOND: Vec2 = Vec2::new(0.25, 6.6);
 /// What the camera looks at: the fight a little left of the middle, so the pond's north
 /// shore fills the lower right and the moose's bank the upper right.
 const FOCUS: Vec2 = Vec2::new(4.6, 4.8);
-/// The forest's day over the glade's (scene.rs's `light_the_hour`). The glade's (sun 1,200
-/// lux, sky 450 nits, EV 9, AgX) left the still murky: luma p50 0.046, p95 0.12,
-/// saturation 0.17, bright share 0.007, against the day refs' (le-river-beam,
-/// poe2-shock-nova, le-desert-fight) 0.06 to 0.10, 0.30 to 0.40, 0.27 to 0.47 and 0.03 to
-/// 0.11. A sun of 2,600 alone moved p95 only to 0.13 (the floor is dark grass and soil), so
-/// the exposure opens a stop, the sky's fill drops so the shade stays dark, Tony McMapface
-/// replaces AgX (which greys greens and a flame) and the grade adds saturation. At r4 (EV 8,
-/// sun 3,200, sky 330) the frame still graded as dusk: p50 0.044, p95 0.216, saturation
-/// 0.23 (judge forest-r4), the fight's ground in an oak's shade; half a stop more, a
-/// brighter sun over a darker sky fill, the fight in a sun break (clearing.rs).
-const EV100: f32 = 7.5;
-const SUN_LUX: f32 = 4_200.0;
-const SKY_NITS: f32 = 300.0;
-/// 1.45 at r1 made the sunlit grass acid lime (judge forest-r1, both judges); 1.3 keeps
-/// the shade's greens. The midtones get their own (the greens' band) over it.
-const SATURATION: f32 = 1.3;
-/// 1.15 left saturation 0.254 (the day refs' 0.27 to 0.47).
-const MID_SATURATION: f32 = 1.25;
 
 pub fn stage() -> Stage {
     Stage {
@@ -102,60 +84,58 @@ fn smoulder(
     }
 }
 
-/// The forest's day, set after the glade's hour has set its own (scene.rs, in Update).
+/// The forest's light, its preset's (biomes/light/forest-day.ron), set over the glade's at
+/// that hour after the glade's hour has set its own (scene.rs, in Update). At another hour
+/// (`--hour`) the glade's stands.
 fn day(
     hour: Res<crate::scene::Hour>,
-    mut sun: Query<&mut DirectionalLight>,
+    light: Res<crate::kit::light::Light>,
+    mut sun: Query<(&mut DirectionalLight, &mut Transform)>,
     mut cams: Query<(
         &mut bevy::camera::Exposure,
         &mut bevy::core_pipeline::tonemapping::Tonemapping,
     )>,
+    mut fog: Query<&mut bevy::pbr::DistanceFog>,
     mut ambient: ResMut<GlobalAmbientLight>,
 ) {
-    if !hour.is_changed() || *hour != crate::scene::Hour::Day {
+    if !hour.is_changed() || *hour != light.hour.scene() {
         return;
     }
-    for mut s in &mut sun {
-        s.illuminance = SUN_LUX;
+    for (mut s, mut tr) in &mut sun {
+        s.color = light.key.colour.color();
+        s.illuminance = light.key.lux;
+        *tr = light.key.toward.transform();
     }
     for (mut e, mut t) in &mut cams {
-        e.ev100 = EV100;
-        *t = bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface;
+        e.ev100 = light.ev100;
+        *t = light.curve.tonemapping();
     }
-    ambient.brightness = SKY_NITS;
+    if let Some(h) = light.haze {
+        for mut f in &mut fog {
+            f.color = h.colour.color();
+        }
+    }
+    ambient.color = light.sky.colour.color();
+    ambient.brightness = light.sky.nits;
 }
 
-/// The ruin's camera, on the fight.
-fn camera(mut commands: Commands, args: Res<crate::Args>, mut images: ResMut<Assets<Image>>) {
+/// The ruin's camera, on the fight, its exposure, grade and haze the preset's.
+fn camera(
+    mut commands: Commands,
+    args: Res<crate::Args>,
+    light: Res<crate::kit::light::Light>,
+    mut images: ResMut<Assets<Image>>,
+) {
     let focus = FOCUS.extend(shape(FOCUS) + 1.2).xzy();
-    let cam = crate::ruin::camera::arpg(&mut commands, &args, &mut images, focus, EV100);
-    let d = crate::ruin::camera::DISTANCE;
-    commands.entity(cam).insert((
-        // The glade's camp fire lights on its casters' layer (camp::FIRE_CASTS).
-        bevy::camera::visibility::RenderLayers::from_layers(&[0, crate::camp::FIRE_CASTS]),
-        // The glade's haze, its colour the hour's (scene.rs), over the land beyond the fight.
-        bevy::pbr::DistanceFog {
-            color: Color::NONE,
-            directional_light_color: Color::NONE,
-            falloff: bevy::pbr::FogFalloff::Linear {
-                start: d - 2.0,
-                end: d + 70.0,
-            },
-            ..default()
-        },
-        bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
-        bevy::render::view::ColorGrading {
-            global: bevy::render::view::ColorGradingGlobal {
-                post_saturation: SATURATION,
-                ..default()
-            },
-            midtones: bevy::render::view::ColorGradingSection {
-                saturation: MID_SATURATION,
-                ..default()
-            },
-            ..default()
-        },
-    ));
+    let cam = crate::ruin::camera::arpg(&mut commands, &args, &mut images, focus, light.ev100);
+    // The glade's camp fire lights on its casters' layer (camp::FIRE_CASTS).
+    commands
+        .entity(cam)
+        .insert(bevy::camera::visibility::RenderLayers::from_layers(&[
+            0,
+            crate::camp::FIRE_CASTS,
+        ]));
+    light.camera(&mut commands, cam, crate::ruin::camera::DISTANCE);
 }
 
 #[cfg(test)]

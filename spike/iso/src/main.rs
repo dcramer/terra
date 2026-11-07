@@ -44,12 +44,12 @@ pub struct Args {
     pub zoom: f32,
     pub focus: Vec2,
     pub size: (u32, u32),
-    /// `--scene glade|ruin`: the party's glade (the default) or the ARPG's ruin (ruin/).
-    pub ruin: bool,
-    /// `--scene forest`: the temperate wood by day at the ruin's camera (wood/).
-    pub forest: bool,
-    /// `--scene marsh`: the marsh at dusk at the ruin's camera (marsh/).
-    pub marsh: bool,
+    /// `--biome NAME`: the biome file `biomes/NAME.ron` (kit/, D634), whose layout says
+    /// which scene runs; `--scene ruin|forest|marsh` is the same, `--scene glade` (or none)
+    /// the party's glade. Its light preset sets the hour unless `--hour` says.
+    pub biome: Option<String>,
+    /// The biome's layout, once its file is read (`None`: the glade).
+    pub layout: Option<kit::biome::Layout>,
     /// `--film N` with `--shot dir/f.jpg`: N frames from `--frames` on, at a fixed 30 per
     /// second of game time, saved as dir/f-0000.jpg on; clips play rather than hold.
     pub film: u32,
@@ -61,7 +61,7 @@ pub struct Args {
 /// A film's frame rate in game time, whatever the machine draws.
 pub const FILM_FPS: f64 = 30.0;
 
-fn args() -> Args {
+fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
     let mut a = Args {
         shot: None,
         frames: 300,
@@ -71,12 +71,12 @@ fn args() -> Args {
         zoom: 14.0,
         focus: Vec2::new(-1.0, 1.0),
         size: (1920, 1080),
-        ruin: false,
-        forest: false,
-        marsh: false,
+        biome: None,
+        layout: None,
         film: 0,
         asset: None,
     };
+    let mut hour = None;
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
         let mut val = || it.next().expect("a value after the flag");
@@ -86,21 +86,19 @@ fn args() -> Args {
             "--film" => a.film = val().parse().unwrap(),
             "--asset" => a.asset = Some(val()),
             "--demo" => a.demo = true,
-            "--scene" => match val().as_str() {
-                "ruin" => a.ruin = true,
-                // The forest is by day unless `--hour` says otherwise after it.
-                "forest" => (a.forest, a.hour) = (true, scene::Hour::Day),
-                "marsh" => a.marsh = true,
-                _ => {}
-            },
+            "--biome" => a.biome = Some(val()),
+            "--scene" => {
+                let name = val();
+                a.biome = (name != "glade").then_some(name);
+            }
             "--demo-at" => a.demo_at = val().parse().unwrap(),
             "--zoom" => a.zoom = val().parse().unwrap(),
             "--hour" => {
-                a.hour = match val().as_str() {
+                hour = Some(match val().as_str() {
                     "day" => scene::Hour::Day,
                     "night" => scene::Hour::Night,
                     _ => scene::Hour::Dusk,
-                }
+                })
             }
             "--focus" => {
                 let v: Vec<f32> = val().split(',').map(|s| s.parse().unwrap()).collect();
@@ -113,11 +111,27 @@ fn args() -> Args {
             other => panic!("unknown flag {other}: see the Args doc in main.rs"),
         }
     }
-    a
+    let loaded = biome(&mut a);
+    a.hour = hour.unwrap_or(a.hour);
+    (a, loaded)
+}
+
+/// The biome `--biome` names and its light, setting the run's layout and hour (the light's);
+/// a file that does not read stops the run with what to fix (kit/mod.rs).
+fn biome(args: &mut Args) -> Option<(kit::biome::Biome, kit::light::Light)> {
+    let name = args.biome.as_deref()?;
+    let read = kit::biome::Biome::load(name).and_then(|b| Ok((b.light()?, b)));
+    let (light, biome) = read.unwrap_or_else(|e| {
+        eprintln!("--biome {name}: {e}");
+        std::process::exit(2)
+    });
+    args.hour = light.hour.scene();
+    args.layout = Some(biome.layout);
+    Some((biome, light))
 }
 
 fn main() {
-    let args = args();
+    let (args, loaded) = args();
     let window = if args.shot.is_some() {
         None
     } else {
@@ -155,18 +169,22 @@ fn main() {
         app.add_plugins((mipmaps::plugin, view::plugin)).run();
         return;
     }
-    if args.ruin {
+    use kit::biome::Layout;
+    if let Some((biome, light)) = loaded {
+        app.insert_resource(biome).insert_resource(light);
+    }
+    if args.layout == Some(Layout::Ruin) {
         app.add_plugins((mipmaps::plugin, rim::plugin, ruin::plugin))
             .run();
         return;
     }
-    if args.marsh {
+    if args.layout == Some(Layout::Marsh) {
         // The glade's ground material, then the marsh's own land over it.
         app.add_plugins((mipmaps::plugin, terrain::plugin, rim::plugin, marsh::plugin))
             .run();
         return;
     }
-    if args.forest {
+    if args.layout == Some(Layout::Forest) {
         // The glade's land, wood, pond and beasts without its party, camera and orders.
         app.add_plugins((
             mipmaps::plugin,

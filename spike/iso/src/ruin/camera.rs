@@ -25,16 +25,21 @@ pub const YAW: f32 = 20.0;
 pub const DISTANCE: f32 = 19.0;
 /// What the camera looks at: the middle of the fight, between the knight and the ogre.
 pub const FOCUS: Vec3 = Vec3::new(0.7, 1.2, -0.6);
-/// The exposure (a night's: the moonlit stone dark, the firelight's pools bright).
-pub const EV100: f32 = 8.0;
 
 pub fn offset() -> Vec3 {
     let (p, y) = (PITCH.to_radians(), YAW.to_radians());
     Vec3::new(p.cos() * y.sin(), p.sin(), p.cos() * y.cos()) * DISTANCE
 }
 
-pub fn spawn(mut commands: Commands, args: Res<Args>, mut images: ResMut<Assets<Image>>) {
-    arpg(&mut commands, &args, &mut images, FOCUS, EV100);
+/// The ruin's camera, its exposure and tone curve the biome's light preset's.
+pub fn spawn(
+    mut commands: Commands,
+    args: Res<Args>,
+    light: Res<crate::kit::light::Light>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let cam = arpg(&mut commands, &args, &mut images, FOCUS, light.ev100);
+    light.camera(&mut commands, cam, DISTANCE);
 }
 
 /// The ARPG's camera on `focus`, at exposure `ev100`, as the ruin's; the forest's too.
