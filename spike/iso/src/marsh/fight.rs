@@ -46,5 +46,14 @@ fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
             at,
             once: false,
         });
+        if name == "knight" {
+            // In a film he wades in from the front left (ruin/walk.rs).
+            commands.entity(body).insert(crate::ruin::walk::WalkIn {
+                from: Vec2::new(-1.6, 3.4),
+                to: place,
+                floor: crate::ruin::walk::Floor::Shape(|p| footing(p, 0.35)),
+                fight: true,
+            });
+        }
     }
 }

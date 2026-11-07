@@ -7,7 +7,7 @@ use crate::scene::model;
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins(super::held::plugin)
+    app.add_plugins((super::held::plugin, super::walk::plugin))
         .add_systems(Update, (cast, pose));
 }
 
@@ -110,6 +110,16 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
         });
         if name != "tree-monster" {
             rim(&mut commands, place);
+        }
+        if name == "knight" {
+            // In a film he walks in from the front of the court, clear of the pool, the
+            // brazier, the skull and the barrels (walk.rs).
+            commands.entity(body).insert(super::walk::WalkIn {
+                from: Vec2::new(0.8, 4.0),
+                to: place,
+                floor: super::walk::Floor::Flat(super::ground::TOP),
+                fight: true,
+            });
         }
     }
 }

@@ -19,6 +19,7 @@ mod life;
 mod light;
 mod litter;
 mod scatter;
+pub mod walk;
 mod walls;
 mod water;
 

@@ -51,5 +51,15 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
                 once,
             },
         ));
+        if name == "knight" {
+            // In a film he walks in up the clearing past the fallen one, clear of the
+            // two creatures on his left (ruin/walk.rs).
+            commands.entity(body).insert(crate::ruin::walk::WalkIn {
+                from: Vec2::new(1.6, 8.6),
+                to: place,
+                floor: crate::ruin::walk::Floor::Shape(shape),
+                fight: true,
+            });
+        }
     }
 }

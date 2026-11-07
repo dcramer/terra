@@ -173,9 +173,9 @@
             // the pavement in the sodium lamp's pool at x 8, one in the BAR's cyan pool, each
             // edged by a faint cold rim (about a third of the ruin's fighters' at this ev).
             (model: "models/iso/knight.glb", side: North, line: Wall, at: [6.8], out: 1.4,
-             turn: 75.0, pose: ("walk", 0.4), rim: 0.35),
+             turn: 75.0, pose: ("walk", 0.4), rim: 0.35, stroll: true),
             (model: "models/iso/knight.glb", side: North, line: Wall, at: [-2.4], out: 1.5,
-             turn: -60.0, pose: ("walk", 1.5), rim: 0.35),
+             turn: -60.0, pose: ("walk", 1.5), rim: 0.35, stroll: true),
         ],
     ),
     light: (preset: "city-night-rain"),

@@ -115,6 +115,7 @@ fn blow(
     mut cues: ResMut<Cues>,
     children: Query<&Children>,
     mut players: Query<&mut AnimationPlayer>,
+    walking: Option<Res<crate::ruin::walk::Walking>>,
 ) {
     if clock.still {
         return;
@@ -137,9 +138,13 @@ fn blow(
     else {
         return;
     };
+    // While the hero walks in his clip is the walk's: no blow, and his attack counts from
+    // its start once he stands (walk.rs).
+    let walks = walking.is_some_and(|w| w.now);
     let last = hit.seek;
-    hit.seek = seek;
-    let crossed = (last < BLOW && seek >= BLOW) || (seek < last && (last < BLOW || seek >= BLOW));
+    hit.seek = if walks { 0.0 } else { seek };
+    let crossed = !walks
+        && ((last < BLOW && seek >= BLOW) || (seek < last && (last < BLOW || seek >= BLOW)));
     let speed = if crossed && !hit.stopped {
         hit.at = clock.t;
         cues.blow = clock.t;

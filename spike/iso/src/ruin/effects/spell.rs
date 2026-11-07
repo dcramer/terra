@@ -219,12 +219,18 @@ fn fly(
     )>,
     mut meshes: ResMut<Assets<Mesh>>,
     stage: Res<Stage>,
+    walking: Option<Res<crate::ruin::walk::Walking>>,
 ) {
     let stage = &*stage;
     let p = if clock.still {
         STILL
     } else {
-        clock.t.rem_euclid(PERIOD)
+        // None in the air while the hero walks in; his volleys count from when he stood
+        // (walk.rs; 0 when he never walked).
+        match walking.as_deref() {
+            Some(w) if w.now => -1.0,
+            w => (clock.t - w.map_or(0.0, |w| w.stood)).rem_euclid(PERIOD),
+        }
     };
     for (Bolt(i, part), tr, light, mark) in &mut parts {
         let (s, struck) = flight(*i, p);

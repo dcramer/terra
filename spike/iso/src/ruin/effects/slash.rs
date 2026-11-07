@@ -253,9 +253,12 @@ fn show(
     players: Query<&AnimationPlayer>,
     mut parts: Query<(&Part, Option<&mut Transform>, Option<&mut PointLight>)>,
     mut meshes: ResMut<Assets<Mesh>>,
+    walking: Option<Res<crate::ruin::walk::Walking>>,
 ) {
+    // No trail while the hero walks in to where it was baked (walk.rs).
+    let walks = walking.is_some_and(|w| w.now);
     let t = match (&blade.bake, blade.player) {
-        (Bake::Done, Some(p)) => players
+        (Bake::Done, Some(p)) if !walks => players
             .get(p)
             .ok()
             .and_then(|p| p.playing_animations().next().map(|(_, a)| a.seek_time()))

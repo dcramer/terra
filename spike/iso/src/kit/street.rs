@@ -192,7 +192,8 @@ pub enum Line {
 /// from facing the road, scaled `scale`; a rigged one (a person on the pavement) held in its
 /// `pose`, a clip of its GLB by name and the time in it (the ruin's `Pose`), and edged by
 /// `rim` times the fighters' cold rim band (rim.rs; none at 0), so a dark figure reads off
-/// the dark wet street as the ARPGs lift theirs.
+/// the dark wet street as the ARPGs lift theirs. A `stroll`ing one walks on down the
+/// pavement the way it faces through a film (ruin/walk.rs), its pose its walk; a still holds it.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Prop {
@@ -210,6 +211,8 @@ pub struct Prop {
     pub pose: Option<(String, f32)>,
     #[serde(default)]
     pub rim: f32,
+    #[serde(default)]
+    pub stroll: bool,
 }
 
 fn deep() -> f32 {
@@ -417,6 +420,7 @@ pub fn plugin(app: &mut App) {
         super::weather::plugin,
         super::facade::plugin,
         super::contact::plugin,
+        crate::ruin::walk::plugin,
     ))
     .add_systems(Startup, (spawn, strew))
     // Rigged props stand in their clips (the ruin's poser).
@@ -632,6 +636,16 @@ fn spawn(
                     clip: Box::leak(clip.clone().into_boxed_str()),
                     at: *time,
                     once: false,
+                });
+            }
+            if p.stroll {
+                // Along the street (x) the way it faces, past the film's end.
+                let way = Vec2::X * yaw.sin().signum();
+                commands.entity(body).insert(crate::ruin::walk::WalkIn {
+                    from: at.xz(),
+                    to: at.xz() + way * 30.0,
+                    floor: crate::ruin::walk::Floor::Flat(at.y),
+                    fight: false,
                 });
             }
         }
