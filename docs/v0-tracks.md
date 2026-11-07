@@ -73,7 +73,7 @@ The largest risk. The design is [netcode.md](netcode.md) (D34, D651, D652, D636)
 - **Need**:
   - The design built (netcode.md): written 2026-11-06 for the developers to read (D49); D34 stands on its survey.
   - netcode.md's rest: the game making a host or a link from the title screen and from a scripted run, a guest's figure, the host's own player a client (step 4), and the fight, pack and creatures across it (step 5). The same server running with no window is for scripted runs now (D51); offering it to players comes later.
-  - **Always a client.** Even solo, the drawn game is a client of a server. Otherwise there are two code paths.
+  - **Always a client.** Even solo, the drawn game is a client of a server. Otherwise there are two code paths. Until the instance host exists a hosted world is its own server (D638, Leaning: the developers may ask for the instance host first).
   - **Two realms at once.** One player can be in each realm, so a host's server runs both while its own client draws one. instances.md's split (a headless `App` per instance on the server, the client's world in the main `World`) means a host holds its realm twice. Measure that memory before building on it.
   - Sending by area, a snapshot then changes, others shown between ticks, late join, leaving and rejoining mid-fight, and a version check on connect.
   - Each player's character kept by the server (D592) under an identity, a key kept on the player's machine. Direct address first, Steam's relay later (D34). When the host leaves, the session ends for everyone with a plain message and the world is saved, as the developers confirmed; there is no handing over to another player.

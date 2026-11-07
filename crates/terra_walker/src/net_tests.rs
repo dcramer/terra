@@ -10,7 +10,7 @@ use terra_motion::mover::net::{Own, Shown};
 use terra_net::client::{Client, Event as Heard};
 use terra_net::clock::Clock;
 use terra_net::identity::Identity;
-use terra_net::transport::loopback::{Conditions, LoopbackClient, Network};
+use terra_net::transport::loopback::{Conditions, Network};
 use terra_world::flora;
 use terra_world::planet::Planet;
 
@@ -64,7 +64,7 @@ fn hosted() -> (World, Entity, Network) {
 
 /// A client with no game behind it: it says hello and, each tick, what it holds down.
 struct Bot {
-    wire: LoopbackClient,
+    wire: Box<dyn terra_net::transport::ClientTransport>,
     client: Client,
     clock: Clock,
     heard: Vec<Heard>,
@@ -73,8 +73,12 @@ struct Bot {
 
 impl Bot {
     fn join(network: &Network, holds: Option<Action>) -> Bot {
+        Bot::over(Box::new(network.connect(Conditions::PERFECT)), holds)
+    }
+
+    fn over(wire: Box<dyn terra_net::transport::ClientTransport>, holds: Option<Action>) -> Bot {
         let mut bot = Bot {
-            wire: network.connect(Conditions::PERFECT),
+            wire,
             client: Client::new(),
             clock: Clock::default(),
             heard: Vec::new(),
@@ -90,6 +94,8 @@ impl Bot {
     }
 
     fn tick(&mut self) {
+        use terra_net::transport::ClientTransport;
+        self.wire.advance(super::TICK);
         let from = self.heard.len();
         self.client.poll(&mut self.wire, &mut self.heard);
         for heard in &self.heard[from..] {
@@ -460,4 +466,42 @@ fn a_joined_game_with_another_mover_fails_the_check_and_is_held_to_the_host() {
         .filter_map(|(tick, predicted)| Some(predicted.distance(*together.truth.get(tick)?)));
     let worst = worst.skip(WARM as usize).fold(0.0, f64::max);
     assert!(worst < 1.0, "{worst} m from the host at worst");
+}
+
+/// The same host over this machine's own sockets (D34): the transport's time is the tick's,
+/// said by `hear`, so a hosted game needs nothing more than a UDP server for its wire.
+#[test]
+fn a_guest_joins_a_hosted_world_over_real_sockets() {
+    use terra_net::transport::udp::{UdpClient, UdpServer};
+    let (mut world, _, _) = hosted();
+    let wire = UdpServer::bind((std::net::Ipv4Addr::LOCALHOST, 0).into(), 4).expect("a free port");
+    let address = wire.address();
+    let start = world
+        .resource::<Planet>()
+        .ground_at(Vec3::new(0.0, 2100.0, 3.0));
+    world.insert_resource(Host::new(
+        Config::new(VERSION),
+        parts(),
+        Box::new(wire),
+        start,
+        Vec::new(),
+    ));
+    let mut bot = Bot::over(
+        Box::new(UdpClient::connect(address, 7).expect("a socket")),
+        Some(Action::Forward),
+    );
+    for _ in 0..200 {
+        bot.tick();
+        world.run_system_once(hear).unwrap();
+        world.run_system_once(walk).unwrap();
+        world.run_system_once(tell).unwrap();
+        // The machine's own sockets deliver at once, given a moment.
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let mut guests = world.query::<(&Guest, &Transform)>();
+    let (_, transform) = guests.single(&world).expect("one guest");
+    let walked = (transform.translation - start).dot(Vec3::X);
+    assert!(walked > 5.0, "the guest walked {walked} m");
+    let (mine, _) = bot.mine_and_other();
+    assert!(mine.part(OWN).is_some());
 }

@@ -121,6 +121,7 @@ impl Link {
 
     fn listen(&mut self, world: &mut World) {
         let mut heard = std::mem::take(&mut self.heard);
+        self.wire.advance(super::TICK);
         self.client.poll(&mut self.wire, &mut heard);
         for event in heard.drain(..) {
             match &event {

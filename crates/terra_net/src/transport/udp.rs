@@ -3,8 +3,7 @@
 //! direct address; Steam's relay is `renet_steam` behind the same seam, later.
 //!
 //! Neither end reads a clock (a shared crate's rule): the caller says how much time has
-//! passed ([`UdpServer::advance`], [`UdpClient::advance`]), as it does for the in-memory
-//! network. The connection is netcode's "unsecure" kind: who a player is, is proven above
+//! passed (the transports' `advance`), as it does for the in-memory network. The connection is netcode's "unsecure" kind: who a player is, is proven above
 //! the transport (D592), not by it.
 
 use super::{ClientTransport, FromClients, FromServer, Lane, Peer, ServerTransport};
@@ -91,22 +90,6 @@ impl UdpServer {
     pub fn address(&self) -> SocketAddr {
         self.netcode.addresses()[0]
     }
-
-    /// Time has passed: resends and timeouts run on it, and the socket is read.
-    pub fn advance(&mut self, elapsed: Duration) {
-        self.now += elapsed;
-        self.renet.update(elapsed);
-        // A socket's error on one packet is that packet lost, which the lanes already bear.
-        let _ = self.netcode.update(elapsed, &mut self.renet);
-        let now = self.now;
-        let renet = &mut self.renet;
-        self.leaving.retain(|&(peer, at)| {
-            if at <= now {
-                renet.disconnect(peer);
-            }
-            at > now
-        });
-    }
 }
 
 impl ServerTransport for UdpServer {
@@ -140,6 +123,22 @@ impl ServerTransport for UdpServer {
 
     fn flush(&mut self) {
         self.netcode.send_packets(&mut self.renet);
+    }
+
+    /// Resends and timeouts run on it, and the socket is read.
+    fn advance(&mut self, elapsed: Duration) {
+        self.now += elapsed;
+        self.renet.update(elapsed);
+        // A socket's error on one packet is that packet lost, which the lanes already bear.
+        let _ = self.netcode.update(elapsed, &mut self.renet);
+        let now = self.now;
+        let renet = &mut self.renet;
+        self.leaving.retain(|&(peer, at)| {
+            if at <= now {
+                renet.disconnect(peer);
+            }
+            at > now
+        });
     }
 }
 
@@ -177,12 +176,6 @@ impl UdpClient {
     pub fn connected(&self) -> bool {
         self.renet.is_connected()
     }
-
-    /// Time has passed, as [`UdpServer::advance`].
-    pub fn advance(&mut self, elapsed: Duration) {
-        self.renet.update(elapsed);
-        let _ = self.netcode.update(elapsed, &mut self.renet);
-    }
 }
 
 impl ClientTransport for UdpClient {
@@ -209,6 +202,11 @@ impl ClientTransport for UdpClient {
 
     fn flush(&mut self) {
         let _ = self.netcode.send_packets(&mut self.renet);
+    }
+
+    fn advance(&mut self, elapsed: Duration) {
+        self.renet.update(elapsed);
+        let _ = self.netcode.update(elapsed, &mut self.renet);
     }
 }
 

@@ -31,6 +31,8 @@ use terra_world::tick::Sim;
 /// own player is told it (`mover::net::Own`).
 pub const SHOWN: usize = 0;
 pub const OWN: usize = 1;
+/// A tick, for a transport that keeps time: the systems here run once a tick.
+pub(crate) const TICK: std::time::Duration = std::time::Duration::from_micros(15_625);
 /// The kind of a player's entity.
 pub const PERSON: Kind = Kind(1);
 /// The one room, until realms are instances a server holds several of (instances.md).
@@ -172,6 +174,7 @@ pub fn hear(
 ) {
     let host = &mut *host;
     let mut events = std::mem::take(&mut host.events);
+    host.wire.advance(TICK);
     host.server.poll(&mut host.wire, &mut events);
     for event in events.drain(..) {
         match event {

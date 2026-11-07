@@ -46,6 +46,9 @@ pub trait ServerTransport {
     fn drop_peer(&mut self, peer: Peer);
     /// Puts what was sent on the wire, where a carrier gathers a tick's sends into packets.
     fn flush(&mut self) {}
+    /// Time has passed, for a carrier that keeps its own (resends, timeouts, its socket):
+    /// the caller's to say, since nothing here reads a clock.
+    fn advance(&mut self, _elapsed: std::time::Duration) {}
 }
 
 impl<T: ServerTransport + ?Sized> ServerTransport for Box<T> {
@@ -61,6 +64,9 @@ impl<T: ServerTransport + ?Sized> ServerTransport for Box<T> {
     fn flush(&mut self) {
         (**self).flush();
     }
+    fn advance(&mut self, elapsed: std::time::Duration) {
+        (**self).advance(elapsed);
+    }
 }
 
 /// A client's end of a transport.
@@ -70,6 +76,8 @@ pub trait ClientTransport {
     fn close(&mut self);
     /// As [`ServerTransport::flush`].
     fn flush(&mut self) {}
+    /// As [`ServerTransport::advance`].
+    fn advance(&mut self, _elapsed: std::time::Duration) {}
 }
 
 impl<T: ClientTransport + ?Sized> ClientTransport for Box<T> {
@@ -84,5 +92,8 @@ impl<T: ClientTransport + ?Sized> ClientTransport for Box<T> {
     }
     fn flush(&mut self) {
         (**self).flush();
+    }
+    fn advance(&mut self, elapsed: std::time::Duration) {
+        (**self).advance(elapsed);
     }
 }
