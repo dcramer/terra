@@ -5,10 +5,14 @@
 // 0.21 to 0.54. Started from forest-day's exposure (sun 4,200 lux at EV 7.5 over a 300-nit
 // sky) with the sun lower and warmer for long shadows off the junk, the sky's fill less
 // blue, and a smaller penumbra (a sun's, 0.3 m at the caster) for the hard desert shade.
+// The sun is behind the north fronts (uc-wasteland j3, azimuth -115, from -70): their faces
+// to the road in shade and their shadows across the verge to the kerb, the junk's shadows
+// long toward the camera, as the refs' low sun gives (j2's frame lit from the front had a
+// dark share of 0.03 against the refs' 0.12 to 0.58).
 (
     hour: Day,
     key: (
-        toward: Angles(elevation: 34.0, azimuth: -70.0),
+        toward: Angles(elevation: 34.0, azimuth: -115.0),
         colour: Srgb(1.0, 0.9, 0.76),
         lux: 4200.0,
         shadows: (cascades: 2, first: 30.0, far: 70.0, soft: 0.3),
