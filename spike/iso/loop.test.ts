@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { blindOrder, delta, isChanged, outcome, type Pair, parseBiome, pixelShare, refRanges, type Side, statsLine, testResult, verdict, winnerOf } from "./loop.ts";
+import { blindOrder, delta, isChanged, outcome, type Pair, parseBiome, pixelShare, refRanges, runNotes, type Side, statsLine, testResult, verdict, winnerOf } from "./loop.ts";
 
 const pair = (a: Side, winner?: Side | "same", margin?: Pair["margin"]): Pair => ({ folder: "f", brief: "b", a, winner, margin });
 const changed = (...pairs: Pair[]) => ({ changed: true, pairs });
@@ -93,4 +93,19 @@ test("the spike's tests are read from cargo's log", () => {
   assert.equal(testResult("test result: FAILED. 80 passed; 1 failed;").failed, true);
   assert.equal(testResult("error[E0425]: cannot find value").failed, true);
   assert.equal(testResult("").failed, true, "no tests ran");
+});
+
+test("a run log's budgets and shader errors reach the round", () => {
+  const log = [
+    "\x1b[2m2026-11-07T08:45:16.36Z\x1b[0m \x1b[33m WARN\x1b[0m bevy_audio: No audio device found.",
+    "weather budget (neon-street): rain 5600 streaks",
+    "\x1b[2m2026-11-07T08:45:16.91Z\x1b[0m \x1b[33m WARN\x1b[0m bevy_shader::shader_cache: Shader `w.wesl` has an unresolved import:",
+    "error: module not found: `bevy_pbr::mesh_view_bindings`",
+    "\x1b[2m2026-11-07T08:45:16.97Z\x1b[0m \x1b[33m WARN\x1b[0m bevy_shader::shader_cache: Shader `w.wesl` has an unresolved import:",
+    "error: module not found: `bevy_pbr::mesh_view_bindings`",
+  ].join("\n");
+  assert.deepEqual(runNotes(log), [
+    "weather budget (neon-street): rain 5600 streaks",
+    "WARN bevy_shader::shader_cache: Shader `w.wesl` has an unresolved import: error: module not found: `bevy_pbr::mesh_view_bindings`",
+  ]);
 });

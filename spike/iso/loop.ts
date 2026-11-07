@@ -186,6 +186,24 @@ export function testResult(log: string): { passed: number; failed: boolean } {
   return { passed, failed };
 }
 
+/**
+ * What a biome's run log says that a round should show (iso-kit j20): its budget lines
+ * (`... budget (...)`) and every shader or pipeline error with the line under it (j19's rain
+ * was never drawn, a bad shader import warned only in the run log). Colour codes stripped.
+ */
+export function runNotes(log: string): string[] {
+  const lines = log.split("\n").map((l) => l.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
+  const notes: string[] = [];
+  lines.forEach((l, i) => {
+    if (/ budget \(/.test(l)) notes.push(l);
+    else if (/shader_cache|wgpu.*(error|ERROR)|\bERROR\b/.test(l)) {
+      const s = `${l.replace(/^\S+Z\s+/, "")}${lines[i + 1]?.startsWith("error:") ? ` ${lines[i + 1]}` : ""}`;
+      if (!notes.includes(s)) notes.push(s);
+    }
+  });
+  return notes;
+}
+
 /** A round's name: the day and minute it was shot, `yymmdd-hhmm`. */
 export function stamp(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
@@ -327,6 +345,12 @@ function shoot(argv: string[], say: (l: string) => void) {
   const rnd: Round = { at: new Date().toISOString(), rev, dirty, job, biomes: {} };
   let judges = 0;
   for (const b of biomes) {
+    // Its run log's budgets and shader errors, in the round's log and on screen.
+    const run = join(out, `run-${b}.txt`);
+    for (const n of existsSync(run) ? runNotes(readFileSync(run, "utf8")) : []) {
+      say(`  ${b}: ${n}`);
+      appendFileSync(log, `${b}: ${n}\n`);
+    }
     // Each biome's line also goes in the round's stats.txt, where its judges read it.
     const e = fileBiome(round, b, out, film, h.kept[b], (l) => {
       say(l);
