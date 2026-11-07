@@ -7,7 +7,10 @@
 //! It says `listening` once its realms are made, counts SECONDS from the first connection,
 //! then says, as one line of JSON, where each guest of the first realm stands, how long its
 //! ticks took and how many began late, and what a realm costs with nobody in it (its memory,
-//! and its tick while it still ticks); then it tells everyone the host left.
+//! and its tick while it still ticks); then it tells everyone the host left. A script
+//! steers it by lines on its input (`tools/sandbox/crossing.ts`): `where` says each realm's
+//! guests now, `hand` hands everyone in the first realm on to the second (a crossing), `end`
+//! ends it with its report.
 
 use bevy::prelude::{Transform, With};
 use std::net::Ipv4Addr;
@@ -72,8 +75,17 @@ fn main() {
     let (mut first, mut next) = (None::<Instant>, Instant::now());
     let (mut ticks, mut late, mut spent, mut worst) = (0u32, 0u32, Duration::ZERO, Duration::ZERO);
     let total = Duration::from_secs_f64(seconds);
-    let guests = |host: &mut Instances<UdpServer>| -> Vec<[f32; 3]> {
-        let world = host.realm_mut(0).world_mut();
+    // Lines on its input, from a script that waits on a game.
+    let (lines, asked) = std::sync::mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        for line in std::io::stdin().lines().map_while(Result::ok) {
+            if lines.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    let guests = |host: &mut Instances<UdpServer>, realm: usize| -> Vec<[f32; 3]> {
+        let world = host.realm_mut(realm).world_mut();
         let mut guests = world.query_filtered::<&Transform, With<Guest>>();
         guests
             .iter(world)
@@ -94,13 +106,31 @@ fn main() {
         if first.is_some() {
             (ticks, spent, worst) = (ticks + 1, spent + took, worst.max(took));
         }
-        if first.is_some_and(|first| first.elapsed() >= total) {
+        let mut ended = first.is_some_and(|first| first.elapsed() >= total);
+        for line in asked.try_iter() {
+            match line.trim() {
+                "where" => {
+                    let each: Vec<_> = (0..host.realms())
+                        .map(|realm| guests(&mut host, realm))
+                        .collect();
+                    println!("{}", serde_json::json!({ "where": each }));
+                }
+                "hand" if host.realms() > 1 => {
+                    for peer in host.realm(0).world().resource::<Host>().peers() {
+                        host.hand(peer, 1);
+                    }
+                }
+                "end" => ended = true,
+                other => eprintln!("nethost: \"{other}\" is not where, hand or end"),
+            }
+        }
+        if ended {
             break;
         }
         next += TICK;
         std::thread::sleep(next.saturating_duration_since(Instant::now()));
     }
-    let at: Vec<[f32; 3]> = guests(&mut host);
+    let at: Vec<[f32; 3]> = guests(&mut host, 0);
     let report = serde_json::json!({
         "guests": at,
         "ticks": ticks,

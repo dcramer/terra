@@ -228,6 +228,11 @@ impl Host {
         &self.server
     }
 
+    /// Every connection that has said hello here, with a body yet or not.
+    pub fn peers(&self) -> Vec<Peer> {
+        self.identities.keys().copied().collect()
+    }
+
     /// A connection's player.
     pub fn guest(&self, peer: Peer) -> Option<Entity> {
         self.guests.get(&peer).copied()

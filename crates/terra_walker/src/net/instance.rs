@@ -41,6 +41,8 @@ pub fn walker(app: &mut App) {
     )
     .init_resource::<terra_world::flora::Obstacles>();
     crate::movement::plugin(app);
+    // A realm is one world from its making: what the game makes on entering one is made here.
+    app.init_resource::<crate::movement::Movers>();
     super::hosting(app);
 }
 

@@ -23,6 +23,7 @@ use terra_build_layout::walk::Walking;
 use terra_motion::mover::net::Own;
 use terra_motion::mover::{self, Block, Bodies, Capsule, Capsules, Ground, Kind, Obstacles, Sdf};
 use terra_world::flora;
+use terra_world::instance::InstanceApp;
 use terra_world::planet::{HeightMemo, Planet};
 use terra_world::spatial::SpatialHash;
 use terra_world::tick::Sim;
@@ -55,7 +56,9 @@ const OTHERS: u32 = 1 << 31;
 const MEMO_MOST: usize = 1024;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Movers>()
+    // The world's: what the walk keeps is of one land (its heights as last asked, its props
+    // by place), and another land's would stop a walker where nothing stands.
+    app.init_world_resource::<Movers>()
         .add_message::<Fell>()
         .add_message::<Drowned>()
         .add_systems(FixedUpdate, walk.in_set(Sim::Act));

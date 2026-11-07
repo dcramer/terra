@@ -8,12 +8,13 @@
 
 use super::leaving::Leaving;
 use super::profile::Profile;
-use super::{Title, go};
+use super::{Title, go, leaving};
 use crate::shell::Options;
 use bevy::prelude::*;
 use terra_walker::net::link::{Ended, Link};
 use terra_walker::net::session;
-use terra_world::loading::Screen;
+use terra_world::instance::{Cross, WorldSpec};
+use terra_world::loading::{Screen, Then};
 
 /// The world chosen is to be hosted once it is played.
 #[derive(Resource)]
@@ -27,7 +28,10 @@ pub(super) struct Session;
 pub fn plugin(app: &mut App) {
     app.add_systems(
         OnEnter(Screen::Playing),
-        host.run_if(resource_exists::<Hosting>),
+        (
+            host.run_if(resource_exists::<Hosting>),
+            arrived.run_if(resource_exists::<Crossing>),
+        ),
     )
     .add_systems(
         Update,
@@ -35,6 +39,10 @@ pub fn plugin(app: &mut App) {
             welcomed
                 .run_if(in_state(Screen::Title))
                 .run_if(resource_exists::<Link>),
+            crossed
+                .run_if(in_state(Screen::Playing))
+                .run_if(resource_exists::<Link>)
+                .run_if(not(resource_exists::<Crossing>)),
             ended
                 .run_if(resource_exists::<Ended>)
                 .run_if(resource_exists::<Session>),
@@ -127,6 +135,49 @@ fn welcomed(world: &mut World) {
     let mut options = world.resource_mut::<Options>();
     (options.seed, options.radius_m) = (Some(seed), radius_m);
     go(world, seed);
+}
+
+/// The land of a realm the host handed this game on to is being made (a crossing, D640).
+#[derive(Resource)]
+struct Crossing;
+
+/// The host handed this game on to another of its realms, whose server has greeted it: that
+/// realm's land is made under the loading screen, as a portal crosses (D596), nobody standing
+/// on the land left, the link kept and nothing walked meanwhile (`Link::crossing`).
+fn crossed(world: &mut World) {
+    let Some(realm) = world.resource::<Link>().crossing().map(<[u8]>::to_vec) else {
+        return;
+    };
+    let Some((seed, radius_m)) = session::realm_from(&realm) else {
+        let why =
+            "The world crossed to could not be read: the host runs another version of the game.";
+        world.insert_resource(Leaving(Some(why.into())));
+        return;
+    };
+    info!(
+        "Crossing to the host's realm of seed {seed}, {} km round.",
+        radius_m / 1000.0
+    );
+    let mut options = world.resource_mut::<Options>();
+    (options.seed, options.radius_m) = (Some(seed), radius_m);
+    world.insert_resource(Crossing);
+    world.insert_resource(Then(Screen::Playing));
+    // Under the loading screen from this frame, the clock held, as a world left is (`leaving`).
+    world
+        .resource_mut::<NextState<Screen>>()
+        .set(Screen::Loading);
+    world.resource_mut::<Time<Virtual>>().pause();
+    leaving::nobody(world);
+    let loaded = world.resource::<WorldSpec>().clone();
+    Command::apply(Cross(WorldSpec { seed, ..loaded }), world);
+}
+
+/// The land crossed to is made and played: the link walks again, and takes its body there.
+fn arrived(world: &mut World) {
+    world.remove_resource::<Crossing>();
+    if let Some(mut link) = world.get_resource_mut::<Link>() {
+        link.arrived();
+    }
 }
 
 /// The session ended, and not by this player's choice: on the title screen it says why; a
