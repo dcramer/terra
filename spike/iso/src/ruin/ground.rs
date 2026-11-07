@@ -22,8 +22,8 @@ const EARTH: f32 = -0.03;
 /// The paving's mesh spacing: fine enough that its cut edge reads as broken stone.
 const CELL: f32 = 0.2;
 /// The maps the paving carries for the kit's laid floor (kit/laid.rs `Place`): how mossy
-/// (litter::mossy) and how wet (water::puddled).
-const SITES: [&str; 3] = ["mossy", "puddled", ""];
+/// (litter::mossy), how wet (water::puddled), how near the walls' feet (litter::near_walls).
+const SITES: [&str; 3] = ["mossy", "puddled", "walls"];
 
 /// The biome's laid floor (ruin.ron's `ground.laid`), the ruin's own when run as a scene.
 fn laid(biome: Option<Res<crate::kit::biome::Biome>>) -> crate::kit::biome::Laid {
@@ -166,8 +166,10 @@ fn paving(flags_m: f32) -> Mesh {
                     let speck = fbm(*p * 2.5, 313);
                     let edge = 1.0 - smooth(0.5, 0.95, left);
                     let v = 0.78 * (1.0 - 0.45 * drift - 0.55 * edge) * (0.85 + 0.3 * speck);
+                    // Its alpha the walls' feet, the third map (`SITES`).
+                    let feet = super::litter::near_walls(*p, 1.2);
                     col.push(
-                        Color::srgb(v, v * 0.97, v * 0.93)
+                        Color::srgba(v, v * 0.97, v * 0.93, feet)
                             .to_linear()
                             .to_f32_array(),
                     );

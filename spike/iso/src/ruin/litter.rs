@@ -35,9 +35,14 @@ const STONE_TRIES: f32 = 2.4;
 /// How near the walls `p` is, 1 at their feet to 0 three metres out: the back wall and the
 /// west wall, where the wind leaves leaves and the walls drop stones.
 fn by_walls(p: Vec2) -> f32 {
+    near_walls(p, 3.0)
+}
+
+/// How near the back and west walls `p` is, 1 at their feet to 0 `reach` metres out.
+pub fn near_walls(p: Vec2, reach: f32) -> f32 {
     let back = p.y - (BACK_Z + 0.35);
     let west = p.x - (WEST_X + 0.35);
-    1.0 - smooth(0.0, 3.0, back.min(west).max(0.0))
+    1.0 - smooth(0.0, reach, back.min(west).max(0.0))
 }
 
 /// How clear the fight's floor is kept: 0 at its middle to 1 four metres out.

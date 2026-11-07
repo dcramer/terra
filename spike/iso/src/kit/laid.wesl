@@ -21,6 +21,10 @@ import bevy_pbr::render::{
 struct Params {
     look: vec4<f32>,
     masks: vec4<f32>,
+    vary: vec4<f32>,
+    courses: array<vec4<f32>, 4>,
+    joints: array<vec4<f32>, 4>,
+    shape: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(106)
@@ -81,6 +85,31 @@ fn cell_wall(p: vec2<f32>) -> f32 {
     return f2 - f1;
 }
 
+// Which unit a point of the scan lies in (kit/laid.rs's `unit`, tested there): the tile,
+// the course and the unit along it, a unit cut by the tile's edge counted where it starts.
+fn unit(uv: vec2<f32>) -> vec4<f32> {
+    var tile = floor(uv);
+    let f = uv - tile;
+    let n = u32(laid.shape.x);
+    var r = n - 1u;
+    var found = false;
+    for (var k = 0u; k < n; k++) {
+        if f.y >= laid.courses[k].x {
+            r = k;
+            found = true;
+        }
+    }
+    if !found { tile.y -= 1.0; }
+    let a = vec4<f32>(laid.courses[r].yzw, laid.joints[r].x);
+    let b = vec3<f32>(laid.joints[r].yzw);
+    var c = dot(step(a, vec4<f32>(f.x)), vec4<f32>(1.0)) + dot(step(b, vec3<f32>(f.x)), vec3<f32>(1.0));
+    if c < 0.5 {
+        tile.x -= 1.0;
+        c = dot(step(a, vec4<f32>(1.5)), vec4<f32>(1.0)) + dot(step(b, vec3<f32>(1.5)), vec3<f32>(1.0));
+    }
+    return vec4<f32>(tile, f32(r), c);
+}
+
 // A mask's weight at the fragment (kit/laid.rs's `source`).
 fn source(s: f32, in: VertexOutput) -> f32 {
     switch u32(s) {
@@ -96,7 +125,7 @@ fn source(s: f32, in: VertexOutput) -> f32 {
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     let p = in.world_position.xz;
-    let mossy = source(laid.masks.x, in);
+    var mossy = source(laid.masks.x, in);
     let wet_w = source(laid.masks.y, in);
     var colour = pbr_input.material.base_color.rgb;
 
@@ -108,8 +137,35 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let grain = textureSample(detail, detail_sampler, p / laid.look.z).rgb * 2.0;
     colour *= mix(vec3<f32>(1.0), grain, laid.look.w);
 
-    // Grime packed in every joint.
+    // Each unit its own stone: its value, warmth and roughness wander (quarried and worn
+    // apart), the step hidden in the joint.
+    var rough_k = 1.0;
+    let feet = source(laid.masks.w, in);
+    if laid.shape.x > 0.5 {
+        let u = unit(in.uv);
+        let key = u.xy * vec2<f32>(5.31, 7.17) + u.zw * vec2<f32>(1.73, 3.11) + 0.5;
+        let inner = 1.0 - joint;
+        colour *= 1.0 + laid.vary.x * (hash(key) * 2.0 - 1.0) * inner;
+        colour *= mix(vec3<f32>(1.0), vec3<f32>(1.06, 1.0, 0.92), hash(key + 11.0) * inner * laid.vary.x * 2.0);
+        rough_k = 1.0 + laid.vary.y * (hash(key + 23.0) * 2.0 - 1.0) * inner;
+    }
+
+    // Grime packed in every joint, and in a band at the walls' feet.
     colour *= mix(1.0, laid.look.x, joint);
+    colour *= mix(1.0, 0.55, feet * (0.5 + 0.5 * noise(p * 1.9 + 4.0)));
+
+    // Soil blown into drifts at two scales, thickest in the joints and at the walls; grit a
+    // couple of centimetres across strewn over all, lighter and darker.
+    var dirty = 0.0;
+    if laid.vary.z > 0.0 {
+        let d = noise(p * 0.55 + 31.0) * 0.55 + noise(p * 1.9 + 5.0) * 0.3 + noise(p * 6.5) * 0.15;
+        dirty = smoothstep(0.5, 0.78, d + feet * 0.35 + joint * 0.25) * laid.vary.z;
+        let soil = vec3<f32>(0.115, 0.095, 0.075) * (0.7 + 0.6 * noise(p * 23.0));
+        colour = mix(colour, soil, dirty);
+        let cell = floor(p * 45.0);
+        let speck = smoothstep(0.86, 0.94, hash(cell + 3.0)) * laid.vary.z;
+        colour *= mix(1.0, mix(0.55, 1.45, hash(cell + 9.0)), speck);
+    }
 
     // Hairline cracks across some units: thin wandering lines in patches.
     let warp = vec2<f32>(noise(p * 3.1), noise(p * 3.1 + 7.0)) - 0.5;
@@ -120,6 +176,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 
     // Moss: out of the joints first, then over the units where it is mossiest.
     let tuft = noise(p * 2.3) * 0.6 + noise(p * 7.7 + 2.0) * 0.4;
+    mossy = min(mossy + feet * 0.4, 1.0);
     let in_joints = max(joint, crack) * smoothstep(0.3, 0.6, mossy + (tuft - 0.5) * 0.7);
     let on_flags = smoothstep(0.62, 0.82, mossy * (0.55 + 0.75 * tuft) + (1.0 - ao) * 0.5);
     let moss = max(in_joints, on_flags) * step(0.5, 8.5 - laid.masks.x);
@@ -135,7 +192,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let damp = smoothstep(0.15, 0.45, wet_w + rag) * (1.0 - wet) * step(0.5, 8.5 - laid.masks.y);
     colour *= mix(1.0, 0.62, damp);
     colour *= mix(1.0, 0.38, wet);
-    let rough = pbr_input.material.perceptual_roughness;
+    // Broad patches of damp stone, darker and glossier.
+    let dp = noise(p * 0.27 + 41.0) * 0.65 + noise(p * 1.1 + 13.0) * 0.35;
+    let damp_patch = smoothstep(0.58, 0.72, dp) * laid.vary.w * (1.0 - dirty);
+    colour *= mix(1.0, 0.7, damp_patch);
+    var rough = clamp(pbr_input.material.perceptual_roughness * rough_k, 0.05, 1.0);
+    rough = mix(rough, 1.0, dirty) * mix(1.0, 0.55, damp_patch);
     pbr_input.material.perceptual_roughness = mix(mix(rough, rough * 0.6, damp), 0.09, wet);
     // Standing water is flat: the units' relief shows only faintly through it.
     pbr_input.N = normalize(mix(pbr_input.N, pbr_input.world_normal, wet * 0.85));

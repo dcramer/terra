@@ -129,6 +129,23 @@ pub struct Laid {
     /// Where water stands on the floor (none when `None`).
     #[serde(default)]
     pub wet: Option<Mask>,
+    /// The scan's courses top to bottom in its texture, up to four: where each starts (v, 0
+    /// to 1) and the joints across it (u, up to seven), so each unit is told apart.
+    #[serde(default)]
+    pub courses: Vec<(f32, Vec<f32>)>,
+    /// How far each unit's value and roughness wander from the scan's, as fractions.
+    #[serde(default)]
+    pub spread: (f32, f32),
+    /// Soil blown into drifts at two scales, thickest in the joints and at `feet`, and grit
+    /// strewn over all, 0 (none) to 1.
+    #[serde(default)]
+    pub dirt: f32,
+    /// Broad patches of damp stone, darker and glossier, 0 (none) to 1.
+    #[serde(default)]
+    pub damp: f32,
+    /// Where the floor meets walls: grime, dirt and moss heavier there (none when `None`).
+    #[serde(default)]
+    pub feet: Option<Mask>,
 }
 
 fn joints() -> f32 {

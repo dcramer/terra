@@ -21,6 +21,17 @@
             grain: (0.5, 0.6),
             moss: Site("mossy"),
             wet: Site("puddled"),
+            // The scan's three courses and their joints, off its colour map: each flag its
+            // own value, warmth and roughness.
+            courses: [
+                (0.008, [0.069, 0.443, 0.705]),
+                (0.345, [0.086, 0.399, 0.726]),
+                (0.677, [0.005, 0.337, 0.630]),
+            ],
+            spread: (0.22, 0.3),
+            dirt: 0.7,
+            damp: 0.6,
+            feet: Site("walls"),
         ),
     ),
 )
