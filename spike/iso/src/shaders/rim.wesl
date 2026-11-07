@@ -5,7 +5,10 @@ import bevy_pbr::render::{
     forward_io::{VertexOutput, FragmentOutput},
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
+    mesh_view_bindings::view,
+    view_transformations::{depth_ndc_to_view_z, direction_world_to_view},
 };
+@if(DEPTH_PREPASS) import bevy_pbr::prepass::utils::prepass_depth;
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> rim: vec4<f32>;
@@ -23,6 +26,33 @@ var scans_sampler: sampler;
 var<uniform> stone: vec4<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(107)
 var<uniform> moss: vec4<f32>;
+
+// How much of a fighter's band this fragment keeps: whole where it is the body's outline,
+// none inside it. The mesh normal alone cannot tell: every leaf of a crown and every fold
+// of Tripo's bark grazes the view somewhere, so the band glittered over the treants and
+// the tree monster as hard white specks (the panel's "chrome glitter", uc-gaps j1). As
+// the toon renderers' screen-space rim does (miHoYo's depth-offset rim, Unite 2017; docs
+// only), the depth prepass is read a few pixels out along the normal's screen direction:
+// an outline has the ground metres behind it there, a leaf or fold another of the same
+// body's surfaces a hand's breadth away.
+fn outline(frag: vec4<f32>, n: vec3<f32>) -> f32 {
+    var share = 1.0;
+    @if(DEPTH_PREPASS) {
+        let s = direction_world_to_view(n).xy;
+        let len = length(s);
+        if len > 0.0001 {
+            // 6 px at 1080 lines, past the band's own width (2 to 3 px at 960, iso-art j30),
+            // so its inner side still finds the ground beyond the outline.
+            let offset = vec2<f32>(s.x, -s.y) / len * 6.0 * view.viewport.w / 1080.0;
+            let lo = view.viewport.xy;
+            let at = clamp(frag.xy + offset, lo, lo + view.viewport.zw - 1.0);
+            let behind = depth_ndc_to_view_z(prepass_depth(vec4<f32>(at, 0.0, 1.0), 0u));
+            let here = depth_ndc_to_view_z(frag.z);
+            share = smoothstep(0.15, 0.5, here - behind);
+        }
+    }
+    return share;
+}
 
 fn hash(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(127.1, 311.7));
@@ -98,7 +128,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // upper outline, never a top (at the ARPG's 55 degrees a normal over about 0.6 up
         // faces the camera; a canopy's leaves are all such) nor an underside.
         let sky = smoothstep(-0.35, 0.1, n.y) * (1.0 - smoothstep(0.5, 0.8, n.y));
-        edge = (1.0 - smoothstep(lift.y, lift.z, facing)) * sky * lift.w;
+        edge = (1.0 - smoothstep(lift.y, lift.z, facing)) * sky * lift.w * outline(in.position, n);
     } else {
         // Brighter where the edge faces up, as a sky's light would.
         let up = 0.55 + 0.45 * clamp(n.y, 0.0, 1.0);
