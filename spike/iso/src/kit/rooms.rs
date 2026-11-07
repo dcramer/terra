@@ -67,8 +67,9 @@ pub enum Kind {
     Curtains,
 }
 
-/// A room: its kind, which of the front's colours lights it, how bright (0.6 to 1.2 of its
-/// storey's nits) and warm (0 to 1), how far its blinds or curtains are drawn (0.3 to 0.9),
+/// A room: its kind, which of the front's colours lights it, how bright (0.35 to 1.4 of its
+/// storey's nits, most rooms dim, a few bright: a lamp in a corner against a ceiling light)
+/// and warm (0 to 1), how far its blinds or curtains are drawn (0.3 to 0.9),
 /// and a pick (0 to 1) for its cloth, shutter and furniture.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Room {
@@ -112,7 +113,7 @@ pub fn room(b: &Bays, r: &Rooms, along: (f32, f32), column: usize, storey: usize
     Room {
         kind,
         colour: (h(3) * n as f32) as usize % n,
-        bright: 0.6 + 0.6 * h(4),
+        bright: 0.35 + 1.05 * h(4) * h(4),
         warm: h(7),
         drawn: 0.3 + 0.6 * h(5),
         pick: h(6),
@@ -183,18 +184,23 @@ impl Front<'_> {
             Some(l) => glow(materials, 0.03, l * share),
             None => self.dark.clone(),
         };
-        let floor = lit(0.5);
-        let ceiling = lit(0.3);
-        let sides = lit(0.4);
+        // The floor in two halves, the one by the glass in less of the light than the one
+        // under the lamp, so from above its light falls off toward the window (depth).
+        let near = lit(0.16);
+        let far = lit(0.4);
+        let ceiling = lit(0.25);
+        let sides = lit(0.35);
         let back = lit(1.0);
-        self.put(
-            commands,
-            floor,
-            false,
-            Transform::from_xyz(y.x, y.y0 + 0.02, mid)
-                .with_rotation(Quat::from_rotation_x(-FRAC_PI_2))
-                .with_scale(Vec3::new(y.w, deep, 1.0)),
-        );
+        for (m, d) in [(near, 0.25), (far, 0.75)] {
+            self.put(
+                commands,
+                m,
+                false,
+                Transform::from_xyz(y.x, y.y0 + 0.02, self.s * (self.wall + FRONT + deep * d))
+                    .with_rotation(Quat::from_rotation_x(-FRAC_PI_2))
+                    .with_scale(Vec3::new(y.w, deep / 2.0, 1.0)),
+            );
+        }
         self.put(
             commands,
             ceiling,
@@ -222,11 +228,15 @@ impl Front<'_> {
                 .with_rotation(self.turn)
                 .with_scale(Vec3::new(y.w, h, 1.0)),
         );
-        let (fw, fh, fd) =
-            [(1.0, 0.75, 0.6), (1.8, 0.8, 0.85), (1.5, 0.5, 1.4)][(y.rm.pick * 3.0) as usize % 3];
+        // A table stands out in the room, its top over the lit floor; a sofa or a bed
+        // against the back wall. Their tops catch a little of the lamp, so from above each
+        // reads as a shape on the floor, not a hole.
+        let pick = (y.rm.pick * 3.0) as usize % 3;
+        let (fw, fh, fd) = [(1.0, 0.75, 0.6), (1.8, 0.8, 0.85), (1.5, 0.5, 1.4)][pick];
         let fx = y.x + (y.rm.warm - 0.5) * (y.w - fw - 0.2).max(0.0);
-        let fz = self.s * (self.wall + b.back - 0.05 - fd / 2.0);
-        let wood = glow(materials, 0.04, l * 0.04);
+        let off = if pick == 0 { 0.55 } else { 0.05 };
+        let fz = self.s * (self.wall + b.back - off - fd / 2.0);
+        let wood = glow(materials, 0.04, l * 0.1);
         self.put(
             commands,
             wood,
@@ -248,11 +258,12 @@ impl Front<'_> {
         };
         match y.rm.kind {
             Kind::Tv => {
-                // The screen low on the back wall, its cold light the room's only one.
-                let m = glow(materials, 0.0, r.screen.color().to_linear() * y.nits * 1.5);
+                // The screen on a low unit by the back wall, its cold light the room's
+                // only one, low enough to show under the window's head from above.
+                let m = glow(materials, 0.0, r.screen.color().to_linear() * y.nits * 2.5);
                 let z = self.s * (self.wall + self.b.back - 0.04);
                 let x = y.x + (y.rm.pick - 0.5) * y.w * 0.4;
-                self.put(commands, m, false, at(x, y.y0 + 0.85, z, (0.9, 0.55)));
+                self.put(commands, m, false, at(x, y.y0 + 0.62, z, (0.9, 0.5)));
             }
             Kind::Blinds => {
                 // Slats down from the head, lit from behind, the room between them.
@@ -354,7 +365,7 @@ pub fn spawn(
             tone.blue *= 0.8 + 0.4 * rm.warm;
             let light = match rm.kind {
                 Kind::Lit | Kind::Blinds | Kind::Curtains => Some(tone * nits * rm.bright),
-                Kind::Tv => Some(r.screen.color().to_linear() * nits * 0.1),
+                Kind::Tv => Some(r.screen.color().to_linear() * nits * 0.3),
                 Kind::Dark | Kind::Shut => None,
             };
             let bay = Bay {
@@ -478,8 +489,16 @@ mod tests {
                     "{m:?}"
                 );
             }
-            assert!((0.6..=1.2).contains(&m.bright) && m.colour < 2);
+            assert!((0.35..=1.4).contains(&m.bright) && m.colour < 2);
         }
+        // Rooms are not one brightness: the brightest at least thrice the dimmest, so lit
+        // windows read apart past the tone curve (iso-kit j69), and most under the middle.
+        let (lo, hi) = all.iter().fold((f32::MAX, 0f32), |(lo, hi), m| {
+            (lo.min(m.bright), hi.max(m.bright))
+        });
+        assert!(hi > 3.0 * lo, "rooms' brightness only {lo} to {hi}");
+        let dim = all.iter().filter(|m| m.bright < 0.875).count();
+        assert!(dim * 2 > all.len(), "only {dim} of {} rooms dim", all.len());
         let mut none = b.clone();
         none.colours.clear();
         assert!((0..10).all(|c| !matches!(

@@ -122,14 +122,19 @@
         // 2.2 m deep (kit/rooms.rs, iso-kit j37): lit warm or cold, some by a TV's blue
         // alone, some with blinds or curtains part drawn, some dark or shuttered, by a hash.
         // A lit shop window's light spills out onto the pavement before it, a warm pool
-        // 2.2 m out (rooms `spill`, iso-kit j49), dark between the shops.
+        // 2.2 m out (rooms `spill`, iso-kit j49), dark between the shops. A room's glow is
+        // emissive, which the camera's exposure does not scale: at 6 nits every lit room
+        // passed the tone curve's shoulder into one cream (the judge's "identical peach
+        // windows"), so they glow at 1.4 to 1.6 (the shops 3), each in one of tungsten,
+        // halogen, cold and green fluorescent, at its own brightness (iso-kit j69).
         fronts: [
             (side: North, along: (-35.0, -9.0), height: 15.0, material: "concrete_wall_006",
              metres: 2.0, roof: "asphalt_02",
              bays: (model: "models/iso/city/facade-apartments.glb",
                     ground: [2, 1, 2, 3, 0, 2, 3, 2, 1], upper: [5, 4, 5, 6], top: 8, pier: 9,
-                    lit: 0.4, shops: (0.85, 8.0), nits: 6.0,
-                    colours: [Srgb(1.0, 0.72, 0.42), Srgb(0.62, 0.8, 1.0)],
+                    lit: 0.4, shops: (0.85, 3.0), nits: 1.6,
+                    colours: [Srgb(1.0, 0.62, 0.32), Srgb(1.0, 0.82, 0.6),
+                              Srgb(0.72, 0.88, 1.0), Srgb(0.8, 1.0, 0.84)],
                     paint: Srgb(0.78, 0.5, 0.4), grime: 0.35,
                     back: 2.2,
                     wall: (scan: "concrete_wall_006", contrast: 1.2, streaks: 0.7, foot: 0.6),
@@ -141,8 +146,9 @@
              metres: 2.0, tint: (0.7, 0.7, 0.72), roof: "asphalt_02",
              bays: (model: "models/iso/city/facade-apartments.glb",
                     ground: [3, 2, 1, 3, 2], upper: [6, 7], top: 8, pier: 9,
-                    lit: 0.4, shops: (1.0, 8.0), nits: 5.0,
-                    colours: [Srgb(1.0, 0.72, 0.42), Srgb(1.0, 0.85, 0.6)],
+                    lit: 0.4, shops: (1.0, 3.0), nits: 1.4,
+                    colours: [Srgb(1.0, 0.62, 0.32), Srgb(1.0, 0.82, 0.6),
+                              Srgb(0.8, 1.0, 0.84)],
                     paint: Srgb(0.9, 0.84, 0.68), grime: 0.45,
                     back: 2.2,
                     wall: (scan: "concrete_wall_006", contrast: 1.4, streaks: 0.8, foot: 0.7),
@@ -154,9 +160,9 @@
              metres: 2.0, tint: (0.85, 0.8, 0.74), roof: "asphalt_02",
              bays: (model: "models/iso/city/facade-apartments.glb",
                     ground: [2, 2, 3, 0, 3, 2, 1, 2, 0, 2], upper: [4, 5, 4, 7], top: 8, pier: 9,
-                    lit: 0.35, shops: (0.85, 8.0), nits: 6.0,
-                    colours: [Srgb(1.0, 0.72, 0.42), Srgb(0.62, 0.8, 1.0),
-                              Srgb(1.0, 0.9, 0.75)],
+                    lit: 0.35, shops: (0.85, 3.0), nits: 1.6,
+                    colours: [Srgb(1.0, 0.62, 0.32), Srgb(0.72, 0.88, 1.0),
+                              Srgb(1.0, 0.86, 0.68), Srgb(0.8, 1.0, 0.84)],
                     paint: Srgb(0.6, 0.66, 0.72), grime: 0.35,
                     back: 2.2,
                     wall: (scan: "concrete_wall_006", contrast: 1.2, streaks: 0.7, foot: 0.6),
