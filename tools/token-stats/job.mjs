@@ -176,9 +176,12 @@ export function findJobs(projects, pattern) {
     const dir = join(projects, project);
     if (!statSync(dir).isDirectory()) continue;
     for (const session of readdirSync(dir)) {
-      const sub = join(dir, session, "subagents");
-      if (!existsSync(sub)) continue;
-      for (const f of readdirSync(sub)) {
+      const subagents = join(dir, session, "subagents");
+      if (!existsSync(subagents)) continue;
+      // A workflow's agents sit a level down, in subagents/workflows/<run>/.
+      const workflows = join(subagents, "workflows");
+      const folders = [subagents, ...(existsSync(workflows) ? readdirSync(workflows).map((run) => join(workflows, run)) : [])];
+      for (const sub of folders) for (const f of readdirSync(sub)) {
         if (!f.endsWith(".meta.json")) continue;
         let meta;
         try {

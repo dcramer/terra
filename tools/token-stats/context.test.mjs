@@ -184,6 +184,18 @@ test("a hook inside a subagent reads the subagent's own transcript", () => {
   assert.equal(transcriptFor({ transcript_path: session, agent_id: "abc" }), join(dir, "s1", "subagents", "agent-abc.jsonl"));
 });
 
+test("a hook inside a workflow's agent reads that agent's transcript, not the session's", () => {
+  const dir = mkdtempSync(join(tmpdir(), "context-"));
+  const session = join(dir, "s1.jsonl");
+  writeFileSync(session, "");
+  const run = join(dir, "s1", "subagents", "workflows", "wf_1-2");
+  mkdirSync(run, { recursive: true });
+  writeFileSync(join(run, "agent-other.jsonl"), "");
+  assert.equal(transcriptFor({ transcript_path: session, agent_id: "abc" }), session, "another agent's file is not this one's");
+  writeFileSync(join(run, "agent-abc.jsonl"), "");
+  assert.equal(transcriptFor({ transcript_path: session, agent_id: "abc" }), join(run, "agent-abc.jsonl"));
+});
+
 test("with no sessions of this repository it says where it looked and how to look elsewhere", () => {
   const config = mkdtempSync(join(tmpdir(), "context-config-"));
   const folder = join(config, "projects", "-src-terra");

@@ -93,3 +93,12 @@ test("finds a job's transcript by its task, and prints the mean of several", () 
   assert.match(text, /^mean\s+3\s+13k/m);
   assert.ok(text.split("\n").length <= 20, "short enough to read every job");
 });
+
+test("finds a workflow's job, kept a level down under subagents/workflows/<run>/", () => {
+  const root = mkdtempSync(join(tmpdir(), "job-"));
+  const run = join(root, "proj", "session", "subagents", "workflows", "wf_1-2");
+  mkdirSync(run, { recursive: true });
+  writeFileSync(join(run, "agent-w1.jsonl"), lines.join("\n"));
+  writeFileSync(join(run, "agent-w1.meta.json"), JSON.stringify({ agentType: "job", description: "wasteland j2" }));
+  assert.deepEqual(findJobs(root, "wasteland j2").map((j) => j.name), ["wasteland j2"]);
+});

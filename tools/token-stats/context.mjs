@@ -538,13 +538,24 @@ export function decide(context, seen, bound = DEFAULT_BOUND, { job = false } = {
 }
 
 // The transcript a hook's call is about: a subagent's own when it runs inside one, since
-// Claude Code passes the session's transcript_path with the subagent's agent_id.
+// Claude Code passes the session's transcript_path with the subagent's agent_id. A workflow's
+// agents keep theirs a level down, in subagents/workflows/<run>/; without looking there a
+// workflow job read its coordinator's context as its own and stopped at its first call.
 export function transcriptFor(input) {
   const path = input?.transcript_path;
   if (typeof path !== "string") return null;
   if (typeof input.agent_id === "string" && /^[A-Za-z0-9_-]+$/.test(input.agent_id)) {
-    const own = join(dirname(path), basename(path, ".jsonl"), "subagents", `agent-${input.agent_id}.jsonl`);
+    const subagents = join(dirname(path), basename(path, ".jsonl"), "subagents");
+    const name = `agent-${input.agent_id}.jsonl`;
+    const own = join(subagents, name);
     if (own !== path && existsSync(own)) return own;
+    const workflows = join(subagents, "workflows");
+    if (existsSync(workflows)) {
+      for (const run of readdirSync(workflows)) {
+        const inRun = join(workflows, run, name);
+        if (existsSync(inRun)) return inRun;
+      }
+    }
   }
   return path;
 }
