@@ -15,9 +15,9 @@ fn at_rest(table: &mut Table) -> f64 {
         / (after.down_packets - before.down_packets).max(1) as f64
 }
 
-/// A state packet with nothing owed, bytes: its header (65 bits), stamp (41), no events (4)
-/// and end (1).
-const EMPTY_PACKET: f64 = 14.0;
+/// A state packet with nothing owed, bytes: whose it is (8 bits, D640), its header (65),
+/// stamp (41), no events (4) and end (1).
+const EMPTY_PACKET: f64 = 15.0;
 
 fn soaked(ticks: u32) -> Table {
     let mut table = Table::new();

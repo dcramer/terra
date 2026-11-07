@@ -155,7 +155,9 @@ impl<T: ServerTransport> Instances<T> {
     /// first opened is where a new connection goes.
     pub fn open(&mut self, planet: Planet, start: Vec3) -> usize {
         let (number, wire) = self.switch.branch();
-        let realm = Realm::new(planet, start, self.config.clone(), wire, &self.layers);
+        let mut config = self.config.clone();
+        config.epoch = u8::try_from(number).expect("a host of at most 256 realms");
+        let realm = Realm::new(planet, start, config, wire, &self.layers);
         self.realms.push(realm);
         number
     }

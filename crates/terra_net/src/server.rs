@@ -58,6 +58,10 @@ pub struct Config {
     /// What its challenges are drawn from ([`crate::identity`]): the game's to give, from
     /// the operating system's randomness, so no hello overheard on one run passes on another.
     pub secret: u64,
+    /// Which server of a host of several this is (D640): the first byte of its challenges
+    /// and of every state packet either way, so state in flight to or from a server a client was handed on
+    /// from is dropped unread by both ends.
+    pub epoch: u8,
 }
 
 impl Config {
@@ -73,6 +77,7 @@ impl Config {
             resend_ticks: 16,
             packet_bytes: 1200,
             secret: 0,
+            epoch: 0,
         }
     }
 }
@@ -167,6 +172,8 @@ struct Leaving {
 struct Session {
     /// The name it gave, once its hello was proven.
     name: String,
+    /// Its hello has come: words before it are another server's, if it was handed on.
+    hello: bool,
     /// The number its hello must be signed with.
     challenge: [u8; 32],
     welcomed: bool,
@@ -196,6 +203,7 @@ impl Session {
     fn new(challenge: [u8; 32]) -> Session {
         Session {
             name: String::new(),
+            hello: false,
             challenge,
             welcomed: false,
             room: RoomId(0),
@@ -233,6 +241,8 @@ pub struct Server {
     scratch: replicate::Scratch,
     /// Packets that could not be read, both lanes.
     pub malformed: u64,
+    /// State packets meant for another server (one a client was handed on from), unread.
+    pub strays: u64,
     /// The host's own player's name, where the host plays too (D638): told to whoever
     /// comes, with the others'.
     pub host_name: Option<String>,
@@ -257,6 +267,7 @@ impl Server {
             inbox: Vec::new(),
             scratch: replicate::Scratch::default(),
             malformed: 0,
+            strays: 0,
             host_name: None,
         }
     }
@@ -283,7 +294,9 @@ impl Server {
                         transport.drop_peer(peer);
                     } else {
                         self.joined += 1;
-                        let challenge = identity::challenge(self.config.secret, self.joined);
+                        // Its first byte says which server this is: the client's epoch.
+                        let mut challenge = identity::challenge(self.config.secret, self.joined);
+                        challenge[0] = self.config.epoch;
                         transport.send(peer, Lane::Ordered, &Down::Challenge(challenge).encoded());
                         self.sessions.insert(peer, Session::new(challenge));
                     }
@@ -376,6 +389,7 @@ impl Server {
                 } else {
                     if let Some(session) = self.sessions.get_mut(&peer) {
                         session.name = name.clone();
+                        session.hello = true;
                     }
                     events.push(Event::Hello {
                         peer,
@@ -394,6 +408,9 @@ impl Server {
                 self.say(transport, &name, &text);
                 events.push(Event::Said { peer, text });
             }
+            // Before its hello: words to the server it was handed on from, still on their way
+            // when it was (D640). The lane keeps order, so none can follow the hello.
+            Ok(Up::Ask(_) | Up::Ready | Up::Say(_)) if !session.hello => {}
             // Out of turn or unreadable on the lane that loses nothing: not a game of ours.
             _ => {
                 self.malformed += 1;
@@ -411,6 +428,14 @@ impl Server {
     /// A state packet up: acknowledgements, then intents. One that cannot be read is dropped,
     /// as a lost one would be.
     fn state(&mut self, peer: Peer, bytes: &[u8]) {
+        // Meant for another server (one it was handed on from): unread.
+        let Some((_, bytes)) = bytes
+            .split_first()
+            .filter(|(epoch, _)| **epoch == self.config.epoch)
+        else {
+            self.strays += 1;
+            return;
+        };
         let Some(session) = self
             .sessions
             .get_mut(&peer)

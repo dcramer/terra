@@ -7,6 +7,7 @@
 //! server has. Each test that passes on it has a planted fault beside it that must fail it
 //! (D632).
 
+mod handed;
 mod hostile;
 mod milestone;
 mod rooms;
@@ -289,6 +290,7 @@ impl Table {
                     Heard::Ready => seat.ready_after = Some(seat.ticks),
                     Heard::Closed(reason) => seat.closed = Some(reason),
                     Heard::Entered(_)
+                    | Heard::Handed
                     | Heard::Gone(_)
                     | Heard::Happened { .. }
                     | Heard::Said { .. }

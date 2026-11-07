@@ -16,7 +16,7 @@ use terra_world::start::Start;
 
 /// The protocol's version: a game of another is refused. A hash of the wire's schema and the
 /// game's data is to take its place (docs/netcode.md).
-pub const VERSION: u64 = 4;
+pub const VERSION: u64 = 5;
 /// The UDP port a world is hosted on, and joined at when an address names none.
 pub const PORT: u16 = 46_464;
 /// The most clients a hosted world lets in.

@@ -1257,3 +1257,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-07**: D639 changed (by the agent): the client's "ready" is built; a joining game has no body on the host until its land is made.
 - **2026-11-07**: D640 added, Decided (by the agent): the instance host is a switch over realm servers, each realm a headless `App` with its own server; the game's hosting stays the listen server until an instance holds the walk's solids and the creatures (D638's deletion waits on that).
 - **2026-11-07**: D640 changed (by the agent): built for the walker's layer, run with no window and measured; the client's half of a hand-on is designed in it and waits for the portal's crossing over the network.
+- **2026-11-07**: D640 changed (by the agent): a client handed from one realm's server to another is built on the wire (an epoch on challenges and state, protocol version 5); the game's side waits for the portal's crossing.

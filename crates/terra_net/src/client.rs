@@ -55,6 +55,9 @@ pub enum Event {
     /// An entity came near, and one left or is no more.
     Entered(EntityId),
     Gone(EntityId),
+    /// Handed on to another server of the host (a crossing between realms): everything held
+    /// was the last one's and is gone; its greeting follows, as a first one does.
+    Handed,
     /// The connection is over, and why, in words for the player ([`Reason::message`]).
     Closed(Reason),
 }
@@ -143,13 +146,19 @@ pub struct Client {
     floor: u32,
     /// The numbers of the events lately heard, so a copy is not heard twice.
     heard_events: VecDeque<u32>,
-    /// The server's challenge, and the hello waiting for it.
+    /// The server's challenge, and who it asks to play as: said to each server that
+    /// challenges it.
     challenge: Option<[u8; 32]>,
+    /// Which server's state it believes: the one whose challenge it last answered (the
+    /// challenge's first byte, `server::Config::epoch`).
+    epoch: Option<u8>,
     asking: Option<(u64, Identity, String)>,
     inbox: Vec<FromServer>,
     acked: Vec<u16>,
     /// Packets that could not be read.
     pub malformed: u64,
+    /// State packets of a server it is not with (one it was handed on from), dropped unread.
+    pub strays: u64,
 }
 
 impl Client {
@@ -184,7 +193,7 @@ impl Client {
         };
         transport.send(Lane::Ordered, &hello.encoded());
         transport.flush();
-        self.asking = None;
+        // Who it plays as is kept: another server of the host may challenge it (D640).
     }
 
     /// Takes what the transport has for it.
@@ -228,7 +237,20 @@ impl Client {
                     Ok(Down::Said { name, text }) => events.push(Event::Said { name, text }),
                     Ok(Down::Roster { name, here }) => events.push(Event::Roster { name, here }),
                     Ok(Down::Challenge(challenge)) => {
+                        if self.challenge.is_some() {
+                            // A second challenge: handed on to another server (a crossing
+                            // between realms, D640). Nothing of the one left is kept: its
+                            // entities, its ticks, what was acknowledged either way.
+                            *self = Client {
+                                asking: self.asking.take(),
+                                malformed: self.malformed,
+                                strays: self.strays,
+                                ..Client::default()
+                            };
+                            events.push(Event::Handed);
+                        }
                         self.challenge = Some(challenge);
+                        self.epoch = Some(challenge[0]);
                         self.greet(transport);
                     }
                     Ok(Down::Refuse(reason) | Down::Closing(reason)) => self.close(reason, events),
@@ -255,6 +277,11 @@ impl Client {
     /// A state packet down.
     fn state(&mut self, bytes: &[u8], events: &mut Vec<Event>) -> Result<(), Malformed> {
         let mut from = Reader::new(bytes);
+        // Another server's (one it was handed on from): unread, its acknowledgements too.
+        if Some(u8::read(&mut from)?) != self.epoch {
+            self.strays += 1;
+            return Ok(());
+        }
         let header = Header::read(&mut from)?;
         self.acked.clear();
         if !self.acks.incoming(header, &mut self.acked) {
@@ -405,7 +432,12 @@ impl Client {
         if !self.calls.is_multiple_of(SEND_EVERY) {
             return;
         }
+        // Nothing is said of state before any server's challenge.
+        let Some(epoch) = self.epoch else {
+            return;
+        };
         let mut to = Writer::default();
+        epoch.write(&mut to);
         self.acks.outgoing().write(&mut to);
         self.intents
             .back()

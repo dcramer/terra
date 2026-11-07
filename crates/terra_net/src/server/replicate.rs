@@ -306,6 +306,9 @@ pub(super) fn send(
     let budget = config.packet_bytes;
     let resend = resend_after(session, config);
     let mut to = Writer::reusing(std::mem::take(&mut scratch.packet));
+    // Whose state this is, first: a client handed on from another server drops the rest
+    // unread (D640).
+    config.epoch.write(&mut to);
     let header = session.acks.outgoing();
     header.write(&mut to);
     let seq = header.seq;

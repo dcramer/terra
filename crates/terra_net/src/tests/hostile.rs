@@ -106,7 +106,8 @@ fn a_full_world_refuses_and_the_host_leaving_ends_it_for_all() {
 }
 
 /// Random bytes on both lanes, from a stranger and from a welcomed client: the server never
-/// panics, drops whoever speaks nonsense on the ordered lane, and the others play on.
+/// panics, drops whoever speaks nonsense on the ordered lane (but what reads as a word before
+/// any hello, which is ignored), lets none of them in, and the others play on.
 #[test]
 fn nonsense_never_panics_the_server_and_costs_only_its_sender() {
     let mut table = Table::new();
@@ -143,13 +144,17 @@ fn nonsense_never_panics_the_server_and_costs_only_its_sender() {
         }
         table.run(2);
     }
-    assert!(
-        table.server.malformed >= 300,
-        "{} unreadable packets counted",
-        table.server.malformed
-    );
+    // Unreadable, or not this server's by its first byte: either way counted and dropped.
+    let dropped = table.server.malformed + table.server.strays;
+    assert!(dropped >= 300, "{dropped} unreadable packets counted");
     // Every stranger was dropped, its body with it; the honest client is as the server.
-    assert_eq!(table.server.clients(), 1);
+    // A few whose bytes read as a word before any hello are ignored, as one handed on from
+    // another server is (D640): connected and no more, as one who says nothing is.
+    assert!(
+        table.server.clients() <= 1 + 300 / 20,
+        "{}",
+        table.server.clients()
+    );
     assert_eq!(table.players.len(), 1);
     table.settle();
     assert_eq!(table.mismatch(0), None);
@@ -178,9 +183,6 @@ fn nonsense_never_panics_a_client() {
         );
         client.poll(&mut tap, &mut heard);
     }
-    assert!(
-        client.malformed > 500,
-        "{} unreadable packets counted",
-        client.malformed
-    );
+    let dropped = client.malformed + client.strays;
+    assert!(dropped > 500, "{} unreadable packets counted", dropped);
 }
