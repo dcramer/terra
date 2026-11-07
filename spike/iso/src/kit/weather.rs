@@ -83,6 +83,16 @@ pub struct Layer {
     pub forward: f32,
     /// Whether the key (the moon or sun) lights it, or only the lamps in it.
     pub keylit: bool,
+    /// Whether the lamps (every point and spot light: fires, lanterns, wisps, the effects'
+    /// flashes) light it. Off, a fire keeps its crisp warm pool, no bloom halo in the mist
+    /// round it (the marsh lost its blind pair twice to that, round 261107-0126).
+    pub lamps: bool,
+    /// The in-scatter's gain over the physical (Bevy's `FogVolume::light_intensity`): moonlit
+    /// at 1 a thin mist seen from above is no brighter than dark ground, so it only veils.
+    pub glow: f32,
+    /// Clearings (x, z, radius m): none at the centre, rising to the full mist at the radius,
+    /// so it lies thicker away from a camp fire.
+    pub clear: Vec<(f32, f32, f32)>,
 }
 
 impl Default for Layer {
@@ -97,6 +107,9 @@ impl Default for Layer {
             colour: Colour::Srgb(0.7, 0.75, 0.8),
             forward: 0.3,
             keylit: true,
+            lamps: true,
+            glow: 1.0,
+            clear: Vec::new(),
         }
     }
 }
@@ -457,6 +470,7 @@ fn spawn(
                 absorption: 0.05,
                 scattering: 1.0,
                 scattering_asymmetry: l.forward,
+                light_intensity: l.glow,
                 ..default()
             },
             Transform::from_translation(lo3 + span * 0.5).with_scale(span),
@@ -597,7 +611,10 @@ pub fn density(floor: &Floor, broad: &[f32], l: &Layer, p: Vec3) -> f32 {
     let low = (-above.max(0.0) / l.height.max(0.05)).exp();
     let hollow = smooth(0.0, 0.5, broad[floor.cell(xz)] - s);
     let water = if floor.wet(xz) { l.water } else { 1.0 };
-    low * (1.0 + l.hollows * hollow) * water
+    let clear = l.clear.iter().fold(1.0, |k, &(x, z, r)| {
+        k * smooth(0.0, r.max(0.01), xz.distance(Vec2::new(x, z)))
+    });
+    low * (1.0 + l.hollows * hollow) * water * clear
 }
 
 /// The volume's shape, normalised to 0 to 1 for the texture, and the peak it was divided by.
@@ -662,8 +679,9 @@ fn drift(time: Res<Time>, mists: Query<&Mist>, mut images: ResMut<Assets<Image>>
     }
 }
 
-/// Every light in a misty biome lights the mist (Bevy draws a light's in-scatter only where
-/// it carries `VolumetricLight`); the key only where the layer says.
+/// The lights in a misty biome light the mist as its layer says, the lamps and the key each
+/// (Bevy 0.20's volumetric_fog.wesl skips a light without `VolumetricLight`'s flag bit, the
+/// clustered point and spot lights by `POINT_LIGHT_FLAGS_VOLUMETRIC_BIT`).
 #[allow(clippy::type_complexity)]
 fn volumetric_lights(
     mut commands: Commands,
@@ -678,8 +696,10 @@ fn volumetric_lights(
     keys: Query<Entity, (With<DirectionalLight>, Without<VolumetricLight>)>,
 ) {
     let Some(m) = mists.iter().next() else { return };
-    for e in &lamps {
-        commands.entity(e).insert(VolumetricLight);
+    if m.layer.lamps {
+        for e in &lamps {
+            commands.entity(e).insert(VolumetricLight);
+        }
     }
     if m.layer.keylit {
         for e in &keys {
@@ -777,6 +797,18 @@ mod tests {
             0.0,
             "none under the land"
         );
+        // A clearing at x 3 (a camp fire's): none at its centre, the full mist past it.
+        let c = Layer {
+            clear: vec![(3.0, 3.0, 2.0)],
+            ..Layer::default()
+        };
+        let dc = |x: f32| {
+            let s = floor.surface(Vec2::new(x, 3.0));
+            density(&floor, &broad, &c, Vec3::new(x, s + 0.2, 3.0))
+        };
+        assert_eq!(dc(3.0), 0.0, "none at the clearing's centre");
+        assert!(dc(4.0) < 0.6 * d(4.0, 0.2), "thin within it");
+        assert_eq!(dc(8.0), d(8.0, 0.2), "the full mist past it");
     }
 
     /// Rain's count follows its amount up to the kit's budget; no rain draws nothing.

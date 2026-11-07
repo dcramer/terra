@@ -101,9 +101,20 @@
     // (round 261107-0052, mist 0.25) it laid a cold grey veil over the water and reeds, the
     // sheets' fault (traps.md: j44 and j45 lost as milky haze). Off since round 261107-0126:
     // at 0.4 lit by the fire it lost the blind pair twice (the fire a soft bloom halo washing
-    // its stones, where kept 261107-0032's ring stays crisp in a warm pool). Back on only
-    // with the fire's light kept out of it, judged.
-    weather: (wind: (0.86, 0.5), mist: 0.0, layer: (height: 0.4, drift: 0.9, keylit: false)),
+    // its stones, where kept 261107-0032's ring stays crisp in a warm pool). Back on lit by
+    // the moon alone (`lamps: false`: no lamp carries VolumetricLight, so the fire keeps its
+    // crisp pool), thin and pale, lying low over the water and in the hollows, cleared round
+    // the fire (dress.rs `FIRE`) and thicker away from it, to lift the night's mids (kept
+    // marsh: dark share 0.87, the refs' top 0.82).
+    // At mist 0.35 over the default thick 0.12 (0.042/m at the land) it was unseen (round
+    // 261107-0306): 0.3/m at the land, about 0.8/m over the water. Moonlit at its physical
+    // in-scatter (glow 1, forward 0.3) it only darkened the water's mirror (round
+    // 261107-0307, dark share 0.866 -> 0.876): even scatter (forward 0) and glow 2.5 so it
+    // shows pale over the dark.
+    weather: (wind: (0.86, 0.5), mist: 1.0, layer: (height: 0.35, water: 2.5, drift: 0.9,
+        thick: 0.3, forward: 0.0, glow: 2.5,
+        colour: Srgb(0.8, 0.82, 0.85), keylit: true, lamps: false,
+        clear: [(-1.8, 1.35, 4.5)])),
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
 )

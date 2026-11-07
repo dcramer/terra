@@ -52,9 +52,9 @@ The fields after `light` but `ground`, `scatter` (marsh and street) and the mars
 
 ## The weather (`src/kit/weather.rs`, `weather.wesl`)
 
-- `weather: (wind, rain, mist, drops: (fall, shutter, width, bright, splashes), layer: (height, water, hollows, drift, banks, thick, colour, forward, keylit))`; a layout inserts its `Floor` (the street's strew, the marsh's land).
+- `weather: (wind, rain, mist, drops: (fall, shutter, width, bright, splashes), layer: (height, water, hollows, drift, banks, thick, colour, forward, keylit, lamps, glow, clear))`; a layout inserts its `Floor` (the street's strew, the marsh's land).
 - Rain: one mesh of streaks (8000 at `rain: 1`) and splashes (6000: a bright fleck spreading to a ring of droplets, 1 to 4 cm, lying on the floor, 25 times a streak's share), moved in the vertex shader: camera-facing, stretched by the shutter, lit only by the 16 brightest point and spot lights near them (`lit`, a trace of key and sky), so they show in the cones; splashes off the water; the water's own `rain` draws the rings. Budget printed.
-- Mist: Bevy's volumetric fog in a box over the floor, a 3D density thickest at the surface (e-fold `height`), `water` times over open water, more in hollows, drifting banks; every light gets `VolumetricLight`, the key if `keylit`. Never sheets (traps.md).
+- Mist: Bevy's volumetric fog in a box over the floor, a 3D density thickest at the surface (e-fold `height`), `water` times over open water, more in hollows, drifting banks, none at the centre of each `clear` circle (x, z, r); the lamps get `VolumetricLight` if `lamps`, the key if `keylit` (a fire lighting the mist blooms a halo round it: lamps off, iso-kit j36). Never sheets (traps.md).
 
 ## Adding a biome
 
