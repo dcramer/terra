@@ -63,8 +63,11 @@ fn cover(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>) {
             if !free(p) {
                 continue;
             }
-            // Ferns in the main; one in five a mossy stone, half sunk.
-            let (path, scale, sink) = if rng.f() < 0.8 {
+            // Ferns in the main; one in five a mossy stone, set well into the soil (a
+            // third of its height and more: at a quarter they sat on it as lumps, judge
+            // 261107-0507), mossed and grimed (rim.rs `Stone`).
+            let stone = rng.f() >= 0.8;
+            let (path, scale, sink) = if !stone {
                 (
                     "models/nature/forest/fern.glb".to_string(),
                     rng.range(0.9, 1.6),
@@ -72,11 +75,11 @@ fn cover(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>) {
                 )
             } else {
                 let i = 1 + (rng.f() * 7.0) as usize % 7;
-                let s = rng.range(0.6, 1.1);
+                let s = rng.range(0.5, 1.25);
                 (
                     format!("models/nature/forest/mossy_rock_b_{i}.glb"),
                     s,
-                    0.25 * s,
+                    0.34 * s,
                 )
             };
             let e = crate::scene::model(
@@ -87,7 +90,13 @@ fn cover(mut commands: Commands, asset: Res<AssetServer>, land: Res<Land>) {
                 rng.f() * 6.28,
                 scale,
             );
-            commands.entity(e).insert(crate::rim::Shade);
+            if stone {
+                commands
+                    .entity(e)
+                    .insert(crate::rim::Stone { floor: on(p).y });
+            } else {
+                commands.entity(e).insert(crate::rim::Shade);
+            }
             placed += 1;
         }
     }

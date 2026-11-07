@@ -15,10 +15,24 @@ pub fn plugin(app: &mut App) {
 /// marsh), takes the fighters' rim (rim.rs; the scene adds `rim::plugin`), so it lifts off
 /// the ground as the ARPGs' bodies do: the three biome judges found the fighters lost in
 /// it (iso-art j28).
-fn cast(mut commands: Commands, posed: Query<(Entity, &Pose), Added<Pose>>) {
+fn cast(
+    mut commands: Commands,
+    posed: Query<(Entity, &Pose), Added<Pose>>,
+    hour: Option<Res<crate::scene::Hour>>,
+) {
+    let day = hour.is_some_and(|h| *h == crate::scene::Hour::Day);
     for (body, pose) in &posed {
         let name = pose.gltf.path().map(|p| p.to_string()).unwrap_or_default();
         let (albedo, rim) = value(&name);
+        // The forest by day: its treants at j34's values read as black cut-outs on the
+        // shaded floor, no lit form (judges 261107-0437 and 0507, iso-kit j50's FOUND):
+        // their bark lifted most of the way back, so the sun models their limbs, still
+        // under the trodden earth's value.
+        let albedo = if day && name.contains("treant") {
+            albedo.sqrt() * 0.85
+        } else {
+            albedo
+        };
         commands
             .entity(body)
             .insert(crate::rim::Fighter::valued(albedo, rim));

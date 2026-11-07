@@ -9,7 +9,8 @@
 
 mod dress;
 mod fight;
-mod land;
+// Its shelving depth (`seen_depth`) draws the forest's pond too.
+pub mod land;
 mod lawn;
 mod life;
 mod light;

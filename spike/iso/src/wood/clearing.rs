@@ -252,7 +252,14 @@ fn spawn(
                 rng.f() * 6.28,
                 scale,
             );
-            commands.entity(e).insert(crate::rim::Shade);
+            // A stone mossed on top and grimed at its foot (rim.rs `Stone`).
+            if path.contains("rock") {
+                commands
+                    .entity(e)
+                    .insert(crate::rim::Stone { floor: on(p).y });
+            } else {
+                commands.entity(e).insert(crate::rim::Shade);
+            }
             placed += 1;
         }
     };
@@ -266,7 +273,7 @@ fn spawn(
         },
         &|rng: &mut Rng| {
             let s = rng.range(0.2, 0.35);
-            (rock(rng), s, 0.2 * s)
+            (rock(rng), s, 0.3 * s)
         },
     );
     place(
@@ -293,7 +300,7 @@ fn spawn(
         },
         &|rng: &mut Rng| {
             let s = rng.range(0.45, 0.8);
-            (rock(rng), s, 0.15 * s)
+            (rock(rng), s, 0.24 * s)
         },
     );
 }

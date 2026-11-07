@@ -174,8 +174,9 @@ fn spawn(mut commands: Commands, asset: Res<AssetServer>, nav: Res<Nav>, land: R
             &mut commands,
             duck,
             at,
-            // Larger than life, as the birds are.
-            1.5,
+            // True to life: at 1.5 a flying drake spanned about 1.3 m beside the 1.75 m
+            // knight (judge 261107-0507); a mallard's is 0.8 to 1 m, its body 0.6 m.
+            1.0,
             Beast::new(Habit::Duck, POND, 3.5, 4.0, 3.0, s),
         );
     }

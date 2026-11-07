@@ -36,6 +36,17 @@ pub struct RimExt {
     /// band's share on this body (`Fighter::rim`).
     #[uniform(103)]
     pub lift: Vec4,
+    /// The ground's scans (kit/ground.rs `STACK`, one array layer each), for a stone's moss.
+    #[texture(104, dimension = "2d_array")]
+    #[sampler(105)]
+    pub scans: Handle<Image>,
+    /// A stone's (`Stone`): x 1 on a stone, y the floor it sits in (m), z the moss scan's
+    /// layer, w the metres it covers; all zero on anything else.
+    #[uniform(106)]
+    pub stone: Vec4,
+    /// A stone's moss: rgb the scan's tint (as the ground's moss layer's), a its cover.
+    #[uniform(107)]
+    pub moss: Vec4,
 }
 
 /// The canopy map's width in metres, about the world's middle.
@@ -49,6 +60,28 @@ struct Canopy(Handle<Image>);
 /// A model shaded by the canopy without a rim (a fern, a rock, a log in the wood).
 #[derive(Component)]
 pub struct Shade;
+
+/// A stone set in the land whose floor is `floor` (m) at its foot: shaded as a `Shade`, with
+/// moss on what faces up and soil grime where it meets the ground (rim.wesl). The judge on
+/// round 261107-0507: "boulders smooth beige uniformly sunlit lumps with one roughness, no
+/// lichen/moss, no settling into the ground"; Titan Quest II's and the drone refs' stones
+/// are mossed on their tops and grimed at their feet. The moss is the ground's own scan
+/// (moss_004) laid from above in world space, as Unreal's and Megascans' world-aligned
+/// blend of a moss layer over a rock asset by its normal's height.
+#[derive(Component)]
+pub struct Stone {
+    pub floor: f32,
+}
+
+/// The ground's scans the stones' moss is drawn from (kit/ground.rs loads the same array).
+#[derive(Resource)]
+struct Scans(Handle<Image>);
+
+/// A stone's moss: the ground's moss layer's tint (biomes/forest.ron, `moss_004` 5.0, 6.0,
+/// 3.2) a little dulled, as moss on a stone dries paler and browner than the bed's; its
+/// cover's share of a stone's upward faces. At (3.6, 4.4, 2.3) the sunlit tops read mint
+/// green (round 261107-0549): darker and warmer, an olive moss.
+const MOSS: Vec4 = Vec4::new(2.2, 2.5, 0.95, 0.75);
 
 /// A fighter (not an `Actor`) that takes the rim too: every body the ruin's fight poses,
 /// in every scene (ruin::fight's `cast`). Its materials are swapped some frames after its
@@ -95,8 +128,33 @@ pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<RimMaterial>::default())
         .init_resource::<Swapped>()
         .init_resource::<Mirrored>()
-        .add_systems(Startup, canopy_map)
+        .add_systems(Startup, (canopy_map, scans))
         .add_systems(Update, (swap, fighters, tint, mirror).chain());
+}
+
+/// The ground's scan array, loaded as kit/ground.rs loads it.
+fn scans(mut commands: Commands, asset: Res<AssetServer>) {
+    use bevy::image::{ImageArrayLayout, ImageLoaderSettings};
+    let rows = crate::kit::ground::STACK.len() as u32;
+    let h = asset
+        .load_builder()
+        .with_settings(move |s: &mut ImageLoaderSettings| {
+            s.array_layout = Some(ImageArrayLayout::RowCount { rows });
+            s.is_srgb = true;
+        })
+        .load("materials/ground/color.jpg");
+    commands.insert_resource(Scans(h));
+}
+
+/// The stone uniform for a floor: the moss scan's layer and metres from the stack.
+fn stone(floor: f32) -> Vec4 {
+    let stack = crate::kit::ground::STACK;
+    let (i, m) = stack
+        .iter()
+        .enumerate()
+        .find(|(_, (n, _))| *n == "moss_004")
+        .map_or((0, 1.1), |(i, (_, m))| (i, *m));
+    Vec4::new(1.0, floor, i as f32, m)
 }
 
 /// The canopy map: the glade's and the forest's oaks over their land; all open in the
@@ -155,6 +213,8 @@ pub struct Hide;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 enum Kind {
     Shade,
+    /// A stone, its floor's bits (`Stone`).
+    Stone(u32),
     Actor,
     Hide,
     Fighter,
@@ -180,7 +240,9 @@ fn rim_for(hour: Hour) -> LinearRgba {
 /// light to read. With no hour (the ruin, the marsh) it is the night's.
 fn fighter_rim(hour: Option<Hour>) -> LinearRgba {
     match hour.unwrap_or(Hour::Night) {
-        Hour::Day => LinearRgba::new(1.7, 1.9, 2.3, 0.0),
+        // By day a little stronger and whiter than j30's, so the forest's dark bark shows
+        // an edge on the shaded floor (judge 261107-0507: "near-black silhouettes").
+        Hour::Day => LinearRgba::new(2.2, 2.35, 2.6, 0.0),
         Hour::Dusk => LinearRgba::new(1.8, 2.2, 3.8, 0.0),
         Hour::Night => LinearRgba::new(2.0, 2.7, 5.0, 0.0),
     }
@@ -208,11 +270,12 @@ fn swap(
     parents: Query<&ChildOf>,
     actors: Query<(Option<&Tint>, Has<Hide>), With<Actor>>,
     shaded: Query<(), With<Shade>>,
+    stones: Query<&Stone>,
     standard: Res<Assets<StandardMaterial>>,
     mut rims: ResMut<Assets<RimMaterial>>,
     mut swapped: ResMut<Swapped>,
     hour: Option<Res<Hour>>,
-    canopy: Res<Canopy>,
+    tex: (Res<Canopy>, Res<Scans>),
 ) {
     let rim = rim_for(hour.map_or(Hour::Dusk, |h| *h));
     for (e, mat) in &added {
@@ -221,10 +284,15 @@ fn swap(
                 tint.map_or(Vec3::ONE, |t| t.0),
                 if hide { Kind::Hide } else { Kind::Actor },
             ),
-            None if parents.iter_ancestors(e).any(|a| shaded.contains(a)) => {
-                (Vec3::ONE, Kind::Shade)
+            None => {
+                if let Some(s) = parents.iter_ancestors(e).find_map(|a| stones.get(a).ok()) {
+                    (Vec3::ONE, Kind::Stone(s.floor.to_bits()))
+                } else if parents.iter_ancestors(e).any(|a| shaded.contains(a)) {
+                    (Vec3::ONE, Kind::Shade)
+                } else {
+                    continue;
+                }
             }
-            None => continue,
         };
         let rim = if matches!(kind, Kind::Actor | Kind::Hide) {
             rim
@@ -235,7 +303,7 @@ fn swap(
             &mut swapped,
             &standard,
             &mut rims,
-            &canopy,
+            (&tex.0, &tex.1),
             mat,
             tint,
             (kind, rim),
@@ -259,7 +327,7 @@ fn rimmed_as(
     swapped: &mut Swapped,
     standard: &Assets<StandardMaterial>,
     rims: &mut Assets<RimMaterial>,
-    canopy: &Canopy,
+    (canopy, scans): (&Canopy, &Scans),
     mat: &MeshMaterial3d<StandardMaterial>,
     tint: Vec3,
     (kind, rim): (Kind, LinearRgba),
@@ -275,12 +343,19 @@ fn rimmed_as(
     if matches!(kind, Kind::Fighter | Kind::Hide) {
         base.reflectance = FIGHTER_REFLECTANCE;
     }
+    let (stone, moss) = match kind {
+        Kind::Stone(floor) => (stone(f32::from_bits(floor)), MOSS),
+        _ => (Vec4::ZERO, Vec4::ZERO),
+    };
     let h = rims.add(ExtendedMaterial {
         base,
         extension: RimExt {
             rim,
             canopy: canopy.0.clone(),
             lift: lift(kind),
+            scans: scans.0.clone(),
+            stone,
+            moss,
         },
     });
     swapped.0.insert(key, h.clone());
@@ -300,7 +375,7 @@ fn fighters(
     mut swapped: ResMut<Swapped>,
     mut mirrored: ResMut<Mirrored>,
     hour: Option<Res<Hour>>,
-    canopy: Res<Canopy>,
+    tex: (Res<Canopy>, Res<Scans>),
 ) {
     let rim = fighter_rim(hour.map(|h| *h));
     for (body, mut f) in &mut fighters {
@@ -320,7 +395,7 @@ fn fighters(
                 &mut swapped,
                 &standard,
                 &mut rims,
-                &canopy,
+                (&tex.0, &tex.1),
                 mat,
                 Vec3::splat(f.value),
                 (Kind::Fighter, rim),
@@ -382,7 +457,7 @@ fn tint(hour: Option<Res<Hour>>, swapped: Res<Swapped>, mut rims: ResMut<Assets<
     }
     for ((.., kind), h) in &swapped.0 {
         let rim = match kind {
-            Kind::Shade => continue,
+            Kind::Shade | Kind::Stone(_) => continue,
             Kind::Actor | Kind::Hide => rim_for(*hour),
             Kind::Fighter => fighter_rim(Some(*hour)),
         };

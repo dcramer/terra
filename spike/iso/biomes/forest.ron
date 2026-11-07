@@ -56,8 +56,16 @@
         // mirror the brightest part of it.
         deep: Srgb(0.035, 0.04, 0.025),
         absorb: (14.0, 11.0, 10.0),
-        shore: 0.1,
+        // The face is drawn over the marsh's shelving depth (wood/pond.rs), so it fades in
+        // over about half a metre of mud; drowned leaf litter mats that margin and fallen
+        // oak leaves float in the shallows, brown and olive, a hand across (the drone refs'
+        // forest ponds; judge 261107-0507: "no muddy shelf, lily edge or leaf drift").
+        shore: 0.12,
         film: 0.0,
+        scum: (colour: Linear(0.045, 0.035, 0.018), amount: 0.45, reach: 0.18, size: 0.9),
+        // At count 5 and linear 0.11, 0.075, 0.03 they were sunlit yellow confetti (round
+        // 261107-0549): fewer, larger, darker and wet.
+        pads: (count: 3.0, radius: 0.09, colour: Linear(0.05, 0.035, 0.015)),
         // A broad lane (along 0.15, across 0.06, steep 0.12) and glitter 0.3 drew a milky
         // sheet under rain-like dashes over the whole pond, its mean sRGB 168, 161, 137
         // against the bridge pond ref's 59, 71, 77 (round 261107-0155): a calm face, a

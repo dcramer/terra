@@ -59,8 +59,13 @@ fn spawn(
         .as_ref()
         .map_or(crate::foliage::WIND, |w| Vec2::new(w.wind.0, w.wind.1));
     let half = Vec2::new(9.5, 8.0);
-    let face = crate::kit::water::surface(POND - half, POND + half, 0.25, water.level, |p| {
-        land.height(p)
+    // Drawn over the marsh's made-up shelving depth (marsh/land.rs `seen_depth`), so the
+    // face fades in over about half a metre of wet mud and the floating leaves mat that
+    // margin: drawn at its true depth it read "a flat mirror cut out of the ground with a
+    // hard dark rim" (judge, round 261107-0507).
+    let level = water.level;
+    let face = crate::kit::water::surface(POND - half, POND + half, 0.25, level, |p| {
+        level - crate::marsh::land::seen_depth(level - land.height(p))
     });
     crate::kit::water::spawn_face(
         &mut commands,

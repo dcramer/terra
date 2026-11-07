@@ -15,6 +15,59 @@ var canopy_map: texture_2d<f32>;
 var canopy_sampler: sampler;
 @group(constants::MATERIAL_BIND_GROUP) @binding(103)
 var<uniform> lift: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(104)
+var scans: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(105)
+var scans_sampler: sampler;
+@group(constants::MATERIAL_BIND_GROUP) @binding(106)
+var<uniform> stone: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(107)
+var<uniform> moss: vec4<f32>;
+
+fn hash(p: vec2<f32>) -> f32 {
+    let q = fract(p * vec2<f32>(127.1, 311.7));
+    return fract((q.x + q.y) * 43758.5453 + dot(q, q + 19.19));
+}
+
+fn noise(p: vec2<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2<f32>(1.0, 0.0)), u.x),
+        mix(hash(i + vec2<f32>(0.0, 1.0)), hash(i + vec2<f32>(1.0, 1.0)), u.x), u.y);
+}
+
+// A stone's dressing (rim.rs `Stone`): the ground's moss scan laid from above over what
+// faces up, broken into patches; lichen's pale blotches on its sides; soil grime and the
+// ground's occlusion where it meets its floor, darker underneath. As Megascans' and
+// Unreal's world-aligned moss blend over a rock asset, by the mesh's own normal.
+struct Dressed {
+    colour: vec3<f32>,
+    // How much rougher (moss and soil are matte).
+    matte: f32,
+    occlusion: f32,
+}
+
+fn dress(base: vec3<f32>, world: vec3<f32>, n: vec3<f32>) -> Dressed {
+    let own = base * 0.8;
+    let m = textureSample(scans, scans_sampler, world.xz / stone.w, u32(stone.z)).rgb;
+    let grain = dot(m, vec3<f32>(0.3, 0.55, 0.15));
+    let patches = noise(world.xz * 2.6 + world.y * 1.3) * 0.65 + noise(world.xz * 0.8 + 7.0) * 0.35;
+    let up = smoothstep(0.2, 0.8, n.y);
+    let cover = smoothstep(0.45, 0.62, up * moss.a + (patches - 0.5) * 0.7 + (grain - 0.25) * 0.6);
+    var c = mix(own, m * moss.rgb, cover);
+    // Lichen: grey-green blotches a hand across on the sides and shoulders.
+    let side = smoothstep(-0.1, 0.25, n.y) * (1.0 - cover);
+    let lichen = smoothstep(0.68, 0.76, noise(world.xz * 7.0 + world.y * 5.0)) * side;
+    c = mix(c, vec3<f32>(0.34, 0.36, 0.29), lichen * 0.8);
+    // The soil splashed and grown up its foot, and the ground's occlusion there.
+    let over = world.y - stone.y;
+    let foot = 1.0 - smoothstep(-0.02, 0.28, over + (patches - 0.5) * 0.12);
+    c = mix(c, c * vec3<f32>(0.42, 0.36, 0.28), foot * 0.85);
+    let under = mix(0.55, 1.0, smoothstep(-0.6, 0.15, n.y));
+    let contact = mix(0.45, 1.0, smoothstep(-0.05, 0.3, over));
+    return Dressed(c, max(cover, foot), under * contact);
+}
 
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
@@ -26,6 +79,13 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var n = normalize(in.world_normal);
     if !is_front {
         n = -n;
+    }
+    if stone.x > 0.0 {
+        let d = dress(pbr_input.material.base_color.rgb, in.world_position.xyz, n);
+        pbr_input.material.base_color = vec4<f32>(d.colour, pbr_input.material.base_color.a);
+        pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 1.0, d.matte);
+        pbr_input.diffuse_occlusion *= vec3<f32>(d.occlusion);
+        pbr_input.specular_occlusion *= d.occlusion;
     }
     let facing = clamp(dot(n, normalize(pbr_input.V)), 0.0, 1.0);
     var edge: f32;
