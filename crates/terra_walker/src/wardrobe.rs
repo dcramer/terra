@@ -193,6 +193,19 @@ impl Wardrobe {
     /// the look whole when `worn` is none: a piece a slot, in the catalogue's order of slots,
     /// then the head if no piece shown holds its region.
     pub fn compose<'a>(&'a self, body: &str, look: &str, worn: Option<&[String]>) -> Vec<&'a str> {
+        self.compose_for(body, look, worn, &[])
+    }
+
+    /// [`Wardrobe::compose`] for a person with pieces of their own (D111): `own` names, for
+    /// an optional slot, the piece that is theirs whatever the look (their hair, their
+    /// beard), or none for a slot they keep bare. A slot it does not name is the look's.
+    pub fn compose_for<'a>(
+        &'a self,
+        body: &str,
+        look: &str,
+        worn: Option<&[String]>,
+        own: &[(&str, Option<&str>)],
+    ) -> Vec<&'a str> {
         let Some(b) = self.bodies.get(body) else {
             return Vec::new();
         };
@@ -239,10 +252,16 @@ impl Wardrobe {
                 let held = held(shown);
                 !p.regions.iter().any(|r| held.contains(r))
             };
-            let of_look = look
-                .and_then(|l| l.pieces.get(slot))
-                .and_then(|name| self.pieces.get_key_value(name.as_str()))
-                .filter(|(_, p)| p.item.is_none() || wears(p));
+            let theirs = own.iter().find(|(named, _)| *named == slot.as_str());
+            let of_look = match theirs {
+                Some((_, piece)) => piece
+                    .and_then(|name| self.pieces.get_key_value(name))
+                    .filter(|(_, p)| p.body == body && p.slot.as_ref() == Some(slot)),
+                None => look
+                    .and_then(|l| l.pieces.get(slot))
+                    .and_then(|name| self.pieces.get_key_value(name.as_str()))
+                    .filter(|(_, p)| p.item.is_none() || wears(p)),
+            };
             let others = self.pieces.iter().filter(|(_, p)| {
                 worn.is_some()
                     && p.body == body

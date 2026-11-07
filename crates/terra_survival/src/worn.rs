@@ -10,11 +10,12 @@ use bevy::world_serialization::WorldAssetRoot;
 use bevy::{gltf::GltfAssetLabel, prelude::*};
 use terra_walker::appearance::gear_for_model;
 use terra_walker::character::{self, Body, BodyReady, Clothing, Outfit, Worn};
+use terra_walker::creator::{Features, creator};
 use terra_walker::wardrobe::wardrobe;
 
 /// The outfit a body is shown wearing, so its looks are changed only when that changes.
 #[derive(Component)]
-struct Dressed(Outfit);
+struct Dressed(Outfit, Option<Features>);
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Update, (outfit_from_gear, show).chain());
@@ -57,30 +58,42 @@ fn show(
         (Entity, &ChildOf, Option<&Dressed>, Option<&WorldAssetRoot>),
         (With<Body>, With<BodyReady>),
     >,
-    outfits: Query<(Ref<Outfit>, Has<Gear>)>,
+    outfits: Query<(Ref<Outfit>, Has<Gear>, Option<Ref<Features>>)>,
     looks: Query<(Entity, &Worn, Option<&WorldAssetRoot>)>,
     assets: Res<AssetServer>,
 ) {
     for (root, parent, dressed, model) in &bodies {
-        let Ok((outfit, equipped)) = outfits.get(parent.parent()) else {
+        let Ok((outfit, equipped, features)) = outfits.get(parent.parent()) else {
             continue;
         };
-        if dressed.is_some_and(|dressed| !outfit.is_changed() || dressed.0 == *outfit) {
+        let features_changed = features
+            .as_ref()
+            .is_some_and(|features| features.is_changed());
+        let features = features.map(|features| Features::clone(&features));
+        if dressed.is_some_and(|dressed| {
+            !(outfit.is_changed() || features_changed)
+                || (dressed.0 == *outfit && dressed.1 == features)
+        }) {
             continue;
         }
+        // Their own features changed: every piece is painted again, so none is kept.
+        let repaint = dressed.is_some_and(|dressed| dressed.1 != features);
         let path = model
             .and_then(|model| model.0.path())
             .map(|p| p.to_string());
         commands
             .entity(root)
-            .insert(Dressed(Outfit::clone(&outfit)));
+            .insert(Dressed(Outfit::clone(&outfit), features.clone()));
         // A wardrobe body (D611): a piece a slot, as the catalogue composes him.
         if let Some((body, at)) = path.as_deref().and_then(|p| wardrobe().body_for_model(p)) {
             let worn: Vec<String> = outfit.0.iter().map(|c| c.item.clone()).collect();
             // Anyone with no equipment of their own (the town, the sparring partner) wears the
             // body's look whole until populations draw theirs; the player's follows its gear.
+            // A person's hair and beard are their own (D111), whatever the look's.
+            let own = features.as_ref().map(Features::own);
+            let own = own.as_ref().map_or(&[][..], |own| &own[..]);
             let mut files: Vec<String> = wardrobe()
-                .compose(body, &at.look, equipped.then_some(worn.as_slice()))
+                .compose_for(body, &at.look, equipped.then_some(worn.as_slice()), own)
                 .into_iter()
                 .filter_map(|piece| wardrobe().file(piece))
                 .collect();
@@ -105,13 +118,14 @@ fn show(
                 if on.body != root {
                     continue;
                 }
-                match file.filter(|f| files.contains(f)) {
+                match file.filter(|f| files.contains(f) && !repaint) {
                     Some(f) => kept.push(f),
                     None => commands.entity(look).despawn(),
                 }
             }
             for file in files.into_iter().filter(|f| !kept.contains(f)) {
                 let tint = gear.iter().find(|(g, _)| *g == file).map(|(_, c)| &c.tint);
+                let of_body = tint.is_none();
                 let look = character::wear(
                     &mut commands,
                     assets.load(GltfAssetLabel::Scene(0).from_asset(file)),
@@ -119,6 +133,12 @@ fn show(
                 );
                 if let Some(tint) = tint.filter(|tint| !tint.0.is_empty()) {
                     commands.entity(look).insert(tint.clone());
+                }
+                // Each piece of the body wears the person's skin, hair colour and eyes.
+                if let (Some(features), true) = (&features, of_body) {
+                    commands
+                        .entity(look)
+                        .insert(creator().paint(body, features));
                 }
             }
             continue;

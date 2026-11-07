@@ -206,6 +206,7 @@ impl Plugin for WalkerPlugin {
         camera::plugin(app);
         movement::plugin(app);
         crate::net::plugin(app);
+        crate::creator::remote::plugin(app);
         app.init_resource::<Hands>()
             .init_resource::<WarpTo>()
             // On entering each world, before the camera's place is propagated, from which

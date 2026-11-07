@@ -23,6 +23,7 @@ pub mod camera;
 pub mod carry_arm;
 pub mod character;
 pub mod controls;
+pub mod creator;
 pub mod feet;
 pub mod figure;
 pub mod gaze;

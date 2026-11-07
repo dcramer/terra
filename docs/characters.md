@@ -36,7 +36,7 @@ Games that do this well don't fit items to characters. They fix a few contracts 
 | **Skin colour** | T8: a tint baked out of the albedo, a skin mask and a melanin-like palette in the shader | The body's material extension | Painted skins built; tint not yet |
 | **Other proportions** (limb length, shoulders, head) | T1: bone scales on leaf or helper bones, so nothing shears | A system writes joint rest transforms | Not yet (D111) |
 | **Head and face** | T2: blends of head morphs, never animated by clips | Its own weight set | Open |
-| **Hair** | A separate part bound to the head like gear (D112); hidden or swapped for a short version under a helmet | A worn look, by name | Not yet |
+| **Hair, and the creator's colours** (D111) | Hair and a beard are wardrobe pieces that are the person's own whatever the look; skin and hair are the body's maps multiplied by a tone, eyes a map each (`models/character/creator.json`, `terra_walker::creator`) | `Features` on the character; `Paint` on each piece | Built for the man: 7 hairstyles, 3 beards, 6 skin tones, 7 hair colours, 5 eye colours; checked with no picture by `node tools/sandbox/creator.ts`. The woman's body, the screen and the network: not yet |
 
 - **A character is a few slider values** (D111): morph weights, a height and a skin tint, each clamped to what every item passes at. The named templates (`models/character/templates.json`) are presets of the same numbers, for people and tests; an NPC's values come from its seed, within its people's ranges.
 - **Sockets**, the same names and axes on every body: hands, head, back, belt ([the table](attachment.md#sockets)).

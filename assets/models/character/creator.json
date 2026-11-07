@@ -1,0 +1,30 @@
+{
+  "about": "What the character creator offers (D111), read by the game (crates/terra_walker/src/creator.rs): skin tones, hair colours and eye colours, each a name the player sees and a save keeps. A skin tone and a hair colour are linear RGB the body's painted map is multiplied by (the pack's skin map is a mid tan and its hair map near white, so over 1 lightens); an eye colour is an eye map, made from the pack's one by tools/characters/eyes.sh. Hairstyles and beards are the wardrobe's pieces of the slots hair and beard (wardrobe.json), so a new one is a row there. `roles` says, for each body, which of its materials (by glTF name) is its skin, hair and eyes. The first of each list is what a new character has.",
+  "roles": {
+    "male": { "skin": "MI_Regular_Male", "hair": "MI_Hair_1", "eyes": "MI_Eyes" }
+  },
+  "skin": [
+    { "name": "Tan", "colour": [1.0, 1.0, 1.0] },
+    { "name": "Pale", "colour": [1.22, 1.27, 1.34] },
+    { "name": "Fair", "colour": [1.1, 1.12, 1.15] },
+    { "name": "Olive", "colour": [0.8, 0.78, 0.68] },
+    { "name": "Brown", "colour": [0.58, 0.5, 0.44] },
+    { "name": "Deep", "colour": [0.36, 0.3, 0.27] }
+  ],
+  "hair": [
+    { "name": "Brown", "colour": [0.2, 0.115, 0.06] },
+    { "name": "Black", "colour": [0.03, 0.03, 0.035] },
+    { "name": "Dark brown", "colour": [0.09, 0.055, 0.035] },
+    { "name": "Auburn", "colour": [0.33, 0.11, 0.05] },
+    { "name": "Blond", "colour": [0.8, 0.55, 0.25] },
+    { "name": "Grey", "colour": [0.45, 0.45, 0.47] },
+    { "name": "White", "colour": [0.88, 0.88, 0.88] }
+  ],
+  "eyes": [
+    { "name": "Brown", "map": "models/character/eyes/brown.png" },
+    { "name": "Hazel", "map": "models/character/eyes/hazel.png" },
+    { "name": "Green", "map": "models/character/eyes/green.png" },
+    { "name": "Blue", "map": "models/character/eyes/blue.png" },
+    { "name": "Grey", "map": "models/character/eyes/grey.png" }
+  ]
+}

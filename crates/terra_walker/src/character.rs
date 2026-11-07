@@ -24,6 +24,8 @@
 //! does in play.
 
 mod held;
+mod paint;
+pub use paint::{Coat, Paint};
 
 pub(crate) use held::look_points;
 pub use held::{CARRIED_IN, CarryHold, CarryPosed, Held};
@@ -230,6 +232,8 @@ pub fn plugin(app: &mut App) {
     .add_observer(held::held_ready)
     .add_observer(crate::strap::strap)
     .add_observer(tint)
+    .init_resource::<paint::Painted>()
+    .add_observer(paint::paint)
     .add_systems(
         PostUpdate,
         crate::strap::follow_fist
