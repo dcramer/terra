@@ -6,8 +6,8 @@
 (
     kind: [Day, Water],
     refs: "forest",
-    // Its scatter, water and life are still wood/'s and the glade's own code; they move
-    // here as the kit's jobs land (j7 on).
+    // Its scatter and life are still wood/'s and the glade's own code; they move here as
+    // the kit's jobs land (j7 on).
     layout: Forest,
     light: (preset: "forest-day"),
     // The kit's ground (kit/ground.rs) over the glade's own maps (terrain.rs `SITES`).
@@ -30,6 +30,36 @@
         ],
         // The camp's fire (scene::FIRE).
         scorch: [(0.0, 3.0)],
+    ),
+    // The pond, the kit's water (kit/water.rs, wood/pond.rs, iso-kit j28, j33): still,
+    // peaty and deep, as the refs' forest ponds: the bed shows only in a hand's breadth at
+    // the bank, the rest a near-black green-brown body under the canopy's and the
+    // forest-day sky's mirror; the breeze barely moves it; the sun's lane off a stand-in
+    // glint (pond.rs), faint.
+    water: (
+        kind: Pond,
+        level: -0.55,
+        // The body is lit as the ground (the shader's PBR pass), so by day its colour is an
+        // albedo under the 4,200 lux sun: j28's Linear(0.025, 0.035, 0.02) and absorb
+        // 3.5/2.2/2.0 read as sunlit dark soil with the bed through it, "a milky grey sheet
+        // like concrete" (round 261107-0220, lift 1, gain 0.15, key 0.1); the marsh's night
+        // hides the same body. Real peaty water scatters well under 1%: near black, the
+        // mirror the brightest part of it.
+        deep: Srgb(0.035, 0.04, 0.025),
+        absorb: (14.0, 11.0, 10.0),
+        shore: 0.1,
+        film: 0.0,
+        // A broad lane (along 0.15, across 0.06, steep 0.12) and glitter 0.3 drew a milky
+        // sheet under rain-like dashes over the whole pond, its mean sRGB 168, 161, 137
+        // against the bridge pond ref's 59, 71, 77 (round 261107-0155): a calm face, a
+        // narrow lane, a little glitter, no dashes.
+        // The stand-in glint's lane (pond.rs) at gain 0.15 was the grey sheet itself once
+        // the body was dark: a broad tan glow over the pond's middle, box mean sRGB 126,
+        // 120, 105 (round 261107-0248). A still pond with the sun out of its mirror shows
+        // none, so the lane is off and the mirror carries the face.
+        mirror: (lift: 2.5, distort: 0.04),
+        ripples: (fine: 0.7, broad: 3.0, steep: 0.05, calm: 0.9),
+        streaks: (along: 0.06, across: 0.025, cell: 0.1, glitter: 0.08, gain: 0.0, key: 0.1, dash: 1.0),
     ),
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],

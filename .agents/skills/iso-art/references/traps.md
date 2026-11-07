@@ -34,6 +34,7 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 - A glossy, reflective water face under a strong point light renders as one flat lit disc — check the light's specular before tuning a faked reflection (the ruin's pool is unlanded: `~/.cache/terra-handoff/iso-art-j10-pool/`).
 - Fog cards over the whole frame lift the mids into lavender smudges — keep them low and in the pools.
 - Water at a true Fresnel (~0.02) reads as mud; at a lift of 6 too — the sky lifted ~25 times (pool.rs `Look.sky.a`), darker near the banks.
+- The kit water's `deep` is an albedo lit by the key, and a stand-in glint's smooth lane spreads over a whole small pond: by day a body of 0.03 with a low `absorb`, or a glint's `gain` 0.15, reads as a milky grey sheet (forest j28, j33: box sRGB 126-133 against the ref's 59, 71, 77), which a night hides. Body near black (sRGB 0.035), absorb 10 to 14, lane off: the mirror carries the face (40, 47, 46, j33).
 - A light's reflection lands ~0.7 x its height toward the camera from its foot: a fire up the bank glints on mud — glinting lights on the water's lip or in it.
 - A sun under ~15 degrees turns every blade's shadow into a frame-wide streak (the marsh's reeds) — `NotShadowCaster` on blades and sedge.
 - Blades under ~1.5 cm wide alias into dark hair at the camera (a pixel is ~1 cm) — 3 to 6 cm, lighter albedo.

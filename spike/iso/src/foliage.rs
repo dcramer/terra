@@ -48,7 +48,7 @@ impl MaterialExtension for FoliageExt {
 }
 
 /// The wind's direction over the clearing (from the west-south-west).
-const WIND: Vec2 = Vec2::new(0.86, 0.5);
+pub const WIND: Vec2 = Vec2::new(0.86, 0.5);
 /// The hole's radius about each of the party (m, on the screen).
 const HOLE: f32 = 2.8;
 
