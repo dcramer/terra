@@ -378,8 +378,8 @@ fn light(
             lumens,
             seed: rng.f() * 40.0,
         },
-        // The pool and the puddles mirror every fire (water.rs).
-        crate::pool::Glint,
+        // The pool mirrors every fire as a streak (water.rs, the kit's water).
+        crate::kit::water::Glint,
     ));
 }
 

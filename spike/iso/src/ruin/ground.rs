@@ -159,8 +159,10 @@ fn paving(flags_m: f32) -> Mesh {
                     let settle = (fbm(*p * 0.3, 311) - 0.5) * 0.03;
                     pos.push([p.x, TOP + settle, p.y]);
                     uv.push((*p / flags_m).to_array());
-                    // The maps the laid floor reads (`SITES`): how mossy, how wet.
-                    weather.push([super::litter::mossy(*p), super::water::puddled(*p)]);
+                    // The maps the laid floor reads (`SITES`): how mossy, how wet (the
+                    // puddles, and the flags under the pool's skin and round its line).
+                    let wet = super::water::puddled(*p).max(super::water::soaked(*p));
+                    weather.push([super::litter::mossy(*p), wet]);
                     // Grime: drifts of dirt washed over the flags, thickest at the broken edge.
                     let drift = smooth(0.35, 0.75, fbm(*p * 0.25, 312));
                     let speck = fbm(*p * 2.5, 313);

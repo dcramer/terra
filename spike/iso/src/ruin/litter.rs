@@ -52,7 +52,7 @@ fn open(p: Vec2) -> f32 {
 
 /// How wet `p` is: litter neither floats on the pool nor lies in the puddles.
 fn wet(p: Vec2) -> f32 {
-    super::water::pool(p).max(super::water::puddled(p))
+    super::water::standing(p).max(super::water::puddled(p))
 }
 
 /// How mossy the flags are at `p` (0..1, kit/laid.wesl grows it): some in every joint, thick

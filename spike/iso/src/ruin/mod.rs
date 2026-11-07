@@ -45,7 +45,7 @@ pub fn plugin(app: &mut App) {
             ),
         )
         .add_plugins((
-            crate::pool::plugin,
+            crate::kit::water::plugin,
             crate::kit::laid::plugin,
             fight::plugin,
             fire::plugin,

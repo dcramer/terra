@@ -38,6 +38,22 @@
             feet: Site("walls"),
         ),
     ),
+    // The rain pool by the west brazier, the kit's water (kit/water.rs, ruin/water.rs, iso-kit
+    // j38): a skin 2 cm over the flags (their settling is 1.5 cm about 0.01), so its line is
+    // the face's fade over ruin/water.rs's depth, out on whole flags, not the paving's cut
+    // ("stepped polygon rims and no wet edge", judge 261107-0302). Dark and still: a few cm
+    // over the sunk flags shows them dim, black where they broke; the fires and the fight in
+    // its mirror, each fire's streak across it, the moon's lane faint (as the marsh's).
+    water: (
+        kind: Pond,
+        level: 0.03,
+        deep: Srgb(0.02, 0.019, 0.018),
+        absorb: (24.0, 22.0, 20.0),
+        shore: 0.008,
+        mirror: (lift: 2.0, distort: 0.02),
+        ripples: (fine: 0.7, broad: 3.0, steep: 0.02, calm: 0.9),
+        streaks: (glitter: 0.1, gain: 0.6, key: 0.1, dash: 1.0),
+    ),
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
 )

@@ -12,7 +12,6 @@ mod mipmaps;
 mod motes;
 mod nav;
 mod party;
-mod pool;
 mod rest;
 mod rim;
 mod ruin;

@@ -72,7 +72,7 @@ pub fn path(p: Vec2) -> f32 {
     smooth(half, half * 0.45, from_path(p))
 }
 
-/// Puddles in the path's ruts, sunk under the water's face (so pool.rs draws them and the
+/// Puddles in the path's ruts, sunk under the water's face (so the kit's water draws them and the
 /// lights glint in them), none where the cast stands.
 fn puddle(p: Vec2) -> f32 {
     let feet = [KNIGHT, super::FOE, super::TARGET]

@@ -1,6 +1,6 @@
 //! Will-o'-wisps and midges: cold orbs drifting low over the channels, each the `wisp`
 //! preset's glow (kit/effects.rs: a hot core in a soft halo facing the camera, no disc's
-//! edge) and its light, mirrored in the water (`pool::Glint`),
+//! edge) and its light, mirrored in the water (`kit::water::Glint`),
 //! swelling and fading on its own slow beat with a flicker through it; and clouds of midges
 //! dancing over the reeds, catching the light.
 
@@ -9,7 +9,7 @@ use super::land::{far, near};
 use crate::forest::Rng;
 use crate::kit::effects::{Glow, Look, Preset};
 use crate::motes::soft_image;
-use crate::pool::Glint;
+use crate::kit::water::Glint;
 use crate::ruin::effects::kit::{Cam, Clock, glow};
 use bevy::prelude::*;
 

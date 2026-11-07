@@ -1,12 +1,12 @@
 //! What stands in the marsh: dead trees in the water at the frame's edges, mossy rocks,
 //! stumps and logs half sunk along the banks, a camp fire on the knight's bank (its flames
 //! the ruin's flipbook, found by its `Halo` card) and a lantern on a post in the mere,
-//! both flickering and mirrored in the water (`pool::Glint`); the lantern hangs from a
+//! both flickering and mirrored in the water (`kit::water::Glint`); the lantern hangs from a
 //! crossarm on a round pole, a crisp flame in its lit glass.
 
 use super::land::shape;
 use crate::motes::{Halo, soft_image};
-use crate::pool::Glint;
+use crate::kit::water::Glint;
 use crate::ruin::effects::kit::{Clock, glow};
 use crate::scene::model;
 use bevy::prelude::*;

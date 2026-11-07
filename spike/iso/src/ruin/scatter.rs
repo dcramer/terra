@@ -67,7 +67,7 @@ fn dry(p: Vec2) -> f32 {
     1.0 - smooth(
         0.05,
         0.3,
-        super::water::pool(p).max(super::water::puddled(p)),
+        super::water::standing(p).max(super::water::puddled(p)),
     )
 }
 
