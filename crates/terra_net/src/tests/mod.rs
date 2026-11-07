@@ -230,7 +230,7 @@ impl Table {
                     *purse += 1;
                     self.server.set_as(id, PURSE, &*purse);
                 }
-                Event::Said { .. } => {}
+                Event::Said { .. } | Event::Ready { .. } => {}
                 Event::Left { peer } => {
                     if let Some(id) = self.players.remove(&peer) {
                         self.server.despawn(id);
@@ -271,7 +271,7 @@ impl Table {
                         tick, you, realm, ..
                     } => {
                         assert_eq!(realm, b"toy realm");
-                        seat.you = Some(you);
+                        seat.you = you;
                         seat.next = tick + LEAD;
                     }
                     Heard::Op {

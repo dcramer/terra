@@ -203,7 +203,7 @@ impl Walk {
             for event in heard {
                 if let Heard::Welcome { tick, you, .. } = event {
                     seat.clock.start(tick);
-                    seat.you = Some(you.0);
+                    seat.you = you.map(|you| you.0);
                 }
             }
             let Some(you) = seat.you else { continue };

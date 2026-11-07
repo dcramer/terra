@@ -91,6 +91,10 @@ pub struct Link {
     /// The link was kept waiting, the world's clock held (a title screen, a load): the next
     /// tick starts the clock and the body again from the server's newest word.
     waited: bool,
+    /// Greeted by the server, with no body yet, and whether this game has said it is ready
+    /// for one: it does on its first tick, when its world is made and its clock runs.
+    greeted: bool,
+    readied: bool,
     /// Who is in the world, as the server has said.
     players: Vec<String>,
     /// What the server said that is the layers' above to act on (operations, events, the
@@ -124,6 +128,8 @@ impl Link {
             over: None,
             welcomed: None,
             waited: false,
+            greeted: false,
+            readied: false,
             players: Vec::new(),
             events: Vec::new(),
         }
@@ -182,10 +188,14 @@ impl Link {
         self.client.poll(&mut self.wire, &mut heard);
         for event in heard.drain(..) {
             match &event {
-                Heard::Welcome { tick, realm, .. } => {
+                Heard::Welcome {
+                    tick, realm, you, ..
+                } => {
                     if !self.realm.is_empty() && *realm != self.realm {
                         self.over = Some(OTHER_WORLD.to_string());
                     }
+                    // With no entity yet it is the greeting (D639): the realm to make.
+                    self.greeted |= you.is_none();
                     self.welcomed = Some(realm.clone());
                     self.clock.start(*tick);
                     self.history.clear();
@@ -224,6 +234,11 @@ impl Link {
 
     fn listen(&mut self, world: &mut World) {
         self.hear(super::TICK);
+        // A tick is walked, so this game's world is made: it can take its body.
+        if self.greeted && !self.readied && self.over.is_none() {
+            self.client.ready(&mut self.wire);
+            self.readied = true;
+        }
         if std::mem::take(&mut self.waited)
             && let Some(stamp) = self.client.stamp()
         {

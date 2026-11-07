@@ -332,11 +332,22 @@ pub fn hear(
                 identity,
                 name,
             } => {
-                // Back where it left, if it has been here before (D592, D637).
-                let place = host.left.remove(&identity).unwrap_or(host.start);
+                // Greeted with the realm, so its game can make the land; its body is made
+                // when it says it has (D639), so nobody sees one stand idle while it loads.
                 host.identities.insert(peer, identity);
                 info!("{name} joined the world.");
                 host.names.insert(peer, name);
+                (host.server).greet(&mut host.wire, peer, ROOM, &host.realm);
+            }
+            Event::Ready { peer } => {
+                if host.guests.contains_key(&peer) {
+                    continue;
+                }
+                // Back where it left, if it has been here before (D592, D637).
+                let known = host.identities.get(&peer);
+                let place = known
+                    .and_then(|identity| host.left.remove(identity))
+                    .unwrap_or(host.start);
                 let up = place.normalize_or(Vec3::Y);
                 let forward = up.any_orthonormal_vector();
                 let body = (
@@ -365,6 +376,8 @@ pub fn hear(
                 let name = host.names.remove(&peer).unwrap_or_default();
                 info!("{name} left the world.");
                 let Some(entity) = host.guests.remove(&peer) else {
+                    // Gone before its game was ready: it had no body.
+                    host.identities.remove(&peer);
                     continue;
                 };
                 // Its body leaves at once (D637); where it stood is kept for its return.

@@ -102,8 +102,12 @@ impl Bot {
         let from = self.heard.len();
         self.client.poll(&mut self.wire, &mut self.heard);
         for heard in &self.heard[from..] {
-            if let Heard::Welcome { tick, .. } = heard {
+            if let Heard::Welcome { tick, you, .. } = heard {
                 self.clock.start(*tick);
+                // Greeted: a bot has no land to load, so it is ready at once.
+                if you.is_none() {
+                    self.client.ready(&mut self.wire);
+                }
             }
         }
         if let Some(stamp) = self.client.stamp() {
@@ -943,4 +947,39 @@ fn each_player_looks_in_the_others_game_as_its_player_made_it() {
         ..bearded
     };
     assert!(Features::decoded(&long.encoded()).is_err());
+}
+
+/// A game that has joined and is still making the host's land (its clock held) is known to
+/// the host and has no body there: nobody sees one stand idle. Its body is made when its
+/// first tick is walked (D639). Before this the body stood from the hello on.
+#[test]
+fn a_joining_game_has_no_body_on_the_host_until_its_world_is_made() {
+    let mut pair = Together::new(Conditions::PERFECT);
+    // Three seconds of loading: the link kept, no tick walked.
+    pair.hold(192, true);
+    let mut guests = pair.host.query_filtered::<Entity, With<Guest>>();
+    assert_eq!(
+        guests.iter(&pair.host).count(),
+        0,
+        "a body stood while it loaded"
+    );
+    assert_eq!(
+        pair.host.resource::<Host>().server().clients(),
+        1,
+        "but it is in"
+    );
+    assert_eq!(
+        pair.client.resource::<link::Link>().realm(),
+        Some(&b"realm"[..]),
+        "and knows the land to make"
+    );
+    // Its world made, its ticks begin: its body stands within the second.
+    pair.run(192..256);
+    assert_eq!(guests.iter(&pair.host).count(), 1);
+    let mut puppets = pair.client.query_filtered::<Entity, With<link::Puppet>>();
+    assert_eq!(
+        puppets.iter(&pair.client).count(),
+        1,
+        "and it sees the host"
+    );
 }

@@ -85,7 +85,13 @@ fn main() {
         client.poll(&mut wire, &mut heard);
         for event in heard.drain(..) {
             match event {
-                Event::Welcome { tick, .. } => clock.start(tick),
+                Event::Welcome { tick, you, .. } => {
+                    clock.start(tick);
+                    // Greeted: a bot has no land to load, so it is ready at once.
+                    if you.is_none() {
+                        client.ready(&mut wire);
+                    }
+                }
                 Event::Closed(reason) => {
                     println!(
                         "{}",

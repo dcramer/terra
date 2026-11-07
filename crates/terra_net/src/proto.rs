@@ -102,6 +102,8 @@ pub enum Up {
     Ask(Vec<u8>),
     /// Words for everyone in the world.
     Say(String),
+    /// The room it was let into is made here (its land loaded): it can take a body now.
+    Ready,
 }
 
 impl Wire for Up {
@@ -113,24 +115,25 @@ impl Wire for Up {
                 name,
                 signature,
             } => {
-                to.ranged(0, 2);
+                to.ranged(0, 3);
                 version.write(to);
                 identity.write(to);
                 name.write(to);
                 signature.write(to);
             }
             Up::Ask(bytes) => {
-                to.ranged(1, 2);
+                to.ranged(1, 3);
                 to.run(bytes);
             }
             Up::Say(text) => {
-                to.ranged(2, 2);
+                to.ranged(2, 3);
                 text.write(to);
             }
+            Up::Ready => to.ranged(3, 3),
         }
     }
     fn read(from: &mut Reader) -> Result<Self, Malformed> {
-        Ok(match from.ranged(2)? {
+        Ok(match from.ranged(3)? {
             0 => {
                 let (version, identity) = (u64::read(from)?, <[u8; 32]>::read(from)?);
                 let name = String::read(from)?;
@@ -145,13 +148,14 @@ impl Wire for Up {
                 }
             }
             1 => Up::Ask(from.run()?.to_vec()),
-            _ => {
+            2 => {
                 let text = String::read(from)?;
                 if text.len() > MOST_SAY {
                     return Err(Malformed::Long);
                 }
                 Up::Say(text)
             }
+            _ => Up::Ready,
         })
     }
 }
@@ -160,11 +164,13 @@ impl Wire for Up {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Down {
     /// You are in: the tick, your room, the entity that is yours, and what the game says of
-    /// the room (its realm and seed: all a client needs to make the land).
+    /// the room (its realm and seed: all a client needs to make the land). With no entity
+    /// yet it is the greeting: make the room and say [`Up::Ready`], and the welcome with
+    /// your entity follows.
     Welcome {
         tick: u32,
         room: RoomId,
-        you: EntityId,
+        you: Option<EntityId>,
         realm: Vec<u8>,
     },
     Refuse(Reason),
@@ -206,7 +212,10 @@ impl Wire for Down {
                 to.ranged(0, 7);
                 tick.write(to);
                 room.0.write(to);
-                you.0.write(to);
+                to.bool(you.is_some());
+                if let Some(you) = you {
+                    you.0.write(to);
+                }
                 to.run(realm);
             }
             Down::Refuse(reason) => {
@@ -249,7 +258,11 @@ impl Wire for Down {
             0 => Down::Welcome {
                 tick: u32::read(from)?,
                 room: RoomId(u16::read(from)?),
-                you: EntityId(u32::read(from)?),
+                you: if from.bool()? {
+                    Some(EntityId(u32::read(from)?))
+                } else {
+                    None
+                },
                 realm: from.run()?.to_vec(),
             },
             1 => Down::Refuse(Reason::read(from)?),
@@ -330,7 +343,13 @@ mod tests {
             Down::Welcome {
                 tick: 77,
                 room: RoomId(2),
-                you: EntityId(40),
+                you: Some(EntityId(40)),
+                realm: b"seed".to_vec(),
+            },
+            Down::Welcome {
+                tick: 78,
+                room: RoomId(2),
+                you: None,
                 realm: b"seed".to_vec(),
             },
             Down::Refuse(Reason::Full),

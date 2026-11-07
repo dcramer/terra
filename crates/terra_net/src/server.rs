@@ -94,6 +94,8 @@ pub enum Event {
     Left { peer: Peer },
     /// A welcomed client said something, which everyone has been told.
     Said { peer: Peer, text: String },
+    /// A greeted client has made the room: give it a body and [`Server::welcome`] it with it.
+    Ready { peer: Peer },
 }
 
 struct Part {
@@ -383,6 +385,10 @@ impl Server {
                 }
             }
             Ok(Up::Ask(bytes)) if session.welcomed => events.push(Event::Asked { peer, bytes }),
+            // In turn only from one greeted and not yet given a body.
+            Ok(Up::Ready) if session.welcomed && session.view.is_none() => {
+                events.push(Event::Ready { peer });
+            }
             Ok(Up::Say(text)) if session.welcomed => {
                 let name = session.name.clone();
                 self.say(transport, &name, &text);
@@ -429,6 +435,31 @@ impl Server {
         you: EntityId,
         realm: &[u8],
     ) {
+        self.let_in(transport, peer, room, Some(you), realm);
+    }
+
+    /// Lets a client in to a room with no body yet: it is told the room, so its game can
+    /// make it (load its land), and says when it has ([`Event::Ready`]); the welcome with
+    /// its entity follows. As Unreal's and Source's clients join: told the level, load it,
+    /// then enter. Until then it is sent no state and nobody sees it.
+    pub fn greet(
+        &mut self,
+        transport: &mut impl ServerTransport,
+        peer: Peer,
+        room: RoomId,
+        realm: &[u8],
+    ) {
+        self.let_in(transport, peer, room, None, realm);
+    }
+
+    fn let_in(
+        &mut self,
+        transport: &mut impl ServerTransport,
+        peer: Peer,
+        room: RoomId,
+        you: Option<EntityId>,
+        realm: &[u8],
+    ) {
         let Some(session) = self.sessions.get_mut(&peer) else {
             return;
         };
@@ -437,7 +468,7 @@ impl Server {
         // yet, and nothing of the last is owed it.
         session.welcomed = true;
         session.room = room;
-        session.view = Some(you);
+        session.view = you;
         session.known.clear();
         session.leaving.clear();
         session.flights.clear();
@@ -446,7 +477,7 @@ impl Server {
         session.events.clear();
         session.settled = false;
         session.sweep = 0;
-        if let Some(entity) = self.entities.get_mut(&you) {
+        if let Some(entity) = you.and_then(|you| self.entities.get_mut(&you)) {
             entity.owner = Some(peer);
         }
         let welcome = Down::Welcome {

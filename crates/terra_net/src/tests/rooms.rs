@@ -156,7 +156,7 @@ fn a_crossing_leaves_the_old_room_behind_and_coming_back_finds_it_again() {
     hall.run(64, flicker);
     let guest = &hall.guests[me];
     assert!(
-        matches!(guest.since_welcome()[0], Heard::Welcome { room: THERE, you, ref realm, .. } if you == second && realm == b"room 2")
+        matches!(guest.since_welcome()[0], Heard::Welcome { room: THERE, you, ref realm, .. } if you == Some(second) && realm == b"room 2")
     );
     assert_eq!(
         guest.holds(),
@@ -445,4 +445,79 @@ fn everyone_is_told_who_is_here_and_hears_what_is_said() {
             .contains(&Heard::Closed(Reason::Malformed))
     );
     assert_eq!(hall.server.clients(), 0);
+}
+
+/// A client greeted with no body yet is told the room and nothing of what is in it; nobody
+/// is told of it either. When it says it is ready it is given its body and welcomed with it,
+/// and the room's state comes (D639: told the level, load it, then enter).
+#[test]
+fn a_greeted_client_takes_its_body_only_once_it_says_it_is_ready() {
+    let network = Network::new();
+    let mut wire = network.server();
+    let part = PartSpec {
+        audience: Audience::Public,
+        weight: 1.0,
+    };
+    let mut server = Server::new(Config::new(VERSION), vec![part]);
+    let lamp = server.spawn(HERE, CREATURE, [0.0; 3]);
+    server.set(lamp, 0, b"lit");
+    let mut tap = network.connect(Conditions::PERFECT);
+    let mut client = Client::new();
+    client.hello(&mut tap, VERSION, &Identity::from_secret([2; 32]), "guest");
+    let (mut events, mut heard, mut you) = (Vec::new(), Vec::new(), None);
+    let mut run = |ticks: u32,
+                   server: &mut Server,
+                   client: &mut Client,
+                   tap: &mut LoopbackClient,
+                   heard: &mut Vec<Heard>,
+                   you: &mut Option<EntityId>| {
+        for _ in 0..ticks {
+            network.advance(TICK_S);
+            server.poll(&mut wire, &mut events);
+            for event in events.drain(..) {
+                match event {
+                    Event::Hello { peer, .. } => server.greet(&mut wire, peer, HERE, b"room"),
+                    Event::Ready { peer } => {
+                        let body = server.spawn(HERE, PLAYER, [1.0, 0.0, 0.0]);
+                        server.set(body, 0, b"body");
+                        server.welcome(&mut wire, peer, HERE, body, b"room");
+                        *you = Some(body);
+                    }
+                    _ => {}
+                }
+            }
+            server.step(&mut wire);
+            client.poll(tap, heard);
+            client.send(tap);
+        }
+    };
+    // Greeted: the room's word, no entity, and for a second nothing of the room.
+    run(64, &mut server, &mut client, &mut tap, &mut heard, &mut you);
+    assert_eq!(
+        heard
+            .iter()
+            .filter(|each| !matches!(each, Heard::Roster { .. }))
+            .collect::<Vec<_>>(),
+        [&Heard::Welcome {
+            tick: 1,
+            room: HERE,
+            you: None,
+            realm: b"room".to_vec()
+        }],
+        "greeted with the room and no entity, and told nothing in it"
+    );
+    assert_eq!(you, None, "no body was made for it");
+    assert_eq!(client.entities().count(), 0);
+    // Ready: its body, the welcome with it, and the room's state.
+    client.ready(&mut tap);
+    run(64, &mut server, &mut client, &mut tap, &mut heard, &mut you);
+    let body = you.expect("its body was made when it said it was ready");
+    assert!(
+        heard
+            .iter()
+            .any(|each| matches!(each, Heard::Welcome { you: Some(you), .. } if *you == body)),
+        "{heard:?}"
+    );
+    assert!(client.entity(body).is_some_and(|entity| entity.mine));
+    assert!(client.entity(lamp).is_some(), "the room's state came");
 }

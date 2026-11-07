@@ -20,11 +20,13 @@ use std::collections::{HashMap, VecDeque};
 #[derive(Debug, PartialEq, Eq)]
 pub enum Event {
     /// The server let it in, or moved it to another room (a crossing): the room, the entity
-    /// that is its own, the game's word on the room. It holds nothing of a room before.
+    /// that is its own, the game's word on the room. It holds nothing of a room before. With
+    /// no entity it is the greeting: once the room is made here, say so ([`Client::ready`])
+    /// and the welcome with the entity follows.
     Welcome {
         tick: u32,
         room: RoomId,
-        you: EntityId,
+        you: Option<EntityId>,
         realm: Vec<u8>,
     },
     /// The next operation of a region's record, to apply.
@@ -427,6 +429,12 @@ impl Client {
     pub fn say(&mut self, transport: &mut impl ClientTransport, text: &str) {
         transport.send(Lane::Ordered, &Up::Say(text.to_string()).encoded());
         transport.flush();
+    }
+
+    /// Says the room it was greeted into is made here, its land loaded: the server then gives
+    /// it a body and welcomes it with that.
+    pub fn ready(&mut self, transport: &mut impl ClientTransport) {
+        transport.send(Lane::Ordered, &Up::Ready.encoded());
     }
 
     /// Asks the server for an operation: it shows when the server orders it (D651).
