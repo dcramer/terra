@@ -12,6 +12,7 @@ pub mod light;
 pub mod scatter;
 pub mod street;
 pub mod water;
+pub mod weather;
 
 use std::path::PathBuf;
 

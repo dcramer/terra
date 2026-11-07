@@ -44,6 +44,7 @@ pub fn plugin(app: &mut App) {
         .insert_resource(crate::terrain::Land::from_shape(land::shape))
         .add_plugins((
             crate::kit::water::plugin,
+            crate::kit::weather::plugin,
             crate::ruin::effects::plugin,
             crate::ruin::fight::plugin,
             land::plugin,

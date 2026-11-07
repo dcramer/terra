@@ -441,7 +441,8 @@ pub enum WaterKind {
     Wet,
 }
 
-/// Weather: the wind (x, z, metres a second), and rain, snow and mist from 0 to 1.
+/// Weather: the wind (x, z, metres a second), and rain, snow and mist from 0 to 1. Rain
+/// falls as `drops` say and mist lies as its `layer` says (kit/weather.rs, iso-kit j19).
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct Weather {
@@ -449,6 +450,8 @@ pub struct Weather {
     pub rain: f32,
     pub snow: f32,
     pub mist: f32,
+    pub drops: super::weather::Drops,
+    pub layer: super::weather::Layer,
 }
 
 /// An effect preset by name (iso-kit j6 names them), and where it plays if not the fight's.
@@ -528,7 +531,8 @@ mod tests {
         scatter: [(models: ["models/bin.glb"], density: 0.05, scale: (0.9, 1.1), on: Some(Wear))],
         decals: [(texture: "decals/oil.png", count: 12, size: (0.5, 1.5))],
         water: Some((kind: Wet, deep: Some(Srgb(0.02, 0.02, 0.03)), film: 0.002, rain: 0.6, mirror: (lift: 2.0, nits: 20.0))),
-        weather: (wind: (1.0, 0.5), rain: 0.8, mist: 0.3),
+        weather: (wind: (1.0, 0.5), rain: 0.8, mist: 0.3, drops: (fall: 8.0, bright: 0.03),
+            layer: (height: 0.5, water: 2.0, colour: Srgb(0.6, 0.65, 0.7))),
         effects: [(preset: "steam", at: Some((2.0, -1.0)))],
         life: [(kind: "drone", count: 2)],
     )"#;

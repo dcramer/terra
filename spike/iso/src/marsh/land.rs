@@ -141,6 +141,14 @@ fn spawn(
     biome: Res<crate::kit::biome::Biome>,
     mut waters: ResMut<Assets<kit::water::KitWater>>,
 ) {
+    // The weather's floor (kit/weather.rs): the land and the channels' water.
+    commands.insert_resource(kit::weather::Floor::sample(
+        Vec2::new(-28.0, -24.0),
+        Vec2::new(28.0, 16.0),
+        0.5,
+        Some(LEVEL),
+        |p| land.height(p),
+    ));
     // The open sky over it all: no crowns.
     let shade = |_: Vec2| 0.0;
     let place = Place {

@@ -50,6 +50,12 @@ The fields after `light` but `ground`, `scatter` (marsh and street) and the mars
 - One shader, four modes (glow, lit puff, trail: a hot edge, a smear dissolving into streaks down its age, premultiplied; streak), each soft against the depth prepass (Lorach 2007); a view drawing them or the fight's decals needs `DepthPrepass` (the water's mirror camera too).
 - Budget: 400 quads and 8 lights a biome, printed at startup.
 
+## The weather (`src/kit/weather.rs`, `weather.wesl`)
+
+- `weather: (wind, rain, mist, drops: (fall, shutter, width, bright, splashes), layer: (height, water, hollows, drift, banks, thick, colour, forward, keylit))`; a layout inserts its `Floor` (the street's strew, the marsh's land).
+- Rain: one mesh of streaks (8000 at `rain: 1`) and splashes (2000), moved in the vertex shader: camera-facing, stretched by the shutter, lit only by the 16 brightest point and spot lights near them (`lit`, a trace of key and sky), so they show in the cones; splashes off the water; the water's own `rain` draws the rings. Budget printed.
+- Mist: Bevy's volumetric fog in a box over the floor, a 3D density thickest at the surface (e-fold `height`), `water` times over open water, more in hollows, drifting banks; every light gets `VolumetricLight`, the key if `keylit`. Never sheets (traps.md).
+
 ## Adding a biome
 
 1. Its references first: `refs/<name>/` with `960/` copies, measured into `refs/stats.json` (`node tools/iso-art/stats.ts`, judging.md).

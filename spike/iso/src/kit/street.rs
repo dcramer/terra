@@ -375,6 +375,7 @@ pub fn plugin(app: &mut App) {
         super::laid::plugin,
         super::water::plugin,
         super::scatter::plugin,
+        super::weather::plugin,
     ))
     .add_systems(Startup, (spawn, strew));
 }
@@ -403,6 +404,14 @@ fn strew(
         .flat_map(|p| p.at.iter().map(|x| st.spot(p.side, p.line, *x, p.out).xz()))
         .collect();
     let keep = |p: Vec2| feet.iter().any(|f| f.distance(p) < 0.7);
+    // The weather's floor (kit/weather.rs): the road and the pavements, no standing water.
+    commands.insert_resource(super::weather::Floor::sample(
+        Vec2::new(st.focus.0 - STREWN, -wall),
+        Vec2::new(st.focus.0 + STREWN, wall),
+        0.25,
+        None,
+        height,
+    ));
     let g = super::scatter::Ground {
         sites: &SITES,
         site: &site,
