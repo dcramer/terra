@@ -39,6 +39,10 @@ const SYSTEM_RANDOMNESS: [&str; 8] = [
 /// Seeds written in that are not the world's, each with why it may be: the file, and why.
 const ALLOWED: &[(&str, &str)] = &[
     (
+        "crates/terra_net/src/transport/loopback.rs",
+        "a link's dice: which packets a test's network loses, not the world",
+    ),
+    (
         "crates/terra_game/src/play/music.rs",
         "the music's dice: what is heard, not the world",
     ),

@@ -1,6 +1,6 @@
 # Netcode
 
-Status: **designed, 2026-11-06; build step 1 built** (D34, D651, D652, D636): `terra_net` passes milestone D and the soak on the in-memory transport. Steps 2 to 5 are not built. How the server of [multiplayer.md](multiplayer.md) (D51) talks to its clients: what is sent, when, and how a client stays smooth. The survey behind it is [research/2026-11-06-netcode.md](../research/2026-11-06-netcode.md). It serves v0 (a host and a few friends, four clients at 100 ms and 1% loss, two realms on one host) and keeps D52's thousand possible: nothing is sent to everyone, and every cost is per area.
+Status: **designed, 2026-11-06; build steps 1 and 2 built** (D34, D651, D652, D636): `terra_net` passes milestone D and the soak on the in-memory transport, and two men walk together on the real mover, each predicting its own body. Steps 3 to 5 are not built. How the server of [multiplayer.md](multiplayer.md) (D51) talks to its clients: what is sent, when, and how a client stays smooth. The survey behind it is [research/2026-11-06-netcode.md](../research/2026-11-06-netcode.md). It serves v0 (a host and a few friends, four clients at 100 ms and 1% loss, two realms on one host) and keeps D52's thousand possible: nothing is sent to everyone, and every cost is per area.
 
 ## The model
 
@@ -50,6 +50,7 @@ The Bevy side is thin: the server and the client each sit in a resource, a syste
 - **Most recent state, by priority**: for each client the server knows, per part, the version that client last acknowledged. A part whose version is newer is owed. Owed parts gain priority each tick by kind and nearness, the packet is filled from the highest, and what does not fit waits and rises (Tribes, Halo, Fiedler's priority accumulator). A thing at rest costs nothing; a crowd degrades by updating far things less often, never by growing the packet.
 - **Interest**: cells of 32 m; a client is sent the entities in cells within its radius (128 m to start, a number per kind later) and stops being sent them one cell further out (hysteresis). Leaving is a part's version too, sent until acknowledged, so no reliable message is needed and order cannot go wrong.
 - **Operations**: on `Ordered`. A client asks; the server checks reach, ownership and permission (D51), gives the operation the next number in its region's record (regions of 256 m) and sends it to every client whose interest holds the region. The lane loses nothing, so the server knows how much of each region's record a client has been sent; a client coming to a region is sent what follows, and a late join is the same path. Compacting a long record into a snapshot is D21's later step.
+- **Intents** repeat: one equal to the one before it goes up as a bit, so a key held costs little.
 - **Events** (a noise, a blow landing): on `Ordered`, by area, in v0. If the soak shows them waiting behind a lost packet, they move to the `State` lane, resent until acknowledged.
 - **Quantising**: positions to 1/512 m within a cell-relative frame, velocities to 1/64 m/s, directions to 12 bits a turn; a client's own body unquantised.
 
@@ -61,6 +62,8 @@ First numbers, each a reading until its test has a planted fault (D632); they se
 | Up, a player | 4 kB/s | 2.4 kB/s |
 | Server, per client per tick, to pick and pack | 20 µs | 3.9 µs |
 | A late joiner correct around itself, on loopback | under 1 s | under 1 s (asserted) |
+
+On the real mover (two men walking, sprinting and jumping, 100 ms, 1% loss): 3.0 kB/s down and 1.3 kB/s up a player, a body shown in 19 bytes, and no correction in 20 s once the clock has its margin.
 
 ## Connecting
 
@@ -85,7 +88,7 @@ Each check has a planted fault beside it (D632).
 
 - **Milestone D** (engine.md), built: a server and two clients on loopback over a toy state end the same; a third joining late catches up. Faults: an operation dropped from one region's record, and a thing moved with nothing sent, must each fail the check.
 - **Soak**, built: four clients, 100 ms, 1% loss, jitter and copies, 30 simulated minutes in 2 s of real time: no lasting mismatch, a packet at rest carrying nothing, bytes a player a second reported. Fault: acknowledgements cut off must show as state never settling.
-- **Prediction**: a body walked on the real mover at 100 ms: no corrections on clear ground, a planted push corrected within a round trip. Fault: a client mover with other gravity must be corrected every tick.
+- **Prediction**, built (`terra_motion::mover::net`): two men on the real mover at 100 ms and 1% loss: every tick a client first predicts is where the server put the body, to a millimetre; a shove from the server is mispredicted for under 24 ticks and no longer. Fault: a client whose man is a tenth faster must fail the check.
 - **The reader**, built: random bytes never panic the wire, the server or a client; on the ordered lane they cost only their sender its connection.
 
 ## Build order

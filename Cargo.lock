@@ -6361,6 +6361,7 @@ dependencies = [
  "serde",
  "terra_core",
  "terra_gen",
+ "terra_net",
 ]
 
 [[package]]

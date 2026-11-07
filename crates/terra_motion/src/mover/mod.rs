@@ -21,6 +21,7 @@ mod climb;
 mod footing;
 mod grid;
 mod lanes;
+pub mod net;
 mod push;
 pub mod query;
 pub mod shapes;
