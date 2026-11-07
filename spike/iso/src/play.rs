@@ -19,6 +19,8 @@ use bevy::input::InputSystems;
 use bevy::prelude::*;
 use std::time::Duration;
 
+mod strike;
+
 /// How far the swing reaches (m, from his feet) and half its arc (degrees): the staged
 /// fight's ogre stands 2.4 m off.
 pub const REACH: f32 = 3.0;
@@ -28,6 +30,8 @@ pub const ARC: f32 = 60.0;
 const SWING: (f32, f32) = (0.7, 1.75);
 const BLOW: f32 = 1.25;
 const SWING_SPEED: f32 = 1.5;
+/// The hit-stop when the blade bites (s), as the staged blow's (ruin/effects/hit.rs).
+const STOP: f32 = 0.08;
 /// Ground speeds (m/s) of the knight's run and walk clips (art/iso/knight/asset.json).
 const RUN: f32 = 3.87;
 const WALK: f32 = 1.15;
@@ -40,7 +44,7 @@ const FOLLOW: f32 = 6.0;
 #[derive(Component)]
 pub struct Hero;
 
-/// A struck body, played its fall.
+/// A body felled by its last blow (strike.rs).
 #[derive(Component)]
 struct Fallen;
 
@@ -55,6 +59,8 @@ struct Rig {
     playing: Option<AnimationNodeIndex>,
     /// A swing under way: the way he faces, and whether the blow has landed.
     swing: Option<(Vec2, bool)>,
+    /// The hit-stop's end (s): the swing held where the blade bit.
+    halt: Option<f32>,
 }
 
 /// Where the hero may stand in this layout: the floor's height under a point, and whether
@@ -68,7 +74,8 @@ pub struct Ground {
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, (ground, street_hero))
         .add_systems(PreUpdate, script.after(InputSystems))
-        .add_systems(Update, (adopt, rig, control, follow).chain());
+        .add_systems(Update, (adopt, rig, control, follow).chain())
+        .add_plugins(strike::plugin);
     // The street stages no fight, so nothing else hangs the sword on its hero (held.rs).
     let layout = app.world().get_resource::<Args>().and_then(|a| a.layout);
     if layout == Some(Layout::Street) {
@@ -265,6 +272,7 @@ fn rig(
             attack: n[3],
             playing: Some(n[0]),
             swing: None,
+            halt: None,
         });
     }
 }
@@ -311,10 +319,8 @@ fn control(
         Option<Res<crate::nav::Nav>>,
         Option<ResMut<crate::ruin::walk::Walking>>,
     ),
-    (gltfs, mut graphs): (Res<Assets<Gltf>>, ResMut<Assets<AnimationGraph>>),
     mut hero: Query<(Entity, &mut Transform, &mut Rig), With<Hero>>,
-    foes: Query<(Entity, &Transform, &Pose), (Without<Hero>, Without<Fallen>)>,
-    children: Query<&Children>,
+    foes: Query<(Entity, &Transform), (With<Pose>, Without<Hero>, Without<Fallen>)>,
     mut players: Query<&mut AnimationPlayer>,
     mut transitions: Query<&mut AnimationTransitions>,
 ) {
@@ -356,20 +362,26 @@ fn control(
         let t = p.animation(rig.attack).map_or(SWING.1, |a| a.seek_time());
         // The slash trail draws from it (ruin/effects/slash.rs).
         commands.entity(body).insert(Swinging(rig.attack));
+        let now = time.elapsed_secs();
+        if rig.halt.is_some_and(|h| now >= h) {
+            rig.halt = None;
+            if let Some(a) = p.animation_mut(rig.attack) {
+                a.set_speed(SWING_SPEED);
+            }
+        }
         if !landed && t >= BLOW {
             rig.swing = Some((face, true));
-            for (foe, ftr, pose) in &foes {
+            let mut bit = false;
+            for (foe, ftr) in &foes {
                 if in_arc(here, face, ftr.translation.xz()) {
-                    fall(
-                        &mut commands,
-                        foe,
-                        pose,
-                        &gltfs,
-                        &mut graphs,
-                        &children,
-                        &mut players,
-                    );
+                    commands.entity(foe).insert(strike::Blow { from: here, t });
+                    bit = true;
                 }
+            }
+            // The hit-stop: the swing held a moment where the blade bit.
+            if bit && let Some(a) = p.animation_mut(rig.attack) {
+                a.set_speed(0.0);
+                rig.halt = Some(now + STOP);
             }
             return;
         }
@@ -415,39 +427,6 @@ fn control(
     }
     let k = 1.0 - (-TURN * dt).exp();
     tr.rotation = tr.rotation.slerp(facing(dir), k);
-}
-
-/// A struck body plays its hit, else its fall, once.
-fn fall(
-    commands: &mut Commands,
-    body: Entity,
-    pose: &Pose,
-    gltfs: &Assets<Gltf>,
-    graphs: &mut Assets<AnimationGraph>,
-    children: &Query<&Children>,
-    players: &mut Query<&mut AnimationPlayer>,
-) {
-    let (Some(gltf), Some(player)) = (gltfs.get(&pose.gltf), player_of(body, children, players))
-    else {
-        return;
-    };
-    let Some(clip) = ["hit", "death"]
-        .iter()
-        .find_map(|n| gltf.named_animations.get(*n))
-    else {
-        return;
-    };
-    let (graph, node) = AnimationGraph::from_clip(clip.clone());
-    let mut p = players.get_mut(player).unwrap();
-    p.stop_all();
-    p.play(node).set_speed(1.0);
-    commands
-        .entity(player)
-        .insert(AnimationGraphHandle(graphs.add(graph)));
-    commands
-        .entity(body)
-        .insert(Fallen)
-        .remove::<crate::ruin::walk::WalkIn>();
 }
 
 /// The camera on the hero's chest at its fixed angle and distance, catching up smoothly.

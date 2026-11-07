@@ -76,6 +76,11 @@ impl Blade {
     pub(crate) fn settled(&self) -> bool {
         matches!(self.bake, Bake::Done) || (self.sword.is_none() && self.looked > 30)
     }
+    /// The blade's inner and outer points at clip time `t` of the swing, in the knight's
+    /// frame, once baked (play/strike.rs finds where it meets a foe by it).
+    pub(crate) fn edge(&self, t: f32) -> Option<(Vec3, Vec3)> {
+        (matches!(self.bake, Bake::Done) && self.path.len() >= 2).then(|| blade_at(&self.path, t))
+    }
 }
 
 /// A swing the player plays (play.rs): his attack clip's node on his player, whose time

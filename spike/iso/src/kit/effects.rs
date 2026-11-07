@@ -293,11 +293,13 @@ impl Effects {
     }
 }
 
-/// When the fight's cues last went off (the clock's time): hit.rs's blow, spell.rs's bolt.
+/// When the fight's cues last went off (the clock's time): hit.rs's blow, spell.rs's bolt;
+/// and where a blow landed in play (play/strike.rs), which the blow's effects move to.
 #[derive(Resource)]
 pub struct Cues {
     pub blow: f32,
     pub bolt: f32,
+    pub contact: Option<Contact>,
 }
 
 impl Default for Cues {
@@ -305,8 +307,56 @@ impl Default for Cues {
         Cues {
             blow: -10.0,
             bolt: -10.0,
+            contact: None,
         }
     }
+}
+
+/// Where a blow in play bites (on the foe, at the blade's height), the floor under it, and
+/// the way the blow goes along the ground (from the hero to the foe).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Contact {
+    pub point: Vec3,
+    pub floor: f32,
+    pub toward: Vec2,
+}
+
+/// A blow's effect moved from where the stage laid it (`here`, the stage's blow going
+/// `toward`) to the contact: each point to `to + turn * (p - here)`.
+#[derive(Clone, Copy, Debug)]
+pub struct Shift {
+    here: Vec3,
+    to: Vec3,
+    turn: Quat,
+    floor: f32,
+}
+
+impl Shift {
+    pub fn point(&self, p: Vec3) -> Vec3 {
+        self.to + self.turn * (p - self.here)
+    }
+}
+
+/// The shift of a blow's effect at the stage's bite or the ground under it, once a blow in
+/// play has landed; none for a biome's placed effect, a loop or a bolt, so a staged scene
+/// draws as it always did.
+pub fn shift(p: &Preset, at: Option<Vec2>, here: Vec3, toward: Vec2, cues: &Cues) -> Option<Shift> {
+    let c = cues.contact?;
+    if at.is_some() || p.cue != Cue::Blow {
+        return None;
+    }
+    let to = match p.at {
+        Anchor::Strike => c.point,
+        Anchor::Ground => Vec3::new(c.point.x, c.floor, c.point.z),
+        _ => return None,
+    };
+    let yaw = |d: Vec2| d.x.atan2(d.y);
+    Some(Shift {
+        here,
+        to,
+        turn: Quat::from_rotation_y(yaw(c.toward) - yaw(toward)),
+        floor: c.floor,
+    })
 }
 
 /// An effect's age at the clock: the still's chosen moment, else the time since its cue.
@@ -653,7 +703,7 @@ fn play(
     places: Res<Places>,
     clock: Res<Clock>,
     cues: Res<Cues>,
-    cam: Res<Cam>,
+    (cam, stage): (Res<Cam>, Res<Stage>),
     light: Option<Res<Light>>,
     mut lamps: Query<(&Lit, &mut PointLight, &mut Transform), Without<Quad>>,
     others: Query<(&PointLight, &GlobalTransform), Without<Lit>>,
@@ -661,12 +711,27 @@ fn play(
     mut glows: ResMut<Assets<Glow>>,
 ) {
     let ages: Vec<f32> = fx.0.iter().map(|e| age(&e.1, &clock, &cues)).collect();
+    // A blow's effects where it landed in play (none staged).
+    let toward = (stage.foe - stage.knight).normalize_or(Vec2::X);
+    let shifts: Vec<Option<Shift>> =
+        fx.0.iter()
+            .zip(&places.0)
+            .map(|(e, pl)| shift(&e.1, e.2, pl.0, toward, &cues))
+            .collect();
     let mut points: Vec<(Vec3, Vec3, f32, f32)> = Vec::new();
     for (lit, mut pl, mut tr) in &mut lamps {
         let p = &fx.0[lit.effect].1;
         let l = &p.lamps[lit.lamp];
         pl.intensity = lamp_lm(l, ages[lit.effect], p.life);
-        tr.translation = lamp_at(lit.base, l.toward, cam.rot);
+        let base = match shifts[lit.effect] {
+            Some(s) if l.ground => {
+                let b = s.point(lit.base);
+                Vec3::new(b.x, s.floor + l.up, b.z)
+            }
+            Some(s) => s.point(lit.base),
+            None => lit.base,
+        };
+        tr.translation = lamp_at(base, l.toward, cam.rot);
         let c = pl.color.to_linear();
         points.push((
             tr.translation,
@@ -688,6 +753,8 @@ fn play(
     for (q, mut tr) in &mut quads {
         let p = &fx.0[q.effect].1;
         let (here, _) = places.0[q.effect];
+        let moved = |p: Vec3| shifts[q.effect].map_or(p, |s| s.point(p));
+        let turned = |v: Vec3| shifts[q.effect].map_or(v, |s| s.turn * v);
         let a = ages[q.effect];
         let mut look = Look::default();
         let mut shown = false;
@@ -697,7 +764,7 @@ fn play(
                 if (0.0..p.life).contains(&a) {
                     let k = (a / p.life).min(1.0);
                     let fade = (-a / f.fall.max(0.001)).exp() * (1.0 - k * k);
-                    tr.translation = here;
+                    tr.translation = moved(here);
                     tr.rotation = cam.rot;
                     tr.scale = Vec3::splat(
                         f.size * (1.0 + f.swell * (1.0 - (-a / f.fall.max(0.001)).exp())),
@@ -719,6 +786,7 @@ fn play(
                 if (0.0..life).contains(&a) && (0.0..p.life).contains(&ages[q.effect]) {
                     let k = a / life;
                     let (at, v) = spark_at(from, dir * speed, s.gravity, a);
+                    let (at, v) = (moved(at), turned(v));
                     let along = v - facing * v.dot(facing);
                     let x = along.normalize_or(cam.rot * Vec3::X);
                     let y = facing.cross(x);
@@ -748,7 +816,7 @@ fn play(
                 let a = looped(p, a, phase) - delay;
                 if (0.0..life).contains(&a) && (0.0..p.life + f.delay).contains(&(ages[q.effect])) {
                     let k = a / life;
-                    let at = here + off + drift * a + Vec3::Y * f.rise * a;
+                    let at = moved(here + off + drift * a + Vec3::Y * f.rise * a);
                     tr.translation = at;
                     tr.rotation =
                         cam.rot * Quat::from_rotation_z(phase * std::f32::consts::TAU + a * 0.6);
@@ -954,6 +1022,7 @@ mod tests {
         let cues = Cues {
             blow: 2.0,
             bolt: 0.0,
+            contact: None,
         };
         assert_eq!(
             age(
@@ -994,5 +1063,39 @@ mod tests {
                 .abs()
                 < 1e-5
         );
+    }
+
+    /// A blow landed in play takes the blow's sparks to its bite and its dust to the floor
+    /// under it, turned the blow's way; a loop, a bolt and a placed effect stay put, and
+    /// with no contact nothing moves.
+    #[test]
+    fn a_blow_in_play_moves_its_effects_to_the_bite() {
+        let stage = Stage::default();
+        let toward = (stage.foe - stage.knight).normalize();
+        let bite = stage.strike();
+        let mut cues = Cues::default();
+        let spark = Preset::load("hit-spark").unwrap();
+        assert!(shift(&spark, None, bite, toward, &cues).is_none());
+        let point = Vec3::new(5.0, 2.2, 7.0);
+        cues.contact = Some(Contact {
+            point,
+            floor: 1.0,
+            toward: Vec2::new(-toward.y, toward.x),
+        });
+        let s = shift(&spark, None, bite, toward, &cues).unwrap();
+        assert!(s.point(bite).distance(point) < 1e-5);
+        // A spark thrown along the staged blow now flies a quarter turn off it, as the blow.
+        let ahead = bite + toward.extend(0.0).xzy();
+        let flown = s.point(ahead) - point;
+        assert!(flown.distance(Vec2::new(-toward.y, toward.x).extend(0.0).xzy()) < 1e-5);
+        let dust = Preset::load("smoke-puff").unwrap();
+        let under = stage.ground(None, bite.xz());
+        let d = shift(&dust, None, under, toward, &cues).unwrap();
+        assert!(d.point(under).distance(Vec3::new(5.0, 1.0, 7.0)) < 1e-5);
+        for name in ["steam", "bolt", "spell-burst"] {
+            let p = Preset::load(name).unwrap();
+            assert!(shift(&p, None, bite, toward, &cues).is_none(), "{name}");
+        }
+        assert!(shift(&spark, Some(Vec2::ONE), bite, toward, &cues).is_none());
     }
 }

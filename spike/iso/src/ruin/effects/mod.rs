@@ -5,7 +5,7 @@
 //! sword's trail through the chop, mark.rs the marks both leave on the ground.
 
 mod flame;
-mod hit;
+pub(crate) mod hit;
 pub mod kit;
 mod mark;
 pub(crate) mod slash;

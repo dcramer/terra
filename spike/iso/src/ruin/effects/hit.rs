@@ -18,7 +18,7 @@ const BLOW: f32 = 1.25;
 const STILL_AGE: f32 = 0.05;
 const STOP: f32 = 0.08;
 /// How far the flinch throws the ogre back at its height (radians), and its rise and fall (s).
-const FLINCH: f32 = 0.15;
+pub(crate) const FLINCH: f32 = 0.15;
 const RISE: f32 = 0.05;
 const FALL: f32 = 0.16;
 /// The warm scuff the blow leaves on the floor under the bite: its size (m) and life (s).
@@ -143,8 +143,8 @@ fn blow(
     let walks = walking.is_some_and(|w| w.now);
     let last = hit.seek;
     hit.seek = if walks { 0.0 } else { seek };
-    let crossed = !walks
-        && ((last < BLOW && seek >= BLOW) || (seek < last && (last < BLOW || seek >= BLOW)));
+    let crossed =
+        !walks && ((last < BLOW && seek >= BLOW) || (seek < last && (last < BLOW || seek >= BLOW)));
     let speed = if crossed && !hit.stopped {
         hit.at = clock.t;
         cues.blow = clock.t;
@@ -166,7 +166,7 @@ fn blow(
 }
 
 /// The flinch's share at `a` s after the blow: up fast, back slowly.
-fn flinch(a: f32) -> f32 {
+pub(crate) fn flinch(a: f32) -> f32 {
     if a < 0.0 {
         0.0
     } else if a < RISE {
@@ -180,7 +180,7 @@ fn flinch(a: f32) -> f32 {
 /// Partial, as the ARPGs' hit flash is: it multiplies the creature's own albedo (its
 /// emissive texture is its base colour's, `show`) and stays under it, so the hide's
 /// pattern and the light's shading still read through it rather than a flat silhouette.
-fn flash(a: f32) -> LinearRgba {
+pub(crate) fn flash(a: f32) -> LinearRgba {
     if !(0.0..0.17).contains(&a) {
         return LinearRgba::BLACK;
     }
@@ -192,6 +192,7 @@ fn flash(a: f32) -> LinearRgba {
 }
 
 fn show(
+    args: Res<crate::Args>,
     clock: Res<Clock>,
     hit: Res<Hit>,
     mut scuffs: Query<&mut super::mark::Mark, With<Scuff>>,
@@ -207,7 +208,10 @@ fn show(
     for mut mark in &mut scuffs {
         mark.age = a;
     }
-    let Some(ogre) = hit.ogre else { return };
+    // In play the ogre's flinch and flash are play's own blows' (play/strike.rs).
+    let Some(ogre) = hit.ogre.filter(|_| !args.play) else {
+        return;
+    };
     if let Ok(mut tr) = bodies.get_mut(ogre) {
         let d = (stage.foe - stage.knight).normalize().extend(0.0).xzy();
         let f = flinch(a);
