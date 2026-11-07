@@ -35,8 +35,11 @@ pub struct Footprint(pub Vec<(Vec2, f32)>);
 const THIN: (f32, f32) = (0.12, 0.6);
 /// The band above its lowest point a model too big for a footprint is cut at for its foot
 /// (m): a dead tree's trunk above its root flare (1.4 to 2.8 m across at the ground, j7's
-/// marsh probe) and below its spreading branches.
-const FOOT: (f32, f32) = (0.5, 1.0);
+/// marsh probe; at 0.5 to 1.0 m still 0.9 to 1.5 m, the marsh sinking its trees 0.3 m, j8's)
+/// and below its spreading branches.
+const FOOT: (f32, f32) = (1.0, 1.5);
+/// The share of a foot's points left out on each side of it (`foot`).
+const TRIM: f32 = 0.1;
 
 /// The circles along a box on the ground (lo, hi its corners): as many as its long side
 /// holds of its short, each its half short side across, end to end.
@@ -66,18 +69,22 @@ pub fn blocked(circles: &[(Vec2, f32)], here: Vec2, to: Vec2) -> bool {
 }
 
 /// The box on the ground of a model's foot: its points (in its frame) in the `FOOT` band over
-/// the lowest, at least `SHORT.0` across (a trunk thinner than a stone still blocks); `None`
-/// with none there.
+/// the lowest, between their `TRIM` and `1 - TRIM` quantiles on each side (a stray root or
+/// low branch reaching into the band left out), at least `SHORT.0` across (a trunk thinner
+/// than a stone still blocks); `None` with none there.
 pub fn foot(points: &[Vec3], scale: f32) -> Option<(Vec2, Vec2)> {
     let base = points.iter().map(|p| p.y).reduce(f32::min)?;
-    let (mut lo, mut hi) = (Vec2::MAX, Vec2::MIN);
     let band = |p: &&Vec3| (FOOT.0..FOOT.1).contains(&((p.y - base) * scale));
-    for p in points.iter().filter(band) {
-        (lo, hi) = (lo.min(p.xz()), hi.max(p.xz()));
-    }
-    if lo.x > hi.x {
+    let (mut xs, mut zs): (Vec<f32>, Vec<f32>) =
+        points.iter().filter(band).map(|p| (p.x, p.z)).unzip();
+    if xs.is_empty() {
         return None;
     }
+    xs.sort_by(f32::total_cmp);
+    zs.sort_by(f32::total_cmp);
+    let at = |v: &[f32], q: f32| v[((v.len() - 1) as f32 * q).round() as usize];
+    let lo = Vec2::new(at(&xs, TRIM), at(&zs, TRIM));
+    let hi = Vec2::new(at(&xs, 1.0 - TRIM), at(&zs, 1.0 - TRIM));
     let grow = ((Vec2::splat(SHORT.0 / scale) - (hi - lo)) / 2.0).max(Vec2::ZERO);
     Some((lo - grow, hi + grow))
 }
@@ -356,10 +363,14 @@ mod tests {
             let a = k as f32 * core::f32::consts::FRAC_PI_4;
             let (s, c) = a.sin_cos();
             points.push(Vec3::new(0.9 * c, 0.0, 0.8 * s)); // roots flared at the ground
-            points.push(Vec3::new(0.2 * c, 0.6, 0.2 * s)); // its trunk
-            points.push(Vec3::new(0.15 * c, 0.9, 0.15 * s));
+            points.push(Vec3::new(0.5 * c, 0.6, 0.5 * s));
+            for h in [1.1, 1.2, 1.3, 1.4] {
+                points.push(Vec3::new(0.2 * c, h, 0.2 * s)); // its trunk
+            }
             points.push(Vec3::new(2.5 * c, 3.0, 1.3 * s)); // branches
         }
+        // One low branch reaching out through the trunk's height.
+        points.push(Vec3::new(1.8, 1.25, 0.0));
         let (lo, hi) = foot(&points, 1.0).unwrap();
         assert!((hi - lo).max_element() < 0.5, "{lo} {hi}: its trunk");
         let c = circles(lo, hi);
