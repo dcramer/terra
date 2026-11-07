@@ -17,6 +17,7 @@
 pub mod ground;
 pub mod link;
 pub mod remote;
+pub mod worn;
 
 use crate::intent::Intent;
 use crate::movement::{Movers, walk};
@@ -54,7 +55,12 @@ pub fn parts() -> Vec<PartSpec> {
         audience,
         weight: 1.0,
     };
-    vec![part(Audience::Public), part(Audience::Owner)]
+    // What is worn changes rarely and matters less than where a body is.
+    let worn = PartSpec {
+        audience: Audience::Public,
+        weight: 0.3,
+    };
+    vec![part(Audience::Public), part(Audience::Owner), worn]
 }
 
 /// What a player means to do and where they look, on a tick: what a client sends up.
@@ -190,6 +196,13 @@ impl Host {
             .collect()
     }
 
+    /// A part of a player's entity as it is now, once the entity is on the wire.
+    pub fn set(&mut self, player: Entity, part: usize, value: &impl Wire) {
+        if let Some(&id) = self.ids.get(&player) {
+            self.server.set_as(id, part, value);
+        }
+    }
+
     /// Orders an operation at a place: told to every game near it, now and when it comes
     /// (`terra_net::server::Server::order`). The first byte says whose it is ([`ground::GROUND`]).
     pub fn order(&mut self, place: Vec3, bytes: &[u8]) {
@@ -235,6 +248,18 @@ pub fn plugin(app: &mut App) {
     .add_systems(Update, link::pace.run_if(joined))
     .add_systems(Last, farewell)
     .init_resource::<ground::Ground>()
+    .init_resource::<worn::Said>()
+    .add_systems(
+        FixedUpdate,
+        (
+            worn::host.in_set(Sim::End).before(tell).run_if(hosted),
+            worn::joined
+                .in_set(Sim::End)
+                .after(link::show)
+                .run_if(joined),
+            worn::unjoined.in_set(Sim::End).run_if(not(joined)),
+        ),
+    )
     .add_systems(
         FixedUpdate,
         (
@@ -377,6 +402,8 @@ pub fn tell(mut host: ResMut<Host>, movers: Res<Movers>, players: Query<Entity, 
         }
         stays
     });
+    // What was asked this tick and is no layer's is nobody's.
+    host.asked.clear();
     host.server.step(&mut host.wire);
 }
 

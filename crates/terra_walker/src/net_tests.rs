@@ -32,6 +32,7 @@ fn hosted() -> (World, Entity, Network) {
     world.init_resource::<flora::Obstacles>();
     world.init_resource::<Movers>();
     world.init_resource::<ground::Ground>();
+    world.init_resource::<worn::Said>();
     world.init_resource::<Messages<crate::movement::Fell>>();
     world.init_resource::<Messages<crate::movement::Drowned>>();
     let mut time = Time::<()>::default();
@@ -264,6 +265,7 @@ fn joined(network: &Network, conditions: Conditions) -> (World, Entity) {
     world.init_resource::<flora::Obstacles>();
     world.init_resource::<Movers>();
     world.init_resource::<ground::Ground>();
+    world.init_resource::<worn::Said>();
     world.init_resource::<Messages<crate::movement::Fell>>();
     world.init_resource::<Messages<crate::movement::Drowned>>();
     let mut time = Time::<()>::default();
@@ -358,6 +360,7 @@ impl Together {
                 self.client.run_system_once(link::record).unwrap();
                 self.client.run_system_once(link::show).unwrap();
                 self.client.run_system_once(ground::joined).unwrap();
+                self.client.run_system_once(worn::joined).unwrap();
                 let tick = self.client.resource::<link::Link>().tick();
                 let body = self.client.resource::<Movers>().body(self.player);
                 if let (Some(tick), Some(body)) = (tick, body) {
@@ -369,6 +372,7 @@ impl Together {
             self.host.run_system_once(hear).unwrap();
             self.host.run_system_once(walk).unwrap();
             self.host.run_system_once(ground::host).unwrap();
+            self.host.run_system_once(worn::host).unwrap();
             self.host.run_system_once(tell).unwrap();
             let mut guests = self.host.query_filtered::<Entity, With<Guest>>();
             if let Some(guest) = guests.iter(&self.host).next()
@@ -765,4 +769,56 @@ fn an_operation_that_could_not_be_asked_is_refused() {
             "{operation:?} was let through"
         );
     }
+}
+
+/// What each player wears crosses both ways: the host's player's outfit is on its puppet in
+/// the joined game, the joined player's on its guest on the host, and a change follows.
+#[test]
+fn each_player_is_dressed_as_its_player_is_in_the_others_game() {
+    use crate::character::{Clothing, Outfit};
+    let wears = |items: &[&str]| Outfit(items.iter().map(|item| Clothing::new(*item)).collect());
+    let mut together = Together::new(rough());
+    together
+        .host
+        .entity_mut(together.host_player)
+        .insert(wears(&["vest", "pack"]));
+    together
+        .client
+        .entity_mut(together.player)
+        .insert(wears(&["hat"]));
+    together.run(0..90);
+    let mut puppets = together
+        .client
+        .query_filtered::<&Outfit, With<link::Puppet>>();
+    assert_eq!(
+        puppets.single(&together.client).expect("the host's puppet"),
+        &wears(&["vest", "pack"])
+    );
+    let mut guests = together.host.query_filtered::<&Outfit, With<Guest>>();
+    assert_eq!(
+        guests.single(&together.host).expect("the guest"),
+        &wears(&["hat"])
+    );
+    // Each takes something off, and puts something on.
+    together
+        .host
+        .entity_mut(together.host_player)
+        .insert(wears(&["vest"]));
+    together
+        .client
+        .entity_mut(together.player)
+        .insert(wears(&["hat", "cloak"]));
+    together.run(90..150);
+    assert_eq!(
+        puppets.single(&together.client).expect("the host's puppet"),
+        &wears(&["vest"])
+    );
+    assert_eq!(
+        guests.single(&together.host).expect("the guest"),
+        &wears(&["hat", "cloak"])
+    );
+    // An outfit of too many pieces, or a name too long, is held to the wire's most.
+    use terra_net::wire::Wire;
+    let long = worn::Wearing(vec!["x".repeat(65)]);
+    assert!(worn::Wearing::decoded(&long.encoded()).is_err());
 }
