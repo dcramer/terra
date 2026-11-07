@@ -1,0 +1,17 @@
+// The knight's blow biting the ogre (kit/effects.rs): a white-hot core in an orange halo, a
+// light at the bite and a pool on the floor under it, sparks streaked along their flight.
+(
+    cue: Blow,
+    at: Strike,
+    still: 0.05,
+    life: 0.4,
+    flash: (core: Srgb(1.0, 0.95, 0.85), core_nits: 2500.0, rim: Srgb(1.0, 0.55, 0.2), rim_nits: 150.0,
+        size: 0.9, core_size: 0.12, falloff: 7.0, swell: 0.4, fall: 0.08),
+    lamps: [
+        (lm: 40000.0, colour: Srgb(1.0, 0.8, 0.55), up: 0.2, range: 6.0, fall: 0.14),
+        (lm: 22000.0, colour: Srgb(1.0, 0.62, 0.32), up: 0.5, ground: true, range: 2.5, fall: 0.2),
+    ],
+    sparks: (count: 40, speed: (4.0, 11.0), life: (0.12, 0.35), width: 0.016, spread: 0.8,
+        gravity: 9.8, shutter: 0.03, hot: Srgb(1.0, 0.9, 0.7), hot_nits: 3000.0,
+        cool: Srgb(1.0, 0.35, 0.08), cool_nits: 400.0),
+)

@@ -1,0 +1,10 @@
+// Dust and smoke thrown off the blow (kit/effects.rs): soft lit puffs, warm at birth, widening.
+(
+    cue: Blow,
+    at: Strike,
+    still: 0.05,
+    life: 1.2,
+    puffs: (count: 8, size: (0.25, 0.9), life: (0.6, 1.1), rise: 0.35, spread: 0.3,
+        albedo: Srgb(0.55, 0.52, 0.48), density: 0.45, delay: 0.08,
+        glow: Srgb(1.0, 0.5, 0.2), glow_nits: 20.0, grain: 0.6, soft: 0.3),
+)
