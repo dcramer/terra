@@ -7,7 +7,7 @@
 // How to use it: the iso-art skill's "The loop a job follows"; tests: loop.test.ts.
 
 import { spawnSync } from "node:child_process";
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, extname, join, resolve } from "node:path";
 import { decodeAny, measure, type Rgb, type Stats } from "../../tools/iso-art/stats.ts";
@@ -31,13 +31,16 @@ export const SHOWN: [keyof Stats, string][] = [
   ["bright_share", "bright"],
 ];
 /** A measure moved by more than this is a change: two fixed-step shots of one ruin agree to
- * 0.0001 (iso-kit j4), real-time ones differed by 0.0025. */
-export const EPS = 0.0005;
+ * 0.0001 (iso-kit j4), real-time ones differed by 0.0025; the forest's still moves 0.0006 on
+ * unchanged code (its clips start on the frame they load, iso-kit j5), so the bar sits over it. */
+export const EPS = 0.001;
 /** A pixel differs when a channel moved by more than this many levels (two shots of unchanged
  * code: 2.7% of pixels one level apart, the GPU's noise). */
 export const LEVELS = 2;
-/** A still changed when more than this share of its pixels differ (unchanged: 0.007%). */
-export const PIXEL_SHARE = 0.00025;
+/** A still changed when more than this share of its pixels differ (unchanged: the ruin 0.007%,
+ * the forest up to 0.33% in specks on its fight's effects, iso-kit j5); a look change moves
+ * several percent. */
+export const PIXEL_SHARE = 0.005;
 
 export type Margin = "slight" | "clear" | "strong";
 export type Side = "new" | "kept";
@@ -324,7 +327,11 @@ function shoot(argv: string[], say: (l: string) => void) {
   const rnd: Round = { at: new Date().toISOString(), rev, dirty, job, biomes: {} };
   let judges = 0;
   for (const b of biomes) {
-    const e = fileBiome(round, b, out, film, h.kept[b], say);
+    // Each biome's line also goes in the round's stats.txt, where its judges read it.
+    const e = fileBiome(round, b, out, film, h.kept[b], (l) => {
+      say(l);
+      appendFileSync(join(dir, "stats.txt"), `${l}\n`);
+    });
     if (!e) continue;
     rnd.biomes[b] = e;
     if (e.judge) judges++;
