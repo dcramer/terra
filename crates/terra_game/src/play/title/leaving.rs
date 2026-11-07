@@ -60,6 +60,9 @@ fn leave(world: &mut World) {
     if *world.resource::<State<Screen>>().get() != Screen::Playing {
         return;
     }
+    // A session goes with the world: a host's guests are told the host left.
+    terra_walker::net::session::close(world);
+    world.remove_resource::<super::joining::Session>();
     world.remove_resource::<SavePath>();
     world.remove_resource::<Playing>();
     nobody(world);
@@ -75,6 +78,9 @@ fn leave(world: &mut World) {
         .get_resource::<Title>()
         .map_or_else(|| worlds::Dice::from_clock().0, |title| title.0.dice);
     menu.notice = notice;
+    if let Some(profile) = world.get_resource::<super::profile::Profile>() {
+        (menu.player, menu.address) = (profile.name.clone(), profile.address.clone());
+    }
     world.insert_resource(Title(menu));
     world.resource_mut::<Chosen>().0 = None;
     world.insert_resource(Then(Screen::Title));

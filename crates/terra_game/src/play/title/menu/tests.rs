@@ -204,3 +204,71 @@ fn new_world_rolls_a_seed_kept_in_its_world_and_takes_one_typed() {
     assert_eq!(menu.seed, "");
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn hosting_needs_a_world_and_a_name_and_joining_a_name_and_an_address() {
+    let root = folder_for("host");
+    let menu = Menu::new(Vec::new());
+    assert!(!menu.enabled(Item::Host), "no world to host");
+    let world = worlds::make(&root, "Home", false, 7, 30_000.0, 1).unwrap();
+    let mut menu = Menu::new(vec![world.clone()]);
+    assert_eq!(choose(&mut menu, Item::Host), None);
+    assert_eq!(menu.page, Page::Host);
+    // With no name the world cannot be hosted; typed, it can.
+    assert_eq!(choose(&mut menu, Item::HostWorld(0)), None);
+    menu.at = 0;
+    menu.type_text("Ada");
+    assert_eq!(
+        choose(&mut menu, Item::HostWorld(0)),
+        Some(Act::Host(world))
+    );
+
+    menu.back();
+    assert_eq!(choose(&mut menu, Item::Join), None);
+    assert_eq!(menu.picked(), Some(Item::Address));
+    assert!(!menu.enabled(Item::Connect), "no address yet");
+    // An address takes what one is written in, no spaces.
+    menu.type_text(" 203.0.113.7 :4/7");
+    assert_eq!(menu.address, "203.0.113.7:47");
+    menu.erase();
+    menu.erase();
+    menu.erase();
+    let asked = choose(&mut menu, Item::Connect);
+    assert_eq!(
+        asked,
+        Some(Act::Join {
+            address: "203.0.113.7".into()
+        })
+    );
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn while_a_host_is_yet_to_answer_only_back_is_chosen_and_it_gives_up() {
+    let mut menu = Menu::new(Vec::new());
+    (menu.player, menu.address) = ("Ada".into(), "203.0.113.7".into());
+    choose(&mut menu, Item::Join);
+    menu.joining = Some("Asking the host".into());
+    assert_eq!(choose(&mut menu, Item::Connect), None, "asked once");
+    menu.at = 1;
+    menu.type_text("9");
+    assert_eq!(menu.address, "203.0.113.7", "nothing is typed meanwhile");
+    assert_eq!(choose(&mut menu, Item::Back), Some(Act::Cancel));
+    assert_eq!((menu.page, &menu.joining), (Page::Join, &None), "and stays");
+    // What the screen told is gone once the player next chooses.
+    menu.notice = Some("No answer".into());
+    choose(&mut menu, Item::Address);
+    assert_eq!(menu.notice, None);
+}
+
+/// A name is no longer than the wire carries, by bytes, never cut inside a letter.
+#[test]
+fn a_players_name_is_held_to_what_the_wire_carries() {
+    let mut menu = Menu::new(Vec::new());
+    choose(&mut menu, Item::Join);
+    menu.at = 0;
+    menu.type_text(&"é".repeat(40));
+    assert_eq!(menu.player.len(), PLAYER_BYTES);
+    assert_eq!(menu.player.chars().count(), 16);
+    assert_eq!(PLAYER_BYTES, terra_net::proto::MOST_NAME);
+}

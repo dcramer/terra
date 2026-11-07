@@ -16,7 +16,9 @@ mod menu;
 mod view;
 
 pub use leaving::Leaving;
+mod joining;
 mod leaving;
+mod profile;
 mod remote;
 
 use super::daylight::Clock;
@@ -28,7 +30,7 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
-use menu::{Act, Item, Menu, Page};
+use menu::{Act, Item, Menu};
 use terra_world::choice::Choice;
 use terra_world::instance::{Cross, WorldSpec};
 use terra_world::loading::{Screen, Then};
@@ -48,7 +50,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(OnEnter(Screen::Title), (view::show, hold))
         .add_systems(OnExit(Screen::Title), (view::hide, release))
         .add_systems(OnEnter(Screen::Playing), offer)
-        .add_plugins((leaving::plugin, remote::plugin))
+        .add_plugins((leaving::plugin, joining::plugin, remote::plugin))
         .add_systems(
             Update,
             quit_to_title
@@ -77,10 +79,15 @@ pub fn up(screen: &State<Screen>) -> bool {
 /// New world's seeds are rolled from the dice the land behind was chosen with
 /// (`worlds::Dice`), so with no world kept the first it offers is the land already loaded.
 fn open(mut commands: Commands, root: Option<Res<Root>>, dice: Option<Res<worlds::Dice>>) {
-    let worlds = root.map_or_else(Vec::new, |root| worlds::list(&root.0));
+    let worlds = root
+        .as_deref()
+        .map_or_else(Vec::new, |root| worlds::list(&root.0));
     commands.insert_resource(Then(Screen::Title));
+    let profile = profile::Profile::load(root.as_deref().map(|root| root.0.as_path()));
     let mut menu = Menu::new(worlds);
     menu.dice = dice.map_or_else(worlds::Dice::from_clock, |dice| *dice).0;
+    (menu.player, menu.address) = (profile.name.clone(), profile.address.clone());
+    commands.insert_resource(profile);
     commands.insert_resource(Title(menu));
 }
 
@@ -167,8 +174,8 @@ fn keys(
         return;
     }
     let menu = &mut title.0;
-    let naming = menu.page == Page::New && menu.picked() == Some(Item::Name);
-    let typing = naming || (menu.page == Page::New && menu.picked() == Some(Item::Seed));
+    // Where letters are text (a name, an address), W, S and Space are not moves.
+    let (typing, naming) = menu.typing();
     for input in typed.read() {
         if let (true, ButtonState::Pressed, Key::Character(text)) =
             (typing, input.state, &input.logical_key)
@@ -202,48 +209,51 @@ fn keys(
     mouse.reset_all();
 }
 
+/// Plays the land of a seed, of the size the options now say. The land behind the screen, if
+/// it is that land, is played as it stands; another is crossed to first, under the loading
+/// screen, as a portal crosses (D596), with nobody standing on the land left (`nobody`).
+fn go(world: &mut World, seed: u64) {
+    world.insert_resource(Then(Screen::Playing));
+    let radius_m = world.resource::<Options>().radius_m;
+    let resized = world
+        .get_resource::<Planet>()
+        .is_some_and(|planet| planet.radius_m() != radius_m);
+    match world.get_resource::<WorldSpec>().cloned() {
+        Some(loaded) if loaded.seed != seed || resized => {
+            info!(
+                "Crossing from the land of seed {} to seed {seed}, {} km round.",
+                loaded.seed,
+                radius_m / 1000.0
+            );
+            leaving::nobody(world);
+            Command::apply(Cross(WorldSpec { seed, ..loaded }), world);
+        }
+        _ => world
+            .resource_mut::<NextState<Screen>>()
+            .set(Screen::Loading),
+    }
+}
+
 /// Does what was chosen.
-#[allow(clippy::too_many_arguments)]
 fn act(
     mut commands: Commands,
     mut chosen: ResMut<Chosen>,
     mut title: ResMut<Title>,
     mut options: ResMut<Options>,
     root: Option<Res<Root>>,
-    (spec, planet): (Option<Res<WorldSpec>>, Option<Res<Planet>>),
-    mut next: ResMut<NextState<Screen>>,
     mut settings: ResMut<OptionsMenu>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let Some(act) = chosen.0.take() else {
         return;
     };
-    // A world of the seed and size of the land behind the screen is played on it; another
-    // crosses to its own land first, under the loading screen, as a portal crosses (D596).
-    let behind_m = planet.map(|planet| planet.radius_m());
-    let mut play = |commands: &mut Commands, options: &mut Options, world: Option<_>, seed| {
+    let play = |commands: &mut Commands, options: &mut Options, world: Option<_>, seed| {
         options.seed = Some(seed);
         match world {
             Some(world) => worlds::play(commands, options, world),
             None => options.radius_m = worlds::new_radius_m(options),
         }
-        commands.insert_resource(Then(Screen::Playing));
-        let resized = behind_m.is_some_and(|behind| behind != options.radius_m);
-        match spec.as_deref() {
-            Some(loaded) if loaded.seed != seed || resized => {
-                info!(
-                    "Crossing from the land of seed {} to seed {seed}, {} km round.",
-                    loaded.seed,
-                    options.radius_m / 1000.0
-                );
-                commands.queue(leaving::nobody);
-                commands.queue(Cross(WorldSpec {
-                    seed,
-                    ..loaded.clone()
-                }));
-            }
-            _ => next.set(Screen::Loading),
-        }
+        commands.queue(move |world: &mut World| go(world, seed));
     };
     match act {
         Act::Play(mut world) => {
@@ -253,6 +263,19 @@ fn act(
             let seed = world.meta.seed;
             play(&mut commands, &mut options, Some(world), seed);
         }
+        Act::Host(mut world) => {
+            if let Err(problem) = world.played(worlds::now()) {
+                warn!("Could not mark {} played: {problem}", world.meta.name);
+            }
+            let seed = world.meta.seed;
+            commands.queue(joining::remember);
+            commands.insert_resource(joining::Hosting);
+            play(&mut commands, &mut options, Some(world), seed);
+        }
+        Act::Join { address } => {
+            commands.queue(move |world: &mut World| joining::begin(world, &address));
+        }
+        Act::Cancel => commands.queue(joining::cancel),
         Act::Make {
             name,
             creative,

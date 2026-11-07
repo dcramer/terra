@@ -10,6 +10,10 @@ pub enum Page {
     Main,
     Worlds,
     New,
+    /// Hosting: the player's name, and which world to host.
+    Host,
+    /// Joining: the player's name and the host's address.
+    Join,
     /// Asking before the world at this place in the list is deleted.
     Delete(usize),
 }
@@ -20,11 +24,20 @@ pub enum Item {
     Continue,
     Worlds,
     NewWorld,
+    Host,
+    Join,
     Yard,
     Settings,
     Quit,
     /// The world at this place in the list.
     World(usize),
+    /// The name the player goes by in a hosted world.
+    Player,
+    /// The world at this place in the list, to host.
+    HostWorld(usize),
+    /// The host's address, typed.
+    Address,
+    Connect,
     Name,
     Mode,
     /// The new world's seed: rolled, or typed (D596).
@@ -43,6 +56,14 @@ pub enum Act {
         creative: bool,
         seed: u64,
     },
+    /// Play a world and host it, under the player's name.
+    Host(World),
+    /// Join the world hosted at what was typed.
+    Join {
+        address: String,
+    },
+    /// Give up joining.
+    Cancel,
     Yard,
     Settings,
     Quit,
@@ -70,10 +91,20 @@ pub struct Menu {
     /// What the screen tells the player until they next choose: why the world they were in
     /// was left, when it was not their choice.
     pub notice: Option<String>,
+    /// The name the player goes by in a hosted world, and the host's address as typed.
+    pub player: String,
+    pub address: String,
+    /// What is being joined, while the host has yet to answer: nothing else is chosen until
+    /// it does or the player goes back.
+    pub joining: Option<String>,
 }
 
 /// The most digits a seed takes: a 64-bit number's.
 const SEED_DIGITS: usize = 20;
+/// The most bytes of a player's name: what the wire carries (`terra_net::proto::MOST_NAME`).
+pub const PLAYER_BYTES: usize = 32;
+/// The most bytes of an address typed: a host's name is at most 253, and nobody types one.
+const ADDRESS_BYTES: usize = 64;
 
 impl Menu {
     pub fn new(worlds: Vec<World>) -> Self {
@@ -87,6 +118,9 @@ impl Menu {
             seed_typed: false,
             dice: 0,
             notice: None,
+            player: String::new(),
+            address: String::new(),
+            joining: None,
         };
         // Continue first when there is a world to continue, else New world.
         menu.at = usize::from(menu.worlds.is_empty()) * 2;
@@ -100,6 +134,8 @@ impl Menu {
                 Item::Continue,
                 Item::Worlds,
                 Item::NewWorld,
+                Item::Host,
+                Item::Join,
                 Item::Yard,
                 Item::Settings,
                 Item::Quit,
@@ -109,15 +145,27 @@ impl Menu {
                 .chain([Item::Back])
                 .collect(),
             Page::New => vec![Item::Name, Item::Mode, Item::Seed, Item::Create, Item::Back],
+            Page::Host => [Item::Player]
+                .into_iter()
+                .chain((0..self.worlds.len()).map(Item::HostWorld))
+                .chain([Item::Back])
+                .collect(),
+            Page::Join => vec![Item::Player, Item::Address, Item::Connect, Item::Back],
             Page::Delete(_) => vec![Item::Back, Item::ConfirmDelete],
         }
     }
 
-    /// Whether a choice can be made: Continue and Worlds need a world, Create a name and a
-    /// seed.
+    /// Whether a choice can be made: Continue, Worlds and Host need a world, Create a name
+    /// and a seed, hosting and joining a player's name, joining an address too. While a host
+    /// is yet to answer only Back can be chosen.
     pub fn enabled(&self, item: Item) -> bool {
+        let named = !self.player.trim().is_empty();
         match item {
-            Item::Continue | Item::Worlds => !self.worlds.is_empty(),
+            Item::Back => true,
+            _ if self.joining.is_some() => false,
+            Item::Continue | Item::Worlds | Item::Host => !self.worlds.is_empty(),
+            Item::HostWorld(_) => named,
+            Item::Connect => named && !self.address.trim().is_empty(),
             Item::Create => !self.name.trim().is_empty() && self.seed().is_some(),
             _ => true,
         }
@@ -165,6 +213,8 @@ impl Menu {
             Page::Main => {}
             Page::Worlds => self.go(Page::Main, 1),
             Page::New => self.go(Page::Main, 2),
+            Page::Host => self.go(Page::Main, 3),
+            Page::Join => self.go(Page::Main, 4),
             Page::Delete(world) => self.go(Page::Worlds, world),
         }
     }
@@ -184,6 +234,16 @@ impl Menu {
                 self.creative = false;
                 self.roll();
                 self.go(Page::New, 0);
+            }
+            Item::Host => self.go(Page::Host, 1),
+            Item::Join => self.go(Page::Join, 1),
+            Item::Player => self.at = 1,
+            Item::HostWorld(at) => return self.worlds.get(at).cloned().map(Act::Host),
+            Item::Address => self.at = 2,
+            Item::Connect => {
+                return Some(Act::Join {
+                    address: self.address.trim().to_string(),
+                });
             }
             Item::Yard => return Some(Act::Yard),
             Item::Settings => return Some(Act::Settings),
@@ -205,6 +265,8 @@ impl Menu {
                 };
                 return Some(Act::Delete(self.worlds.get(at)?.clone()));
             }
+            // Back while a host is yet to answer gives the joining up, and stays.
+            Item::Back if self.joining.take().is_some() => return Some(Act::Cancel),
             Item::Back => self.back(),
         }
         None
@@ -236,10 +298,21 @@ impl Menu {
         }
     }
 
-    /// Typing into the new world's name, or its seed's digits: a seed of one's own, which
-    /// takes only what keeps it a 64-bit number.
+    /// Whether what is picked takes typing, and whether it takes letters (so W, S and Space
+    /// are text there, not moves): a name or an address does, a seed takes digits alone.
+    pub fn typing(&self) -> (bool, bool) {
+        match self.picked() {
+            Some(Item::Name | Item::Player | Item::Address) => (true, true),
+            Some(Item::Seed) => (true, false),
+            _ => (false, false),
+        }
+    }
+
+    /// Typing into what is picked: a name, the host's address (what an address or a host's
+    /// name is written in, no spaces), or the seed's digits: a seed of one's own, which takes
+    /// only what keeps it a 64-bit number.
     pub fn type_text(&mut self, text: &str) {
-        if self.page != Page::New {
+        if self.joining.is_some() {
             return;
         }
         match self.picked() {
@@ -247,6 +320,22 @@ impl Menu {
                 for c in text.chars().filter(|c| !c.is_control()) {
                     if self.name.chars().count() < 32 {
                         self.name.push(c);
+                    }
+                }
+            }
+            Some(Item::Player) => {
+                for c in text.chars().filter(|c| !c.is_control()) {
+                    // The wire carries a name of so many bytes (`terra_net::proto::MOST_NAME`).
+                    if self.player.len() + c.len_utf8() <= PLAYER_BYTES {
+                        self.player.push(c);
+                    }
+                }
+            }
+            Some(Item::Address) => {
+                let written = |c: &char| c.is_ascii_alphanumeric() || ".:-[]".contains(*c);
+                for c in text.chars().filter(written) {
+                    if self.address.len() < ADDRESS_BYTES {
+                        self.address.push(c);
                     }
                 }
             }
@@ -268,11 +357,13 @@ impl Menu {
     }
 
     pub fn erase(&mut self) {
-        if self.page != Page::New {
+        if self.joining.is_some() {
             return;
         }
         match self.picked() {
             Some(Item::Name) => drop(self.name.pop()),
+            Some(Item::Player) => drop(self.player.pop()),
+            Some(Item::Address) => drop(self.address.pop()),
             // A rolled seed goes whole; one's own a digit at a time.
             Some(Item::Seed) if !self.seed_typed => {
                 self.seed.clear();

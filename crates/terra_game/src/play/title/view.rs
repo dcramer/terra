@@ -154,7 +154,7 @@ pub(super) fn point(
 
 /// What a drawn page shows, so it is drawn again only when that changes.
 #[derive(PartialEq, Default)]
-pub(super) struct Drawn(Option<(Page, usize, (String, String, bool), bool, Option<Item>)>);
+pub(super) struct Drawn(Option<String>);
 
 /// Draws the page when it changes, and marks the picked choice every frame.
 pub(super) fn draw(
@@ -165,16 +165,15 @@ pub(super) fn draw(
     mut drawn: Local<Drawn>,
 ) {
     let menu = &title.0;
-    // The name's and the seed's carets show only while each is picked.
-    let typing = menu
-        .picked()
-        .filter(|item| matches!(item, Item::Name | Item::Seed));
-    let page = Some((
-        menu.page,
-        menu.worlds.len(),
-        (menu.name.clone(), menu.seed.clone(), menu.seed_typed),
-        menu.creative,
-        typing,
+    // A caret shows only while what it is in is picked.
+    let typing = menu.picked().filter(|_| menu.typing().0);
+    let page = Some(format!(
+        "{:?}",
+        (
+            (menu.page, menu.worlds.len(), typing),
+            (&menu.name, &menu.seed, menu.seed_typed, menu.creative),
+            (&menu.player, &menu.address, &menu.joining, &menu.notice),
+        )
     ));
     if drawn.0 != page {
         drawn.0 = page;
@@ -198,6 +197,22 @@ pub(super) fn draw(
             for (at, item) in menu.items().into_iter().enumerate() {
                 choice(column, menu, at, item);
             }
+            // What the player is told: why they are back here, or what is being waited on.
+            let told = [(&menu.notice, EDGE), (&menu.joining, QUIET)];
+            for (words, colour) in told {
+                let Some(words) = words else { continue };
+                column.spawn((
+                    Text::new(words.clone()),
+                    TextFont::from_font_size(18.0),
+                    TextColor(colour),
+                    lifted(),
+                    Node {
+                        margin: UiRect::top(px(14)),
+                        max_width: px(WIDTH),
+                        ..default()
+                    },
+                ));
+            }
         });
         return;
     }
@@ -217,6 +232,8 @@ fn heading(menu: &Menu) -> Option<String> {
         Page::Main => None,
         Page::Worlds => Some("Your worlds".into()),
         Page::New => Some("A new world".into()),
+        Page::Host => Some("Host a world: friends join at this machine's address".into()),
+        Page::Join => Some("Join a friend's world".into()),
         Page::Delete(at) => menu
             .worlds
             .get(at)
@@ -242,6 +259,33 @@ fn words(menu: &Menu, item: Item) -> (String, Option<String>) {
             "The yard".into(),
             Some("A flat level for building, nothing saved".into()),
         ),
+        Item::Host => (
+            "Host".into(),
+            Some("Play a world of yours with friends".into()),
+        ),
+        Item::Join => ("Join".into(), Some("Play in a friend's world".into())),
+        Item::Player => {
+            let caret = if menu.picked() == Some(item) { "_" } else { "" };
+            (
+                format!("Your name   {}{caret}", menu.player),
+                Some("What the others see you as".into()),
+            )
+        }
+        Item::HostWorld(at) => {
+            let world = &menu.worlds[at];
+            (
+                world.meta.name.clone(),
+                Some(format!("{}: host and play", mode(world.meta.creative))),
+            )
+        }
+        Item::Address => {
+            let caret = if menu.picked() == Some(item) { "_" } else { "" };
+            (
+                format!("Address   {}{caret}", menu.address),
+                Some("The host's, as they tell it: 203.0.113.7, or a name".into()),
+            )
+        }
+        Item::Connect => ("Join".into(), None),
         Item::Settings => ("Settings".into(), None),
         Item::Quit => ("Quit".into(), None),
         Item::World(at) => {

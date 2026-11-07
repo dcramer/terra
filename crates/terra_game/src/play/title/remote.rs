@@ -4,6 +4,8 @@
 //!
 //! - `title.state`: the screen up, the land's seed, the world played, and while the title
 //!   screen is up its page, its choices, the one picked, its worlds and what it tells.
+//! - `title.type {"text": "…"}`: typed into what is picked (a name, an address, a seed), as
+//!   the keyboard's letters are; a key press carries no letter in a scripted run.
 //! - `title.leave`: the world played is left for the title screen.
 
 use super::super::worlds::Playing;
@@ -17,6 +19,7 @@ use terra_world::remote::{method, refused};
 
 pub fn plugin(app: &mut App) {
     method(app, "title.state", state);
+    method(app, "title.type", type_text);
     method(app, "title.leave", leave);
 }
 
@@ -38,7 +41,33 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
             "seed": world.meta.seed.to_string(),
         })).collect::<Vec<_>>()),
         "notice": menu.and_then(|menu| menu.notice.clone()),
+        "joining": menu.and_then(|menu| menu.joining.clone()),
+        "player": menu.map(|menu| menu.player.clone()),
+        "address": menu.map(|menu| menu.address.clone()),
     }))
+}
+
+#[derive(serde::Deserialize)]
+struct Typed {
+    text: String,
+}
+
+fn type_text(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Typed { text } = bevy::remote::builtin_methods::parse_some(params)?;
+    if *world.resource::<State<Screen>>().get() != Screen::Title {
+        return Err(refused(
+            "The title screen is not up: there is nothing to type into.",
+        ));
+    }
+    let menu = &mut world.resource_mut::<Title>().0;
+    if !menu.typing().0 {
+        return Err(refused(format!(
+            "What is picked ({:?}) takes no typing: pick a name, an address or a seed first.",
+            menu.picked()
+        )));
+    }
+    menu.type_text(&text);
+    Ok(json!("typed"))
 }
 
 fn leave(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
