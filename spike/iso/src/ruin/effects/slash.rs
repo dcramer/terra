@@ -294,12 +294,13 @@ fn show(
     players: Query<&AnimationPlayer>,
     mut parts: Query<(&Part, Option<&mut Transform>, Option<&mut PointLight>)>,
     mut meshes: ResMut<Assets<Mesh>>,
-    walking: Option<Res<crate::ruin::walk::Walking>>,
+    (walking, args): (Option<Res<crate::ruin::walk::Walking>>, Res<crate::Args>),
     (bodies, swings): (Query<&GlobalTransform>, Query<&Swinging>),
 ) {
     // No staged trail while the hero walks in, or plays (walk.rs, play.rs): then only his
-    // own swing's.
-    let walks = walking.is_some_and(|w| w.now);
+    // own swing's. In play always, from the first frame: the street stages no fight, and
+    // its hero's staged clip (the attack, for the bake) would draw a streak of its own.
+    let walks = args.play || walking.is_some_and(|w| w.now);
     let swing = blade
         .knight
         .and_then(|k| swings.get(k).ok())

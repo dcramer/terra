@@ -359,4 +359,8 @@
         (models: ["models/iso/city/trash-bag.glb"], density: 0.12, scale: (0.8, 1.2),
             on: Site("walls"), clump: (5.0, 1.0, 0.92), tilt: 10.0, sink: 0.02, seed: 23),
     ],
+    // Play's blows (play.rs, play/strike.rs): the sword's trail and the sparks where it
+    // bites. Only play adds the effects to the street (it stages no fight), so a still is
+    // as before.
+    effects: [(preset: "slash"), (preset: "hit-spark")],
 )

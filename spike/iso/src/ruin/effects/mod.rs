@@ -80,6 +80,17 @@ pub fn plugin(app: &mut App) {
         });
 }
 
+/// What a scene that stages no fight (the street) needs for play's blows: the effects'
+/// clock, the biome's presets (its `effects`, cued by play/strike.rs) and the slash. The
+/// staged fires, bolts, blow and marks stay out. Its `Stage` is inserted before Startup.
+pub fn played(app: &mut App) {
+    app.init_resource::<Stage>().add_plugins((
+        kit::plugin,
+        crate::kit::effects::plugin,
+        slash::plugin,
+    ));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

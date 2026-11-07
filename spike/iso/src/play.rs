@@ -76,10 +76,43 @@ pub fn plugin(app: &mut App) {
         .add_systems(PreUpdate, script.after(InputSystems))
         .add_systems(Update, (adopt, rig, control, follow).chain())
         .add_plugins(strike::plugin);
-    // The street stages no fight, so nothing else hangs the sword on its hero (held.rs).
+    // The street stages no fight, so nothing else hangs the sword on its hero (held.rs) or
+    // draws his blows: its stage (the effects aim at it from Startup) and play's effects.
     let layout = app.world().get_resource::<Args>().and_then(|a| a.layout);
-    if layout == Some(Layout::Street) {
-        app.add_plugins(crate::ruin::held::plugin);
+    let street = app
+        .world()
+        .get_resource::<Biome>()
+        .and_then(|b| b.street.clone());
+    if layout == Some(Layout::Street)
+        && let Some(st) = street
+    {
+        app.insert_resource(street_stage(&st))
+            .add_plugins((crate::ruin::held::plugin, crate::ruin::effects::played));
+    }
+}
+
+/// The street's foes in play (it stages none), from its hero: the ruin's ogre where the
+/// ruin's stands from its knight (so the ruin's scripted click strikes it here too), and a
+/// second behind him on the road.
+const STREET_FOES: [Vec2; 2] = [Vec2::new(2.0, -1.4), Vec2::new(-2.2, 1.8)];
+
+/// The street's floor at `p`: the pavements the kerb's rise up, the road at 0.
+fn street_floor(st: &crate::kit::street::Street, p: Vec2) -> f32 {
+    if p.y.abs() > st.road / 2.0 {
+        st.kerb.1
+    } else {
+        0.0
+    }
+}
+
+/// The street's stage: its hero at the focus, his first foe the one his blow aims at.
+fn street_stage(st: &crate::kit::street::Street) -> crate::ruin::effects::Stage {
+    let at = Vec2::new(st.focus.0, st.focus.1);
+    crate::ruin::effects::Stage {
+        knight: at,
+        foe: at + STREET_FOES[0],
+        target: at,
+        floor: street_floor(st, at),
     }
 }
 
@@ -160,7 +193,7 @@ fn ground(mut commands: Commands, args: Res<Args>, biome: Option<Res<Biome>>) {
     commands.insert_resource(g);
 }
 
-/// The street stages no fight: the hero stands at its focus.
+/// The street stages no fight: the hero stands at its focus, his foes about him.
 fn street_hero(
     mut commands: Commands,
     args: Res<Args>,
@@ -175,29 +208,39 @@ fn street_hero(
     }
     let at = Vec2::new(st.focus.0, st.focus.1);
     let path = "models/iso/knight.glb";
-    let y = if at.y.abs() > st.road / 2.0 {
-        st.kerb.1
-    } else {
-        0.0
-    };
-    // The stage held.rs finds its knight on, to hang his sword.
-    commands.insert_resource(crate::ruin::effects::Stage {
-        knight: at,
-        foe: at,
-        target: at,
-        floor: y,
-    });
+    let y = street_floor(&st, at);
     let body = crate::scene::model(&mut commands, &asset, path, at.extend(y).xzy(), 0.0, 1.0);
     commands.entity(body).insert((
         Hero,
         crate::rim::Fighter::valued(1.0, 0.35),
+        // His attack first, not his idle: the slash bakes its blade's path from the clip
+        // he first plays (ruin/effects/slash.rs), and play's rig then takes him over.
         Pose {
             gltf: asset.load(path),
-            clip: "idle",
+            clip: "attack",
             at: 0.0,
             once: false,
         },
     ));
+    let ogre = "models/iso/ogre.glb";
+    for off in STREET_FOES {
+        let p = at + off;
+        let yaw = (-off).x.atan2((-off).y);
+        let floor = street_floor(&st, p);
+        let foe = crate::scene::model(&mut commands, &asset, ogre, p.extend(floor).xzy(), yaw, 1.0);
+        // Darker than the ground about it as the ruin's (fight.rs `value`), a faint rim as
+        // the street's people, its contact shadow under its feet (kit/contact.rs).
+        commands.entity(foe).insert((
+            crate::rim::Fighter::valued(0.5, 0.35),
+            crate::kit::contact::Feet { floor },
+            Pose {
+                gltf: asset.load(ogre),
+                clip: "idle",
+                at: 0.0,
+                once: false,
+            },
+        ));
+    }
 }
 
 /// The staged fight's hero (the body that walks in to fight) becomes the player.
@@ -471,6 +514,26 @@ mod tests {
         // Two keys at once go no faster.
         assert!((screen_move(Vec2::ONE, YAW).length() - 1.0).abs() < 1e-4);
         assert_eq!(screen_move(Vec2::ZERO, YAW), Vec2::ZERO);
+    }
+
+    /// The street's foes stand in reach of the hero, each on its own floor (the road or the
+    /// pavement), and its stage aims his blow at the first.
+    #[test]
+    fn the_streets_foes_stand_in_reach() {
+        let st = crate::kit::biome::Biome::load("neon-street")
+            .unwrap()
+            .street
+            .unwrap();
+        let stage = street_stage(&st);
+        assert_eq!(stage.knight, Vec2::new(st.focus.0, st.focus.1));
+        assert_eq!(stage.floor, street_floor(&st, stage.knight));
+        for off in STREET_FOES {
+            let foe = stage.knight + off;
+            assert!(in_arc(stage.knight, off.normalize(), foe), "{off}");
+            assert!(off.length() > 1.5, "{off}: too close to swing at");
+        }
+        assert_eq!(stage.foe, stage.knight + STREET_FOES[0]);
+        assert_eq!(street_floor(&st, Vec2::ZERO), 0.0, "the road");
     }
 
     /// The swing faces the click: the model's +z turned onto the way to it, and only what
