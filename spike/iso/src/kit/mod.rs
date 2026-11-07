@@ -5,6 +5,7 @@
 //! something. How to add one: .agents/skills/iso-art/references/kit.md.
 
 pub mod biome;
+pub mod ground;
 pub mod light;
 
 use std::path::PathBuf;

@@ -4,8 +4,9 @@
 //! water's face over them (pool.rs).
 
 use super::{KNIGHT, LEVEL};
+use crate::kit::ground::{GroundMaterial, Place, material};
 use crate::pool::{self, Edge, Look, PoolMaterial, Sheen};
-use crate::terrain::{GroundMaterial, Land, fbm, ground_material, smooth};
+use crate::terrain::{Land, SITES, fbm, smooth};
 use bevy::prelude::*;
 
 /// The water's floor in a channel's middle, and the bank's mean height over the water.
@@ -183,11 +184,28 @@ fn spawn(
     light: Res<crate::kit::light::Light>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut grounds: ResMut<Assets<GroundMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+    biome: Res<crate::kit::biome::Biome>,
     mut pools: ResMut<Assets<PoolMaterial>>,
 ) {
+    // The open sky over it all: no crowns.
+    let shade = |_: Vec2| 0.0;
+    let place = Place {
+        land: &land,
+        sites: SITES,
+        water: Some(LEVEL),
+        shade: &shade,
+    };
+    let ground = material(
+        &asset,
+        &mut images,
+        &biome.ground,
+        biome.weather.as_ref(),
+        &place,
+    );
     commands.spawn((
         Mesh3d(meshes.add(land.mesh(cover))),
-        MeshMaterial3d(grounds.add(ground_material(&asset))),
+        MeshMaterial3d(grounds.add(ground)),
     ));
     let face = pool::surface(
         Vec2::new(-28.0, -24.0),
@@ -214,7 +232,11 @@ mod tests {
             assert!(shape(p) > LEVEL + 0.03, "{p} is under water: {}", shape(p));
         }
         for p in [Vec2::new(0.0, near(0.0)), Vec2::new(-2.0, far(-2.0)), MERE] {
-            assert!(shape(p) < LEVEL - 0.25, "{p} is not open water: {}", shape(p));
+            assert!(
+                shape(p) < LEVEL - 0.25,
+                "{p} is not open water: {}",
+                shape(p)
+            );
         }
     }
 
@@ -225,7 +247,10 @@ mod tests {
         let (c, w) = (SHELF.x, SHELF.y);
         let e = 1e-3;
         let mid = (shelf(c + e) - shelf(c - e)) / (2.0 * e);
-        assert!((mid - 0.5).abs() < 0.02, "the shelf's slope at its middle is {mid}");
+        assert!(
+            (mid - 0.5).abs() < 0.02,
+            "the shelf's slope at its middle is {mid}"
+        );
         let mut last = shelf(c - w - 0.1);
         for k in 1..=400 {
             let h = c - w - 0.1 + k as f32 * (2.0 * w + 0.2) / 400.0;
@@ -256,6 +281,9 @@ mod tests {
         }
         assert!(wet_ >= 3, "{wet_} of {on} steps stand in a puddle");
         assert!(dry > on * 2 / 3, "only {dry} of {on} steps are dry");
-        assert!(path(Vec2::new(0.0, 3.0)) == 0.0, "the path spreads to the near channel");
+        assert!(
+            path(Vec2::new(0.0, 3.0)) == 0.0,
+            "the path spreads to the near channel"
+        );
     }
 }

@@ -10,7 +10,7 @@ Unknown fields are refused; a parse error names the file, line, column, field an
 - `refs: "ruin"`: its references' folder, `~/.cache/terra-review/iso-kit/refs/<refs>/` (full size, `960/` copies, `refs.md`), measured in `refs/stats.json`.
 - `layout: Ruin | Forest | Marsh`: how the scene is built (the land, where the fight stands, the camera). For now each runs its biome's modules (`ruin/`, `wood/`, `marsh/`); the kit's layouts replace them as its jobs land.
 - `light: (preset: "ruin-night", overrides: (...))`: a preset in `biomes/light/<name>.ron` (`src/kit/light.rs`: hour, key's direction, colour, lux and shadows, sky fill, `ev100`, tone curve, grade, haze) and the numbers this biome changes of it. The preset sets the hour unless `--hour` says.
-- `ground: [(material, mask, amount)]`: scanned materials (`assets/materials/<material>`) at their true size, laid by a mask: Base, Wear, Mud, Wet, Moss, Snow, Grime.
+- `ground: (layers: [...], broad, scorch)`: up to eight layers, each a scan of the `materials/ground` stack by name (`kit/ground.rs` `STACK`, true sizes) with `mask`, `amount`, `tint`, `breakup` (drifts), `wets`, `triplanar`; one without a material only wets. Drawn by the kit for the forest and marsh (below).
 - `scatter: [(models, density, scale, on)]`, `decals: [(texture, count, size, on)]`, `water: (kind, level, deep)`, `weather: (wind, rain, snow, mist)`, `effects: [(preset, at)]`, `life: [(kind, count)]`.
 
 The fields after `light` are parsed and carried, each naming the iso-kit job that draws it; the ruin, forest and marsh still draw those from their own code.
@@ -19,7 +19,14 @@ The fields after `light` are parsed and carried, each naming the iso-kit job tha
 
 - `src/kit/mod.rs`: reading and parsing a file, the errors.
 - `src/kit/biome.rs`: the schema; its tests parse every biome and a full non-fantasy one.
+- `src/kit/ground.rs` and `ground.wesl`: the ground's layers, rule masks and material (below).
 - `src/kit/light.rs`: the light presets, `Light` (a resource): `Light::spawn` the key and fill, `Light::camera` the exposure, curve, grade and haze.
+
+## The ground (`src/kit/ground.rs`, `ground.wesl`)
+
+- Layers height-blend where their masks overlap (Mishkinis' splat: the highest of weight x 1.4 plus the scan's height wins over 0.25), then the broad variation, wet (darker 0.65, roughness 0.45), the wear slot's packed soil and the scorches.
+- A mask is the layout's own map, `Site("grass")` (terrain.rs `SITES`: grass, leaves, moss, rock, mud, roots, per vertex; shade and wear in UV_0), or a rule baked from the land into two textures at 0.25 m: `Mud` (within ~1.5 m of water, under 0.5 m over it), `Wet` (~1 m, a few cm over it; `weather.rain` wets hollows), `Moss` (shade or creases, not steep), `Snow` (faces up; its `amount` takes it down steeper), `Grime` (hollows, the heights' Laplacian), `Steep`; each edge ragged by noise at two scales. Each rule has a test.
+- A paved street is the same file: its scans stacked first (no asphalt or concrete in the stack yet).
 
 ## Adding a biome
 

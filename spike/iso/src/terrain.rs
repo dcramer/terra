@@ -3,14 +3,20 @@
 //! stack of scans) blended per vertex by what lies there: grass in the open, leaves, duff
 //! and roots under the trees, moss by the rocks, bare rock where it is steep, mud at the
 //! water. Everyone stands on it; the search map is blocked where it is too steep or wet.
+//! The biome's ground layers (kit/ground.rs) lay the scans by these maps and the kit's rules.
 
-use bevy::asset::embedded_asset;
-use bevy::image::{ImageArrayLayout, ImageLoaderSettings};
 use bevy::mesh::{Indices, PrimitiveTopology};
-use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
-use bevy::render::render_resource::AsBindGroup;
-use bevy::shader::ShaderRef;
+
+/// The names of the six maps `Land::mesh`'s `cover` gives each vertex, in its order (the
+/// colour's four, then the second texture coordinate's two), as a biome's ground names
+/// them (`Site("grass")`, kit/ground.rs).
+pub const SITES: [&str; 6] = ["grass", "leaves", "moss", "rock", "mud", "roots"];
+
+pub fn plugin(app: &mut App) {
+    app.add_plugins(crate::kit::ground::plugin)
+        .insert_resource(Land::new());
+}
 
 /// Half the ground mesh's side, metres, and its cell.
 pub const EXTENT: f32 = 56.0;
@@ -51,29 +57,6 @@ pub fn bare(p: Vec2) -> f32 {
 /// The pond's water, metres.
 pub const WATER: f32 = -0.55;
 pub const POND: Vec2 = Vec2::new(13.0, 7.0);
-
-pub type GroundMaterial = ExtendedMaterial<StandardMaterial, GroundExt>;
-
-pub fn plugin(app: &mut App) {
-    embedded_asset!(app, "shaders/ground.wesl");
-    app.add_plugins(MaterialPlugin::<GroundMaterial>::default())
-        .insert_resource(Land::new());
-}
-
-#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
-pub struct GroundExt {
-    #[texture(100, dimension = "2d_array")]
-    #[sampler(101)]
-    pub color: Handle<Image>,
-    #[texture(102, dimension = "2d_array")]
-    pub normal: Handle<Image>,
-}
-
-impl MaterialExtension for GroundExt {
-    fn fragment_shader() -> ShaderRef {
-        "embedded://iso/shaders/ground.wesl".into()
-    }
-}
 
 /// A small integer hash to 0..1.
 pub fn hash(x: i32, y: i32, seed: u32) -> f32 {
@@ -285,30 +268,6 @@ impl Land {
             .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, uvb)
             .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
             .with_inserted_indices(Indices::U32(idx))
-    }
-}
-
-/// The ground's material: the game's stack of scans as texture arrays.
-pub fn ground_material(asset: &AssetServer) -> GroundMaterial {
-    let load = |file: &'static str, srgb: bool| -> Handle<Image> {
-        asset
-            .load_builder()
-            .with_settings(move |s: &mut ImageLoaderSettings| {
-                s.array_layout = Some(ImageArrayLayout::RowCount { rows: 12 });
-                s.is_srgb = srgb;
-            })
-            .load(file)
-    };
-    ExtendedMaterial {
-        base: StandardMaterial {
-            perceptual_roughness: 0.92,
-            reflectance: 0.3,
-            ..default()
-        },
-        extension: GroundExt {
-            color: load("materials/ground/color.jpg", true),
-            normal: load("materials/ground/normal.jpg", false),
-        },
     }
 }
 

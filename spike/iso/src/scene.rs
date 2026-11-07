@@ -140,7 +140,9 @@ pub fn build(
     asset: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut grounds: ResMut<Assets<terrain::GroundMaterial>>,
+    mut grounds: ResMut<Assets<crate::kit::ground::GroundMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+    biome: Option<Res<crate::kit::biome::Biome>>,
     land: Res<Land>,
     mut nav: ResMut<Nav>,
 ) {
@@ -156,10 +158,29 @@ pub fn build(
         flames: flames.clone(),
     });
 
-    // The land (the pond's water is water.rs's).
+    // The land (the pond's water is water.rs's), in the biome's ground; the glade without
+    // `--biome` lays the forest's.
+    let biome = biome.map_or_else(
+        || crate::kit::biome::Biome::load("forest").unwrap_or_else(|e| panic!("{e}")),
+        |b| b.clone(),
+    );
+    let shade = |p: Vec2| 1.0 - canopy(p, &trees);
+    let place = crate::kit::ground::Place {
+        land: &land,
+        sites: terrain::SITES,
+        water: Some(WATER),
+        shade: &shade,
+    };
+    let ground = crate::kit::ground::material(
+        &asset,
+        &mut images,
+        &biome.ground,
+        biome.weather.as_ref(),
+        &place,
+    );
     commands.spawn((
         Mesh3d(meshes.add(land.mesh(|p, n, h| cover(p, n, h, &trees)))),
-        MeshMaterial3d(grounds.add(terrain::ground_material(&asset))),
+        MeshMaterial3d(grounds.add(ground)),
     ));
     nav.block_where(|p| land.slope(p) > 0.6 || land.height(p) < WATER + 0.08);
 

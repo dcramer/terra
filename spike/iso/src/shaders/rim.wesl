@@ -45,7 +45,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         edge = pow(1.0 - facing, rim.w) * up;
     }
     // Under the oaks the crowns hide the sky: its fill dimmed as the ground's is there
-    // (ground.wesl), and the rim with it (rim.rs's canopy map, 128 m about the middle),
+    // (kit/ground.wesl), and the rim with it (rim.rs's canopy map, 128 m about the middle),
     // but for the share `lift.x` a fighter's rim keeps (the ARPGs' lift, not the sky's).
     let open = textureSample(canopy_map, canopy_sampler, in.world_position.xz / 128.0 + 0.5).r;
     pbr_input.diffuse_occlusion *= vec3<f32>(open * open);

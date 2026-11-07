@@ -6,8 +6,29 @@
 (
     kind: [Day, Water],
     refs: "forest",
-    // Its ground, scatter, water and life are still wood/'s and the glade's own code; they
-    // move here as the kit's jobs land (j4, j5, j7).
+    // Its scatter, water and life are still wood/'s and the glade's own code; they move
+    // here as the kit's jobs land (j7 on).
     layout: Forest,
     light: (preset: "forest-day"),
+    // The kit's ground (kit/ground.rs) over the glade's own maps (terrain.rs `SITES`).
+    // The tints bring each scan, photographed under cloud, to its stuff's albedo in the
+    // open (grass greener, moss far lighter).
+    ground: (
+        layers: [
+            (material: "leafy_grass", mask: Site("grass"), tint: (1.55, 2.1, 1.2)),
+            // Fallen leaves, fresh or dry in drifts.
+            (material: "forest_leaves_04", mask: Site("leaves"), tint: (1.5, 1.45, 1.35),
+                breakup: (0.21, 0.9, 0.65, 0.35)),
+            (material: "dry_decay_leaves", mask: Site("leaves"), tint: (1.45, 1.4, 1.3),
+                breakup: (0.21, 0.9, 0.35, 0.65)),
+            (material: "moss_004", mask: Site("moss"), tint: (5.0, 6.0, 3.2)),
+            (material: "rock_face_03", mask: Site("rock"), tint: (1.35, 1.35, 1.4),
+                triplanar: true),
+            // Wet mud by the water: darker and glossier.
+            (material: "brown_mud_02", mask: Site("mud"), wets: 1.0),
+            (material: "roots", mask: Site("roots"), tint: (1.3, 1.3, 1.3)),
+        ],
+        // The camp's fire (scene::FIRE).
+        scorch: [(0.0, 3.0)],
+    ),
 )

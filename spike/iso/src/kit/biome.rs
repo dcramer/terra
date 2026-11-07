@@ -20,9 +20,9 @@ pub struct Biome {
     pub refs: String,
     pub layout: Layout,
     pub light: LightRef,
-    /// Bottom first; each over the ones before where its mask says (iso-kit j4).
+    /// The ground's layers and how they blend (kit/ground.rs draws it, iso-kit j6).
     #[serde(default)]
-    pub ground: Vec<Layer>,
+    pub ground: Ground,
     /// Props and plants strewn by rule (iso-kit j4).
     #[serde(default)]
     pub scatter: Vec<Scatter>,
@@ -77,29 +77,73 @@ pub struct LightRef {
     pub overrides: Overrides,
 }
 
-/// A ground layer: a scanned material (`assets/materials/<material>`) at its true size,
-/// where its mask lays it, `amount` of the way (0 to 1).
+/// The ground (kit/ground.rs): its layers, the light and hue its floor drifts between over
+/// tens of metres, and the scorched points (a camp fire's ash and char).
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields, default)]
+pub struct Ground {
+    /// Bottom first; up to eight, height-blended where their masks overlap.
+    pub layers: Vec<Layer>,
+    /// The broad variation's darkest and brightest, as factors on the blended colour.
+    pub broad: (f32, f32),
+    /// Up to four scorched points, x and z.
+    pub scorch: Vec<(f32, f32)>,
+}
+
+impl Default for Ground {
+    fn default() -> Self {
+        Ground {
+            layers: Vec::new(),
+            broad: (0.78, 1.15),
+            scorch: Vec::new(),
+        }
+    }
+}
+
+/// A ground layer: a scanned material (a layer of the `materials/ground` stack, by name) at
+/// its true size, where its mask lays it, `amount` of the way (0 to 1). One without a
+/// material only wets what lies under it (`wets`).
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Layer {
-    pub material: String,
+    #[serde(default)]
+    pub material: Option<String>,
     pub mask: Mask,
     #[serde(default = "one")]
     pub amount: f32,
+    /// Metres the scan covers, if not its true size (kit/ground.rs's `STACK`).
+    #[serde(default)]
+    pub metres: Option<f32>,
+    /// A factor on the scan's colour: the scans are dark, photographed under cloud.
+    #[serde(default = "white")]
+    pub tint: (f32, f32, f32),
+    /// Broken into drifts: (broad scale, fine scale, band from, band to); a band running
+    /// down (0.65, 0.35) lays the drifts' inverse.
+    #[serde(default)]
+    pub breakup: Option<(f32, f32, f32, f32)>,
+    /// How wet the ground reads where it lies, 0 to 1: darker and glossier.
+    #[serde(default)]
+    pub wets: f32,
+    /// Projected from three sides (rock on the steep), not from above.
+    #[serde(default)]
+    pub triplanar: bool,
 }
 
-/// Where a layer lies: everywhere, or by what made it there (worn on paths and in the
-/// open, mud in hollows and by water, wet where water stands or rain falls, moss in shade
-/// and on north faces, snow on tops, grime in corners and along walls).
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+/// Where a layer lies: everywhere; by the layout's own map of that name (`Site("grass")`,
+/// the place's authored weights); or by the kit's rules (kit/ground.rs): worn on paths,
+/// mud low by water, wet nearer and lower, moss in shade and creases, snow on what faces
+/// up, grime in hollows, steep where the land is.
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Mask {
     Base,
+    Site(String),
     Wear,
     Mud,
     Wet,
     Moss,
     Snow,
     Grime,
+    Steep,
 }
 
 /// A scatter set: models (paths under `assets/`) strewn at `density` a square metre, scaled
@@ -178,6 +222,10 @@ fn one() -> f32 {
     1.0
 }
 
+fn white() -> (f32, f32, f32) {
+    (1.0, 1.0, 1.0)
+}
+
 fn unit() -> (f32, f32) {
     (1.0, 1.0)
 }
@@ -223,10 +271,10 @@ mod tests {
         refs: "neon-street",
         layout: Ruin,
         light: (preset: "city-night-rain", overrides: (lux: 30.0, curve: AgX)),
-        ground: [
+        ground: (layers: [
             (material: "asphalt", mask: Base),
-            (material: "grime", mask: Grime, amount: 0.6),
-        ],
+            (material: "grime", mask: Grime, amount: 0.6), (mask: Wet, wets: 0.8),
+        ]),
         scatter: [(models: ["models/bin.glb"], density: 0.05, scale: (0.9, 1.1), on: Some(Wear))],
         decals: [(texture: "decals/oil.png", count: 12, size: (0.5, 1.5))],
         water: Some((kind: Wet, deep: Some(Srgb(0.02, 0.02, 0.03)))),
@@ -240,7 +288,7 @@ mod tests {
     #[test]
     fn a_full_biome_parses() {
         let b: Biome = crate::kit::parse(FULL, "full.ron", "biome.rs").unwrap();
-        assert_eq!(b.ground[1].mask, Mask::Grime);
+        assert_eq!(b.ground.layers[1].mask, Mask::Grime);
         assert_eq!(b.weather.as_ref().unwrap().snow, 0.0);
         let lit = b.light().unwrap();
         assert_eq!(lit.key.lux, 30.0);
