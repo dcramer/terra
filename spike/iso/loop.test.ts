@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { blindOrder, delta, type History, isChanged, newerKept, outcome, type Pair, parseBiome, pixelShare, refRanges, reserveRound, type Round, runNotes, type Side, statsLine, testResult, updateHistory, verdict, winnerOf } from "./loop.ts";
+import { blindOrder, delta, type History, isChanged, newerKept, outcome, type Pair, parseBiome, pixelShare, refRanges, reserveRound, type Round, runNotes, shotAgainst, type Side, staleAgainst, statsLine, testResult, updateHistory, verdict, winnerOf } from "./loop.ts";
 
 const pair = (a: Side, winner?: Side | "same", margin?: Pair["margin"]): Pair => ({ folder: "f", brief: "b", a, winner, margin });
 const changed = (...pairs: Pair[]) => ({ changed: true, pairs });
@@ -155,4 +155,23 @@ test("a verdict on a round older than a biome's kept still is refused, a newer o
   assert.deepEqual(newerKept(h, "mid"), [], "the round that is kept may be judged again");
   assert.deepEqual(newerKept(h, "new"), []);
   assert.deepEqual(newerKept(h, "gone"), []);
+});
+
+test("a round shot against a kept still since replaced keeps none of its ties and is refused for a change", () => {
+  const e = (changed: boolean, against?: string) => ({ still: "s", stats: {}, pairs: [], changed, against }) as unknown as Round["biomes"][string];
+  const kept = (r: string) => ({ round: r, still: "k", stats: {} }) as unknown as History["kept"][string];
+  const h: Pick<History, "kept" | "rounds"> = {
+    rounds: {
+      base: { at: "08:00", rev: "r", dirty: false, job: "j", biomes: { marsh: e(false), ruin: e(false) }, verdict: { result: "KEEP", losers: [], at: "08:10" } },
+      // Both shot against base; marsh's change is then kept, after ruin's round began.
+      wet: { at: "08:20", rev: "r", dirty: true, job: "j", biomes: { marsh: e(true, "base"), ruin: e(false, "base") }, verdict: { result: "KEEP", losers: [], at: "08:40" } },
+      grime: { at: "08:25", rev: "r", dirty: true, job: "j", biomes: { marsh: e(false), ruin: e(true) } },
+      late: { at: "08:30", rev: "r", dirty: true, job: "j", biomes: { marsh: e(true, "base") } },
+    },
+    kept: { marsh: kept("wet"), ruin: kept("wet") },
+  };
+  assert.equal(shotAgainst(h, "grime", "marsh"), "base", "inferred from the last keep before it was shot");
+  assert.deepEqual(staleAgainst(h, "grime"), { ties: ["marsh"], changed: ["ruin"] }, "grime's marsh tied base's still, not wet's");
+  assert.deepEqual(staleAgainst(h, "late"), { ties: [], changed: ["marsh"] });
+  assert.deepEqual(staleAgainst(h, "wet"), { ties: [], changed: [] }, "the kept round itself is current");
 });

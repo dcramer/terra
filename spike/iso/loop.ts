@@ -50,6 +50,8 @@ export type Entry = {
   stats: Stats;
   /** Against the kept still: null when the biome had none. */
   changed: boolean | null;
+  /** The kept still's round it was measured and paired against. */
+  against?: string;
   delta?: Partial<Stats>;
   share?: number;
   pairs: Pair[];
@@ -422,7 +424,7 @@ function fileBiome(round: string, b: string, out: string, film: boolean, kept: K
   if (kept) {
     const d = delta(stats, kept.stats);
     const share = pixelShare(im, decodeAny(kept.still));
-    e = { ...e, delta: d, share, changed: isChanged(d, share) };
+    e = { ...e, delta: d, share, changed: isChanged(d, share), against: kept.round };
     keptInfo = { round: kept.round, delta: d, share };
   }
   const line = statsLine(b, stats, refs.ranges, keptInfo);
@@ -499,6 +501,34 @@ export function newerKept(h: Pick<History, "kept" | "rounds">, round: string): s
   });
 }
 
+/** The kept round a biome of `round` was measured against: its `against`, or for a round shot
+ * before that was recorded, the last round kept for the biome before `round` was shot. */
+export function shotAgainst(h: Pick<History, "rounds">, round: string, b: string): string | undefined {
+  const r = h.rounds[round];
+  if (r?.biomes[b]?.against) return r.biomes[b].against;
+  let best: [string, string] | undefined;
+  for (const [name, o] of Object.entries(h.rounds)) {
+    const v = o.verdict;
+    if (name === round || !o.biomes[b] || v?.result !== "KEEP" || !r || v.at >= r.at) continue;
+    if (!best || v.at > best[1]) best = [name, v.at];
+  }
+  return best?.[0];
+}
+
+/** The biomes of `round` measured against a kept still that has since been replaced: a tie
+ * there only matched the older still (keeping it would undo the newer win), a change was
+ * judged against the wrong one. */
+export function staleAgainst(h: Pick<History, "kept" | "rounds">, round: string): { ties: string[]; changed: string[] } {
+  const out = { ties: [] as string[], changed: [] as string[] };
+  for (const [b, e] of Object.entries(h.rounds[round]?.biomes ?? {})) {
+    const was = shotAgainst(h, round, b);
+    const now = h.kept[b]?.round;
+    if (!was || !now || was === now || now === round) continue;
+    (e.changed ? out.changed : out.ties).push(b);
+  }
+  return out;
+}
+
 function judgeVerdict(argv: string[], say: (l: string) => void) {
   const round = argv[0];
   const h = loadHistory(say);
@@ -506,6 +536,8 @@ function judgeVerdict(argv: string[], say: (l: string) => void) {
   if (!rnd) fail(`no round ${round}: \`node spike/iso/loop.ts history\` lists them`);
   const later = newerKept(h, round);
   if (later.length) fail(`${round} is older than the kept still of ${later.map((b) => `${b} (${h.kept[b].round})`).join(", ")}: a verdict on it would put its older stills back over the newer kept ones (D634's ratchet only moves forward). Judge the newest round; to restore an older round's stills on purpose, \`node spike/iso/loop.ts rebase ${round} "restore: <why>"\``);
+  const stale = staleAgainst(h, round);
+  if (stale.changed.length) fail(`${stale.changed.map((b) => `${b} (judged against kept ${shotAgainst(h, round, b)}, kept now ${h.kept[b].round})`).join(", ")}: ${round}'s pair was judged against a kept still since replaced, so its answer says nothing against the new one. Shoot the change again on top of the newer kept look (rebase the change onto main) and judge that round`);
   const v = verdict(rnd!.biomes);
   for (const [b, o] of Object.entries(v.out)) {
     const s = rnd!.biomes[b].score;
@@ -518,10 +550,12 @@ function judgeVerdict(argv: string[], say: (l: string) => void) {
   if (v.result === "KEEP") {
     mkdirSync(join(KIT, "kept"), { recursive: true });
     for (const [b, e] of Object.entries(rnd!.biomes)) {
+      if (stale.ties.includes(b)) continue;
       const still = join(KIT, "kept", `${b}.png`);
       copyFileSync(e.still, still);
       h.kept[b] = { round, still, stats: e.stats };
     }
+    if (stale.ties.length) say(`${stale.ties.join(", ")}: tied only an older kept still, so the newer kept one stays`);
     say(`KEEP ${round}: no biome lost; its stills are the kept ones now (${join(KIT, "kept")})`);
   } else say(`REVERT ${round}: ${v.losers.join(", ")} lost; undo the change shot in it (${rnd!.rev}${rnd!.dirty ? " with uncommitted changes" : ""}: git revert, never a force-push); the kept stills stay`);
   const said = { result: v.result!, losers: v.losers, at: new Date().toISOString() };
