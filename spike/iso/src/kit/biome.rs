@@ -49,6 +49,11 @@ pub struct Biome {
     /// j60). None by default: a model looks as its file made it.
     #[serde(default)]
     pub finishes: Vec<super::finish::Finish>,
+    /// The scene captured into a cubemap from one point and lit back as the view's
+    /// environment map, for glass, paint and gloss to mirror (kit/reflect.rs, uc-reflect j1).
+    /// None by default: no image-based light.
+    #[serde(default)]
+    pub reflect: Option<super::reflect::Reflections>,
 }
 
 /// The kind of a reference and a still.

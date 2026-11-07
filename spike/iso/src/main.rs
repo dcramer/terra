@@ -208,6 +208,8 @@ fn main() {
     use kit::biome::Layout;
     if let Some((biome, light)) = loaded {
         app.insert_resource(biome).insert_resource(light);
+        // A biome's reflection probe, if its file names one (kit/reflect.rs).
+        app.add_plugins(kit::reflect::plugin);
     }
     if args.play {
         app.add_plugins(play::plugin);

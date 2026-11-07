@@ -13,6 +13,7 @@ pub mod finish;
 pub mod ground;
 pub mod laid;
 pub mod light;
+pub mod reflect;
 pub mod rooms;
 pub mod scatter;
 pub mod street;
