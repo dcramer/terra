@@ -69,6 +69,15 @@ test("verdict refuses to keep a tied round's stills, and --revert records it wit
     assert.equal(after.rounds.r1.verdict?.result, "REVERT");
     assert.equal(after.kept.ruin.round, "r0");
     assert.equal(readFileSync(keptStill, "utf8"), "kept look");
+    // A revert copies nothing, so it is taken on a round older than another biome's kept still
+    // (lead 9: 261107-1024's ruin tied after 1029's neon street was kept).
+    h.rounds.r1.biomes.forest = { still: roundStill, stats: {} as never, changed: false, pairs: [] };
+    h.rounds.r2 = { at: "2026-11-07T09:30:00Z", rev: "c", dirty: true, job: "j", biomes: {}, verdict: { result: "KEEP", losers: [], at: "2026-11-07T09:40:00Z" } };
+    h.kept.forest = { round: "r2", still: keptStill, stats: {} as never };
+    writeFileSync(join(dir, "history.json"), JSON.stringify(h));
+    assert.match(run("r1").stdout, /older than the kept still of forest/);
+    const late = run("r1", "--revert");
+    assert.equal(late.status, 0, late.stdout + late.stderr);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

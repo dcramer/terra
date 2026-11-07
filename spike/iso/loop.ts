@@ -553,10 +553,12 @@ function judgeVerdict(argv: string[], say: (l: string) => void) {
   const h = loadHistory(say);
   const rnd = h.rounds[round];
   if (!rnd) fail(`no round ${round}: \`node spike/iso/loop.ts history\` lists them`);
-  const later = newerKept(h, round);
+  // A revert copies no stills, so a round older than a kept one (or judged against a replaced
+  // one) may still be recorded as reverted.
+  const later = revert ? [] : newerKept(h, round);
   if (later.length) fail(`${round} is older than the kept still of ${later.map((b) => `${b} (${h.kept[b].round})`).join(", ")}: a verdict on it would put its older stills back over the newer kept ones (D634's ratchet only moves forward). Judge the newest round; to restore an older round's stills on purpose, \`node spike/iso/loop.ts rebase ${round} "restore: <why>"\``);
   const stale = staleAgainst(h, round);
-  if (stale.changed.length) fail(`${stale.changed.map((b) => `${b} (judged against kept ${shotAgainst(h, round, b)}, kept now ${h.kept[b].round})`).join(", ")}: ${round}'s pair was judged against a kept still since replaced, so its answer says nothing against the new one. Shoot the change again on top of the newer kept look (rebase the change onto main) and judge that round`);
+  if (stale.changed.length && !revert) fail(`${stale.changed.map((b) => `${b} (judged against kept ${shotAgainst(h, round, b)}, kept now ${h.kept[b].round})`).join(", ")}: ${round}'s pair was judged against a kept still since replaced, so its answer says nothing against the new one. Shoot the change again on top of the newer kept look (rebase the change onto main) and judge that round`);
   const v = verdict(rnd!.biomes);
   for (const [b, o] of Object.entries(v.out)) {
     const s = rnd!.biomes[b].score;
