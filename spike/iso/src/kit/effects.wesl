@@ -7,11 +7,11 @@
 // windowed to nothing well inside the quad, added over the frame (premultiplied, alpha 0).
 // Mode 1, smoke or steam: a soft noisy puff, lit by what the CPU summed of the lights at it
 // (kit/effects.rs `lit_at`), drawn over the frame (premultiplied).
-// Mode 2, a trail (u the age, v across from the hilt to the edge): a hot edge, a smear of
-// motion inside it streaked along the swing, its tail dissolved into the streaks, drawn
-// premultiplied (the body hides a little of what is behind it).
+// Mode 2, a trail (u the age, v across from the hilt to the edge): a blade's motion streak,
+// a thin hot glint along the edge's path in a feathered glow, a faint blur of the blade
+// inside it, fading from the blade back, nearly additive.
 // Mode 3, a streak (a projectile's trail, u the age from the head, v across): a hot line
-// down the middle in a halo narrowing down the trail, the tail eroded as mode 2's.
+// down the middle in a narrow halo narrowing down the trail, the tail eroded into wisps.
 // Every mode fades where it nears what is behind it (a soft particle, the depth prepass's
 // view depth against its own), so a puff or a trail never cuts a hard line into the floor.
 
@@ -68,30 +68,36 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let age = in.uv.x;
         let v = in.uv.y;
         let s = look.lit.w;
-        // Streaks along the swing (noise stretched along u, fine across v), as a motion blur's.
-        let n = 0.62 * noise(vec2(age * 3.0 + s, v * 11.0)) + 0.38 * noise(vec2(age * 9.0, v * 29.0 + s));
-        // The dissolve a ribbon's tail breaks into wisps by (Niagara's ribbon examples): the
-        // threshold climbs with age, so the old trail is eroded into its streaks, never faded
-        // whole.
-        let t = 0.88 * pow(age, 1.25) - 0.08;
-        let kept = smoothstep(t - 0.06, t + 0.14, n);
+        // A lit blade's motion streak, as a camera's shutter draws one (iso-kit j43; the
+        // judges' "flat, hard-edged crescent" was a ribbon of solid body with a cut border):
+        // a thin hot glint along the path of the edge (`edge`, a Gaussian `width` across), a
+        // feathered falloff about it three times as wide, a faint blur of the blade inward
+        // (`smear`), all fading from the blade back down its age and gone before either
+        // border of the strip, so no edge of it shows.
+        // Fine streaks along the swing (noise long in u, fine across v), as a motion blur's.
+        let n = 0.6 * noise(vec2(age * 2.0 + s, v * 23.0)) + 0.4 * noise(vec2(age * 5.0, v * 47.0 + s));
+        let streak = 0.85 + 0.3 * n;
         let along = pow(max(1.0 - age, 0.0), look.lit.x);
-        // The body: from nothing at the hilt, thickening outward, fading out past the edge
-        // (a motion blur's soft border, not a ribbon's cut).
-        let out = 1.0 - smoothstep(look.core.w, 1.0, v);
-        let body = smoothstep(0.04, look.core.w * 0.72, v) * out * kept;
-        // The hot edge near the tip, and a hot head at the blade.
-        let d = (v - look.core.w) / max(look.rim.w, 0.001);
-        let rim = exp(-d * d) * (1.0 - smoothstep(0.25, 0.85, age)) * min(0.75 + 0.5 * n, 1.0);
-        let head = exp(-(age / 0.05) * (age / 0.05)) * smoothstep(0.25, 0.85, v) * out;
-        let hot = min(rim + 0.7 * head, 1.0);
-        // The body darkens to a deep red down the trail.
-        let deep = look.rim.rgb * mix(vec3(1.0), vec3(0.55, 0.18, 0.45), age);
-        let rgb = deep * body * look.shape.w * (0.8 + 0.4 * n) + look.core.rgb * hot;
-        // Premultiplied: the body hides some of what is behind it, so it stays orange-red over
-        // a sunlit floor rather than washing to peach as a purely additive strip did.
-        let cover = max(0.7 * body, 0.3 * hot) * along * strength;
-        return vec4(rgb * along * strength * view.exposure, cover);
+        // No cut where the blade stands now: the blur's leading edge is soft too.
+        let lead = smoothstep(0.0, 0.04, age);
+        let window = smoothstep(0.0, 0.15, v) * (1.0 - smoothstep(0.86, 1.0, v));
+        let w = max(look.rim.w, 0.001);
+        let d = (v - look.core.w) / w;
+        let f = (v - look.core.w) / (3.0 * w);
+        // The glint cools first: hot only over the newest part of the streak.
+        let hot = exp(-d * d) * (1.0 - smoothstep(0.15, 0.6, age)) * streak;
+        let feather = exp(-f * f);
+        // The blade's own blur, rising from the hilt to the edge, the feather's beyond it.
+        let blade = select(smoothstep(0.0, look.core.w, v), feather, v > look.core.w);
+        let glow = (0.6 * feather + look.shape.w * 0.4 * blade) * streak;
+        // The glow cools down the streak from the rim's colour toward a dull red.
+        let tint = look.rim.rgb * mix(vec3(1.0), vec3(0.6, 0.32, 0.25), age);
+        let k = along * lead * window * strength;
+        let rgb = (look.core.rgb * hot + tint * glow) * k;
+        // Nearly additive: a light, not a ribbon; a little cover so it holds over a sunlit
+        // floor.
+        let cover = 0.12 * glow * k;
+        return vec4(rgb * view.exposure, cover);
     }
     if mode == 3 {
         let age = in.uv.x;
@@ -100,17 +106,18 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let s = look.lit.w;
         let n = 0.62 * noise(vec2(age * 4.0 + s, v * 7.0)) + 0.38 * noise(vec2(age * 13.0, v * 19.0 + s));
         let t = 0.88 * pow(age, 1.25) - 0.08;
-        let kept = smoothstep(t - 0.06, t + 0.14, n);
+        // Eroded softly (iso-kit j43: the narrow ramp cut blotches with hard rims).
+        let kept = smoothstep(t - 0.15, t + 0.3, n);
         let along = pow(max(1.0 - age, 0.0), look.lit.x);
-        // The halo narrows down the trail as it cools, a Gaussian across, gone before the
-        // strip's border so no edge of it shows.
+        // The halo narrows down the trail as it cools, a narrow Gaussian across (a glow about
+        // the line, not a band: iso-kit j43's "hard crescent"), long gone at the border.
         let xh = x / mix(1.0, 0.45, age);
-        let halo = exp(-3.0 * xh * xh) * (1.0 - smoothstep(0.7, 1.0, xh)) * kept;
+        let halo = exp(-7.0 * xh * xh) * (1.0 - smoothstep(0.8, 1.0, xh)) * kept;
         // The hot line down the middle, thinning and cooling first.
         let c = x / max(look.rim.w * mix(1.0, 0.5, age), 0.001);
-        let hot = exp(-c * c) * (1.0 - smoothstep(0.2, 0.8, age)) * min(0.75 + 0.5 * n, 1.0);
+        let hot = exp(-c * c) * (1.0 - smoothstep(0.15, 0.6, age)) * min(0.75 + 0.5 * n, 1.0);
         let rgb = look.rim.rgb * halo * look.shape.w * (0.8 + 0.4 * n) + look.core.rgb * hot;
-        let cover = 0.25 * halo * along * strength;
+        let cover = 0.1 * halo * along * strength;
         return vec4(rgb * along * strength * view.exposure, cover);
     }
     let p = in.uv * 2.0 - 1.0;

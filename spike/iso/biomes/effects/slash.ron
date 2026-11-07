@@ -1,15 +1,18 @@
 // The knight's slash (kit/effects.rs; slash.rs sweeps the strip along the blade's path): a
-// lit motion trail, a thin white-hot edge near the tip, a streaked orange-red smear inside it
-// darkening down the trail and dissolving into its streaks, and a light riding the edge.
-// Started at the texture slash.rs drew before it (iso-kit j16): its hot edge ~10 and body ~1.2
-// in linear light at the ruin's ev100 8 (exposure 1/307); the edge at the blade's tip (0.85 of
-// the strip, which reaches 1.12 blades out) and the body fading past it, not cut.
+// lit blade's motion streak, as a camera's shutter draws one (iso-kit j43; the judges' "flat,
+// hard-edged crescent" was a solid orange body with a cut border): a thin warm-white glint
+// along the path of the blade's tip, a feathered glow about it, a faint blur of the blade
+// inside it, fading quickly from the blade back, and a light riding the edge.
+// The glint at the blade's tip (0.85 of the strip, which reaches 1.12 blades out), `width` its
+// Gaussian across (a share of the strip, ~3 cm), the glow three times that; `smear` the
+// blade's blur; `tail` the fade's exponent down its age. At the ruin's ev100 8 (exposure
+// 1/307) the glint is ~10 linear, the glow ~1. A glow of 190 nits read as a painted line.
 (
     cue: Swing,
     at: Strike,
     still: 0.0,
     life: 0.2,
-    lamps: [(lm: 28000.0, colour: Srgb(1.0, 0.62, 0.3), up: 0.0, range: 5.0, fall: 1.0)],
-    trail: (core: Srgb(1.0, 0.92, 0.8), core_nits: 3000.0, rim: Srgb(1.0, 0.48, 0.14), rim_nits: 370.0,
-        edge: 0.85, width: 0.05, smear: 1.0, tail: 0.8, soft: 0.2),
+    lamps: [(lm: 28000.0, colour: Srgb(1.0, 0.7, 0.42), up: 0.0, range: 5.0, fall: 1.0)],
+    trail: (core: Srgb(1.0, 0.94, 0.84), core_nits: 3000.0, rim: Srgb(1.0, 0.68, 0.4), rim_nits: 300.0,
+        edge: 0.85, width: 0.04, smear: 0.8, tail: 2.2, soft: 0.2),
 )

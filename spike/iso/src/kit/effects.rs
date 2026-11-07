@@ -131,6 +131,10 @@ pub struct Sparks {
     /// Where they come from about the anchor (m, a cube's half-size).
     #[serde(default)]
     pub area: f32,
+    /// The time over which they are thrown (s): a spray, not one ring of streaks all the same
+    /// way out (iso-kit j43: born together, a still showed a starburst).
+    #[serde(default)]
+    pub delay: f32,
 }
 
 /// Puffs of smoke or steam: how many, size at birth and death (m), life range (s), how
@@ -317,6 +321,20 @@ pub fn spark_at(from: Vec3, v0: Vec3, gravity: f32, a: f32) -> (Vec3, Vec3) {
     (from + v0 * a + 0.5 * g * a * a, v0 + g * a)
 }
 
+/// A streak's light at `k` of its life (nits, linear rgb), as hot metal cools: `hot` at
+/// birth (white-yellow), `cool` by mid-life (orange), then dimming to nothing (dark red), not
+/// a straight fade from white (iso-kit j43).
+pub fn spark_glow(s: &Sparks, k: f32) -> Vec3 {
+    let smooth = |a: f32, b: f32, x: f32| {
+        let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let c = nits(s.hot, s.hot_nits).lerp(nits(s.cool, s.cool_nits), smooth(0.0, 0.5, k));
+    // The red end of the glow lasts longest: blue and green go first.
+    let dark = smooth(0.4, 1.0, k);
+    c * Vec3::new(1.0, 1.0 - 0.6 * dark, 1.0 - 0.8 * dark) * (1.0 - dark)
+}
+
 /// The illuminance (lux, linear rgb) the lights leave at `p`: each point light's lumens over
 /// 4π d², within its reach, plus the key's and the sky's (a puff scatters half of each). A
 /// puff is a volume `r` in radius, not a point: a light at or inside it lights it as one about
@@ -424,6 +442,7 @@ enum Kind {
         speed: f32,
         life: f32,
         from: Vec3,
+        delay: f32,
         phase: f32,
     },
     Puff {
@@ -522,7 +541,9 @@ fn spawn(
                 },
             ));
         };
-        if p.flash.is_some() {
+        // A trail's flash is its head's, drawn by its scene where the head is (spell.rs's
+        // bolts), as its lamps are.
+        if p.flash.is_some() && p.trail.is_none() {
             quad_of(&mut commands, Kind::Flash);
         }
         if let Some(s) = p.sparks {
@@ -544,6 +565,7 @@ fn spawn(
                     speed: rng.range(s.speed.0, s.speed.1),
                     life: rng.range(s.life.0, s.life.1),
                     from,
+                    delay: rng.range(0.0, s.delay),
                     phase: j as f32 / s.count.max(1) as f32,
                 };
                 quad_of(&mut commands, kind);
@@ -665,10 +687,11 @@ fn play(
                 speed,
                 life,
                 from,
+                delay,
                 phase,
             } => {
                 let s = p.sparks.unwrap();
-                let a = looped(p, a, phase);
+                let a = looped(p, a, phase) - delay;
                 if (0.0..life).contains(&a) && (0.0..p.life).contains(&ages[q.effect]) {
                     let k = a / life;
                     let (at, v) = spark_at(from, dir * speed, s.gravity, a);
@@ -682,11 +705,11 @@ fn play(
                         s.width * 2.0,
                         1.0,
                     );
-                    let hot = nits(s.hot, s.hot_nits).lerp(nits(s.cool, s.cool_nits), k);
+                    let hot = spark_glow(&s, k);
                     // A streak is all core: hot along its middle, its halo the bloom's.
                     look.core = hot.extend(0.45);
                     look.rim = (hot * 0.25).extend(3.0);
-                    look.shape = Vec4::new((1.0 - k).powf(1.2), 0.05, 0.0, 0.0);
+                    look.shape = Vec4::new(1.0, 0.05, 0.0, 0.0);
                     shown = true;
                 }
             }
@@ -822,6 +845,24 @@ mod tests {
         assert!((p.x - 2.0).abs() < 1e-5 && p.y < -1.2 && v.y < -4.8);
         let (p, _) = spark_at(Vec3::ZERO, Vec3::ZERO, -1.0, 1.0);
         assert!(p.y > 0.49);
+    }
+
+    /// A spark cools as hot metal does: only ever dimmer, white-yellow at birth, orange (its
+    /// green under half its red) by mid-life, and dark at death, not a white streak cut off.
+    #[test]
+    fn sparks_cool_to_dark() {
+        let s = Preset::load("hit-spark").unwrap().sparks.unwrap();
+        let born = spark_glow(&s, 0.0);
+        assert!(born.y > 0.6 * born.x, "born {born}");
+        let mid = spark_glow(&s, 0.5);
+        assert!(mid.y < 0.5 * mid.x, "mid-life {mid}");
+        assert!(spark_glow(&s, 1.0).max_element() < 1e-3);
+        let mut last = f32::MAX;
+        for i in 0..=20 {
+            let l = spark_glow(&s, i as f32 / 20.0).element_sum();
+            assert!(l <= last, "brighter at {i}/20");
+            last = l;
+        }
     }
 
     /// A puff under a light is lit by it as a lux meter would read (lm / 4π d²), and a light

@@ -1,17 +1,20 @@
-// The knight's blow biting the ogre (kit/effects.rs): a white-hot core in an orange halo, a
-// light at the bite and a pool on the floor under it, sparks streaked along their flight.
+// The knight's blow biting the ogre (kit/effects.rs): a small white-hot core in a warm halo,
+// a light at the bite and a pool on the floor under it, and a spray of short stubby sparks
+// thrown over 0.05 s, falling, cooling white-yellow to orange to dark. iso-kit j43 cut the
+// starburst (48 long streaks born together, 4 to 11 m/s, a 0.03 s shutter) and the 0.9 m halo
+// for realism: smaller and subtler beats bigger.
 (
     cue: Blow,
     at: Strike,
     still: 0.1,
-    life: 0.4,
-    flash: (core: Srgb(1.0, 0.95, 0.85), core_nits: 5000.0, rim: Srgb(1.0, 0.55, 0.2), rim_nits: 450.0,
-        size: 0.9, core_size: 0.12, falloff: 7.0, swell: 0.4, fall: 0.1),
+    life: 0.5,
+    flash: (core: Srgb(1.0, 0.95, 0.85), core_nits: 5000.0, rim: Srgb(1.0, 0.6, 0.28), rim_nits: 300.0,
+        size: 0.5, core_size: 0.12, falloff: 7.0, swell: 0.3, fall: 0.08),
     lamps: [
         (lm: 50000.0, colour: Srgb(1.0, 0.8, 0.55), up: 0.2, range: 6.0, fall: 0.14),
         (lm: 22000.0, colour: Srgb(1.0, 0.62, 0.32), up: 0.5, ground: true, range: 2.5, fall: 0.2),
     ],
-    sparks: (count: 48, speed: (4.0, 11.0), life: (0.12, 0.35), width: 0.022, spread: 0.8,
-        gravity: 9.8, shutter: 0.03, hot: Srgb(1.0, 0.9, 0.7), hot_nits: 5000.0,
-        cool: Srgb(1.0, 0.35, 0.08), cool_nits: 400.0),
+    sparks: (count: 22, speed: (1.5, 5.0), life: (0.2, 0.5), width: 0.014, spread: 0.9,
+        gravity: 9.8, shutter: 0.02, hot: Srgb(1.0, 0.93, 0.72), hot_nits: 5000.0,
+        cool: Srgb(1.0, 0.38, 0.08), cool_nits: 700.0, area: 0.05, delay: 0.06),
 )
