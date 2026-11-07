@@ -3,7 +3,8 @@
 // host's world walks the joined player from its intents, the joined game predicts its own
 // player and draws the host. Checked with no picture, by what each game says (`net.state`):
 // each holds the other, the joined player walks, and where it stands is the same in both
-// games to a centimetre; then each lists the other, and the host leaving is told to the
+// games to a centimetre; the joined player digs and the ground is the same in both; then
+// each lists the other, and the host leaving is told to the
 // joined game in words. Says how often the joined game's prediction was corrected: a
 // reading, since on a loaded machine frames carry several ticks and intents come late.
 //
@@ -26,7 +27,7 @@ const GAME_PORT = 47000 + (process.pid % 2000);
 const SAVES = ["shots/net-host.ron", "shots/net-join.ron"];
 
 type Place = [number, number, number];
-type State = { mine: Place | null; guests: { at: Place }[]; puppets: { at: Place }[]; corrections: number | null; clients: number | null; tick: number | null; players: string[] | null; ended: string | null };
+type State = { mine: Place | null; guests: { at: Place }[]; puppets: { at: Place }[]; corrections: number | null; clients: number | null; tick: number | null; players: string[] | null; ended: string | null; ground: number | null; ground_pending: number | null };
 
 /// One `remote.ts` command to a copy (by its remote port; none: the one last started).
 function remote(port: number | undefined, ...words: string[]): string {
@@ -112,6 +113,20 @@ try {
     still(joiner, theirs.mine!, resolve(SHOTS, "joiner-sees-host.png"));
     console.log(`✓ stills of each game's other player in ${SHOTS}`);
   }
+  if (!failed) {
+    // The joined player digs with its pickaxe, a step east of where it stands: the ground's
+    // change is asked of the host, made there, and ordered back (D21).
+    const stood = (JSON.parse(remote(joiner, "state")) as { at: [number, number] }).at;
+    remote(joiner, "press", "3");
+    remote(joiner, "aim", `${stood[0] + 1.5},${stood[1]}`, "--up", "0");
+    remote(joiner, "press", "e:240");
+    await until("the joined player's dig never reached the host's ground, or never came back", () => {
+      const [theirs, ours] = [state(host), state(joiner)];
+      return (theirs.ground ?? 0) > 0 && theirs.ground === ours.ground && ours.ground_pending === 0;
+    });
+    console.log(`✓ dug: ${state(host).ground} operations shape the ground in both games, none of the joined game's waiting on the host`);
+  }
+
   if (!failed) {
     // Who is here, a word each way, and the host leaving.
     const here = [state(host).players, state(joiner).players].map((players) => (players ?? []).join(","));

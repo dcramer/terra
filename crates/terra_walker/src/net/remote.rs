@@ -9,7 +9,8 @@
 //! - `net.say {"text": "…"}`: words to everyone in the world, as the host or as a guest.
 //! - `net.leave`: stop hosting (every guest is told the host left) or leave the hosted world.
 //! - `net.state`: who is connected, where each guest and puppet stands, how often this
-//!   game's prediction was corrected, and why a link ended if one did.
+//!   game's prediction was corrected, how many operations have shaped its ground and how many
+//!   of its own the host has yet to order back, and why a link ended if one did.
 
 use super::link::{Ended, Link, Puppet};
 use super::{Guest, Host, parts, realm_of};
@@ -170,6 +171,8 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "tick": host.map(|host| host.server().tick()).or(link.and_then(Link::tick)),
         "guests": guests,
         "joined": link.is_some(),
+        "ground": world.get_resource::<Planet>().map(Planet::operation_count),
+        "ground_pending": world.get_resource::<super::ground::Ground>().map(super::ground::Ground::pending),
         "players": host.map(Host::players).or(link.map(|link| link.players().to_vec())),
         "ended": world.get_resource::<Ended>().map(|ended| ended.0.clone()),
         "corrections": link.map(Link::corrections),

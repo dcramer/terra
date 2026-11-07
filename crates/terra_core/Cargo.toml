@@ -10,6 +10,8 @@ publish.workspace = true
 glam.workspace = true
 libm.workspace = true
 terra_gen.workspace = true
+# An operation's form on the wire (D21, D636): defined here, by the crate that owns it.
+terra_net.workspace = true
 twox-hash.workspace = true
 
 [lints]

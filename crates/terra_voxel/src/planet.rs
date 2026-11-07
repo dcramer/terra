@@ -150,8 +150,15 @@ impl<F: Field> VoxelPlanet<F> {
     /// The operations that shaped the ground, in the order they were applied: what a save
     /// keeps, and what replaying makes the same ground again (D21).
     pub fn operations(&self) -> Vec<Operation> {
+        self.operations_from(0)
+    }
+
+    /// The operations after the first so many: what the log has gained since it was last
+    /// read, for a host to tell (docs/netcode.md).
+    pub fn operations_from(&self, first: usize) -> Vec<Operation> {
         self.edits
             .iter()
+            .skip(first)
             .map(|edit| match *edit {
                 Edit::Dig { centre, radius } => Operation::Dig { centre, radius },
                 Edit::DigBox {

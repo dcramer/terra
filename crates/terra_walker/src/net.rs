@@ -14,6 +14,7 @@
 //! The server is `terra_net`'s and knows nothing of Bevy; this is the thin side. A client that
 //! joins need not be a game at all (D73): the tests' is a few lines.
 
+pub mod ground;
 pub mod link;
 pub mod remote;
 
@@ -175,6 +176,12 @@ impl Host {
             .collect()
     }
 
+    /// Orders an operation at a place: told to every game near it, now and when it comes
+    /// (`terra_net::server::Server::order`). The first byte says whose it is ([`ground::GROUND`]).
+    pub fn order(&mut self, place: Vec3, bytes: &[u8]) {
+        self.server.order(ROOM, place.as_dvec3().to_array(), bytes);
+    }
+
     /// The host is leaving: every guest is told why, and the session is over (D51).
     pub fn close(&mut self) {
         self.server
@@ -212,7 +219,16 @@ pub fn plugin(app: &mut App) {
         ),
     )
     .add_systems(Update, link::pace.run_if(joined))
-    .add_systems(Last, farewell);
+    .add_systems(Last, farewell)
+    .init_resource::<ground::Ground>()
+    .add_systems(
+        FixedUpdate,
+        (
+            ground::host.in_set(Sim::End).before(tell).run_if(hosted),
+            ground::joined.in_set(Sim::End).run_if(joined),
+            ground::unjoined.in_set(Sim::End).run_if(not(joined)),
+        ),
+    );
 }
 
 /// The game is closing: a host's guests are told the host left, and a joined game leaves, so

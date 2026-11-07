@@ -314,6 +314,16 @@ impl Planet {
         self.ground.operations()
     }
 
+    /// How many operations have shaped the ground, and those after the first so many: what a
+    /// host tells of since it last told (D21).
+    pub fn operation_count(&self) -> usize {
+        self.ground.edit_count()
+    }
+
+    pub fn operations_from(&self, first: usize) -> Vec<Operation> {
+        self.ground.operations_from(first)
+    }
+
     /// The voxel ground itself, for drawing it.
     pub fn voxels(&self) -> &Arc<VoxelPlanet<GeneratedPlanet>> {
         &self.ground

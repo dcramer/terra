@@ -31,6 +31,7 @@ fn hosted() -> (World, Entity, Network) {
     world.insert_resource(planet);
     world.init_resource::<flora::Obstacles>();
     world.init_resource::<Movers>();
+    world.init_resource::<ground::Ground>();
     world.init_resource::<Messages<crate::movement::Fell>>();
     world.init_resource::<Messages<crate::movement::Drowned>>();
     let mut time = Time::<()>::default();
@@ -249,6 +250,7 @@ fn joined(network: &Network, conditions: Conditions) -> (World, Entity) {
     world.insert_resource(planet);
     world.init_resource::<flora::Obstacles>();
     world.init_resource::<Movers>();
+    world.init_resource::<ground::Ground>();
     world.init_resource::<Messages<crate::movement::Fell>>();
     world.init_resource::<Messages<crate::movement::Drowned>>();
     let mut time = Time::<()>::default();
@@ -342,6 +344,7 @@ impl Together {
                 self.client.run_system_once(walk).unwrap();
                 self.client.run_system_once(link::record).unwrap();
                 self.client.run_system_once(link::show).unwrap();
+                self.client.run_system_once(ground::joined).unwrap();
                 let tick = self.client.resource::<link::Link>().tick();
                 let body = self.client.resource::<Movers>().body(self.player);
                 if let (Some(tick), Some(body)) = (tick, body) {
@@ -352,6 +355,7 @@ impl Together {
             let tick = self.host.resource::<Host>().server().tick();
             self.host.run_system_once(hear).unwrap();
             self.host.run_system_once(walk).unwrap();
+            self.host.run_system_once(ground::host).unwrap();
             self.host.run_system_once(tell).unwrap();
             let mut guests = self.host.query_filtered::<Entity, With<Guest>>();
             if let Some(guest) = guests.iter(&self.host).next()
@@ -610,4 +614,142 @@ fn a_guest_returns_to_where_it_left_and_is_told_when_the_host_leaves() {
         "{:?}",
         back.heard.last()
     );
+}
+
+/// The ground across the network (D21): what the host digs, a joined game's ground has; what
+/// a joined game digs, the host's has, and the joined game's has once, not twice; and a dig
+/// asked for far from the player is refused (D51).
+#[test]
+fn a_dig_on_either_side_is_in_both_grounds_once() {
+    use terra_core::Operation;
+    let mut together = Together::new(rough());
+    together.run(0..60);
+    let count = |world: &World| world.resource::<Planet>().operation_count();
+    let depth = |world: &World, at: Vec3| world.resource::<Planet>().distance(at);
+    let guest_at = together
+        .client
+        .get::<Transform>(together.player)
+        .unwrap()
+        .translation;
+    let host_at = together
+        .host
+        .get::<Transform>(together.host_player)
+        .unwrap()
+        .translation;
+
+    // The host digs beside its own player, three metres from the guest's start.
+    let hosts = Operation::Dig {
+        centre: host_at + Vec3::X * 1.5,
+        radius: 0.6,
+    };
+    together.host.resource_mut::<Planet>().apply(&hosts);
+    together.run(60..90);
+    assert_eq!(
+        (count(&together.host), count(&together.client)),
+        (1, 1),
+        "the host's dig did not reach the joined game"
+    );
+    let at = host_at + Vec3::X * 1.5;
+    assert!(
+        depth(&together.client, at) > 0.3,
+        "the joined game's ground is not dug there"
+    );
+    assert_eq!(depth(&together.client, at), depth(&together.host, at));
+
+    // The joined game digs beside its own player.
+    let guests = Operation::Dig {
+        centre: guest_at + Vec3::X * 1.0,
+        radius: 0.6,
+    };
+    together.client.resource_mut::<Planet>().apply(&guests);
+    assert_eq!(count(&together.client), 2, "its own dig shows at once");
+    together.run(90..130);
+    assert_eq!(
+        (count(&together.host), count(&together.client)),
+        (2, 2),
+        "dug once on each side"
+    );
+    assert_eq!(
+        together.client.resource::<ground::Ground>().pending(),
+        0,
+        "its own dig came back"
+    );
+    assert_eq!(
+        together.host.resource::<Planet>().operations(),
+        together.client.resource::<Planet>().operations()
+    );
+
+    // And asks for one half a kilometre off, which no tool reaches: the host refuses.
+    let far = Operation::Dig {
+        centre: guest_at + Vec3::X * 500.0,
+        radius: 0.6,
+    };
+    together.client.resource_mut::<Planet>().apply(&far);
+    together.run(130..170);
+    assert_eq!(
+        count(&together.host),
+        2,
+        "the host made a dig out of the guest's reach"
+    );
+    assert_eq!(
+        together.client.resource::<ground::Ground>().pending(),
+        1,
+        "the refused dig is still waited on"
+    );
+}
+
+/// An operation from a stranger is held to what could be asked: numbers that are none, a
+/// size past the most, a turn that is no turn.
+#[test]
+fn an_operation_that_could_not_be_asked_is_refused() {
+    use terra_core::{MaterialId, Operation};
+    use terra_net::wire::Wire;
+    let good = [
+        Operation::Dig {
+            centre: Vec3::new(1.0, 2.0, 3.0),
+            radius: 0.5,
+        },
+        Operation::DigBox {
+            centre: Vec3::ONE,
+            half: Vec3::splat(2.0),
+            rotation: Quat::from_rotation_y(0.7),
+        },
+        Operation::Fill {
+            centre: Vec3::ONE,
+            radius: 1.0,
+            material: MaterialId(3),
+        },
+        Operation::ClearCover {
+            centre: Vec3::ONE,
+            radius: 4.0,
+        },
+    ];
+    for operation in good {
+        assert_eq!(Operation::decoded(&operation.encoded()), Ok(operation));
+    }
+    let bad = [
+        Operation::Dig {
+            centre: Vec3::new(f32::NAN, 0.0, 0.0),
+            radius: 0.5,
+        },
+        Operation::Dig {
+            centre: Vec3::ONE,
+            radius: 5000.0,
+        },
+        Operation::Dig {
+            centre: Vec3::ONE,
+            radius: -1.0,
+        },
+        Operation::DigBox {
+            centre: Vec3::ONE,
+            half: Vec3::ONE,
+            rotation: Quat::from_xyzw(0.0, 0.0, 0.0, 9.0),
+        },
+    ];
+    for operation in bad {
+        assert!(
+            Operation::decoded(&operation.encoded()).is_err(),
+            "{operation:?} was let through"
+        );
+    }
 }

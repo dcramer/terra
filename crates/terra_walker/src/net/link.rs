@@ -124,6 +124,11 @@ impl Link {
         self.client.say(&mut self.wire, text);
     }
 
+    /// Asks the host for an operation: it is made when the host's order of it comes.
+    pub fn ask(&mut self, bytes: &[u8]) {
+        self.client.ask(&mut self.wire, bytes);
+    }
+
     /// The names of the others in the world.
     pub fn players(&self) -> &[String] {
         &self.players

@@ -6494,6 +6494,7 @@ dependencies = [
  "glam",
  "libm",
  "terra_gen",
+ "terra_net",
  "twox-hash",
 ]
 
