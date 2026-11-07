@@ -16,14 +16,16 @@
         // Just after rain: a film of the water (8 mm, a third of a puddle's mirror at its
         // 2 cm shore) over all the paving, so the lights streak across the whole wet road.
         film: 0.008,
-        // The road: Poly Haven's worn, cracked Asphalt 02 at its 3 m, wet all over and
-        // standing in patches and along the gutters.
+        // The road: Poly Haven's worn Asphalt 02 at its 3 m, its own long cracks a little
+        // darker (`joints` darkens what its occlusion marks: 1 clean, 0 black), none of the
+        // kit's crack web (crazing reads as dried mud on asphalt), the detail grain fine as
+        // its aggregate; wet all over and standing in patches and along the gutters.
         asphalt: (
             material: "asphalt_02",
             metres: 3.0,
-            joints: 0.0,
-            cracks: 0.5,
-            grain: (0.4, 0.5),
+            joints: 0.6,
+            cracks: 1.0,
+            grain: (0.2, 0.7),
             wet: Site("puddled"),
             dirt: 0.3,
             damp: 0.9,
@@ -33,7 +35,7 @@
             material: "granite_tile_04",
             metres: 2.0,
             joints: 0.3,
-            cracks: 0.3,
+            cracks: 1.0,
             grain: (0.4, 0.5),
             wet: Site("gutter"),
             damp: 0.6,
@@ -109,13 +111,15 @@
     // light, splashes on the paving.
     weather: (wind: (0.6, 0.2), rain: 0.7, drops: (bright: 0.06, splashes: 1.5)),
     ground: (
-        // The pavements: Poly Haven's Concrete Pavement flags at their 1.8 m.
+        // The pavements: Poly Haven's Concrete Pavement flags laid at 2.7 m, so each is a
+        // street's 900 x 450 mm flag (its 1.8 m made them 600 x 300 mm block pavers), their
+        // straight joints grimed; no crack web (crazing reads as dried mud).
         laid: (
             material: "concrete_pavement",
-            metres: 1.8,
-            joints: 0.4,
-            cracks: 0.3,
-            grain: (0.4, 0.5),
+            metres: 2.7,
+            joints: 0.3,
+            cracks: 1.0,
+            grain: (0.3, 0.6),
             wet: Site("puddled"),
             dirt: 0.4,
             damp: 0.7,
