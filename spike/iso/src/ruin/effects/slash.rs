@@ -78,9 +78,10 @@ impl Blade {
     }
 }
 
-/// A swing the player plays (play.rs): its attack clip's time, from which the trail draws.
+/// A swing the player plays (play.rs): his attack clip's node on his player, whose time
+/// the trail draws from.
 #[derive(Component)]
-pub(crate) struct Swinging(pub f32);
+pub(crate) struct Swinging(pub AnimationNodeIndex);
 
 #[derive(Component)]
 enum Part {
@@ -92,7 +93,14 @@ enum Part {
 pub fn plugin(app: &mut App) {
     app.init_resource::<Blade>()
         .add_systems(Startup, spawn)
-        .add_systems(Update, (find, bake, show).chain());
+        .add_systems(Update, (find, bake).chain())
+        // After the clips advance, so the trail ends where this frame's pose holds the blade,
+        // not a frame or two behind it (at play's 1.5x the chop drops a metre a frame).
+        .add_systems(
+            PostUpdate,
+            show.after(bevy::app::AnimationSystems)
+                .before(bevy::transform::TransformSystems::Propagate),
+        );
 }
 
 fn spawn(
@@ -287,7 +295,11 @@ fn show(
     // No staged trail while the hero walks in, or plays (walk.rs, play.rs): then only his
     // own swing's.
     let walks = walking.is_some_and(|w| w.now);
-    let swing = blade.knight.and_then(|k| swings.get(k).ok()).map(|s| s.0);
+    let swing = blade
+        .knight
+        .and_then(|k| swings.get(k).ok())
+        .zip(blade.player.and_then(|p| players.get(p).ok()))
+        .and_then(|(s, p)| p.animation(s.0).map(|a| a.seek_time()));
     let t = match (&blade.bake, blade.player) {
         (Bake::Done, _) if walks => swing.unwrap_or(-1.0),
         (Bake::Done, Some(p)) => players

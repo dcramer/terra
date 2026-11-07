@@ -355,7 +355,7 @@ fn control(
     if let Some((face, landed)) = rig.swing {
         let t = p.animation(rig.attack).map_or(SWING.1, |a| a.seek_time());
         // The slash trail draws from it (ruin/effects/slash.rs).
-        commands.entity(body).insert(Swinging(t));
+        commands.entity(body).insert(Swinging(rig.attack));
         if !landed && t >= BLOW {
             rig.swing = Some((face, true));
             for (foe, ftr, pose) in &foes {
