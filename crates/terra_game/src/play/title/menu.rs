@@ -106,9 +106,8 @@ pub struct Menu {
     /// What is being joined, while the host has yet to answer: nothing else is chosen until
     /// it does or the player goes back.
     pub joining: Option<String>,
-    /// The player's character as chosen so far, and the body it is of.
+    /// The player's character as chosen so far.
     pub features: Features,
-    pub body: String,
 }
 
 /// The most digits a seed takes: a 64-bit number's.
@@ -134,7 +133,6 @@ impl Menu {
             address: String::new(),
             joining: None,
             features: creator().first(BODY),
-            body: BODY.into(),
         };
         // Continue first when there is a world to continue, else New world.
         menu.at = usize::from(menu.worlds.is_empty()) * 2;
@@ -166,7 +164,10 @@ impl Menu {
                 .chain([Item::Back])
                 .collect(),
             Page::Join => vec![Item::Player, Item::Address, Item::Connect, Item::Back],
-            Page::Character => (Feature::ALL.into_iter().map(Item::Feature))
+            // The body is a choice once there is more than one to stand on.
+            Page::Character => (Feature::ALL.into_iter())
+                .filter(|feature| *feature != Feature::Body || creator().roles.len() > 1)
+                .map(Item::Feature)
                 .chain([Item::Back])
                 .collect(),
             Page::Delete(_) => vec![Item::Back, Item::ConfirmDelete],
@@ -257,7 +258,7 @@ impl Menu {
             Item::Host => self.go(Page::Host, 1),
             Item::Join => self.go(Page::Join, 1),
             Item::Character => self.go(Page::Character, 0),
-            Item::Feature(feature) => self.features.turn(&self.body, feature, true),
+            Item::Feature(feature) => self.features.turn(feature, true),
             Item::Player => self.at = 1,
             Item::HostWorld(at) => return self.worlds.get(at).cloned().map(Act::Host),
             Item::Address => self.at = 2,

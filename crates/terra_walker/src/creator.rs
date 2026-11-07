@@ -10,6 +10,19 @@
 
 pub mod remote;
 
+/// A player stands on the body their features name.
+pub fn plugin(app: &mut App) {
+    app.add_systems(Update, stand_on);
+}
+
+fn stand_on(mut players: Query<(&Features, &mut crate::figure::Sex), Changed<Features>>) {
+    for (features, mut sex) in &mut players {
+        if sex.0 != features.body && creator().roles.contains_key(&features.body) {
+            sex.0 = features.body.clone();
+        }
+    }
+}
+
 use crate::character::{Coat, Paint};
 use crate::wardrobe::wardrobe;
 use bevy::prelude::*;
@@ -21,6 +34,9 @@ use std::sync::OnceLock;
 /// has falls back to the first on offer, so an old save still makes a person.
 #[derive(Component, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Features {
+    /// The body they stand on: a sex the data gives roles (`figure::Sex` follows it).
+    #[serde(default = "first_body")]
+    pub body: String,
     /// The hairstyle, a wardrobe piece of the slot `hair`; none is a bare head.
     pub hair: Option<String>,
     /// The beard, a wardrobe piece of the slot `beard`; none is a bare chin.
@@ -28,6 +44,11 @@ pub struct Features {
     pub hair_colour: String,
     pub skin: String,
     pub eyes: String,
+}
+
+/// The body a character with none named stands on: the man's, the first the wardrobe had.
+fn first_body() -> String {
+    "male".into()
 }
 
 /// A colour on offer: its name, and what the body's map is multiplied by (linear RGB).
@@ -93,6 +114,7 @@ impl Creator {
     pub fn first(&self, body: &str) -> Features {
         let first = |tones: &[Tone]| tones.first().map(|tone| tone.name.clone());
         Features {
+            body: body.to_string(),
             hair: self.pieces(body, HAIR).first().map(|name| name.to_string()),
             beard: None,
             hair_colour: first(&self.hair).unwrap_or_default(),
@@ -134,6 +156,7 @@ impl Creator {
 /// One of the choices a creator's screen offers, in the order it shows them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Feature {
+    Body,
     Hair,
     Beard,
     HairColour,
@@ -142,7 +165,8 @@ pub enum Feature {
 }
 
 impl Feature {
-    pub const ALL: [Feature; 5] = [
+    pub const ALL: [Feature; 6] = [
+        Feature::Body,
         Feature::Hair,
         Feature::Beard,
         Feature::HairColour,
@@ -153,6 +177,7 @@ impl Feature {
     /// What a screen calls it.
     pub fn label(self) -> &'static str {
         match self {
+            Feature::Body => "Body",
             Feature::Hair => "Hair",
             Feature::Beard => "Beard",
             Feature::HairColour => "Hair colour",
@@ -168,6 +193,7 @@ impl Creator {
     pub fn offered(&self, body: &str, feature: Feature) -> Vec<Option<&str>> {
         let tones = |tones: &'static [Tone]| tones.iter().map(|t| Some(t.name.as_str())).collect();
         match feature {
+            Feature::Body => self.roles.keys().map(|body| Some(body.as_str())).collect(),
             Feature::Hair => (self.pieces(body, HAIR).into_iter().map(Some))
                 .chain([None])
                 .collect(),
@@ -187,6 +213,7 @@ impl Creator {
 impl Features {
     fn of(&self, feature: Feature) -> Option<&str> {
         match feature {
+            Feature::Body => Some(&self.body),
             Feature::Hair => self.hair.as_deref(),
             Feature::Beard => self.beard.as_deref(),
             Feature::HairColour => Some(&self.hair_colour),
@@ -195,10 +222,12 @@ impl Features {
         }
     }
 
-    /// Turns a feature to the next on offer for the body, or the one before, round and
-    /// round. One the data no longer has turns from the first.
-    pub fn turn(&mut self, body: &str, feature: Feature, forward: bool) {
-        let offered = creator().offered(body, feature);
+    /// Turns a feature to the next on offer for their body, or the one before, round and
+    /// round. One the data no longer has turns from the first. Another body has its own hair
+    /// and beards, so turning the body takes that body's first; the colours stay.
+    pub fn turn(&mut self, feature: Feature, forward: bool) {
+        let body = self.body.clone();
+        let offered = creator().offered(&body, feature);
         if offered.is_empty() {
             return;
         }
@@ -206,6 +235,15 @@ impl Features {
         let step = if forward { 1 } else { offered.len() - 1 };
         let next = offered[(at + step) % offered.len()].map(str::to_string);
         match feature {
+            Feature::Body => {
+                let colours = self.clone();
+                *self = Features {
+                    hair_colour: colours.hair_colour,
+                    skin: colours.skin,
+                    eyes: colours.eyes,
+                    ..creator().first(&next.unwrap_or_default())
+                };
+            }
             Feature::Hair => self.hair = next,
             Feature::Beard => self.beard = next,
             Feature::HairColour => self.hair_colour = next.unwrap_or_default(),
@@ -223,6 +261,7 @@ impl Features {
         let slot = match feature {
             Feature::Hair => HAIR,
             Feature::Beard => BEARD,
+            Feature::Body => return if name == "female" { "Woman" } else { "Man" }.to_string(),
             _ => return name.to_string(),
         };
         let own = (name.split_once(&format!("_{slot}_"))).map_or(name, |(_, own)| own);
@@ -266,7 +305,10 @@ mod tests {
         }
         for (body, roles) in &creator.roles {
             assert!(wardrobe().bodies.contains_key(body), "no body {body}");
-            assert!(creator.pieces(body, HAIR).len() >= 4, "{body}'s hairstyles");
+            // A body with hairstyles has a choice of them; the woman has none yet (D599).
+            let styles = creator.pieces(body, HAIR).len();
+            assert!(styles == 0 || styles >= 4, "{body}'s hairstyles: {styles}");
+            assert!(body != "male" || styles >= 4);
             // The head carries each of the three materials.
             let head = &wardrobe().bodies[body].head;
             let file = assets.join(wardrobe().file(head).unwrap());
@@ -321,17 +363,22 @@ mod tests {
             let offered = creator.offered("male", feature);
             let mut seen = vec![features.words(feature)];
             for _ in 1..offered.len() {
-                features.turn("male", feature, true);
+                features.turn(feature, true);
                 seen.push(features.words(feature));
             }
             let mut unique = seen.clone();
             unique.sort();
             unique.dedup();
             assert_eq!(unique.len(), offered.len(), "{feature:?}: {seen:?}");
-            features.turn("male", feature, true);
+            features.turn(feature, true);
+            if feature == Feature::Body {
+                // Round to the same body, whose hair is then its first again.
+                assert_eq!(features.body, began.body, "the body comes round");
+                continue;
+            }
             assert_eq!(features, began, "{feature:?} comes round");
-            features.turn("male", feature, false);
-            features.turn("male", feature, true);
+            features.turn(feature, false);
+            features.turn(feature, true);
             assert_eq!(features, began, "{feature:?} back and forth");
         }
         let mut features = creator.first("male");

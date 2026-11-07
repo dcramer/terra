@@ -108,6 +108,7 @@ fn a_mixed_clip_takes_its_share_of_its_mains_weight_and_stops_with_it() {
             player,
             Animated {
                 player: Entity::PLACEHOLDER,
+                moves: Arc::default(),
                 hands: Vec::new(),
                 doing: Doing::Acting,
                 playing: None,

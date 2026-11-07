@@ -30,6 +30,7 @@ fn name(from: &mut Reader) -> Result<String, Malformed> {
 
 impl Wire for Features {
     fn write(&self, to: &mut Writer) {
+        self.body.write(to);
         for piece in [&self.hair, &self.beard] {
             to.bool(piece.is_some());
             if let Some(piece) = piece {
@@ -42,6 +43,7 @@ impl Wire for Features {
     }
 
     fn read(from: &mut Reader) -> Result<Self, Malformed> {
+        let body = name(from)?;
         let mut piece = || {
             Ok(if from.bool()? {
                 Some(name(from)?)
@@ -51,6 +53,7 @@ impl Wire for Features {
         };
         let (hair, beard) = (piece()?, piece()?);
         Ok(Features {
+            body,
             hair,
             beard,
             hair_colour: name(from)?,

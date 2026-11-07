@@ -279,12 +279,19 @@ fn the_characters_page_turns_each_feature_and_back_returns_to_it() {
     assert_eq!(choose(&mut menu, Item::Character), None);
     assert_eq!(menu.page, Page::Character);
     let began = menu.features.clone();
-    for feature in Feature::ALL {
+    // The man's features each turn; the body is turned after (another body has its own hair).
+    for feature in Feature::ALL
+        .into_iter()
+        .filter(|each| *each != Feature::Body)
+    {
         let before = menu.features.clone();
         assert_eq!(choose(&mut menu, Item::Feature(feature)), None);
         assert_ne!(menu.features, before, "{feature:?} did not turn");
     }
     assert_ne!(menu.features.hair, began.hair);
+    // The body is offered only when there is more than one to stand on.
+    let offers_body = menu.items().contains(&Item::Feature(Feature::Body));
+    assert_eq!(offers_body, creator().roles.len() > 1);
     menu.back();
     assert_eq!(
         (menu.page, menu.picked()),

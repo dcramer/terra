@@ -1,7 +1,7 @@
 //! The creator by the remote protocol (D69, tools/sandbox), so a scripted run can change
 //! this machine's player's features and read, with no picture, what its body then shows.
 //!
-//! - `creator.set {"hair": "male_hair_dreads", "beard": null, "hair_colour": "Black",
+//! - `creator.set {"body": "female", "hair": "male_hair_dreads", "beard": null, "hair_colour": "Black",
 //!   "skin": "Deep", "eyes": "Blue"}`: any of them; one left out stays. A name not on offer
 //!   is refused with what is.
 //! - `creator.state`: the player's features, what is on offer, the files of the pieces its
@@ -29,6 +29,7 @@ pub fn plugin(app: &mut App) {
 /// A field left out is not changed; `null` for the hair or beard is none.
 #[derive(Deserialize, Default)]
 struct Ask {
+    body: Option<String>,
     #[serde(default, deserialize_with = "given")]
     hair: Option<Option<String>>,
     #[serde(default, deserialize_with = "given")]
@@ -68,6 +69,23 @@ fn set(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         .get::<Features>(player)
         .cloned()
         .unwrap_or_else(|| creator.first(name));
+    let bodies: Vec<&str> = creator.roles.keys().map(String::as_str).collect();
+    if let Some(asked) = ask.body.filter(|asked| *asked != features.body) {
+        if !bodies.contains(&asked.as_str()) {
+            return Err(refused(format!(
+                "No body is named {asked:?}: choose one of {}.",
+                bodies.join(", ")
+            )));
+        }
+        // Another body: its own first hair, the colours kept (`Features::turn`).
+        while features.body != asked {
+            features.turn(super::Feature::Body, true);
+        }
+    }
+    let name = wardrobe()
+        .bodies
+        .get_key_value(features.body.as_str())
+        .map_or(name, |(name, _)| name.as_str());
     let offered = |what: &str, asked: &str, names: Vec<&str>| {
         names.contains(&asked).then_some(()).ok_or_else(|| {
             refused(format!(

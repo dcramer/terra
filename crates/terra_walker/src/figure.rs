@@ -18,6 +18,7 @@ use bevy::{
     gltf::GltfNode, platform::collections::HashMap, prelude::*,
     world_serialization::WorldInstanceReady,
 };
+use std::sync::Arc;
 use std::time::Duration;
 use terra_motion::feet::Markers;
 pub use terra_motion::hold::Hand;
@@ -35,10 +36,37 @@ const SWIM_BLEND: Duration = Duration::from_millis(400);
 /// until her own body comes in; `appearance::bodies` names each body's).
 pub const CLIPS: &str = "models/character/fight.glb";
 
-#[derive(Resource)]
+/// A body's model and the file of its clips.
 struct FigureModel {
     model: Handle<Gltf>,
     clips: Handle<Gltf>,
+}
+
+/// The body each sex stands on (`appearance::bodies`), loaded: a player's figure is its own
+/// sex's, with that body's own clips (D599: two bodies, each with its own).
+#[derive(Resource, Default)]
+struct Models(HashMap<String, FigureModel>);
+
+/// Which body a player stands on (D111): a sex `models/character/bodies.json` names. Changing
+/// it stands the player a new figure. Every player has one; the first is [`TEMPLATE`]'s.
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub struct Sex(pub String);
+
+impl Default for Sex {
+    fn default() -> Self {
+        Sex(appearance(TEMPLATE).sex)
+    }
+}
+
+/// Each body's animations, by its sex, once its clips have loaded.
+#[derive(Resource, Default)]
+pub struct Movesets(HashMap<String, Arc<Moves>>);
+
+impl Movesets {
+    /// The animations of the body a sex stands on, once loaded.
+    pub fn of(&self, sex: &Sex) -> Option<&Moves> {
+        self.0.get(&sex.0).map(Arc::as_ref)
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -98,8 +126,8 @@ impl Doing {
     }
 }
 
-/// The animations, as places in the figure's animation graph: every clip by name.
-#[derive(Resource)]
+/// A body's animations, as places in its figure's animation graph: every clip by name.
+#[derive(Default)]
 pub struct Moves {
     graph: Handle<AnimationGraph>,
     clips: HashMap<String, Nodes>,
@@ -133,6 +161,8 @@ pub struct Grip {
 #[derive(Component)]
 struct Animated {
     player: Entity,
+    /// Its body's animations.
+    moves: Arc<Moves>,
     hands: Vec<Entity>,
     doing: Doing,
     /// The clip playing, which copy, and the arms holds are laid on over it.
@@ -305,12 +335,16 @@ struct Figured;
 
 pub fn plugin(app: &mut App) {
     crate::inertia::plugin(app);
-    app.add_systems(Startup, load)
+    app.init_resource::<Models>()
+        .init_resource::<Movesets>()
+        .register_required_components::<Player, Sex>()
+        .add_systems(Startup, load)
         .add_systems(
             Update,
             (
-                prepare.run_if(not(resource_exists::<Moves>)),
-                stand.run_if(resource_exists::<Moves>),
+                prepare,
+                restand,
+                stand,
                 animate,
                 crate::swim::lay
                     .in_set(crate::pose::Layer::Swim)
@@ -332,65 +366,97 @@ pub fn plugin(app: &mut App) {
         );
 }
 
-/// The player's appearance: its template's.
-fn appearance() -> crate::appearance::Appearance {
-    crate::appearance::Appearance::template(TEMPLATE).unwrap_or_default()
+/// The appearance a player of a sex begins with: the player's template for its own sex, as
+/// before there was a choice; another sex's body as made (the old templates of other sexes
+/// are of the old base body: its morphs and painted skins).
+fn appearance(sex: &str) -> crate::appearance::Appearance {
+    let template = crate::appearance::Appearance::template(TEMPLATE).unwrap_or_default();
+    if template.sex == sex {
+        return template;
+    }
+    crate::appearance::Appearance {
+        sex: sex.to_string(),
+        ..default()
+    }
 }
 
-/// Loads the body the player's appearance stands on, and the file of its clips: every player
-/// is one template today, so one body and one set of clips serve all.
-fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
-    let body = appearance().body();
-    let model = assets.load(body.model.clone());
-    let clips = assets.load(body.clips().to_string());
-    loading.wait_for(&model);
-    loading.wait_for(&clips);
-    commands.insert_resource(FigureModel { model, clips });
+/// Loads the body each sex stands on, and the file of its clips.
+fn load(mut models: ResMut<Models>, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
+    for (sex, body) in crate::appearance::bodies() {
+        let model = assets.load(body.model.clone());
+        let clips = assets.load(body.clips().to_string());
+        loading.wait_for(&model);
+        loading.wait_for(&clips);
+        models.0.insert(sex.clone(), FigureModel { model, clips });
+    }
 }
 
 /// Once the clips have loaded, makes the animations ready.
 fn prepare(
-    mut commands: Commands,
-    model: Res<FigureModel>,
+    models: Res<Models>,
+    mut movesets: ResMut<Movesets>,
     assets: Res<AssetServer>,
     gltfs: Res<Assets<Gltf>>,
     gltf_nodes: Res<Assets<GltfNode>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     mut baked: ResMut<crate::feet::Baked>,
 ) {
-    if !assets.is_loaded_with_dependencies(&model.clips) {
+    if movesets.0.len() == models.0.len() {
         return;
     }
-    let Some(gltf) = gltfs.get(&model.clips) else {
-        return;
-    };
-    let (graph, clips) = crate::layer::graph(gltf, &gltf_nodes);
-    baked.register(gltf, &gltf_nodes);
-    commands.insert_resource(Moves {
-        graph: graphs.add(graph),
-        clips,
-        paces: crate::pace::paces(gltf, &gltf_nodes).into_iter().collect(),
-        markers: crate::feet::markers(gltf, &gltf_nodes)
-            .into_iter()
-            .collect(),
-        swings: crate::arm_swing::shares(gltf, &gltf_nodes),
-    });
+    for (sex, model) in &models.0 {
+        if movesets.0.contains_key(sex) || !assets.is_loaded_with_dependencies(&model.clips) {
+            continue;
+        }
+        let Some(gltf) = gltfs.get(&model.clips) else {
+            continue;
+        };
+        let (graph, clips) = crate::layer::graph(gltf, &gltf_nodes);
+        baked.register(gltf, &gltf_nodes);
+        let moves = Moves {
+            graph: graphs.add(graph),
+            clips,
+            paces: crate::pace::paces(gltf, &gltf_nodes).into_iter().collect(),
+            markers: crate::feet::markers(gltf, &gltf_nodes)
+                .into_iter()
+                .collect(),
+            swings: crate::arm_swing::shares(gltf, &gltf_nodes),
+        };
+        movesets.0.insert(sex.clone(), Arc::new(moves));
+    }
 }
 
-/// Stands a figure on each player who has none yet.
+/// A player whose body changed (the creator's choice of sex) loses its figure, and is stood
+/// a new one on the body it now has (`stand`).
+fn restand(
+    mut commands: Commands,
+    changed: Query<(Entity, &Children), (Changed<Sex>, With<Figured>)>,
+    bodies: Query<(), With<crate::character::Body>>,
+) {
+    for (player, children) in &changed {
+        for child in children.iter().filter(|child| bodies.contains(*child)) {
+            commands.entity(child).despawn();
+        }
+        commands.entity(player).remove::<Figured>();
+    }
+}
+
+/// Stands a figure on each player who has none yet, on the body of its sex, once that
+/// body and its clips have loaded.
 fn stand(
     mut commands: Commands,
-    model: Res<FigureModel>,
+    (models, movesets): (Res<Models>, Res<Movesets>),
     gltfs: Res<Assets<Gltf>>,
-    players: Query<Entity, (With<Player>, Without<Figured>)>,
+    players: Query<(Entity, &Sex), (With<Player>, Without<Figured>)>,
 ) {
-    let Some(scene) = gltfs
-        .get(&model.model)
-        .and_then(|gltf| gltf.default_scene.clone())
-    else {
-        return;
-    };
-    for player in &players {
+    for (player, sex) in &players {
+        let scene = (models.0.get(&sex.0))
+            .filter(|_| movesets.of(sex).is_some())
+            .and_then(|model| gltfs.get(&model.model))
+            .and_then(|gltf| gltf.default_scene.clone());
+        let Some(scene) = scene else {
+            continue;
+        };
         commands
             .entity(player)
             .insert((Figured, Shows::default(), crate::swim::Pitch::default()));
@@ -398,7 +464,7 @@ fn stand(
             .spawn((
                 Name::new("Figure"),
                 crate::character::Body,
-                appearance(),
+                appearance(&sex.0),
                 WorldAssetRoot(scene.clone()),
                 // The model faces +Z; things here face -Z.
                 Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
@@ -412,7 +478,8 @@ fn stand(
 fn dress(
     ready: On<WorldInstanceReady>,
     mut commands: Commands,
-    moves: Res<Moves>,
+    movesets: Res<Movesets>,
+    sexes: Query<&Sex>,
     children: Query<&Children>,
     mut animators: Query<&mut AnimationPlayer>,
     names: Query<&Name>,
@@ -421,6 +488,11 @@ fn dress(
     let Ok(player) = parents.get(ready.entity).map(ChildOf::parent) else {
         return;
     };
+    // The animations of the body the player stands on: loaded before it was stood (`stand`).
+    let Some(moves) = (sexes.get(player).ok()).and_then(|sex| movesets.0.get(&sex.0)) else {
+        return;
+    };
+    let moves = moves.clone();
     // The figure's own animation player, among everything its model spawned; creatures
     // have theirs.
     let Some(entity) = children
@@ -460,6 +532,7 @@ fn dress(
         crate::inertia::Inertia::default(),
         Animated {
             player,
+            moves,
             hands,
             doing: Doing::Idle,
             playing: Some((Doing::Idle.clip().to_string(), 0, Arms::None)),
@@ -477,7 +550,6 @@ fn dress(
 /// Picks the animation that fits what each player is doing, or what a layer above asks,
 /// and blends their figure into it.
 fn animate(
-    moves: Option<Res<Moves>>,
     time: Res<Time>,
     mut players: Query<
         (
@@ -503,8 +575,8 @@ fn animate(
     (grips, looks): (Query<(&Grip, Option<&CarryHold>)>, Query<(), With<Held>>),
     mut feet: Query<&mut crate::feet::Kept>,
 ) {
-    let Some(moves) = moves else { return };
     for (mut animator, mut transitions, mut inertia, mut animated, place, own) in &mut figures {
+        let moves = animated.moves.clone();
         let Ok((motion, body, stance, downed, acting, pitch, shows)) =
             players.get_mut(animated.player)
         else {

@@ -112,13 +112,12 @@ pub(super) fn pace(moves: &Moves, clip: &str, seek: f32) -> f32 {
 /// lock): the mover moves the body, so a clip's own travel would carry it twice as far. After
 /// the clips are evaluated, before the inertialization records the pose.
 pub(super) fn root_lock(
-    moves: Option<Res<Moves>>,
-    figures: Query<(Entity, &AnimationPlayer), With<Animated>>,
+    figures: Query<(Entity, &AnimationPlayer, &Animated)>,
     mut bones: Query<(Entity, &AnimatedBy, &Name, &mut Transform)>,
     mut pelvises: Local<HashMap<Entity, Entity>>,
 ) {
-    let Some(moves) = moves else { return };
-    for (figure, animator) in &figures {
+    for (figure, animator, animated) in &figures {
+        let moves = &animated.moves;
         let mut off = Vec3::ZERO;
         for (name, m) in moves.markers.iter().filter(|(_, m)| m.travels()) {
             let Some(nodes) = moves.clips.get(name) else {

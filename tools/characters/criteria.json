@@ -23,7 +23,7 @@
   { "id": "bound", "check": "wardrobe", "stage": "bound", "bar": "every joint of every piece on its body's skeleton" },
   { "id": "neck", "check": "wardrobe", "stage": "neck", "bar": "our bare torso meets every head shown with it within 1 mm, gap and overlap, through the clips, as their uncut body meets their head (0 and 0; D600, neck.ts)" },
   { "id": "looks", "check": "wardrobe", "stage": "looks", "bar": "every look composed in every state of undress" },
-  { "id": "build", "check": "build", "bar": "no failure but the known ones (rig, clips, gear, morphs: build_verdict.ts)", "known": [{ "match": "Sprint_Loop", "why": "the man's sprint skates 2.7/7.8 cm, known since char-switch j8" }] },
+  { "id": "build", "check": "build", "bar": "no failure but the known ones (rig, clips, gear, morphs: build_verdict.ts)", "known": [{ "match": "Sprint_Loop", "why": "the man's sprint skates 2.7/7.8 cm, known since char-switch j8" }, { "match": "FIT large_pack", "why": "on the woman the large pack rests on her back (nearest 0.0 cm) with just under the 8% of its vertices within 3 cm that the bar asks, her back being narrower; to be settled with her hair, before she is offered (front lead, 2026-11-07)" }] },
   { "id": "looks.hair", "live": "hair", "bar": "every look wears its person's hair (wardrobe.json looks' `pieces.hair`)" },
   { "id": "variants", "live": "figures", "bar": "hundreds of dressed figures a body, not millions (D182)", "within": [100, 100000] }
  ],

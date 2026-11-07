@@ -211,8 +211,7 @@ fn keys(
         menu.picked(),
         pressed(&[KeyCode::ArrowLeft, KeyCode::ArrowRight]),
     ) {
-        let body = menu.body.clone();
-        (menu.features).turn(&body, feature, pressed(&[KeyCode::ArrowRight]));
+        (menu.features).turn(feature, pressed(&[KeyCode::ArrowRight]));
     } else if pressed(&[KeyCode::Delete])
         && let Some(Item::World(at)) = menu.picked()
     {

@@ -38,7 +38,7 @@ use terra_survival::inventory::{Gear, HandsFull, Items, OFF_HAND};
 use terra_survival::told::Notice;
 use terra_walker::camera::framing::FightView;
 use terra_walker::controls::Action;
-use terra_walker::figure::{Act, Acting, Grip, Hand, Moves};
+use terra_walker::figure::{Act, Acting, Grip, Hand, Movesets, Sex};
 use terra_walker::intent::Intent;
 use terra_walker::walker::Steer;
 use terra_walker::{Downed, Motion, Player, Stamina, Stance, View};
@@ -288,13 +288,14 @@ type Drawing<'a> = (
     &'a mut Acting,
     Option<&'a mut Stamina>,
     Has<Downed>,
+    Option<&'a Sex>,
 );
 
 /// A drawn player's tick: their hands kept off building and tools, the lock-on, the guard,
 /// the moves they ask for and run, how the walk is steered, and the clip their figure shows.
 fn act(
     time: Res<Time>,
-    figure: Option<Res<Moves>>,
+    figures: Option<Res<Movesets>>,
     mut players: Query<Drawing<'_>, (With<Player>, Without<partner::Partner>)>,
     partners: Query<(Entity, &Transform), With<partner::Partner>>,
     mut said: Option<ResMut<record::Said>>,
@@ -311,6 +312,7 @@ fn act(
         mut acting,
         mut pool,
         downed,
+        sex,
     ) in &mut players
     {
         let set = Arc::clone(&fighter.set);
@@ -424,7 +426,9 @@ fn act(
             rate,
         );
         if fighter.runner.name().is_none() && fighter.stagger_s <= 0.0 {
-            let pace = |clip: &str| figure.as_ref().and_then(|moves| moves.pace(clip));
+            // The pace of the clip on the body this player stands on.
+            let moves = figures.as_ref().zip(sex).and_then(|(all, sex)| all.of(sex));
+            let pace = |clip: &str| moves.and_then(|moves| moves.pace(clip));
             walk_clip(
                 &mut drawn,
                 &mut acting,

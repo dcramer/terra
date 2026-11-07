@@ -10,6 +10,13 @@
       "head": "male_head",
       "bare": { "body": "male_bare_torso", "arms": "male_bare_arms", "legs": "male_bare_legs", "feet": "male_bare_feet" },
       "look": "ranger"
+    },
+    "female": {
+      "model": "models/character/female.glb",
+      "pieces": "models/character/female",
+      "head": "female_head",
+      "bare": { "body": "female_bare_torso", "arms": "female_bare_arms", "legs": "female_bare_legs", "feet": "female_bare_feet" },
+      "look": "female_ranger"
     }
   },
   "pieces": {
@@ -182,7 +189,163 @@
     "male_hair_slick_back": { "body": "male", "source": "art/characters/quaternius/universal-base-characters/Hair_SlickBack.gltf", "slot": "hair", "layer": 0, "regions": ["hair"], "colourways": ["shipped"], "tags": [] },
     "male_beard_full": { "body": "male", "source": "art/characters/quaternius/universal-base-characters/Hair_Beard.gltf", "slot": "beard", "layer": 0, "regions": ["beard"], "colourways": ["shipped"], "tags": [] },
     "male_beard_moustache": { "body": "male", "source": "art/characters/quaternius/universal-base-characters/Hair_Moustache.gltf", "slot": "beard", "layer": 0, "regions": ["beard"], "colourways": ["shipped"], "tags": [] },
-    "male_beard_mutton_chops": { "body": "male", "source": "art/characters/quaternius/universal-base-characters/Hair_MuttonChops.gltf", "slot": "beard", "layer": 0, "regions": ["beard"], "colourways": ["shipped"], "tags": [] }
+    "male_beard_mutton_chops": { "body": "male", "source": "art/characters/quaternius/universal-base-characters/Hair_MuttonChops.gltf", "slot": "beard", "layer": 0, "regions": ["beard"], "colourways": ["shipped"], "tags": [] },
+    "female_head": {
+      "body": "female",
+      "source": "art/characters/quaternius/universal-base-characters/Regular_Female_OnlyHead.gltf",
+      "layer": 0,
+      "regions": ["head"],
+      "colourways": ["shipped"],
+      "tags": []
+    },
+    "female_bare_arms": {
+      "body": "female",
+      "source": "art/characters/quaternius/universal-base-characters/Regular_Female_FullBody.gltf",
+      "cut": "arms",
+      "slot": "arms",
+      "layer": 0,
+      "regions": ["arms"],
+      "colourways": ["shipped"],
+      "tags": []
+    },
+    "female_bare_torso": {
+      "body": "female",
+      "source": "art/characters/quaternius/universal-base-characters/Regular_Female_FullBody.gltf",
+      "cut": "torso",
+      "slot": "body",
+      "layer": 0,
+      "regions": ["torso"],
+      "colourways": ["shipped"],
+      "tags": []
+    },
+    "female_bare_legs": {
+      "body": "female",
+      "source": "art/characters/quaternius/universal-base-characters/Regular_Female_FullBody.gltf",
+      "cut": "legs",
+      "slot": "legs",
+      "layer": 0,
+      "regions": ["legs"],
+      "colourways": ["shipped"],
+      "tags": []
+    },
+    "female_bare_feet": {
+      "body": "female",
+      "source": "art/characters/quaternius/universal-base-characters/Regular_Female_FullBody.gltf",
+      "cut": "feet",
+      "slot": "feet",
+      "layer": 0,
+      "regions": ["feet"],
+      "colourways": ["shipped"],
+      "tags": []
+    },
+    "female_ranger_body": {
+      "body": "female",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Female_Ranger_Body.gltf",
+      "outfit": "ranger",
+      "slot": "body",
+      "item": "leather_coat",
+      "layer": 1,
+      "regions": ["torso"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "warm"]
+    },
+    "female_ranger_arms": {
+      "body": "female",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Female_Ranger_Arms.gltf",
+      "outfit": "ranger",
+      "slot": "arms",
+      "item": "leather_coat",
+      "layer": 1,
+      "regions": ["arms"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "warm"]
+    },
+    "female_ranger_legs": {
+      "body": "female",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Female_Ranger_Legs.gltf",
+      "outfit": "ranger",
+      "slot": "legs",
+      "item": "trousers",
+      "layer": 1,
+      "regions": ["legs"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work"]
+    },
+    "female_ranger_boots": {
+      "body": "female",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Female_Ranger_Feet.gltf",
+      "outfit": "ranger",
+      "slot": "feet",
+      "item": "boots",
+      "layer": 1,
+      "regions": ["feet"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work"]
+    },
+    "female_peasant_body": {
+      "body": "female",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Female_Peasant_Body.gltf",
+      "outfit": "peasant",
+      "slot": "body",
+      "item": "shirt",
+      "layer": 1,
+      "regions": ["torso"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "plain"]
+    },
+    "female_peasant_arms": {
+      "body": "female",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Female_Peasant_Arms.gltf",
+      "outfit": "peasant",
+      "slot": "arms",
+      "item": "shirt",
+      "layer": 1,
+      "regions": ["arms"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "plain"]
+    },
+    "female_peasant_legs": {
+      "body": "female",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Female_Peasant_Legs.gltf",
+      "outfit": "peasant",
+      "slot": "legs",
+      "item": "trousers",
+      "layer": 1,
+      "regions": ["legs"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "plain"]
+    },
+    "female_peasant_feet": {
+      "body": "female",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Female_Peasant_Feet.gltf",
+      "outfit": "peasant",
+      "slot": "feet",
+      "item": "shoes",
+      "layer": 1,
+      "regions": ["feet"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "plain"]
+    },
+    "female_ranger_hood": {
+      "body": "female",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Female_Ranger_Head_Hood.gltf",
+      "outfit": "ranger",
+      "slot": "headwear",
+      "item": "hood",
+      "layer": 1,
+      "regions": ["hair"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "warm"]
+    }
   },
   "looks": {
     "ranger": {
@@ -220,9 +383,53 @@
       "body": "male",
       "pieces": { "body": "male_wizard_body", "arms": "male_wizard_arms", "legs": "male_wizard_legs", "feet": "male_wizard_feet", "hair": "male_hair_ponytail", "beard": "male_beard_full" },
       "colourway": "shipped"
+    },
+    "female_ranger": {
+      "about": "The starting kit's clothes on her (D602): her Ranger's body and arms as the leather coat, its leggings as the trousers, its boots.",
+      "body": "female",
+      "pieces": { "body": "female_ranger_body", "arms": "female_ranger_arms", "legs": "female_ranger_legs", "feet": "female_ranger_boots" },
+      "colourway": "shipped"
+    },
+    "female_peasant": {
+      "about": "Their Peasant as made for her: the tunic and its sleeves as the shirt, the trousers, the shoes.",
+      "body": "female",
+      "pieces": { "body": "female_peasant_body", "arms": "female_peasant_arms", "legs": "female_peasant_legs", "feet": "female_peasant_feet" },
+      "colourway": "shipped"
     }
   },
   "pairings": [
+    {"pieces":["female_peasant_arms","female_peasant_body"],"verdict":"theirs","over":"female_peasant_body","clips":31,"rest":0,"poke_mm":36.7,"worst":"Fixing_Kneeling@1.29","open":8,"frames":408},
+    {"pieces":["female_peasant_arms","female_peasant_feet"],"verdict":"apart"},
+    {"pieces":["female_peasant_arms","female_peasant_legs"],"verdict":"apart"},
+    {"pieces":["female_peasant_arms","female_ranger_body"],"verdict":"refused","over":"female_ranger_body","clips":26,"rest":0,"poke_mm":48.4,"worst":"Swim_Fwd_Loop@5.03","open":10,"frames":408,"worse":12,"theirs_rest":8},
+    {"pieces":["female_peasant_arms","female_ranger_boots"],"verdict":"apart"},
+    {"pieces":["female_peasant_arms","female_ranger_hood"],"verdict":"refused","over":"female_ranger_hood","clips":33,"rest":0,"poke_mm":22.3,"worst":"Swim_Dive_Loop@0.00","open":14,"frames":408,"worse":29,"theirs_rest":0},
+    {"pieces":["female_peasant_arms","female_ranger_legs"],"verdict":"apart"},
+    {"pieces":["female_peasant_body","female_peasant_feet"],"verdict":"apart"},
+    {"pieces":["female_peasant_body","female_peasant_legs"],"verdict":"theirs","over":"female_peasant_body","clips":14,"rest":0,"poke_mm":11.3,"worst":"Sword_Attack@0.50","open":12,"frames":408},
+    {"pieces":["female_peasant_body","female_ranger_arms"],"verdict":"refused","over":"female_peasant_body","clips":32,"rest":10,"poke_mm":44.8,"worst":"Death01@1.39","open":15,"frames":408,"worse":24,"theirs_rest":8},
+    {"pieces":["female_peasant_body","female_ranger_boots"],"verdict":"apart"},
+    {"pieces":["female_peasant_body","female_ranger_hood"],"verdict":"refused","over":"female_ranger_hood","clips":34,"rest":162,"poke_mm":112.5,"worst":"Crouch_Idle_Loop@2.19","open":24,"frames":408,"worse":0,"theirs_rest":60},
+    {"pieces":["female_peasant_body","female_ranger_legs"],"verdict":"pass","over":"female_peasant_body","clips":2,"rest":0,"poke_mm":0.4,"worst":"Jog_Start@1.73","open":1,"frames":408,"worse":0,"theirs_rest":0},
+    {"pieces":["female_peasant_feet","female_peasant_legs"],"verdict":"theirs","over":"female_peasant_feet","clips":28,"rest":0,"poke_mm":81.8,"worst":"Swim_Dive_Loop@2.02","open":0,"frames":408},
+    {"pieces":["female_peasant_feet","female_ranger_arms"],"verdict":"apart"},
+    {"pieces":["female_peasant_feet","female_ranger_body"],"verdict":"apart"},
+    {"pieces":["female_peasant_feet","female_ranger_hood"],"verdict":"apart"},
+    {"pieces":["female_peasant_feet","female_ranger_legs"],"verdict":"refused","over":"female_peasant_feet","clips":33,"rest":2,"poke_mm":111.1,"worst":"Swim_Dive_Loop@2.02","open":0,"frames":408,"worse":3,"theirs_rest":2},
+    {"pieces":["female_peasant_legs","female_ranger_arms"],"verdict":"apart"},
+    {"pieces":["female_peasant_legs","female_ranger_body"],"verdict":"pass","over":"female_ranger_body","clips":11,"rest":0,"poke_mm":48.6,"worst":"Roll@0.73","open":4,"frames":408,"worse":0,"theirs_rest":0},
+    {"pieces":["female_peasant_legs","female_ranger_boots"],"verdict":"refused","over":"female_ranger_boots","clips":8,"rest":0,"poke_mm":89.2,"worst":"Swim_Dive_Loop@2.02","open":9,"frames":408,"worse":6,"theirs_rest":2},
+    {"pieces":["female_peasant_legs","female_ranger_hood"],"verdict":"apart"},
+    {"pieces":["female_ranger_arms","female_ranger_body"],"verdict":"theirs","over":"female_ranger_body","clips":26,"rest":8,"poke_mm":42.4,"worst":"Punch_Cross@0.33","open":8,"frames":408},
+    {"pieces":["female_ranger_arms","female_ranger_boots"],"verdict":"apart"},
+    {"pieces":["female_ranger_arms","female_ranger_hood"],"verdict":"theirs","over":"female_ranger_hood","clips":24,"rest":0,"poke_mm":9.3,"worst":"Swim_Dive_Loop@0.00","open":14,"frames":408},
+    {"pieces":["female_ranger_arms","female_ranger_legs"],"verdict":"apart"},
+    {"pieces":["female_ranger_body","female_ranger_boots"],"verdict":"apart"},
+    {"pieces":["female_ranger_body","female_ranger_hood"],"verdict":"theirs","over":"female_ranger_hood","clips":34,"rest":60,"poke_mm":131.8,"worst":"Punch_Jab@0.63","open":34,"frames":408},
+    {"pieces":["female_ranger_body","female_ranger_legs"],"verdict":"theirs","over":"female_ranger_body","clips":24,"rest":0,"poke_mm":62.6,"worst":"Jump_Land@0.21","open":16,"frames":408},
+    {"pieces":["female_ranger_boots","female_ranger_hood"],"verdict":"apart"},
+    {"pieces":["female_ranger_boots","female_ranger_legs"],"verdict":"theirs","over":"female_ranger_boots","clips":16,"rest":2,"poke_mm":117.3,"worst":"Swim_Dive_Loop@2.02","open":0,"frames":408},
+    {"pieces":["female_ranger_hood","female_ranger_legs"],"verdict":"apart"},
     {"pieces":["male_beard_full","male_hair_balding"],"verdict":"pass","over":"male_hair_balding","clips":0,"rest":0,"poke_mm":0,"worst":"rest@0.00","open":76,"frames":408,"worse":0,"theirs_rest":53},
     {"pieces":["male_beard_full","male_hair_buzzed"],"verdict":"pass","over":"male_hair_buzzed","clips":0,"rest":0,"poke_mm":1.3,"worst":"Roll@0.36","open":80,"frames":408,"worse":0,"theirs_rest":53},
     {"pieces":["male_beard_full","male_hair_dreads"],"verdict":"pass","over":"male_hair_dreads","clips":0,"rest":0,"poke_mm":1.3,"worst":"Roll@0.36","open":80,"frames":408,"worse":0,"theirs_rest":53},

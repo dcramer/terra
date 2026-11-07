@@ -414,7 +414,9 @@ fn record(
     mover: &Mover,
 ) -> Frame {
     let world = app.world();
-    let moves = world.resource::<Moves>();
+    // The course's walker stands on the first body.
+    let moves = (world.resource::<Movesets>().of(&Sex::default()))
+        .expect("the body's clips are loaded before the course runs");
     let player = world.get::<AnimationPlayer>(animator).unwrap();
     let animated = world.get::<Animated>(animator).unwrap();
     let clip = animated

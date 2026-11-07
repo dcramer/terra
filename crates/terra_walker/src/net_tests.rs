@@ -892,6 +892,7 @@ fn a_link_not_kept_while_held_fails_the_check() {
 fn each_player_looks_in_the_others_game_as_its_player_made_it() {
     use crate::creator::{Features, creator};
     let made = |hair: Option<&str>, skin: &str, eyes: &str| Features {
+        body: "male".into(),
         hair: hair.map(str::to_string),
         beard: None,
         hair_colour: creator().hair[1].name.clone(),
