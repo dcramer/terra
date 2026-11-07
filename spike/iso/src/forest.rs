@@ -283,11 +283,6 @@ fn grass(land: &Land, lo: Vec2, size: f32, rng: &mut Rng, nav: &Nav) -> Option<M
 #[derive(Resource, Default)]
 pub struct Extra(pub Vec<Spot>);
 
-/// Each oak's scale against a spot's, so both trunks are as thick at a spot's scale: at
-/// scale 1 OakBough2's trunk is 3.0 m across 4 m up (its chest height at 0.3), OakBough's
-/// 4.6 m (the GLBs' median width of a 0.25 m slice, measured in iso-kit j23).
-const GIRTH: [f32; 2] = [0.65, 1.0];
-
 #[allow(clippy::too_many_arguments)]
 /// Where an oak stands, how large and turned.
 #[derive(Clone, Copy)]
@@ -303,14 +298,11 @@ pub fn tree_spots(land: &Land) -> Vec<Spot> {
     let mut rng = Rng::new(0x7ee5_0a11);
     let mut trees: Vec<Spot> = Vec::new();
     let mut tries = 0;
-    // At true size (iso-kit j23): a trunk 0.8 to 1.1 m across at chest height (`GIRTH`), the
-    // tree 6 to 9 m tall, so more of them closer, a wood's stand; at 0.55 to 0.85, 5.5 to
-    // 8.5 m apart, the trunks stood 2.5 to 4 m across, a toy set beside the hero.
-    while trees.len() < 260 && tries < 60_000 {
+    while trees.len() < 80 && tries < 20_000 {
         tries += 1;
         let p = Vec2::new(rng.range(-50.0, 50.0), rng.range(-50.0, 50.0));
-        let spacing = rng.range(3.0, 4.8);
-        let scale = rng.range(0.26, 0.38);
+        let spacing = rng.range(5.5, 8.5);
+        let scale = rng.range(0.55, 0.85);
         // Seen from above at the camera's slant, a crown stands up the screen from its
         // trunk (about a metre for each metre up): it must lie over the wood too, not
         // hang over the clearing, or it reads as a bush floating by the camp.
@@ -393,8 +385,7 @@ fn plant(
     spots.extend(extra.iter().flat_map(|e| e.0.iter().copied()));
     let trees: Vec<Vec2> = spots.iter().map(|t| t.at).collect();
     for (i, t) in spots.iter().enumerate() {
-        let (p, yaw) = (&t.at, t.yaw);
-        let scale = t.scale * GIRTH[i % kinds.len()];
+        let (p, scale, yaw) = (&t.at, t.scale, t.yaw);
         let (trunk, crown, shell) = &kinds[i % kinds.len()];
         let rot = Quat::from_rotation_y(yaw);
         nav.block_circle(*p, 0.9 * scale);
