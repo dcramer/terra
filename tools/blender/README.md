@@ -20,6 +20,8 @@ tools/blender/run.sh path/to/script.py --open scene.blend [args...]
 
 **[pieces.py](pieces.py)** is what `scan.py` and `campfire.py` share: a mesh's triangles, welding it along its seams, and cutting it to a triangle budget with Blender's collapse decimation, which keeps its texture places so its scanned maps still fit.
 
+**[kit.py](kit.py)** gathers a modular kit's parts into the modules a layout places, such as a Poly Haven scanned facade into one-storey bays: `tools/blender/run.sh tools/blender/kit.py SPEC.json OUT.glb [PREVIEW.png]` fetches the spec's Poly Haven asset (or reads a local .gltf), joins each module's named parts at their shared corner, cuts it to the spec's budget, centres it across with its foot on the ground, and writes every module as a scene of one GLB sharing the textures, then a Cycles preview of them side by side. Blender runs on the render worker only where the machine is embargoed; the spec of the street's fronts is `art/iso/city/facade-apartments.json`.
+
 **[decimate.py](decimate.py)** cuts a model's meshes to a triangle budget for tools/iso-art's `decimate`, which splices the new mesh back under the original's skeleton, clips and textures: `tools/blender/run.sh tools/blender/decimate.py IN.glb OUT.glb BUDGET`.
 
 **[tips.py](tips.py)** finds where a modelled tree's leaves go, for a crown of cards grown on a modelled trunk (D235): `tools/blender/run.sh tools/blender/tips.py MODEL.glb OUT.ron [--from 0.5] [--clump 1.0]` measures how far each point is from the foot along the surface, gathers the points past `--from` of the longest path into clumps a `--clump` apart, each with the way its branch runs and a mass by side and height, and writes them as RON for `assets/data/trees`.

@@ -26,7 +26,7 @@ Scanned and photo-textured street props for the iso experiment's neon street at 
 | `utility-box.glb` | [Utility Box 02](https://polyhaven.com/a/utility_box_02) | James Ray Cock | 6,268 | 0.92 x 1.12 x 0.43 | |
 | `wheel-rim.glb` | [Rusted Wheel Rim 01](https://polyhaven.com/a/rusted_wheel_rim_01) | John Hutcheson | 16,440 over | 0.40 x 0.40 x 0.15 | |
 
-No building shells yet: Kenney's City Kit Commercial (CC0) downloads only through its page's script, and its flat-coloured low-poly kit would read toy-like against these scans (D634).
+Building fronts: `facade-apartments.glb`, from [Modular Urban Apartments Facade](https://polyhaven.com/a/modular_urban_apartments_facade) by James Ray Cock (CC0), its 2K glTF's parts gathered into one-storey bays by `tools/blender/kit.py` from [art/iso/city/facade-apartments.json](../../../../art/iso/city/facade-apartments.json) (iso-kit j25): ten modules, each a scene of the file in this order, each facing +Z with its foot on y=0 and its middle over the origin, collapse-cut to 3,000 triangles (the flat plaster's; scenery's cap is 20k), the textures shared, 39 MB. 0 `door-large` (double panel door), 1 `door-small`, 2 `shop-window` (two sash windows to the ground), 3 `plain`, 4 `window-large`, 5 `window-double`, 6 `window-small`, 7 `window-offset` (each 3 x 3 m, a string course at its foot), 8 `crown` (the parapet, 3 x 0.75 m), 9 `pier` (0.4 x 3 m). The kit has no glazed shopfront: its doors are panels. Kenney's City Kit Commercial (CC0) downloads only through its page's script, and its flat-coloured low-poly kit would read toy-like against these scans (D634).
 
 ## Signs (`signs/`, iso-kit j11)
 

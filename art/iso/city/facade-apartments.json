@@ -1,0 +1,18 @@
+{
+  "about": "The neon street's building fronts (iso-kit j25, D634): Poly Haven's CC0 Modular Urban Apartments Facade by James Ray Cock, its parts gathered into one-storey bays 3 m wide and 3 m tall, each a scene of assets/models/iso/city/facade-apartments.glb in this order. Made by tools/blender/kit.py; each part is [the source's node, its height in the bay], its node's origin (the source's bay corner) put at the bay's, then the bay centred across.",
+  "source": "modular_urban_apartments_facade",
+  "resolution": "2k",
+  "budget": 3000,
+  "modules": [
+    { "name": "door-large", "parts": [["wall_door_centered_large_01", 0], ["door_centered_large_01", 0], ["dado_door_centered_large_01", 0]] },
+    { "name": "door-small", "parts": [["wall_door_centered_small_01", 0], ["door_centered_small_01", 0], ["dado_door_centered_small_01", 0]] },
+    { "name": "shop-window", "parts": [["wall_window_centered_double_01", 0], ["window_centered_double_01", 0]] },
+    { "name": "plain", "parts": [["wall_standard_standard_01", 0], ["dado_standard_standard_01", 0]] },
+    { "name": "window-large", "parts": [["wall_window_centered_large_02", 0], ["window_centered_large_02", 0], ["cornice_standard_standard_01", 0]] },
+    { "name": "window-double", "parts": [["wall_window_centered_double_02", 0], ["window_centered_double_02", 0], ["cornice_standard_standard_01", 0]] },
+    { "name": "window-small", "parts": [["wall_window_centered_small_02", 0], ["window_centered_small_02", 0], ["cornice_standard_standard_01", 0]] },
+    { "name": "window-offset", "parts": [["wall_window_offset_small_03", 0], ["window_offset_small_03", 0], ["cornice_standard_standard_01", 0]] },
+    { "name": "crown", "parts": [["crown_standard_standard_01", 0]] },
+    { "name": "pier", "parts": [["wall_pier_standard_01", 0], ["dado_pier_pedestal_01", 0]] }
+  ]
+}
