@@ -1,8 +1,8 @@
-// A stub for later (iso-kit j8, the neon street): a city street at night in the rain. No
-// biome uses it yet; its numbers are a starting point, unshot. The key is the sky's glow off
+// The neon street's night (iso-kit j11): a city street at night in the rain. First
+// shot 261106-2325 (4x too dark: ev100 8 to 6.5). The key is the sky's glow off
 // low cloud, not a moon (overcast rain hides it): weak, high and cold, so the street's own
 // lamps and signs make the pools, warm sodium against cold neon, and the wet asphalt mirrors
-// them (the water kit's job, j5). The fill is the cloud's city glow, a dull sodium orange,
+// them (the water kit's job). The fill is the rain cloud's cold blue-grey (iso-kit j11),
 // dark enough that an alley's shade is black. Exposed as the ruin's night; a little less
 // saturation over the whole frame so the signs' colour carries it, not the walls.
 (
@@ -13,8 +13,8 @@
         lux: 40.0,
         shadows: (cascades: 2, first: 30.0, far: 60.0, soft: 3.0),
     ),
-    sky: (colour: Srgb(0.6, 0.42, 0.3), nits: 3.0),
-    ev100: 8.0,
+    sky: (colour: Srgb(0.45, 0.52, 0.65), nits: 4.0),
+    ev100: 6.5,
     curve: TonyMcMapface,
     grade: (saturation: 0.95, mid_saturation: 1.0),
     // Rain haze down the street: dark blue-grey, near, thick (the far blocks fade fast).

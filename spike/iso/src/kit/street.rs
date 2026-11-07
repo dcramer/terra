@@ -266,7 +266,7 @@ impl Street {
     pub fn puddled(&self, p: Vec2) -> f32 {
         let patch = fbm(p * 0.32 + Vec2::splat(17.0), 402);
         let lower = 0.08 * self.gutter(p);
-        smooth(0.6, 0.68, patch + lower)
+        smooth(0.64, 0.7, patch + lower)
     }
 
     /// How near a rising wall a point is: a front's foot on the pavements, the kerb's face on

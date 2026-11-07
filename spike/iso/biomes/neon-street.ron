@@ -12,7 +12,7 @@
         walk: 3.2,
         kerb: (0.3, 0.15),
         length: 70.0,
-        focus: (0.0, -1.0),
+        focus: (0.0, -4.0),
         // The road: Poly Haven's worn, cracked Asphalt 02 at its 3 m, wet all over and
         // standing in patches and along the gutters.
         asphalt: (
@@ -56,19 +56,19 @@
         ],
         // Sodium lamps (about 2000 K) over the road, sides taking turns.
         lamps: (every: 16.0, start: -24.0, height: 6.5, reach: 1.6,
-                colour: Srgb(1.0, 0.62, 0.25), lumens: 300000.0, angle: 60.0, range: 14.0,
+                colour: Srgb(1.0, 0.62, 0.25), lumens: 600000.0, angle: 60.0, range: 14.0,
                 shadows: true),
         // Textures from text by ffmpeg (assets/models/iso/city/README.md, signs).
         signs: [
             (texture: "models/iso/city/signs/ramen.png", side: North, at: -12.0, height: 6.5,
              size: (0.9, 3.15), blade: true, colour: Srgb(1.0, 0.16, 0.55), nits: 30.0,
-             lumens: 50000.0),
+             lumens: 100000.0),
             (texture: "models/iso/city/signs/bar.png", side: North, at: -3.0, height: 4.6,
-             size: (2.9, 1.1), colour: Srgb(0.1, 0.82, 1.0), nits: 30.0, lumens: 50000.0),
+             size: (2.9, 1.1), colour: Srgb(0.1, 0.82, 1.0), nits: 30.0, lumens: 100000.0),
             (texture: "models/iso/city/signs/drug.png", side: North, at: 3.6, height: 5.6,
-             size: (1.0, 2.0), colour: Srgb(0.22, 1.0, 0.42), nits: 30.0, lumens: 35000.0),
+             size: (1.0, 2.0), colour: Srgb(0.22, 1.0, 0.42), nits: 30.0, lumens: 70000.0),
             (texture: "models/iso/city/signs/24h.png", side: North, at: 9.0, height: 4.4,
-             size: (2.2, 1.0), colour: Srgb(1.0, 0.19, 0.09), nits: 30.0, lumens: 40000.0),
+             size: (2.2, 1.0), colour: Srgb(1.0, 0.19, 0.09), nits: 30.0, lumens: 80000.0),
         ],
         props: [
             (model: "models/iso/city/rollershutter-door.glb", side: North, line: Wall,
