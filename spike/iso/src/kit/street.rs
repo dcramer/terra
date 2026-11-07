@@ -78,7 +78,7 @@ impl Side {
         }
     }
     /// The turn about y that faces a thing on this side toward the road (models face +z).
-    fn facing(self) -> f32 {
+    pub(crate) fn facing(self) -> f32 {
         match self {
             Side::North => 0.0,
             Side::South => std::f32::consts::PI,
@@ -88,7 +88,8 @@ impl Side {
 
 /// A block of building along one side, from x `along.0` to `along.1`, `height` tall and
 /// `depth` deep, faced in a scan of `assets/materials/` at its true `metres`; its roof a scan
-/// too (the front's own when `None`).
+/// too (the front's own when `None`). Its face to the road is either the scan with `windows`
+/// or a facade kit's `bays` (kit/facade.rs), the block's face then set back dark behind them.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Front {
@@ -105,6 +106,8 @@ pub struct Front {
     pub roof: Option<String>,
     #[serde(default)]
     pub windows: Option<Windows>,
+    #[serde(default)]
+    pub bays: Option<super::facade::Bays>,
 }
 
 /// A front's windows: a storey's height, the first sill's height, one every `every` metres
@@ -220,6 +223,18 @@ impl Street {
     /// it stands on it.
     pub fn check(&self) -> Result<(), String> {
         let ends = self.length / 2.0;
+        for f in &self.fronts {
+            let Some(b) = &f.bays else { continue };
+            if f.windows.is_some() {
+                return Err(format!(
+                    "the front from x {} to {} has both `windows` and `bays`: its face is one \
+                     or the other. Fix: drop its `windows` (the bays' `lit` and `colours` light \
+                     its rooms; kit/street.rs, D634)",
+                    f.along.0, f.along.1
+                ));
+            }
+            b.check(f.along, f.height)?;
+        }
         for s in &self.signs {
             let (w, h) = (s.size.0 / 2.0, s.size.1 / 2.0);
             let on = self.fronts.iter().any(|f| {
@@ -588,19 +603,25 @@ fn fronts(
         let (x0, x1, h) = (f.along.0, f.along.1, f.height);
         let (near, back) = (s * wall, s * (wall + f.depth));
         let mut faces = Sheets::default();
-        // The face to the road, then its ends; each wound so its normal looks out.
+        // The face to the road (set back dark behind a facade kit's bays), then its ends
+        // from the wall line; each wound so its normal looks out.
         let (z_a, z_b) = if s < 0.0 { (near, back) } else { (back, near) };
+        let mut inner = Sheets::default();
+        let (road, set) = match &f.bays {
+            Some(b) => (&mut inner, s * (wall + b.back)),
+            None => (&mut faces, near),
+        };
         if s < 0.0 {
-            faces.add(
-                Vec3::new(x0, 0.0, near),
+            road.add(
+                Vec3::new(x0, 0.0, set),
                 Vec3::X * (x1 - x0),
                 Vec3::Y * h,
                 f.metres,
                 &flat,
             );
         } else {
-            faces.add(
-                Vec3::new(x1, 0.0, near),
+            road.add(
+                Vec3::new(x1, 0.0, set),
                 Vec3::X * (x0 - x1),
                 Vec3::Y * h,
                 f.metres,
@@ -639,6 +660,21 @@ fn fronts(
             Mesh3d(meshes.add(roof.mesh())),
             MeshMaterial3d(materials.add(material(asset, top, Color::srgb(0.45, 0.45, 0.45)))),
         ));
+        if let Some(b) = &f.bays {
+            // The rooms behind the openings: near black, rough.
+            commands.spawn((
+                Mesh3d(meshes.add(inner.mesh())),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.015, 0.014, 0.013),
+                    perceptual_roughness: 0.95,
+                    ..default()
+                })),
+            ));
+            super::facade::spawn(
+                commands, asset, meshes, materials, f.side, f.along, h, wall, b, &mut rng,
+            );
+            continue;
+        }
         let Some(w) = &f.windows else { continue };
         let lit: Vec<Handle<StandardMaterial>> = w
             .colours
@@ -770,7 +806,8 @@ fn signs(
             ..default()
         });
         // Out from the wall toward the road, and the card's turn: facing the road, or
-        // edge-on to it (a blade, seen from up and down the street).
+        // edge-on to it (a blade, seen from up and down the street). A flat sign's box runs
+        // from the wall to its card, out past a facade's frames (0.2 m) and under its crown.
         let (out, turn, depth) = if sg.blade {
             (
                 0.15 + w / 2.0,
@@ -778,13 +815,13 @@ fn signs(
                 Vec3::new(0.08, h, w),
             )
         } else {
-            (0.08, sg.side.facing(), Vec3::new(w, h, 0.1))
+            (0.25, sg.side.facing(), Vec3::new(w, h, 0.24))
         };
         let mid = Vec3::new(sg.at, sg.height, s * (wall - out));
         commands.spawn((
             Mesh3d(meshes.add(Cuboid::new(depth.x, depth.y, depth.z))),
             MeshMaterial3d(backing.clone()),
-            Transform::from_translation(mid + Vec3::Z * s * 0.06 * (!sg.blade as u8 as f32)),
+            Transform::from_translation(mid + Vec3::Z * s * 0.125 * (!sg.blade as u8 as f32)),
         ));
         let to_road = Vec3::Z * -s;
         // A blade shows a card on each face of its box, a flat sign one toward the road.

@@ -6,6 +6,7 @@
 
 pub mod biome;
 pub mod effects;
+pub mod facade;
 pub mod ground;
 pub mod laid;
 pub mod light;

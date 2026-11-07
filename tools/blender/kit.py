@@ -10,7 +10,8 @@ SPEC is JSON: `source` a Poly Haven asset's id (fetched from api.polyhaven.com a
 `resolution`, glTF with its textures, into a folder beside OUT) or a local .gltf path;
 `budget` a module's triangles; `modules` a list of `{name, parts: [[node, height], ...]}` in
 the order of the file's scenes. Each part is the source's node by name, its origin put at the
-module's (a modular kit's pieces share a corner as their origin), raised by `height` metres.
+module's (a modular kit's pieces share a corner as their origin), raised by `height` metres;
+`alpha` an optional `{material: alpha}` set on the output's materials (glass over an opaque map).
 Prints KIT with each module's triangles before and after and its size."""
 
 import json
@@ -43,6 +44,31 @@ def fetch(asset, resolution, into):
         with get(url) as r, open(path, "wb") as f:
             f.write(r.read())
     return os.path.join(into, os.path.basename(entry["url"]))
+
+
+def finish(path, alpha):
+    """Rewrites the GLB at `path` without its scenes that hold no nodes (the emptied work
+    scene), scene 0 its default: Bevy's glTF loader refuses the whole file over a scene
+    without `nodes` ("missing field `nodes`", iso-kit j26). Each material named in `alpha`
+    gets that base colour alpha: Poly Haven's facade glass blends on an opaque JPEG, so it hid
+    the rooms behind it. The binary chunk is kept as is."""
+    with open(path, "rb") as f:
+        data = f.read()
+    size = int.from_bytes(data[12:16], "little")
+    doc = json.loads(data[20 : 20 + size])
+    doc["scenes"] = [s for s in doc["scenes"] if s.get("nodes")]
+    doc["scene"] = 0
+    for m in doc.get("materials", []):
+        if m.get("name") in alpha:
+            pbr = m.setdefault("pbrMetallicRoughness", {})
+            pbr["baseColorFactor"] = pbr.get("baseColorFactor", [1, 1, 1, 1])[:3] + [alpha[m["name"]]]
+            m["alphaMode"] = "BLEND"
+    text = json.dumps(doc, separators=(",", ":")).encode()
+    text += b" " * (-len(text) % 4)
+    rest = data[20 + size :]
+    head = b"glTF" + (2).to_bytes(4, "little") + (20 + len(text) + len(rest)).to_bytes(4, "little")
+    with open(path, "wb") as f:
+        f.write(head + len(text).to_bytes(4, "little") + b"JSON" + text + rest)
 
 
 def module(work, spec, by_name, budget):
@@ -141,6 +167,7 @@ def main(argv):
         export_image_format="AUTO",
         export_jpeg_quality=90,
     )
+    finish(out, spec.get("alpha", {}))
     print(f"KIT {len(made)} modules to {out}, {os.path.getsize(out) / 1e6:.1f} MB")
     if shot:
         preview(work, made, shot)
