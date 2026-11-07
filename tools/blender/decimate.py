@@ -8,7 +8,13 @@ and the textures stay the original's, so nothing a glTF round trip through Blend
 Collapse decimation (pieces.py's `cut`), which keeps UVs and interpolates vertex groups, so the
 weights follow the cut. On a skinned mesh the Decimate goes first in the stack, ahead of the
 Armature, so it cuts the rest pose; the Armature stays for the exporter's skin. BUDGET is the
-whole file's: each mesh gets its share by its triangles. Prints the triangles before and after."""
+whole file's: each mesh gets its share by its triangles. Prints the triangles before and after.
+
+An unrigged prop's file (Poly Haven's) is written whole, its textures carried by the exporter,
+and used as it is (iso-kit j29): a mesh several objects share (an instanced part) is cut once
+and shared again, its share counted once per instance, since a modifier cannot be applied to
+multi-user data; a mesh's shape keys are dropped, keeping its basis, since one with them takes
+no modifier (no prop of ours plays a morph)."""
 
 import os
 import sys
@@ -42,8 +48,18 @@ def main(argv):
     bpy.ops.import_scene.gltf(filepath=src)
     meshes = [ob for ob in bpy.context.scene.objects if ob.type == "MESH"]
     before = sum(triangles(ob) for ob in meshes)
+    shared = {}
     for ob in meshes:
-        cut_first(ob, int(budget * triangles(ob) / before))
+        shared.setdefault(ob.data.name, []).append(ob)
+    for obs in shared.values():
+        first, share = obs[0], int(budget * triangles(obs[0]) / before)
+        if len(obs) > 1:
+            first.data = first.data.copy()
+        if first.data.shape_keys:
+            first.shape_key_clear()
+        cut_first(first, share)
+        for ob in obs[1:]:
+            ob.data = first.data
     after = sum(triangles(ob) for ob in meshes)
     bpy.ops.export_scene.gltf(filepath=out, export_format="GLB", export_animations=False, export_apply=False, export_yup=True)
     print(f"decimate: {src} {before} to {after} triangles (budget {budget}), {len(meshes)} meshes, to {out}")
