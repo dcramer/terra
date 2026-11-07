@@ -223,15 +223,162 @@ pub struct Decal {
     pub on: Option<Mask>,
 }
 
-/// Water: what shape it takes, its face's height, and its colour deep down.
+/// Water (kit/water.rs draws it, iso-kit j9): its kind and its face's height; its body,
+/// absorbing by depth (Beer-Lambert) and scattering a colour back; its soft shore; what
+/// floats at its edge; its mirror; its ripples, rain rings and the lights' streaks. Every
+/// field but `kind` has a default: dark still water with nothing floating.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Water {
     pub kind: WaterKind,
     #[serde(default)]
     pub level: f32,
+    /// The colour its body scatters back, lit as the ground is (none: near black).
     #[serde(default)]
     pub deep: Option<Colour>,
+    /// How fast it absorbs red, green and blue light (per metre): a channel halves over
+    /// ln 2 / it of depth.
+    #[serde(default = "absorb")]
+    pub absorb: (f32, f32, f32),
+    /// The depth (m) over which its face fades in at the bank, its colour and its mirror.
+    #[serde(default = "shore")]
+    pub shore: f32,
+    /// A thin film's depth (m), for puddles and wet asphalt (0: the depth under the face).
+    #[serde(default)]
+    pub film: f32,
+    /// Foam or scum matting the margin (none by default, as at night).
+    #[serde(default)]
+    pub scum: Option<Scum>,
+    /// Round leaves floating in the open shallows (lily pads, fallen leaves).
+    #[serde(default)]
+    pub pads: Option<Pads>,
+    #[serde(default)]
+    pub mirror: Mirror,
+    #[serde(default)]
+    pub ripples: Ripples,
+    #[serde(default)]
+    pub streaks: Streaks,
+    /// Rain's rings: how many a square metre at once (0: none).
+    #[serde(default)]
+    pub rain: f32,
+}
+
+fn absorb() -> (f32, f32, f32) {
+    (9.0, 6.0, 5.0)
+}
+
+fn shore() -> f32 {
+    0.08
+}
+
+/// Foam or scum: its colour, how much of the margin it mats (0..1), how deep (m) it reaches
+/// out to and its clumps' size (m).
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Scum {
+    pub colour: Colour,
+    pub amount: f32,
+    #[serde(default = "reach")]
+    pub reach: f32,
+    #[serde(default = "clump")]
+    pub size: f32,
+}
+
+fn reach() -> f32 {
+    0.2
+}
+
+fn clump() -> f32 {
+    2.4
+}
+
+/// Floating leaves: how many a square metre of open shallows, a leaf's radius (m), its colour.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Pads {
+    pub count: f32,
+    pub radius: f32,
+    pub colour: Colour,
+}
+
+/// The mirror (a planar reflection): `lift` over Fresnel's two percent (an art cheat, 1 is
+/// physical), how far (m) a unit of the ripples' slope moves what it mirrors, and the sky
+/// it shows where nothing stands over it (none: the light preset's sky).
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields, default)]
+pub struct Mirror {
+    pub lift: f32,
+    pub distort: f32,
+    pub sky: Option<Colour>,
+    pub nits: Option<f32>,
+}
+
+impl Default for Mirror {
+    fn default() -> Self {
+        Mirror {
+            lift: 1.0,
+            distort: 0.1,
+            sky: None,
+            nits: None,
+        }
+    }
+}
+
+/// The ripples: two scrolling normal maps, `fine` and `broad` the metres a tile spans,
+/// `steep` their slope, `calm` how much stiller the margin is (0..1).
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields, default)]
+pub struct Ripples {
+    pub fine: f32,
+    pub broad: f32,
+    pub steep: f32,
+    pub calm: f32,
+}
+
+impl Default for Ripples {
+    fn default() -> Self {
+        Ripples {
+            fine: 1.3,
+            broad: 5.5,
+            steep: 0.25,
+            calm: 0.7,
+        }
+    }
+}
+
+/// Each light's and the key's highlight off the rippled face, a streak toward the eye (an
+/// anisotropic Beckmann lobe): its spread `along` the line to the eye and `across` it; the
+/// glitter's facet `cell` (m) and its share; the lights' `gain`; the key's (the moon's)
+/// `key` gain, the `calm` share of the ripples' tilt it sees taken away and its soft `peak`
+/// (nits, 0: none); a glint drawn `dash` times as long across the streak as along it.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields, default)]
+pub struct Streaks {
+    pub along: f32,
+    pub across: f32,
+    pub cell: f32,
+    pub glitter: f32,
+    pub gain: f32,
+    pub key: f32,
+    pub calm: f32,
+    pub peak: f32,
+    pub dash: f32,
+}
+
+impl Default for Streaks {
+    fn default() -> Self {
+        Streaks {
+            along: 0.1,
+            across: 0.025,
+            cell: 0.09,
+            glitter: 0.3,
+            gain: 1.0,
+            key: 0.4,
+            calm: 0.5,
+            peak: 160.0,
+            dash: 3.0,
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -329,7 +476,7 @@ mod tests {
         ], laid: (material: "concrete_pavement", metres: 1.8, wet: Site("gutter"))),
         scatter: [(models: ["models/bin.glb"], density: 0.05, scale: (0.9, 1.1), on: Some(Wear))],
         decals: [(texture: "decals/oil.png", count: 12, size: (0.5, 1.5))],
-        water: Some((kind: Wet, deep: Some(Srgb(0.02, 0.02, 0.03)))),
+        water: Some((kind: Wet, deep: Some(Srgb(0.02, 0.02, 0.03)), film: 0.002, rain: 0.6, mirror: (lift: 2.0, nits: 20.0))),
         weather: (wind: (1.0, 0.5), rain: 0.8, mist: 0.3),
         effects: [(preset: "steam", at: Some((2.0, -1.0)))],
         life: [(kind: "drone", count: 2)],

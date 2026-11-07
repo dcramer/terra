@@ -1,6 +1,6 @@
 //! The fourth scene (`--scene marsh`): the third biome, a marsh at dusk, seen from the
 //! ruin's action-RPG camera. Mud banks and mossy hummocks between open channels of still
-//! dark water (pool.rs), reeds and grass in the wind, dead trees standing in the water, low
+//! dark water (kit/water.rs), reeds and grass in the wind, dead trees standing in the water, low
 //! fog, midges and fireflies, will-o'-wisps flickering over the channels, a camp fire and a
 //! lantern on a post for the warm pools. The knight fights an ogre and a treant on a mud
 //! bank while a tree monster wades in; herons fish the shallows and mallards swim.
@@ -43,7 +43,7 @@ pub fn plugin(app: &mut App) {
         .insert_resource(light::fog())
         .insert_resource(crate::terrain::Land::from_shape(land::shape))
         .add_plugins((
-            crate::pool::plugin,
+            crate::kit::water::plugin,
             crate::ruin::effects::plugin,
             crate::ruin::fight::plugin,
             land::plugin,

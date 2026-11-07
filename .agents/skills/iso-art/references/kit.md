@@ -13,7 +13,7 @@ Unknown fields are refused; a parse error names the file, line, column, field an
 - `ground: (layers: [...], broad, scorch)`: up to eight layers, each a scan of the `materials/ground` stack by name (`kit/ground.rs` `STACK`, true sizes) with `mask`, `amount`, `tint`, `breakup` (drifts), `wets`, `triplanar`; one without a material only wets. Drawn by the kit for the forest and marsh (below).
 - `scatter: [(models, density, scale, on)]`, `decals: [(texture, count, size, on)]`, `water: (kind, level, deep)`, `weather: (wind, rain, snow, mist)`, `effects: [(preset, at)]`, `life: [(kind, count)]`.
 
-The fields after `light` are parsed and carried, each naming the iso-kit job that draws it; the ruin, forest and marsh still draw those from their own code.
+The fields after `light` but `ground` and the marsh's `water` are parsed and carried, each naming the iso-kit job that draws it; the ruin, forest and marsh still draw those from their own code.
 
 ## The kit's modules
 
@@ -21,6 +21,7 @@ The fields after `light` are parsed and carried, each naming the iso-kit job tha
 - `src/kit/biome.rs`: the schema; its tests parse every biome and a full non-fantasy one.
 - `src/kit/ground.rs` and `ground.wesl`: the ground's layers, rule masks and material (below).
 - `src/kit/light.rs`: the light presets, `Light` (a resource): `Light::spawn` the key and fill, `Light::camera` the exposure, curve, grade and haze.
+- `src/kit/water.rs` and `water.wesl`: a biome's water (below).
 
 ## The ground (`src/kit/ground.rs`, `ground.wesl`)
 
@@ -28,6 +29,13 @@ The fields after `light` are parsed and carried, each naming the iso-kit job tha
 - A mask is the layout's own map, `Site("grass")` (terrain.rs `SITES`: grass, leaves, moss, rock, mud, roots, per vertex; shade and wear in UV_0), or a rule baked from the land into two textures at 0.25 m: `Mud` (within ~1.5 m of water, under 0.5 m over it), `Wet` (~1 m, a few cm over it; `weather.rain` wets hollows), `Moss` (shade or creases, not steep), `Snow` (faces up; its `amount` takes it down steeper), `Grime` (hollows, the heights' Laplacian), `Steep`; each edge ragged by noise at two scales. Each rule has a test.
 - A paved street is the same file: its scans stacked first (no asphalt or concrete in the stack yet).
 - A laid floor (slabs, pavers, cobbles, bricks, kerbs) is `ground.laid` (`src/kit/laid.rs`, `laid.wesl`): one scan of `assets/materials/` at its true `metres`, drawn straight through StandardMaterial on the layout's paving mesh so its joints run true; grime in the joints (`joints`, the scan's AO marks them), `cracks`, the detail `grain`, `moss` and `wet` by the paving's maps (`Site(name)` from `laid::Place`, the second UV's x, y and the colour's alpha) or `Base`. The ruin's court is one. Its `courses` (each course's start and joints, measured off the scan's colour map) tell the units apart for `spread` (each unit's value and roughness); `dirt` (drifts and grit), `damp` (patches) and `feet` (a map where walls rise) weather it further.
+
+## The water (`src/kit/water.rs`, `water.wesl`)
+
+- A biome's `water: (kind, level, deep, absorb, shore, film, scum, pads, mirror, ripples, streaks, rain)` is one face (`spawn_face` on a mesh from `surface`, its depth in the second UV), the marsh's first; the forest's pond is still pool.rs.
+- The body absorbs per channel by depth (Beer-Lambert, `absorb` a metre) and scatters `deep`, lit as the ground; premultiplied, so the bed shows through the shallows. `shore` fades it in at the bank; `film` is a fixed depth for wet floors.
+- The mirror is planar (Unreal's and Unity's flat water): a camera mirrored under the face's level renders the scene into a half-size HDR texture before the main one, the faces on layer 9 it does not see; the face samples it where it projects, moved by the ripples' slope (`mirror.distort`), at Fresnel's 2% times `lift`; `sky` and `nits` its clear colour. Lights light a layer-9 face: Bevy 0.20 filters lights per view, not per mesh.
+- Ripples are one tiling slope map read at `fine` and `broad` metres drifting downwind (`weather.wind`); `calm` stills the margin. The key's lane and each `Glint`'s streak are pool.wesl's anisotropic Beckmann lobe (`streaks`).
 
 ## Adding a biome
 

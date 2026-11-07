@@ -16,18 +16,16 @@
 //! (`Sheen`), `with_body` for clear water by day (`Body`); `Glint` on the point lights to
 //! mirror.
 
-use bevy::asset::{RenderAssetUsages, embedded_asset};
+use bevy::asset::embedded_asset;
 use bevy::diagnostic::FrameCount;
-use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
 use bevy::render::render_resource::{AsBindGroup, ShaderType};
 use bevy::shader::ShaderRef;
 
-pub type PoolMaterial = ExtendedMaterial<StandardMaterial, PoolExt>;
+pub use crate::kit::water::{Glint, LIGHTS, pack, surface};
 
-/// How many lights a pool mirrors.
-pub const LIGHTS: usize = 6;
+pub type PoolMaterial = ExtendedMaterial<StandardMaterial, PoolExt>;
 
 #[derive(Clone, Copy, Debug, Default, Reflect, ShaderType)]
 pub struct Look {
@@ -128,10 +126,6 @@ impl MaterialExtension for PoolExt {
     }
 }
 
-/// A point light the water mirrors.
-#[derive(Component)]
-pub struct Glint;
-
 pub fn plugin(app: &mut App) {
     embedded_asset!(app, "shaders/pool.wesl");
     app.add_plugins(MaterialPlugin::<PoolMaterial>::default())
@@ -172,60 +166,6 @@ pub fn with_body(look: Look, edge: Edge, sheen: Sheen, body: Body) -> PoolMateri
     }
 }
 
-/// The face: a grid over `lo..hi` at `level`, each vertex's world xz in its uv and the
-/// water's depth over `ground` in its second uv, with triangles only where some corner is
-/// wet or nearly so.
-pub fn surface(lo: Vec2, hi: Vec2, step: f32, level: f32, ground: impl Fn(Vec2) -> f32) -> Mesh {
-    let nx = ((hi.x - lo.x) / step) as usize + 1;
-    let nz = ((hi.y - lo.y) / step) as usize + 1;
-    let mut pos = Vec::with_capacity(nx * nz);
-    let mut uv = Vec::with_capacity(nx * nz);
-    let mut uvb = Vec::with_capacity(nx * nz);
-    for j in 0..nz {
-        for i in 0..nx {
-            let p = lo + Vec2::new(i as f32, j as f32) * step;
-            pos.push([p.x, level, p.y]);
-            uv.push([p.x, p.y]);
-            uvb.push([level - ground(p), 0.0]);
-        }
-    }
-    let mut idx: Vec<u32> = Vec::new();
-    for j in 0..nz - 1 {
-        for i in 0..nx - 1 {
-            let a = j * nx + i;
-            let (b, c, d) = (a + 1, a + nx, a + nx + 1);
-            if [a, b, c, d].iter().all(|&k| uvb[k][0] < -0.05) {
-                continue;
-            }
-            let [a, b, c, d] = [a, b, c, d].map(|k| k as u32);
-            idx.extend_from_slice(&[a, d, b, a, c, d]);
-        }
-    }
-    let n = pos.len();
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; n])
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, uvb)
-    .with_inserted_indices(Indices::U32(idx))
-}
-
-/// Packs the lights as the shader reads them: the brightest `LIGHTS`, place and range,
-/// then colour times lumens.
-pub fn pack(mut lights: Vec<(Vec3, f32, LinearRgba, f32)>) -> (u32, [Vec4; LIGHTS * 2]) {
-    lights.sort_by(|a, b| b.3.total_cmp(&a.3));
-    let mut out = [Vec4::ZERO; LIGHTS * 2];
-    let n = lights.len().min(LIGHTS);
-    for (k, (at, range, c, lumens)) in lights.into_iter().take(n).enumerate() {
-        out[k * 2] = at.extend(range);
-        out[k * 2 + 1] = Vec4::new(c.red * lumens, c.green * lumens, c.blue * lumens, 0.0);
-    }
-    (n as u32, out)
-}
-
 /// Each frame, the glinting lights as they now stand and burn (they flicker and drift),
 /// and the time, at a fixed 30 a frame so a still and a film are the same water.
 fn mirror(
@@ -242,43 +182,5 @@ fn mirror(
         m.extension.look.look.x = n as f32;
         m.extension.look.lights = packed;
         m.extension.look.wave.w = frame.0 as f32 / crate::FILM_FPS as f32;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The face covers the water and its margin and nothing drier.
-    #[test]
-    fn the_face_lies_only_over_water() {
-        // A bowl: wet within 2 m of the middle.
-        let ground = |p: Vec2| p.length() - 2.0;
-        let m = surface(Vec2::splat(-5.0), Vec2::splat(5.0), 0.25, 0.0, ground);
-        let Some(bevy::mesh::VertexAttributeValues::Float32x3(pos)) =
-            m.attribute(Mesh::ATTRIBUTE_POSITION)
-        else {
-            panic!("positions");
-        };
-        let Some(Indices::U32(idx)) = m.indices() else {
-            panic!("indices");
-        };
-        assert!(!idx.is_empty());
-        for &k in idx {
-            let p = Vec2::new(pos[k as usize][0], pos[k as usize][2]);
-            assert!(p.length() < 2.5, "a triangle at {p} on dry land");
-        }
-    }
-
-    /// The brightest lights are mirrored first, and no more than the shader reads.
-    #[test]
-    fn the_brightest_lights_are_kept() {
-        let lights: Vec<_> = (0..LIGHTS + 3)
-            .map(|k| (Vec3::X * k as f32, 5.0, LinearRgba::WHITE, k as f32 * 100.0))
-            .collect();
-        let (n, packed) = pack(lights);
-        assert_eq!(n as usize, LIGHTS);
-        assert_eq!(packed[0].x, (LIGHTS + 2) as f32);
-        assert_eq!(packed[1].x, (LIGHTS + 2) as f32 * 100.0);
     }
 }

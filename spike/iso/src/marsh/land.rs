@@ -1,11 +1,11 @@
 //! The marsh's land and water: low hummocks of moss and grass, mud banks shelving into
 //! three open waters (a channel winding across the front of the fight, another behind it,
 //! a mere to the right), drawn in the glade's ground layers by what lies where, and the
-//! water's face over them (pool.rs).
+//! water's face over them (the kit's, kit/water.rs).
 
 use super::{KNIGHT, LEVEL};
+use crate::kit;
 use crate::kit::ground::{GroundMaterial, Place, material};
-use crate::pool::{self, Edge, Look, PoolMaterial, Sheen};
 use crate::terrain::{Land, SITES, fbm, smooth};
 use bevy::prelude::*;
 
@@ -130,53 +130,6 @@ fn cover(p: Vec2, _n: Vec3, h: f32) -> ([f32; 4], [f32; 2], [f32; 2]) {
     ([grass, leaves, moss, 0.0], [mud, roots], [1.0, bare])
 }
 
-/// The water's look by moonrise: a saturated deep blue sky in it (vr-pond-slash's water is
-/// sRGB 1, 41, 86: no red, a violet sky read as lilac paint, iso-art j24), darker toward the
-/// banks over half a metre of depth, the moon's sheen (`sheen`) and the fires' and wisps'
-/// streaks.
-pub fn look() -> Look {
-    Look {
-        deep: Vec4::new(0.002, 0.005, 0.009, 0.35),
-        shallow: Vec4::new(0.015, 0.016, 0.012, 0.45),
-        sky: Vec4::new(0.3, 5.0, 26.0, 25.0),
-        horizon: Vec4::new(5.0, 11.0, 22.0, 0.5),
-        wave: Vec4::new(super::WIND.x, super::WIND.y, 0.05, 0.0),
-        look: Vec4::new(0.0, 600.0, 1.0, 0.3),
-        lights: default(),
-    }
-}
-
-/// The margin: the water fading in over 30 cm of depth onto the wet mud, the sky broken
-/// into blots about 3.5 m across (at 6 m the mere was one even blue disc), duckweed in dark clumps (not a band: an even mat along the
-/// water line read as a pale green rim, iso-art j24) and nearly a lily pad a m² of open
-/// shallows.
-pub fn edge() -> Edge {
-    Edge {
-        fade: Vec4::new(0.3, 0.8, 3.5, 0.0),
-        weed: Vec4::new(0.6, 0.2, 2.4, 0.9),
-        green: Vec4::new(0.035, 0.07, 0.018, 0.24),
-    }
-}
-
-/// The moon in the water: a broad sheen of its cold light about its mirror on the far
-/// channel's left reach, and its lane down the water toward the eye: one soft streak, long
-/// and narrow, seen on half the ripples' tilt and brought under 160 nits (a light blue, the
-/// fight's effects stay the brightest thing), three tenths of it glints in 9 cm facets drawn
-/// as dashes three times as long across the lane (at 4 cm, 0.6 of it, and full gain it was
-/// "a field of blown white speckles, like snow", the judge 2026-11-06); the fire, the
-/// lantern and the wisps streak the same way (vr-pond-slash's pond).
-/// The moon is the biome's key light (its preset).
-pub fn sheen(light: &crate::kit::light::Light) -> Sheen {
-    let c = light.key.colour.color().to_linear();
-    Sheen {
-        toward: light.key.toward.vector().extend(8.0),
-        colour: Vec4::new(6.0, 33.0, 80.0, 0.3),
-        lane: Vec4::new(0.1, 0.025, 0.09, 0.3),
-        moon: (Vec3::new(c.red, c.green, c.blue) * light.key.lux).extend(0.4),
-        soft: Vec4::new(160.0, 0.5, 3.0, 0.0),
-    }
-}
-
 fn spawn(
     mut commands: Commands,
     asset: Res<AssetServer>,
@@ -186,7 +139,7 @@ fn spawn(
     mut grounds: ResMut<Assets<GroundMaterial>>,
     mut images: ResMut<Assets<Image>>,
     biome: Res<crate::kit::biome::Biome>,
-    mut pools: ResMut<Assets<PoolMaterial>>,
+    mut waters: ResMut<Assets<kit::water::KitWater>>,
 ) {
     // The open sky over it all: no crowns.
     let shade = |_: Vec2| 0.0;
@@ -207,18 +160,33 @@ fn spawn(
         Mesh3d(meshes.add(land.mesh(cover))),
         MeshMaterial3d(grounds.add(ground)),
     ));
-    let face = pool::surface(
+    // The kit's water over the channels, the mere and the ruts' puddles.
+    let Some(water) = biome.water.as_ref() else {
+        panic!(
+            "the marsh's biome file has no `water`: its channels need one (biomes/marsh.ron, \
+             `water: (kind: Pond, ...)`, kit.md; D634)"
+        );
+    };
+    let wind = biome
+        .weather
+        .as_ref()
+        .map_or(super::WIND, |w| Vec2::new(w.wind.0, w.wind.1));
+    let face = kit::water::surface(
         Vec2::new(-28.0, -24.0),
         Vec2::new(28.0, 16.0),
         0.25,
-        LEVEL,
+        water.level,
         |p| land.height(p),
     );
-    commands.spawn((
-        Mesh3d(meshes.add(face)),
-        MeshMaterial3d(pools.add(pool::with_sheen(look(), edge(), sheen(&light)))),
-        bevy::light::NotShadowCaster,
-    ));
+    kit::water::spawn_face(
+        &mut commands,
+        &mut meshes,
+        &mut waters,
+        water,
+        wind,
+        Some(&light),
+        face,
+    );
 }
 
 #[cfg(test)]

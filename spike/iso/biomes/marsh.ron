@@ -6,8 +6,8 @@
 (
     kind: [Dusk, Water],
     refs: "marsh",
-    // Its scatter, water, effects and life are still marsh/'s own code; they move here as
-    // the kit's jobs land (j7 on). Its water's moon lane reads this light's key.
+    // Its scatter, effects and life are still marsh/'s own code; they move here as the kit's
+    // jobs land. Its water is the kit's; the moon's lane on it reads this light's key.
     layout: Marsh,
     light: (preset: "marsh-dusk"),
     // The kit's ground (kit/ground.rs) over marsh/land.rs's maps (terrain.rs `SITES`).
@@ -27,4 +27,15 @@
         // bank, not at the marsh's own fire).
         scorch: [(0.0, 3.0)],
     ),
+    // The kit's water (kit/water.rs): black, still water mirroring the trees, the sky and
+    // the lights over it; duckweed in clumps at the margin and lily pads in the shallows.
+    water: (
+        kind: Pond,
+        level: 0.0,
+        deep: Srgb(0.03, 0.03, 0.025),
+        mirror: (lift: 3.0, sky: Linear(0.5, 0.6, 0.8), nits: 30.0),
+        scum: (colour: Linear(0.035, 0.07, 0.018), amount: 0.6, reach: 0.2, size: 2.4),
+        pads: (count: 0.9, radius: 0.24, colour: Linear(0.035, 0.07, 0.018)),
+    ),
+    weather: (wind: (0.86, 0.5)),
 )
