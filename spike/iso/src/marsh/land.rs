@@ -95,7 +95,9 @@ pub fn shape(p: Vec2) -> f32 {
 /// shallows and wet mud for the stones, roots and reeds to stand in, not one cut line
 /// (the judge, iso-art j35). Unchanged outside the band, monotone and smooth: the slope
 /// is 1 - 0.25 (cos(pi d / w) + cos(2 pi d / w)), 0.5 at the middle, 1 at the band's ends.
-const SHELF: Vec2 = Vec2::new(-0.03, 0.12);
+/// At 0.12 wide about -0.03 the bank still fell 0.3 m in its first 0.3 m out (iso-kit j45):
+/// 0.2 about -0.05, from a quarter metre under the face to 0.15 m up the bank.
+const SHELF: Vec2 = Vec2::new(-0.05, 0.2);
 pub fn shelf(h: f32) -> f32 {
     let (c, w) = (SHELF.x, SHELF.y);
     let d = h - c;
@@ -104,6 +106,20 @@ pub fn shelf(h: f32) -> f32 {
     }
     let x = std::f32::consts::PI * d / w;
     h - 0.25 * w / std::f32::consts::PI * (x.sin() + 0.5 * (2.0 * x).sin())
+}
+
+/// The depth the water's face is drawn at over a point `d` metres under it: a quarter of
+/// the true depth to 0.35 m, the true depth from 0.7 m, so the face
+/// fades in over about half a metre of wet mud shelving under it and the scum and leaves mat
+/// that margin, not a clean cut at the bank's line (the judge, round 261107-0358-2: "banks
+/// cut clean"; the ruin's pool's made-up shelving depth, ruin/water.rs, iso-kit j38). Dry
+/// land (`d` under 0) is unchanged; monotone, so the line stays where it is.
+const SHALLOWS: f32 = 0.25;
+pub fn seen_depth(d: f32) -> f32 {
+    if d <= 0.0 {
+        return d;
+    }
+    d * (SHALLOWS + (1.0 - SHALLOWS) * smooth(0.35, 0.7, d))
 }
 
 /// Each vertex's layers, in broad zones a few metres across so the ground is not one even
@@ -184,7 +200,7 @@ fn spawn(
         Vec2::new(28.0, 16.0),
         0.25,
         water.level,
-        |p| land.height(p),
+        |p| water.level - seen_depth(water.level - land.height(p)),
     );
     kit::water::spawn_face(
         &mut commands,
@@ -236,6 +252,46 @@ mod tests {
         for h in [c - w - 0.01, c + w + 0.01, 0.3, -0.6] {
             assert_eq!(shelf(h), h, "the shelf moves {h}");
         }
+    }
+
+    /// The water's face fades in over a margin, not at the bank's line: walking off the near
+    /// channel's bank, the face is still mostly clear 0.2 m past the line and hides the bed
+    /// only some way further out, and the channel's middle is opaque.
+    #[test]
+    fn the_face_fades_in_over_a_margin_of_shallows() {
+        let water = crate::kit::biome::Biome::load("marsh").unwrap().water.unwrap();
+        let absorb = Vec3::new(water.absorb.0, water.absorb.1, water.absorb.2);
+        let seen = |p: Vec2| {
+            let d = seen_depth(water.level - shape(p));
+            kit::water::opacity(d, absorb, water.shore)
+        };
+        for x in [-6.0, -2.0, 3.0] {
+            let centre = Vec2::new(x, near(x));
+            assert!(seen(centre) > 0.9, "the channel's middle at x {x} shows its bed");
+            // Out from the middle toward the fight's bank until the line.
+            let mut p = centre;
+            while shape(p) < water.level {
+                p.y -= 0.01;
+            }
+            let line = p.y;
+            let at = |out: f32| seen(Vec2::new(x, line + out));
+            assert!(at(0.2) < 0.5, "at x {x} the face is {} opaque 0.2 m out", at(0.2));
+            let full = (0..300)
+                .map(|k| k as f32 * 0.01)
+                .find(|&o| at(o) > 0.85)
+                .unwrap_or(9.0);
+            assert!(full > 0.35, "at x {x} the face is opaque {full} m out: a cut");
+        }
+        for d in [-0.2, -0.01, 0.0] {
+            assert_eq!(seen_depth(d), d, "dry land moves at {d}");
+        }
+        let mut last = 0.0;
+        for k in 1..200 {
+            let d = k as f32 * 0.005;
+            assert!(seen_depth(d) > last, "the seen depth falls at {d}");
+            last = seen_depth(d);
+        }
+        assert!((seen_depth(0.7) - 0.7).abs() < 1e-4, "the middle's depth moves");
     }
 
     /// The path runs unbroken from the far channel's bank through the fight to the mere's,

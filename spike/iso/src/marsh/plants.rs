@@ -136,18 +136,25 @@ fn spawn(
         if !edge(c) || clear(c) || crate::terrain::fbm(c * 0.35, 91) < 0.36 {
             continue;
         }
-        for _ in 0..(12 + (rng.f() * 22.0) as usize) {
-            let p = c + Vec2::new(rng.f() - 0.5, rng.f() - 0.5) * 0.8;
+        // Each stand its own height and age, so the beds stand in masses of several heights,
+        // not one even fringe (the judge, round 261107-0358-2: "thin, sparse, even-height"):
+        // a young green stand a knee high to an old one twice a man's waist, mostly last
+        // year's straw; a fifth of the blades lodged, lying half over.
+        let size = rng.range(0.6, 1.3);
+        let sere = rng.f();
+        for _ in 0..(20 + (rng.f() * 30.0) as usize) {
+            let p = c + Vec2::new(rng.f() - 0.5, rng.f() - 0.5) * 0.9;
             let foot = p.extend(shape(p).min(LEVEL + 0.1)).xzy();
-            let tall = rng.range(0.8, 1.6);
-            let lean = Vec3::new(rng.f() - 0.5, 0.0, rng.f() - 0.5) * tall * 0.35;
-            let dry = rng.f() * 0.6;
+            let long = rng.range(0.8, 1.5) * size;
+            let (tall, over) = if rng.f() < 0.2 { (long * 0.5, 1.6) } else { (long, 0.35) };
+            let lean = Vec3::new(rng.f() - 0.5, 0.0, rng.f() - 0.5) * long * over;
+            let dry = sere * 0.7 + rng.f() * 0.3;
             // Broad enough to read as leaves at the camera (a pixel is about 1 cm): thinner
             // ones alias into dark hair.
             reeds.blade(
                 foot,
                 tall,
-                rng.range(0.016, 0.03),
+                rng.range(0.02, 0.034),
                 rng.f() * 6.283,
                 lean,
                 |t| {

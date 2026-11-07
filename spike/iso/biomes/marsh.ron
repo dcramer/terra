@@ -43,8 +43,15 @@
         // The moon's lane: on the stilled face the default key 0.4 spread into broad blue
         // glows (round 261107-0235); a faint one.
         streaks: (key: 0.1),
-        scum: (colour: Linear(0.035, 0.07, 0.018), amount: 0.6, reach: 0.2, size: 2.4),
-        pads: (count: 0.9, radius: 0.24, colour: Linear(0.035, 0.07, 0.018)),
+        // The face is drawn over a made-up shelving depth (land.rs `seen_depth`), fading in
+        // over about half a metre of wet mud, and the scum and pads mat that margin. At linear
+        // 0.035, 0.07, 0.018 both were unseen under the moon on the black water (round
+        // 261107-0358-2: "no lily mats or scum"); at duckweed's own green (linear 0.09, 0.15, 0.025, clumps 2 m) it lay as a lime
+        // band along every bank and the pads as lime confetti (round 261107-0412): rotting
+        // olive scum in broken clumps, the pads a dark leaf green.
+        shore: 0.12,
+        scum: (colour: Linear(0.05, 0.065, 0.02), amount: 0.6, reach: 0.22, size: 1.2),
+        pads: (count: 1.4, radius: 0.24, colour: Linear(0.035, 0.06, 0.02)),
     ),
     // The ground cover and the debris by the water, the kit's scatter (kit/scatter.rs) over
     // land.rs's maps and the rules: masses with gaps, never an even lawn, sizes several-fold
@@ -110,9 +117,11 @@
     // 261107-0306): 0.3/m at the land, about 0.8/m over the water. Moonlit at its physical
     // in-scatter (glow 1, forward 0.3) it only darkened the water's mirror (round
     // 261107-0307, dark share 0.866 -> 0.876): even scatter (forward 0) and glow 2.5 so it
-    // shows pale over the dark.
+    // shows pale over the dark. At glow 2.5 (round 261107-0308) a faint veil, unseen by the
+    // judge (round 261107-0358-2: "no mist or haze anywhere"): glow 6, so it lifts the mids
+    // where it lies thick, over the channels and in the hollows.
     weather: (wind: (0.86, 0.5), mist: 1.0, layer: (height: 0.35, water: 2.5, drift: 0.9,
-        thick: 0.3, forward: 0.0, glow: 2.5,
+        thick: 0.3, forward: 0.0, glow: 6.0,
         colour: Srgb(0.8, 0.82, 0.85), keylit: true, lamps: false,
         clear: [(-1.8, 1.35, 4.5)])),
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
