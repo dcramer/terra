@@ -31,7 +31,8 @@ use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::window::{ExitCondition, WindowResolution};
 use std::path::PathBuf;
 
-/// `--shot <png>` draws offscreen and saves a still after `--frames`; `--demo` sends the
+/// `--shot <png>` draws offscreen and saves a still after `--frames`, on the film's fixed step
+/// (`FILM_FPS`), so the same code gives the same still; `--demo` sends the
 /// party across the square at `--demo-at`; `--hour day|dusk|night`; `--zoom <metres>`;
 /// `--focus x,z`; `--size WxH`.
 #[derive(Resource, Clone)]
@@ -160,7 +161,10 @@ fn main() {
             ..default()
         }))
         .add_systems(Last, shoot);
-    if args.film > 0 {
+    // A still runs on the film's fixed step too, so the same code gives the same still: in
+    // real time the fires' flicker moved a still's p95 by 0.0025 between shots (iso-kit j1),
+    // past the loop's "unchanged ties" bar (D634).
+    if args.shot.is_some() {
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f64(1.0 / FILM_FPS),
         ));
