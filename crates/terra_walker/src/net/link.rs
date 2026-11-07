@@ -95,6 +95,10 @@ pub struct Link {
     /// for one: it does on its first tick, when its world is made and its clock runs.
     greeted: bool,
     readied: bool,
+    /// Handed on to another realm of the host (a crossing, D640), whose land this game has
+    /// not yet made: the link is kept and nothing is walked or said until it has
+    /// ([`Link::arrived`]).
+    crossing: bool,
     /// Who is in the world, as the server has said.
     players: Vec<String>,
     /// What the server said that is the layers' above to act on (operations, events, the
@@ -130,6 +134,7 @@ impl Link {
             waited: false,
             greeted: false,
             readied: false,
+            crossing: false,
             players: Vec::new(),
             events: Vec::new(),
         }
@@ -181,6 +186,20 @@ impl Link {
         self.welcomed.as_deref()
     }
 
+    /// The realm this game is crossing to, once the host's next server has greeted it: the
+    /// land to make, after which the game says it has [`Link::arrived`].
+    pub fn crossing(&self) -> Option<&[u8]> {
+        self.welcomed.as_deref().filter(|_| self.crossing)
+    }
+
+    /// The land of the realm crossed to is made here: the game walks again, from the
+    /// server's newest word, and on its first tick takes its body there.
+    pub fn arrived(&mut self) {
+        if std::mem::take(&mut self.crossing) {
+            self.waited = true;
+        }
+    }
+
     /// Takes what the server sent, so much time having passed on the wire.
     fn hear(&mut self, passed: std::time::Duration) {
         let mut heard = std::mem::take(&mut self.heard);
@@ -200,6 +219,17 @@ impl Link {
                     self.clock.start(*tick);
                     self.history.clear();
                     (self.answered, self.begun) = (0, false);
+                }
+                // Handed to another realm's server: nothing of the last is kept, and the land
+                // this game has made is no longer the one it is in.
+                Heard::Handed => {
+                    (self.greeted, self.readied, self.crossing) = (false, false, true);
+                    self.welcomed = None;
+                    self.realm.clear();
+                    self.players.clear();
+                    self.history.clear();
+                    (self.answered, self.begun) = (0, false);
+                    (self.tick, self.steering) = (None, None);
                 }
                 // Lost before any welcome: nobody was there to answer.
                 Heard::Closed(Reason::Lost) if self.welcomed.is_none() => {
@@ -234,6 +264,11 @@ impl Link {
 
     fn listen(&mut self, world: &mut World) {
         self.hear(super::TICK);
+        if self.crossing {
+            // Between realms: the link is kept, as while the clock is held.
+            self.wire.flush();
+            return;
+        }
         // A tick is walked, so this game's world is made: it can take its body.
         if self.greeted && !self.readied && self.over.is_none() {
             self.client.ready(&mut self.wire);

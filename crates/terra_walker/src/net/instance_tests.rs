@@ -66,3 +66,101 @@ fn realms_on_one_carrier_each_walk_their_own_and_an_empty_one_freezes() {
         );
     }
 }
+
+/// A joined game handed from one realm to the other (a crossing, D640): it holds, walking
+/// nothing and with no body anywhere, until its game says the next land is made; then it has
+/// a body in the second realm, none in the first, and its walk there is the realm's.
+#[test]
+fn a_joined_game_handed_on_walks_in_the_next_realm_once_its_land_is_made() {
+    use instance::{Instances, walker};
+    let network = Network::new();
+    let mut realms = Instances::new(network.server(), Config::new(VERSION), vec![walker]);
+    for _ in 0..2 {
+        let planet = Planet::smooth(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        let start = planet.ground_at(Vec3::Y * 2100.0);
+        realms.open(planet, start);
+    }
+    let (mut game, player) = joined(&network, rough());
+    // Joined to whatever realm the host has, as from the title screen (D639), not to one it
+    // made beforehand; the link `joined` made is left greeted and never ready, with no body.
+    game.insert_resource(link::Link::join(
+        Box::new(network.connect(rough())),
+        VERSION,
+        &Identity::from_secret([7; 32]),
+        "crosser",
+        Vec::new(),
+    ));
+    let guests = |realms: &mut Instances<_>, realm: usize| -> Vec<Vec3> {
+        let world = realms.realm_mut(realm).world_mut();
+        let mut guests = world.query_filtered::<&Transform, With<Guest>>();
+        guests.iter(world).map(|at| at.translation).collect()
+    };
+    let mut budget = 0.0;
+    let mut run = |realms: &mut Instances<_>, game: &mut World, steps: std::ops::Range<u32>| {
+        for step in steps {
+            network.advance(f64::from(TICK));
+            budget += game.resource::<link::Link>().rate();
+            while budget >= 1.0 {
+                budget -= 1.0;
+                *game.get_mut::<Intent>(player).unwrap() = keys(step);
+                game.run_system_once(link::listen).unwrap();
+                game.run_system_once(walk).unwrap();
+                game.run_system_once(link::record).unwrap();
+                game.run_system_once(link::show).unwrap();
+            }
+            realms.tick(Duration::from_secs_f32(TICK));
+        }
+    };
+    run(&mut realms, &mut game, 0..WARM);
+    assert_eq!(
+        (guests(&mut realms, 0).len(), guests(&mut realms, 1).len()),
+        (1, 0)
+    );
+    let peer = realms
+        .realm(0)
+        .world()
+        .resource::<Host>()
+        .guests
+        .keys()
+        .copied()
+        .next();
+    realms.hand(peer.expect("the first realm has its guest"), 1);
+
+    // Handed on: greeted by the second realm, it holds until its land is made.
+    run(&mut realms, &mut game, WARM..WARM + 200);
+    assert!(
+        game.get_resource::<link::Ended>().is_none(),
+        "the link ended"
+    );
+    let link = game.resource::<link::Link>();
+    assert!(
+        link.crossing().is_some(),
+        "not told the realm it crosses to"
+    );
+    assert_eq!(link.tick(), None, "it walked between realms");
+    assert_eq!(
+        (guests(&mut realms, 0).len(), guests(&mut realms, 1).len()),
+        (0, 0)
+    );
+
+    // Its land made: it takes its body in the second realm and walks as that realm has it.
+    game.resource_mut::<link::Link>().arrived();
+    run(&mut realms, &mut game, WARM + 200..WARM + 600);
+    assert!(
+        game.get_resource::<link::Ended>().is_none(),
+        "the link ended"
+    );
+    let theirs = guests(&mut realms, 1);
+    assert_eq!((guests(&mut realms, 0).len(), theirs.len()), (0, 1));
+    let mine = game
+        .resource::<Movers>()
+        .body(player)
+        .expect("it walks")
+        .position;
+    let off = mine.as_vec3().distance(theirs[0]);
+    assert!(off < 0.5, "{off} m from where the second realm has it");
+    assert!(game.resource::<link::Link>().tick().is_some());
+}
