@@ -366,4 +366,10 @@
     // j5) and the trail's through the whole swing (iso-play j8: at 0.2 the wall's red still
     // tripled, 0.05 to 0.16, over a swing).
     effects: [(preset: "slash", light: 0.05), (preset: "hit-spark", light: 0.25)],
+    // The street captured from a car roof's height in the road's middle, lit back as the
+    // view's environment map (kit/reflect.rs, uc-reflect j1): the sedan's paint and glass
+    // and the shop windows mirror the lamps, signs and fronts, not black. Its diffuse at
+    // 0.4 (j2): at the full 1 it lifted all the shade alike, the lamps' pools against the
+    // dark between them flattened and the saturation fell 0.08 (round 261107-1545).
+    reflect: (at: (0.0, 1.5, -0.5), diffuse: 0.4),
 )
