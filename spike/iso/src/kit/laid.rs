@@ -50,7 +50,9 @@ pub struct Params {
     /// The units' wear (biome.rs `Wear`): x the share split, y the tilt (radians), z the
     /// share broken, w the share gone.
     pub wear: Vec4,
-    /// x how wide (m) the units' joints have opened (`Wear.gap`, 0: the scan's own).
+    /// x how wide (m) the units' joints have opened (`Wear.gap`, 0: the scan's own), y how
+    /// far each unit's width wanders (`Wear.uneven`), z how far in (m) its arris is worn
+    /// round (`Wear.round`).
     pub seams: Vec4,
     /// Each mark's centre (x, z) and half size.
     pub mark_at: [Vec4; MARKS],
@@ -215,7 +217,7 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
             laid.wear.broken,
             laid.wear.missing,
         ),
-        seams: Vec4::new(laid.wear.gap, 0.0, 0.0, 0.0),
+        seams: Vec4::new(laid.wear.gap, laid.wear.uneven, laid.wear.round, 0.0),
         ..default()
     };
     let bad_mark = |m: &Mark| {
@@ -459,6 +461,11 @@ mod tests {
         assert!(p.wear.x > 0.0 && p.wear.y > 0.0 && p.wear.z > 0.0 && p.wear.w > 0.0);
         assert!(p.wear.x <= 1.0 && p.wear.z <= 1.0 && p.wear.w <= 1.0 && p.wear.y < 0.2);
         assert_eq!(params(&laid(None, None), &PLACE).unwrap().wear, Vec4::ZERO);
+        // Its joints opened unevenly and its arrises worn round, in the order the shader
+        // reads them (gap, uneven, round), a share and centimetres.
+        assert!(p.seams.x > 0.005 && p.seams.x < 0.05, "{}", p.seams.x);
+        assert!(p.seams.y > 0.0 && p.seams.y < 1.0, "{}", p.seams.y);
+        assert!(p.seams.z > 0.005 && p.seams.z < 0.1, "{}", p.seams.z);
     }
 
     /// The street's flags (six courses of a running bond, iso-kit j49) are each told apart:

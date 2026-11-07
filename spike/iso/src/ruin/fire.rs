@@ -148,14 +148,15 @@ pub fn spawn(
             9,
             (0.45, 0.7),
         );
-        // One light casting soft shadows, cut off at 8 m: a tight hot pool with the dark
-        // between the fires, as the ARPGs' night frames have (no far light's even wash).
+        // One light casting soft shadows, cut off at 4 m: a tight hot pool about 3 m across
+        // with the dark between the fires, as the ARPGs' night frames have (at 8 m the two
+        // braziers spread "one broad warm wash over the middle third", judge 261107-0507).
         light(
             &mut commands,
             &mut rng,
             at + Vec3::Y * (BOWL + 0.45),
             BRAZIER_LM,
-            8.0,
+            4.0,
             true,
             0.5,
         );
@@ -184,7 +185,7 @@ pub fn spawn(
             &mut rng,
             head + Vec3::Y * 0.25,
             TORCH_LM,
-            6.0,
+            4.0,
             false,
             0.1,
         );

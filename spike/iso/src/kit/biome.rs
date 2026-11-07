@@ -193,6 +193,13 @@ pub struct Wear {
     /// dark as the share of the pixel it covers, so it neither vanishes nor shimmers.
     #[serde(default)]
     pub gap: f32,
+    /// How far each unit's `gap` wanders from the rest, as a fraction (0: all alike), so an
+    /// old floor's joints run wide and narrow, its edges chipped along them.
+    #[serde(default)]
+    pub uneven: f32,
+    /// How far in (m) each piece's arris is worn round, shaded toward its joint (0: sharp).
+    #[serde(default)]
+    pub round: f32,
 }
 
 /// A mark on a laid floor: a rectangle `size` metres (along its own x and z) centred `at`

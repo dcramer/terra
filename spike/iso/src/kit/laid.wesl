@@ -172,11 +172,15 @@ fn flag(uv: vec2<f32>, uv_m: f32, px: f32, p: vec2<f32>, feet: f32) -> Flag {
     // under a pixel at the camera), drawn at least a pixel (`px` metres) wide and as dark as
     // the share of the pixel the joint covers, a box filter's coverage, so it neither
     // vanishes nor shimmers.
+    // Uneven (seams.y): each unit's width its own, its edge chipped along it, so the
+    // joints run wide and narrow as an old court's do.
     var open = 0.0;
+    let chip = ((noise(p * 9.0 + key) - 0.5) * 0.7 + (noise(p * 31.0) - 0.5) * 0.3) * laid.seams.y;
     if laid.seams.x > 0.0 {
-        let e = min(min(q.x, sz.x - q.x), min(q.y, sz.y - q.y));
-        let half = 0.5 * max(laid.seams.x, px);
-        open = (1.0 - smoothstep(half * 0.5, half, e)) * min(1.0, laid.seams.x / max(px, 1e-4));
+        let e = min(min(q.x, sz.x - q.x), min(q.y, sz.y - q.y)) + chip * laid.seams.x;
+        let gap = laid.seams.x * (1.0 + laid.seams.y * (hash(key + 131.0) * 2.0 - 1.0));
+        let half = 0.5 * max(gap, px);
+        open = (1.0 - smoothstep(half * 0.5, half, e)) * min(1.0, gap / max(px, 1e-4));
     }
 
     // Split across its longer side, a third to two thirds along, and a half split again.
@@ -213,6 +217,12 @@ fn flag(uv: vec2<f32>, uv_m: f32, px: f32, p: vec2<f32>, feet: f32) -> Flag {
     seam += (noise(p * 37.0) - 0.5) * 0.006;
     var joint = max(1.0 - smoothstep(0.004, 0.012, seam), open);
     var bevel = 1.0 - smoothstep(0.004, 0.05, seam);
+    // Its arris worn round (seams.z metres in): shaded toward every joint, the chips'
+    // wander in it, as foot traffic and frost round an old flag's edges.
+    if laid.seams.z > 0.0 {
+        let e = min(min(q.x, sz.x - q.x), min(q.y, sz.y - q.y)) + chip * laid.seams.z;
+        bevel = max(bevel, 1.0 - smoothstep(0.0, laid.seams.z, e));
+    }
 
     // Broken across: a wandering crack, the far side sunk and tilted its own way.
     var sunk = 0.0;
@@ -341,11 +351,15 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // Sand and soil washed into the joints over the grime and the drifts (which would bury
     // it before), patchy along them and grainy, so an old court's joints read as earth, not
     // shadow (shape.w, 0: the dark joints alone).
+    // Mostly dark loam and grit (pale sand in every joint drew a crisp light grid, judge
+    // 261107-0507-ruin), the sand only where it has dried in drifts.
     if laid.shape.w > 0.0 {
         let fill = smoothstep(0.05, 0.45, joint) * smoothstep(0.2, 0.6, noise(p * 2.3 + 13.0) + 0.3);
         let grains = mix(0.55, 1.45, hash(floor(p * 70.0) + 17.0));
         let sand = vec3<f32>(0.4, 0.31, 0.2) * grains * (0.8 + 0.4 * noise(p * 9.0));
-        colour = mix(colour, sand, fill * laid.shape.w);
+        let loam = vec3<f32>(0.07, 0.058, 0.045) * grains;
+        let dried = smoothstep(0.6, 0.85, noise(p * 0.8 + 21.0)) * 0.6;
+        colour = mix(colour, mix(loam, sand, dried), fill * laid.shape.w);
     }
 
     // Hairline cracks across some units: thin wandering lines in patches.
@@ -402,7 +416,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // Moss: out of the joints first, then over the units where it is mossiest.
     let tuft = noise(p * 2.3) * 0.6 + noise(p * 7.7 + 2.0) * 0.4;
     mossy = min(mossy + feet * 0.4, 1.0);
-    let in_joints = max(joint, crack) * smoothstep(0.3, 0.6, mossy + (tuft - 0.5) * 0.7);
+    // An earthed joint (shape.w) grows its moss in tufts wherever, not only where mossy.
+    let in_joints = max(joint, crack) * smoothstep(0.3, 0.6, mossy + (tuft - 0.5) * 0.7 + laid.shape.w * 0.22);
     let on_flags = smoothstep(0.62, 0.82, mossy * (0.55 + 0.75 * tuft) + (1.0 - ao) * 0.5);
     let moss = max(in_joints, on_flags) * step(0.5, 8.5 - laid.masks.x);
     let m1 = textureSample(stack, stack_sampler, p / laid.masks.z, MOSS).rgb;

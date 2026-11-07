@@ -12,7 +12,8 @@
         lux: 190.0,
         shadows: (cascades: 2, first: 30.0, far: 60.0, soft: 1.0),
     ),
-    sky: (colour: Srgb(0.45, 0.55, 1.0), nits: 1.5),
+    // Its fill at 0.8 nits (1.5 lifted the unlit flags to purple-grey, judge 261107-0507).
+    sky: (colour: Srgb(0.45, 0.55, 1.0), nits: 0.8),
     // A night's: the moonlit stone dark, the firelight's pools bright.
     ev100: 8.0,
     // Keeps a fire gold and orange where AgX bleaches it beige.

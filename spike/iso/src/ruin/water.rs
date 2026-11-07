@@ -63,7 +63,11 @@ fn reach(p: Vec2) -> f32 {
 /// How deep the pool stands at `p` (m, under 0 dry): shelving in from its line over the sunk
 /// flags, then down where they broke.
 pub fn depth(p: Vec2) -> f32 {
-    (SHORE - reach(p)) * SHELVE + POOL.2 * pool(p)
+    // Down where they broke over half the pool's radius by its broad line, not at the
+    // paving's ragged cut: the cut drew the deep water's edge as an ink hole's (judge
+    // 261107-0507), where now the broken flags show through the shallows, then dim.
+    let r = reach(p);
+    (SHORE - r) * SHELVE + POOL.2 * super::ground::smooth(0.95, 0.4, r)
 }
 
 /// How much of the pool's water is at `p` (0..1): nothing lies or grows in it.
