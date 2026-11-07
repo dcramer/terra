@@ -12,6 +12,7 @@ pub mod effects;
 pub mod ground;
 pub mod laid;
 pub mod light;
+pub mod scatter;
 pub mod street;
 pub mod water;
 

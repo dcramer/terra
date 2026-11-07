@@ -11,9 +11,9 @@ Unknown fields are refused; a parse error names the file, line, column, field an
 - `layout: Ruin | Forest | Marsh`: how the scene is built (the land, where the fight stands, the camera). For now each runs its biome's modules (`ruin/`, `wood/`, `marsh/`); the kit's layouts replace them as its jobs land.
 - `light: (preset: "ruin-night", overrides: (...))`: a preset in `biomes/light/<name>.ron` (`src/kit/light.rs`: hour, key's direction, colour, lux and shadows, sky fill, `ev100`, tone curve, grade, haze) and the numbers this biome changes of it. The preset sets the hour unless `--hour` says.
 - `ground: (layers: [...], broad, scorch)`: up to eight layers, each a scan of the `materials/ground` stack by name (`kit/ground.rs` `STACK`, true sizes) with `mask`, `amount`, `tint`, `breakup` (drifts), `wets`, `triplanar`; one without a material only wets. Drawn by the kit for the forest and marsh (below).
-- `scatter: [(models, density, scale, on)]`, `decals: [(texture, count, size, on)]`, `water: (kind, level, deep)`, `weather: (wind, rain, snow, mist)`, `effects: [(preset, at)]`, `life: [(kind, count)]`.
+- `scatter: [(models | plant, density, scale, on, clump, tilt, sink, over, seed)]` (below), `decals: [(texture, count, size, on)]`, `water: (kind, level, deep)`, `weather: (wind, rain, snow, mist)`, `effects: [(preset, at)]`, `life: [(kind, count)]`.
 
-The fields after `light` but `ground` and the marsh's `water` are parsed and carried, each naming the iso-kit job that draws it; the ruin, forest and marsh still draw those from their own code.
+The fields after `light` but `ground`, `scatter` (marsh and street) and the marsh's `water` are parsed and carried, each naming the iso-kit job that draws it; the ruin, forest and marsh still draw those from their own code.
 
 ## The kit's modules
 
@@ -36,6 +36,11 @@ The fields after `light` but `ground` and the marsh's `water` are parsed and car
 - The body absorbs per channel by depth (Beer-Lambert, `absorb` a metre) and scatters `deep`, lit as the ground; premultiplied, so the bed shows through the shallows. `shore` fades it in at the bank; `film` is a fixed depth for wet floors.
 - The mirror is planar (Unreal's and Unity's flat water): a camera mirrored under the face's level renders the scene into a half-size HDR texture before the main one, the faces on layer 9 it does not see; the face samples it where it projects, moved by the ripples' slope (`mirror.distort`), at Fresnel's 2% times `lift`; `sky` and `nits` its clear colour. Lights light a layer-9 face: Bevy 0.20 filters lights per view, not per mesh.
 - Ripples are one tiling slope map read at `fine` and `broad` metres drifting downwind (`weather.wind`); `calm` stills the margin. The key's lane and each `Glint`'s streak are pool.wesl's anisotropic Beckmann lobe (`streaks`); a `Glint` is a point or spot light, the six brightest at the eye kept (`seen`).
+
+## The scatter (`src/kit/scatter.rs`)
+
+- A set is `models` (GLBs, one picked a place) or a `plant` (Tuft, Fern, Leaves: wood/lawn.rs's cards, `tint` a palette walked by broad noise); `density` a m² at a full mask and a clump's heart; `on` a `Site(..)` of the layout's maps or a baked rule (Mud, Wet, Moss, Snow, Grime, Steep); `clump: (broad, fine, amount)` two-scale noise gathering it; `scale` log-uniform; `tilt` degrees, `sink` m; `over: (from, to)` m over the water's face, fading at both ends; sets sharing a `seed` share clumps.
+- A layout offers its `Ground` (maps, height, water, baked rules, `keep` for the fight and props, the span): the marsh (marsh/lawn.rs) and the street (`strew`) so far. `budget` prints each set's count and triangles once loaded. Tests: density follows the mask, sizes spread, none outside `over`, clumps gather, a bad set names its fix.
 
 ## Adding a biome
 

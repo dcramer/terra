@@ -27,7 +27,7 @@ pub struct Biome {
     /// The ground's layers and how they blend (kit/ground.rs draws it, iso-kit j6).
     #[serde(default)]
     pub ground: Ground,
-    /// Props and plants strewn by rule (iso-kit j4).
+    /// Props and plants strewn by rule (kit/scatter.rs, iso-kit j13).
     #[serde(default)]
     pub scatter: Vec<Scatter>,
     /// Flat marks laid on the ground (iso-kit j4).
@@ -205,17 +205,58 @@ pub enum Mask {
     Steep,
 }
 
-/// A scatter set: models (paths under `assets/`) strewn at `density` a square metre, scaled
-/// between `scale`, only where `on` lays (everywhere when `None`).
+/// A scatter set (kit/scatter.rs): models (paths under `assets/`, one picked each) or the
+/// kit's own plant clumps, strewn at up to `density` a square metre where `on` lies full
+/// (everywhere when `None`) and its clumps gather; each scaled between `scale` evenly in
+/// the logarithm (sizes several-fold apart), turned at random, leaned up to `tilt` degrees
+/// and sunk `sink` metres; only `over` the water's face between its two heights (m) when
+/// given. Sets with the same `seed` gather in the same clumps.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Scatter {
+    #[serde(default)]
     pub models: Vec<String>,
+    #[serde(default)]
+    pub plant: Option<Plant>,
     pub density: f32,
     #[serde(default = "unit")]
     pub scale: (f32, f32),
     #[serde(default)]
     pub on: Option<Mask>,
+    /// Noise at two scales (broad m, fine m) and how much it gathers the set, 0 (even) to 1
+    /// (only in the clumps' hearts): never an even lawn.
+    #[serde(default = "gather")]
+    pub clump: (f32, f32, f32),
+    #[serde(default)]
+    pub tilt: f32,
+    #[serde(default)]
+    pub sink: f32,
+    #[serde(default)]
+    pub over: Option<(f32, f32)>,
+    #[serde(default)]
+    pub seed: u32,
+}
+
+fn gather() -> (f32, f32, f32) {
+    (6.0, 1.5, 0.5)
+}
+
+/// The kit's plant clumps (wood/lawn.rs's cards): a kind, tinted between `tint`'s colours
+/// by broad noise and darkened at random, and a flower in some (0 to 1).
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Plant {
+    pub kind: PlantKind,
+    pub tint: Vec<(f32, f32, f32)>,
+    #[serde(default)]
+    pub flowers: f32,
+}
+
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlantKind {
+    Tuft,
+    Fern,
+    Leaves,
 }
 
 /// Decals: a texture (a path under `assets/`) laid `count` times, `size` metres across

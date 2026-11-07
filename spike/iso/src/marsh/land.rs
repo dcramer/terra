@@ -112,7 +112,7 @@ pub fn shelf(h: f32) -> f32 {
 /// roots breaking through; the path wet mud down its middle and packed earth at its edges,
 /// and patches a couple of metres across (moss cushions, leaf litter) so no hummock is one
 /// even carpet of grass (blind-marsh3).
-fn cover(p: Vec2, _n: Vec3, h: f32) -> ([f32; 4], [f32; 2], [f32; 2]) {
+pub fn cover(p: Vec2, _n: Vec3, h: f32) -> ([f32; 4], [f32; 2], [f32; 2]) {
     let margin = smooth(0.22, 0.02, h - LEVEL);
     let zone = fbm(p * 0.16, 31);
     let patch = fbm(p * 0.45, 47);

@@ -257,6 +257,28 @@ pub struct Masks {
     pub b: Vec<[u8; 4]>,
 }
 
+impl Masks {
+    /// A rule's value at `p` (0 to 1, the nearest texel; 0 off the land), or `None` for a
+    /// mask that is not a baked rule (Base, Wear, a Site): what kit/scatter.rs reads.
+    pub fn at(&self, mask: &Mask, p: Vec2) -> Option<f32> {
+        let (map, c) = match mask {
+            Mask::Mud => (&self.a, 0),
+            Mask::Wet => (&self.a, 1),
+            Mask::Moss => (&self.a, 2),
+            Mask::Snow => (&self.a, 3),
+            Mask::Grime => (&self.b, 0),
+            Mask::Steep => (&self.b, 1),
+            _ => return None,
+        };
+        let g = ((p + EXTENT) / TEXEL).floor();
+        let n = self.n as f32;
+        if g.x < 0.0 || g.y < 0.0 || g.x >= n || g.y >= n {
+            return Some(0.0);
+        }
+        Some(map[g.y as usize * self.n + g.x as usize][c] as f32 / 255.0)
+    }
+}
+
 /// A texel's middle.
 fn texel(i: usize, j: usize) -> Vec2 {
     Vec2::new(

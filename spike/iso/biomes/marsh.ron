@@ -6,8 +6,9 @@
 (
     kind: [Dusk, Water],
     refs: "marsh",
-    // Its scatter, effects and life are still marsh/'s own code; they move here as the kit's
-    // jobs land. Its water is the kit's; the moon's lane on it reads this light's key.
+    // Its reeds (plants.rs), effects and life are still marsh/'s own code; they move here as
+    // the kit's jobs land. Its water and scatter are the kit's; the moon's lane on the water
+    // reads this light's key.
     layout: Marsh,
     light: (preset: "marsh-dusk"),
     // The kit's ground (kit/ground.rs) over marsh/land.rs's maps (terrain.rs `SITES`).
@@ -37,5 +38,37 @@
         scum: (colour: Linear(0.035, 0.07, 0.018), amount: 0.6, reach: 0.2, size: 2.4),
         pads: (count: 0.9, radius: 0.24, colour: Linear(0.035, 0.07, 0.018)),
     ),
+    // The ground cover and the debris by the water, the kit's scatter (kit/scatter.rs) over
+    // land.rs's maps and the rules: masses with gaps, never an even lawn, sizes several-fold
+    // apart; at the water's line a mat of dead rush, sticks and stones half sunk in the mud.
+    scatter: [
+        // Sedge tussocks on the hummocks' grass, olive to straw.
+        (plant: (kind: Tuft, tint: [(0.34, 0.5, 0.14), (0.28, 0.48, 0.18), (0.62, 0.47, 0.18)]),
+            density: 3.0, scale: (0.14, 0.55), on: Site("grass"), clump: (5.0, 1.2, 0.6),
+            over: (0.05, 9.0), seed: 1),
+        // Ferns in the moss's cushions, and a few real ferns among them.
+        (plant: (kind: Fern, tint: [(0.18, 0.46, 0.22), (0.3, 0.52, 0.16)]),
+            density: 2.0, scale: (0.2, 0.6), on: Site("moss"), clump: (4.0, 1.0, 0.7),
+            over: (0.08, 9.0), seed: 2),
+        (models: ["models/nature/forest/fern.glb"], density: 0.12, scale: (0.2, 0.5),
+            on: Site("moss"), clump: (4.0, 1.0, 0.7), tilt: 6.0, over: (0.08, 9.0), seed: 2),
+        // Low shrubs over the leaf litter: bog myrtle's green to a bilberry's red-brown.
+        (plant: (kind: Leaves, tint: [(0.24, 0.44, 0.16), (0.46, 0.26, 0.14)]),
+            density: 1.8, scale: (0.22, 0.75), on: Site("leaves"), clump: (7.0, 1.5, 0.7),
+            over: (0.08, 9.0), seed: 3),
+        // The bank's mat: dead rush, straw to wet brown, thick at the water's line, a few
+        // marsh marigolds in it.
+        (plant: (kind: Tuft, tint: [(0.42, 0.34, 0.16), (0.3, 0.26, 0.12), (0.22, 0.24, 0.1)],
+            flowers: 0.04),
+            density: 6.0, scale: (0.15, 0.45), on: Mud, clump: (3.0, 0.8, 0.5),
+            over: (-0.04, 0.2), seed: 4),
+        // Sticks and branches half sunk at the edge, and stones in the mud.
+        (models: ["models/props/Log.glb"], density: 0.25, scale: (0.15, 0.5), on: Mud,
+            clump: (4.0, 1.0, 0.5), tilt: 10.0, sink: 0.03, over: (-0.08, 0.25), seed: 5),
+        (models: ["models/nature/forest/mossy_rock_a_1.glb", "models/nature/forest/mossy_rock_a_3.glb",
+            "models/nature/forest/mossy_rock_b_2.glb", "models/nature/forest/mossy_rock_b_5.glb"],
+            density: 0.3, scale: (0.03, 0.12), on: Mud, clump: (4.0, 1.0, 0.5), sink: 0.01,
+            over: (-0.1, 0.3), seed: 5),
+    ],
     weather: (wind: (0.86, 0.5)),
 )

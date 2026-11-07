@@ -371,8 +371,58 @@ impl Sheets {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins((super::laid::plugin, super::water::plugin))
-        .add_systems(Startup, spawn);
+    app.add_plugins((
+        super::laid::plugin,
+        super::water::plugin,
+        super::scatter::plugin,
+    ))
+    .add_systems(Startup, (spawn, strew));
+}
+
+/// How far down the street the scatter is strewn each side of the focus (m): the frame and
+/// a margin.
+const STREWN: f32 = 18.0;
+
+/// The biome's scatter over the street (kit/scatter.rs): on its maps (`SITES`), the road at
+/// 0 and the pavements the kerb's rise up, kept off each prop's foot.
+fn strew(
+    mut commands: Commands,
+    asset: Res<AssetServer>,
+    biome: Res<Biome>,
+    mut budget: ResMut<super::scatter::Budget>,
+) {
+    let Some(st) = biome.street.as_ref() else {
+        return;
+    };
+    let (half, _, wall) = st.edges();
+    let site = |k: usize, p: Vec2| [st.gutter(p), st.puddled(p), st.walls(p)][k];
+    let height = |p: Vec2| if p.y.abs() <= half { 0.0 } else { st.kerb.1 };
+    let feet: Vec<Vec2> = st
+        .props
+        .iter()
+        .flat_map(|p| p.at.iter().map(|x| st.spot(p.side, p.line, *x, p.out).xz()))
+        .collect();
+    let keep = |p: Vec2| feet.iter().any(|f| f.distance(p) < 0.7);
+    let g = super::scatter::Ground {
+        sites: &SITES,
+        site: &site,
+        height: &height,
+        water: None,
+        rules: None,
+        keep: &keep,
+        span: (
+            Vec2::new(st.focus.0 - STREWN, -wall),
+            Vec2::new(st.focus.0 + STREWN, wall),
+        ),
+    };
+    super::scatter::spawn(
+        &mut commands,
+        &asset,
+        &mut budget,
+        &biome.refs,
+        &biome.scatter,
+        &g,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
