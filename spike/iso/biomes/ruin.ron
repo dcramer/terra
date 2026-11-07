@@ -21,7 +21,9 @@
             // judge 261107-0250-ruin): dark loam and grit, sand where it dried, moss in
             // tufts along them (kit/laid.wesl).
             sand: 0.75,
-            // No drawn crack web (at 0.25 "crack lines that look drawn on", judge 261107-0150).
+            // No darkened hairlines (at 0.25 "crack lines that look drawn on", judge
+            // 261107-0150); the moss still grows in the crack web, which the judges keep:
+            // without it the court lost slight in both orders ("intact, clean slabs", 261107-1015).
             cracks: 1.0,
             grain: (0.5, 0.6),
             moss: Site("mossy"),

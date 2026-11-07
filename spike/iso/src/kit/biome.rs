@@ -132,7 +132,9 @@ pub struct Laid {
     /// (filled): an old court's joints are earth, not shadow (judge 261107-0250-ruin).
     #[serde(default)]
     pub sand: f32,
-    /// The factor on the hairline cracks' colour (1: none).
+    /// The factor on the hairline cracks' colour (1: none). The moss still grows along the
+    /// crack web whatever it is (laid.wesl's `in_joints`): the ruin's judges keep that web
+    /// (round 261107-1015, without it lost slight in both orders).
     #[serde(default = "one")]
     pub cracks: f32,
     /// The detail grain (D362): metres it repeats, how strongly it shows (0 none).
