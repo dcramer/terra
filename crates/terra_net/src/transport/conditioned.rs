@@ -140,10 +140,14 @@ impl<T: ClientTransport> ClientTransport for Conditioned<T> {
     fn advance(&mut self, elapsed: Duration) {
         self.now += elapsed.as_micros() as u64;
         self.inner.advance(elapsed);
-        for (lane, bytes) in due(&mut self.up, self.now) {
-            self.inner.send(lane, &bytes);
+        let ready = due(&mut self.up, self.now);
+        for (lane, bytes) in &ready {
+            self.inner.send(*lane, bytes);
         }
-        self.inner.flush();
+        // Only when something went: a carrier frames every flush.
+        if !ready.is_empty() {
+            self.inner.flush();
+        }
     }
 }
 

@@ -19,8 +19,10 @@ use crate::proto::Stamp;
 pub const MOST_NUDGE: f64 = 0.02;
 /// How far ahead of the tick it was welcomed at a client starts: about a 100 ms round trip.
 const FIRST_LEAD: u32 = 8;
-/// The lowest margin aimed at, ticks: the next tick's intent and one spare.
-const LEAST_MARGIN: i32 = 2;
+/// The lowest margin aimed at, ticks: the next tick's intent, one spare, and two more: a client
+/// sends every second tick, so when a packet is lost the intents it carried come with the
+/// next, two ticks later, and must still be in time.
+const LEAST_MARGIN: i32 = 4;
 /// A lowest margin further than this from its target is jumped to, ticks.
 const JUMP_PAST: i32 = 4;
 /// The longest a jump's hold lasts, in the server's ticks, should the stamp that ends it
@@ -29,8 +31,11 @@ const MOST_HOLD: u32 = 256;
 /// The margins kept to take the lowest of: a second of stamps at 32 a second.
 const KEPT: usize = 32;
 /// How many margins must be kept before being early is believed enough to jump back: half a
-/// second. Being late is believed at once.
+/// second.
 const SURE: usize = 16;
+/// How many readings running must be far late before the clock jumps ahead: an eighth of a
+/// second of them.
+const LATE_RUN: u32 = 4;
 /// The nudge a tick of error asks for.
 const NUDGE_A_TICK: f64 = 0.01;
 
@@ -46,6 +51,8 @@ pub struct Clock {
     /// No margin has been read since the start or the last jump: the first is believed at
     /// once, early or late, so a clock far out is put right on its first reading.
     fresh: bool,
+    /// How many readings running have been far late.
+    late: u32,
     /// The newest stamp's tick taken.
     heard: Option<u32>,
     /// After a jump, stamps are not believed until the server holds an intent of the new
@@ -101,12 +108,29 @@ impl Clock {
         self.margins[self.at] = stamp.margin;
         self.at = (self.at + 1) % KEPT;
         self.held = (self.held + 1).min(KEPT);
-        let over = self.over();
-        let believed = self.fresh || over < 0 || self.held >= SURE;
+        // A jump voids what was predicted, a dozen ticks of it, so it is for a clock truly
+        // out: the first reading after a start or a jump; readings late several times
+        // running (one late reading is a lost packet, which the nudge answers); or the
+        // lowest of half a second still early.
+        let reading = i32::from(stamp.margin) - LEAST_MARGIN;
+        self.late = if reading < -JUMP_PAST {
+            self.late + 1
+        } else {
+            0
+        };
+        let lowest = self.over();
+        let over = if self.fresh && reading.abs() > JUMP_PAST || self.late >= LATE_RUN {
+            reading
+        } else if lowest > JUMP_PAST && self.held >= SURE {
+            lowest
+        } else {
+            0
+        };
         self.fresh = false;
-        if over.abs() <= JUMP_PAST || !believed {
+        if over == 0 {
             return false;
         }
+        self.late = 0;
         let jumped = next.saturating_add_signed(-over);
         self.next = Some(jumped);
         (self.held, self.at, self.fresh) = (0, 0, true);
@@ -176,12 +200,12 @@ mod tests {
     }
 
     #[test]
-    fn the_margin_is_held_near_two_ticks_on_any_round_trip() {
+    fn the_margin_is_held_near_four_ticks_on_any_round_trip() {
         // 16 ms, 100 ms, 300 ms and 600 ms there and back, a tick at a time.
         for (up, down) in [(1, 0), (3, 3), (10, 9), (19, 19)] {
             let margins = held(up, down, 1, 20);
             assert!(
-                margins.iter().all(|margin| (1..=4).contains(margin)),
+                margins.iter().all(|margin| (3..=6).contains(margin)),
                 "{up}+{down} ticks: {margins:?}"
             );
         }
@@ -200,7 +224,7 @@ mod tests {
                 "{burst} ticks a frame: an intent {low} ticks late"
             );
             assert!(
-                *high <= burst as i32 + 6,
+                *high <= burst as i32 + 8,
                 "{burst} ticks a frame: {high} ticks early at most"
             );
         }

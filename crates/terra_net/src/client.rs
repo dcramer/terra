@@ -107,11 +107,15 @@ impl Entity {
     }
 }
 
-/// How many packets carry an intent (D651): three, so two lost in a row lose nothing. Every
-/// packet not yet acknowledged was first sent, and at a round trip of 100 ms that is seven
-/// intents a packet, three quarters of what a player sends, where a third lost in a row is
-/// one in a million at 1% loss and costs one correction.
-const REPEATS: usize = 3;
+/// A client's packet goes every this many ticks, as the server's does: half the packets, and
+/// half the carrier's framing, which was most of what a player sent. An intent waits a tick
+/// at most, which the clock's margin takes up.
+const SEND_EVERY: u32 = 2;
+/// How many intents a packet carries (D651): six, so each goes in three packets and two lost
+/// in a row lose nothing. Every one not yet acknowledged was first sent: at a round trip of
+/// 100 ms that was seven a packet every tick, 13 kB/s up a player in the game, where a third
+/// packet lost in a row is one in a million at 1% loss and costs one correction.
+const REPEATS: usize = 6;
 
 /// How many events' numbers are remembered: more than are ever unacknowledged at once.
 const HEARD_KEPT: usize = 64;
@@ -131,6 +135,8 @@ pub struct Client {
     /// Its intents the server is not known to hold, oldest first, a tick each.
     intents: VecDeque<(u32, Vec<u8>)>,
     closed: bool,
+    /// How many times it has been asked to send: one in [`SEND_EVERY`] does.
+    calls: u32,
     /// The tick it was let into its room: state from before is another room's.
     floor: u32,
     /// The numbers of the events lately heard, so a copy is not heard twice.
@@ -373,8 +379,8 @@ impl Client {
         Ok(())
     }
 
-    /// Its intent for a tick, to go up with this packet and the next two, or fewer if the
-    /// server is known to hold it sooner. Ticks are given in order, one each; a gap starts
+    /// Its intent for a tick, to go up in the next three packets, or fewer if the server is
+    /// known to hold it sooner. Ticks are given in order, one each; a gap starts
     /// the run again.
     pub fn intent(&mut self, tick: u32, bytes: Vec<u8>) {
         if self
@@ -390,8 +396,13 @@ impl Client {
         }
     }
 
-    /// Sends a state packet: what has arrived, and the intents not yet known to have.
+    /// Called each tick: every second one sends a state packet, saying what has arrived and
+    /// carrying the last intents.
     pub fn send(&mut self, transport: &mut impl ClientTransport) {
+        self.calls = self.calls.wrapping_add(1);
+        if !self.calls.is_multiple_of(SEND_EVERY) {
+            return;
+        }
         let mut to = Writer::default();
         self.acks.outgoing().write(&mut to);
         self.intents

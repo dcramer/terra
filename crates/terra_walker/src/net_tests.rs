@@ -175,10 +175,13 @@ fn a_guest_is_walked_by_the_worlds_own_walk_and_told_its_body_and_the_hosts() {
     let (mine, other) = bot.mine_and_other();
     let movers = world.resource::<Movers>();
     let own = Own::decoded(&mine.part(OWN).expect("its own body").newer.bytes).expect("reads");
+    let apart = own
+        .position
+        .distance(movers.body(guest).expect("the guest's body").position);
+    // Exact but for what a body at rest still settles between two ticks: nanometres.
     assert!(
-        own.position
-            .distance(movers.body(guest).expect("the guest's body").position)
-            < 1.0e-9
+        apart < 1.0e-6,
+        "its own body is told {apart} m from where the mover has it"
     );
     let shown =
         Shown::decoded(&other.part(SHOWN).expect("the host, shown").newer.bytes).expect("reads");

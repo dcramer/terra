@@ -671,7 +671,11 @@ impl Server {
                 replicate::send(session, &world, peer, transport, &mut self.scratch);
             }
         }
-        transport.flush();
+        // On the ticks state goes: a carrier frames every flush, and a flush a tick was
+        // half of what went down. An operation ordered on the tick between waits one tick.
+        if tick.is_multiple_of(self.config.send_every) {
+            transport.flush();
+        }
         self.tick += 1;
     }
 }
