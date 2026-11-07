@@ -463,11 +463,12 @@ fn autosave(
     }
 }
 
-/// Writes the game down as it closes.
+/// Writes the game down as it closes, or as its world is left for the title screen.
 #[allow(clippy::too_many_arguments)]
-fn save_on_exit(
+pub(super) fn save_on_exit(
     clock: Res<Clock>,
     mut exits: MessageReader<AppExit>,
+    leaving: Option<Res<super::title::Leaving>>,
     path: Res<SavePath>,
     (planet, felled): (Res<Planet>, FelledWoods),
     (site, offcuts): (Res<Site>, Res<Offcuts>),
@@ -479,7 +480,7 @@ fn save_on_exit(
     people: Query<(&Person, &Transform), Without<Player>>,
     player: Single<PlayerParts, IsLocalPlayer>,
 ) {
-    if exits.read().next().is_some() {
+    if exits.read().next().is_some() || leaving.is_some() {
         let save = gather(
             &clock,
             (&planet, &felled),

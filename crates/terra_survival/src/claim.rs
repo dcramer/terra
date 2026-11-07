@@ -106,7 +106,7 @@ pub fn plugin(app: &mut App) {
             Update,
             (
                 (track, settle.run_if(terra_world::instance::in_world)).chain(),
-                show,
+                show.run_if(terra_world::instance::in_world),
             ),
         )
         .add_systems(FixedUpdate, grow.in_set(Sim::World));

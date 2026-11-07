@@ -329,21 +329,19 @@ pub(crate) fn play(args: &[String]) -> bool {
     }
 }
 
-/// The game's exit codes asking to be started again, as the title screen's choices need a
-/// fresh process (`terra_game::play::title`, D579): the yard is another level, made as the
-/// game starts, and a world left for the title screen cannot be emptied in place. The game
-/// is started again here, with the same build and profiling, so a session stays in one
-/// terminal and each of its games is reported.
-const AGAIN_ON_TITLE: i32 = 75;
+/// The game's exit code asking to be started again on the yard, which the title screen's
+/// choice of it needs a fresh process for (`terra_game::play::title`, D579): the yard is
+/// another level, made as the game starts. The game is started again here, with the same
+/// build and profiling, so a session stays in one terminal and each of its games is
+/// reported. A world is left for the title screen without ending the game.
 const AGAIN_ON_YARD: i32 = 76;
 
 /// Whether the game, ended with `code`, asked to be started again, and if so what it plays
-/// next: the title screen (no choice) or the yard. The launch's choice decides that now, so
+/// next: the yard. The launch's choice decides that now, so
 /// a `--title` among the game's own arguments (how a script opens the title screen) goes,
 /// or the yard asked for would open on the title screen again.
 fn again(code: Option<i32>, launch: &mut Launch, extra: &mut Vec<String>) -> bool {
     launch.choice = match code {
-        Some(AGAIN_ON_TITLE) => None,
         Some(AGAIN_ON_YARD) => Some(Choice::Yard),
         _ => return false,
     };

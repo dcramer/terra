@@ -245,21 +245,15 @@ fn after(code: Option<i32>) -> Option<Vec<String>> {
 }
 
 #[test]
-fn the_game_asking_to_start_again_plays_the_title_screen_or_the_yard() {
-    assert_eq!(games_code("AGAIN_ON_TITLE"), AGAIN_ON_TITLE);
+fn the_game_asking_to_start_again_plays_the_yard() {
     assert_eq!(games_code("AGAIN_ON_YARD"), AGAIN_ON_YARD);
     let rest = ["--press", "enter@140", "--shots", "a@120,400"];
     // The yard, and only the yard: the first game's `--title` is not given again.
     let yard = [&["--experiment", "play", "--level", "yard"][..], &rest].concat();
     assert_eq!(after(Some(games_code("AGAIN_ON_YARD"))), Some(args(&yard)));
-    // The title screen, asked for once.
-    let title = [&["--experiment", "play", "--title"][..], &rest].concat();
-    assert_eq!(
-        after(Some(games_code("AGAIN_ON_TITLE"))),
-        Some(args(&title))
-    );
-    // Ending well, failing, panicking, or killed: the session is over.
-    for code in [None, Some(0), Some(1), Some(101)] {
+    // Ending well, failing, panicking, killed, or the code that once asked for the title
+    // screen (a world is left for it in place now): the session is over.
+    for code in [None, Some(0), Some(1), Some(75), Some(101)] {
         assert_eq!(after(code), None, "{code:?}");
     }
 }

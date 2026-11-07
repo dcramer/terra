@@ -15,6 +15,10 @@
 mod menu;
 mod view;
 
+pub use leaving::Leaving;
+mod leaving;
+mod remote;
+
 use super::daylight::Clock;
 use super::options::OptionsMenu;
 use super::worlds::{self, Root};
@@ -44,6 +48,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(OnEnter(Screen::Title), (view::show, hold))
         .add_systems(OnExit(Screen::Title), (view::hide, release))
         .add_systems(OnEnter(Screen::Playing), offer)
+        .add_plugins((leaving::plugin, remote::plugin))
         .add_systems(
             Update,
             quit_to_title
@@ -127,12 +132,15 @@ fn release(
     mut commands: Commands,
     before: Option<Res<Before>>,
     mut options: ResMut<Options>,
-    mut clock: ResMut<Clock>,
+    clock: Option<ResMut<Clock>>,
 ) {
     if let Some(before) = before {
         options.vantage = before.vantage;
         options.vantage_ground = before.ground;
-        clock.hour = before.hour;
+        // A world crossed to from the screen has its own clock, made as it is entered.
+        if let Some(mut clock) = clock {
+            clock.hour = before.hour;
+        }
         commands.remove_resource::<Before>();
     }
 }
@@ -228,6 +236,7 @@ fn act(
                     loaded.seed,
                     options.radius_m / 1000.0
                 );
+                commands.queue(leaving::nobody);
                 commands.queue(Cross(WorldSpec {
                     seed,
                     ..loaded.clone()
@@ -281,12 +290,11 @@ fn act(
     }
 }
 
-/// The exit codes asking `cargo xtask play` to start the game again (its launcher's `again`
-/// reads the same numbers), on the title screen or on the yard. The yard is another level,
-/// made as the game starts, and a world played cannot yet be emptied in place for another,
-/// so each needs a fresh game; the launcher starts it in the same terminal, with the same
-/// build and profiling, so one session (and its reports) runs on (D579).
-pub const AGAIN_ON_TITLE: u8 = 75;
+/// The exit code asking `cargo xtask play` to start the game again on the yard (its
+/// launcher's `again` reads the same number). The yard is another level, made as the game
+/// starts, so it needs a fresh game; the launcher starts it in the same terminal, with the
+/// same build and profiling, so one session (and its reports) runs on (D579). A world is
+/// left for the title screen in place (`leaving`).
 pub const AGAIN_ON_YARD: u8 = 76;
 
 /// What the log says as the game ends to start again.
@@ -301,12 +309,11 @@ fn offer(mut menu: ResMut<OptionsMenu>) {
     menu.offers_title = true;
 }
 
-/// Quit to title: the game is saved as it ends (`save`'s `save_on_exit`) and starts again on
-/// the title screen.
-fn quit_to_title(mut menu: ResMut<OptionsMenu>, mut exit: MessageWriter<AppExit>) {
+/// Quit to title: the world is left for the title screen (`leaving`), saved as it goes.
+fn quit_to_title(mut commands: Commands, mut menu: ResMut<OptionsMenu>) {
     if std::mem::take(&mut menu.quit_to_title) {
-        info!("{}", again("the title screen", AGAIN_ON_TITLE));
-        exit.write(AppExit::from_code(AGAIN_ON_TITLE));
+        menu.open = false;
+        commands.insert_resource(Leaving::default());
     }
 }
 
@@ -314,25 +321,18 @@ fn quit_to_title(mut menu: ResMut<OptionsMenu>, mut exit: MessageWriter<AppExit>
 mod tests {
     use super::*;
 
-    /// What the game does in a frame where quit to title was or was not chosen: how it
-    /// ends, and whether the request is still there.
-    fn quitting(asked: bool) -> (Vec<AppExit>, bool) {
+    #[test]
+    fn quit_to_title_asks_once_to_leave_the_world_and_closes_the_menu() {
         let mut world = World::new();
-        world.init_resource::<Messages<AppExit>>();
         let mut menu = OptionsMenu::default();
-        menu.offers_title = true;
-        menu.quit_to_title = asked;
+        (menu.open, menu.offers_title, menu.quit_to_title) = (true, true, true);
         world.insert_resource(menu);
         world.run_system_cached(quit_to_title).unwrap();
-        let exits = world.resource_mut::<Messages<AppExit>>().drain().collect();
-        (exits, world.resource::<OptionsMenu>().quit_to_title)
-    }
-
-    #[test]
-    fn quit_to_title_ends_the_game_asking_to_start_again_on_the_title_screen() {
-        let (exits, still_asked) = quitting(true);
-        assert_eq!(exits, vec![AppExit::from_code(AGAIN_ON_TITLE)]);
-        assert!(!still_asked, "the request is taken, so it is done once");
-        assert_eq!(quitting(false).0, vec![]);
+        assert!(world.contains_resource::<Leaving>());
+        let menu = world.resource::<OptionsMenu>();
+        assert!(!menu.quit_to_title && !menu.open);
+        world.remove_resource::<Leaving>();
+        world.run_system_cached(quit_to_title).unwrap();
+        assert!(!world.contains_resource::<Leaving>(), "asked once");
     }
 }

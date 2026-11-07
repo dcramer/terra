@@ -288,7 +288,7 @@ impl Plugin for SkyPlugin {
                 // there: none is while the world is generated (D623).
                 update
                     .run_if(
-                        resource_changed::<Sky>
+                        resource_exists_and_changed::<Sky>
                             .or_eager(resource_exists_and_changed::<Tweaks>)
                             .or_eager(resource_exists_and_changed::<Clouds>)
                             .or_eager(resource_added::<AirPicture>),

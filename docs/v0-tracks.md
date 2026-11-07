@@ -4,9 +4,9 @@ Each of [v0's](v0-goals.md) tracks (D589): what it has, what it needs and when i
 
 ## Front (1)
 
-- **Have**: the title screen (D579, `--title`): Continue, Worlds, New world, The yard, Settings, Quit. Several worlds, each with a name and mode, kept on disk. Deleting asks first.
-- **Need**: a seed on New world, rolled by default, typed if wanted, kept in `world.ron` and shown in the list. New world options kept few: name, mode, seed. Host and Join. A screen for the creator of a few sliders (D111), which has none yet (`terra_walker::appearance` holds the look), so two players can tell each other apart. Quit to title without restarting the program, which a crossing's leaving should now make possible. A plain message for every way a join fails: wrong version, no answer, world full, connection lost.
-- **Done when**: a scripted run makes two worlds from different seeds, sees different land, and returns to the title and loads the first, in one process.
+- **Have**: the title screen (D579, `--title`): Continue, Worlds, New world, The yard, Settings, Quit. Several worlds, each with a name, mode and seed (rolled, or typed; D596), kept on disk. Deleting asks first. Quit to title leaves the world in place, with no new process (launcher.md).
+- **Need**: Host and Join, with a plain message for every way a join fails: wrong version, no answer, world full, connection lost (netcode.md). A screen for the creator of a few sliders (D111), which has none yet (`terra_walker::appearance` holds the look), so two players can tell each other apart.
+- **Done when**: a scripted run makes two worlds from different seeds, sees different land, and returns to the title and loads the first, in one process. It does: `node tools/sandbox/title.ts`.
 
 ## Realms (2)
 

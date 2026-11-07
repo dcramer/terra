@@ -67,6 +67,9 @@ pub struct Menu {
     /// Where the next rolled seed comes from: the screen sets it from the clock as it opens
     /// (`super::open`); each roll steps it on (`terra_gen::hash::splitmix64`).
     pub dice: u64,
+    /// What the screen tells the player until they next choose: why the world they were in
+    /// was left, when it was not their choice.
+    pub notice: Option<String>,
 }
 
 /// The most digits a seed takes: a 64-bit number's.
@@ -83,6 +86,7 @@ impl Menu {
             seed: String::new(),
             seed_typed: false,
             dice: 0,
+            notice: None,
         };
         // Continue first when there is a world to continue, else New world.
         menu.at = usize::from(menu.worlds.is_empty()) * 2;
@@ -171,6 +175,7 @@ impl Menu {
         if !self.enabled(item) {
             return None;
         }
+        self.notice = None;
         match item {
             Item::Continue => return self.worlds.first().cloned().map(Act::Play),
             Item::Worlds => self.go(Page::Worlds, 0),
