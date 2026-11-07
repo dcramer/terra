@@ -310,6 +310,29 @@ pub fn surface(lo: Vec2, hi: Vec2, step: f32, level: f32, ground: impl Fn(Vec2) 
     .with_inserted_indices(Indices::U32(idx))
 }
 
+/// Marks a face's pools (puddles on a track): each vertex's `share` (0 to 1) of the second
+/// uv's y, which water.wesl reads as the least share it mirrors (over Fresnel's 2%) and
+/// clears of scum and floating leaves, so a shallow puddle shows the sky and what stands
+/// over it to a soft rim while the open water keeps its true Fresnel. 0 everywhere else:
+/// a face never marked is unchanged.
+pub fn pooled(mesh: &mut Mesh, share: impl Fn(Vec2) -> f32) {
+    let Some(bevy::mesh::VertexAttributeValues::Float32x2(uv)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0)
+    else {
+        return;
+    };
+    let shares: Vec<f32> = uv
+        .iter()
+        .map(|p| share(Vec2::new(p[0], p[1])).clamp(0.0, 1.0))
+        .collect();
+    if let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvb)) =
+        mesh.attribute_mut(Mesh::ATTRIBUTE_UV_1)
+    {
+        for (v, s) in uvb.iter_mut().zip(shares) {
+            v[1] = s;
+        }
+    }
+}
+
 /// The `LIGHTS` that shine brightest at the eye (lumens over the distance squared), when
 /// more glint than the shader reads: a street's lamps far down the road give way to the
 /// signs in the frame.

@@ -83,17 +83,30 @@ pub fn trodden(p: Vec2) -> f32 {
 /// height (so the kit's water draws them, mirroring the sky and the lights), in pieces a
 /// metre or two long with mud between, none under the cast's feet. As a few deep pits
 /// under the mesh's half-metre cells they were three dark spots, unseen (round
-/// 261107-0607's judge: "one even blue-grey gravel sheet, no puddles").
+/// 261107-0607's judge: "one even blue-grey gravel sheet, no puddles"). A shallow, wide
+/// dish: its sides shelve over a broad span of the noise, so the water fades in over its
+/// rim (at 0.5 to 0.58 a hand deep, round 261107-0850's judge: "black hard-edged puddles,
+/// holes cut into the gravel").
 pub fn puddle(p: Vec2) -> f32 {
     let feet = [KNIGHT, super::FOE, super::TARGET]
         .iter()
         .map(|c| p.distance(*c))
         .fold(f32::MAX, f32::min);
-    trodden(p) * smooth(0.5, 0.58, fbm(p * 1.6, 43)) * smooth(0.7, 1.0, feet)
+    trodden(p) * smooth(0.46, 0.62, fbm(p * 1.6, 43)) * smooth(0.7, 1.0, feet)
 }
 
-/// A puddle's floor: under the water's face by about a hand once the shelf has pressed it.
-const PUDDLE: f32 = LEVEL - 0.12;
+/// A puddle's floor: a few centimetres under the water's face once the shelf has pressed it.
+const PUDDLE: f32 = LEVEL - 0.08;
+
+/// The least share of the sky and what stands over it a puddle mirrors (kit/water.rs
+/// `pooled`), for Fresnel's 2% at this camera: under the dusk's blue key the ground is a
+/// few hundred times the mirrored sky, so a puddle at a true Fresnel is a black hole.
+const POOL: f32 = 0.35;
+
+/// How much a point of the face is a puddle on the track, not the channels' open water.
+pub fn pool(p: Vec2) -> f32 {
+    trodden(p) * (1.0 - smooth(0.0, 0.05, wet(p)))
+}
 
 /// The land's height: hummocks on the banks, shelving into the waters, the path's trampled
 /// trough and its puddles, with a mud shelf at the water's line.
@@ -137,17 +150,16 @@ pub fn seen_depth(d: f32) -> f32 {
 }
 
 /// The depth the face is drawn at over a point `p`, `d` metres under it: the channels'
-/// shelving margin (`seen_depth`), but in the path's trampled middle a puddle a mirror at
-/// once, ten times its depth (to 1 m): past the shore's fade, the scum's reach and the pads'
-/// shallows within a few centimetres of its edge, as a puddle on a track is clear black
-/// water to its rim. At the shallows' quarter depth a hand-deep puddle was drawn about a
-/// fifth opaque, matted with scum and pads: dark mud, not water.
+/// shelving margin (`seen_depth`), but in the path's trampled middle a puddle at two and a
+/// half times its depth: the mud showing through at its rim, the water opaque at its
+/// middle, a few centimetres down, and its face kept clear of scum and pads by `pool`. At
+/// ten times (round 261107-0850) it was opaque within a centimetre of the rim: a hole; at
+/// the shallows' quarter a hand-deep puddle was a fifth opaque, matted with scum and pads.
 pub fn seen(p: Vec2, d: f32) -> f32 {
     if d <= 0.0 {
         return d;
     }
-    let puddled = trodden(p) * (1.0 - smooth(0.0, 0.05, wet(p)));
-    seen_depth(d) + ((d * 10.0).min(1.0) - seen_depth(d)).max(0.0) * puddled
+    seen_depth(d) + (d * 2.5 - seen_depth(d)).max(0.0) * pool(p)
 }
 
 /// Metres from a point to the nearest open water (the land under `LEVEL`, the ruts' puddles
@@ -298,13 +310,14 @@ fn spawn(
         .weather
         .as_ref()
         .map_or(super::WIND, |w| Vec2::new(w.wind.0, w.wind.1));
-    let face = kit::water::surface(
+    let mut face = kit::water::surface(
         Vec2::new(-28.0, -24.0),
         Vec2::new(28.0, 16.0),
         0.25,
         water.level,
         |p| water.level - seen(p, water.level - land.height(p)),
     );
+    kit::water::pooled(&mut face, |p| pool(p) * POOL);
     kit::water::spawn_face(
         &mut commands,
         &mut meshes,
@@ -457,8 +470,9 @@ mod tests {
 
     /// The path is a trodden marsh track as the mesh draws it: down its middle, puddles in
     /// pieces (a quarter to three quarters of the steps clear of the cast's feet, at least four,
-    /// none over 2.5 m long), each drawn as a mirror (the face past half opaque, beyond the
-    /// pads' shallows), dry a metre to the side, the cast dry, and no grey packed soil.
+    /// none over 2.5 m long), each a pool (no scum or pads, a mirror), its face fading in over
+    /// its rim and opaque at its middle, dry a metre to the side, the cast dry, and no grey
+    /// packed soil.
     #[test]
     fn the_path_is_a_trodden_track_with_puddles_down_its_middle() {
         let land = Land::from_shape(shape);
@@ -475,19 +489,28 @@ mod tests {
         };
         let (mut free, mut wet_, mut pieces, mut run, mut longest, mut was) =
             (0, 0, 0, 0.0f32, 0.0f32, false);
+        // Each puddle's opacity where it starts (a centimetre deep) and at its deepest.
+        let (mut rim, mut most) = (Vec::new(), Vec::new());
         for w in PATH.windows(2) {
             let step = w[0].distance(w[1]) / 80.0;
             let side = (w[1] - w[0]).perp().normalize();
             for k in 0..80 {
                 let p = w[0].lerp(w[1], k as f32 / 80.0);
                 let d = LEVEL - land.height(p);
-                let puddled = d > 0.02;
+                let puddled = d > 0.01;
                 if puddled {
                     let o = kit::water::opacity(seen(p, d), absorb, water.shore);
                     assert!(
-                        o > 0.5 && seen(p, d) > 0.2,
-                        "the puddle at {p} is {o} opaque"
+                        wet(p) > 0.0 || pool(p) > 0.6,
+                        "the puddle at {p} is not a pool: {} (scum and pads on it)",
+                        pool(p)
                     );
+                    if !was {
+                        rim.push(o);
+                        most.push(o);
+                    }
+                    let last = most.len() - 1;
+                    most[last] = most[last].max(o);
                     run += step;
                     longest = longest.max(run);
                     pieces += usize::from(!was);
@@ -520,6 +543,16 @@ mod tests {
         assert!(
             pieces >= 4 && longest < 2.5,
             "{pieces} puddles, the longest {longest} m"
+        );
+        // Soft: the mud shows through at each rim; water: half at least are opaque at their
+        // middle, the rest films over the mud.
+        assert!(
+            rim.iter().all(|&o| o < 0.45),
+            "a puddle's face starts opaque at its rim, a hole: {rim:?}"
+        );
+        assert!(
+            most.iter().filter(|&&o| o > 0.75).count() * 2 >= most.len(),
+            "too few puddles are opaque at their middle: {most:?}"
         );
         for p in [KNIGHT, super::super::FOE, super::super::TARGET] {
             assert!(

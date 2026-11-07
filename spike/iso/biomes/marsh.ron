@@ -24,13 +24,16 @@
             (material: "moss_004", mask: Site("moss"), tint: (4.2, 4.5, 2.5)),
             // The black mud at the water's line, in the hollows and down the path: wet, dark
             // and brown (untinted the scan's pale pebbles read as grey-blue gravel under the
-            // moon, round 261107-0507).
-            (material: "brown_mud_02", mask: Site("mud"), tint: (0.6, 0.5, 0.38), wets: 1.0),
+            // moon, round 261107-0507). Its blue cut to under half its green: under the blue
+            // key (0.2, 0.37, 1) a brown of 0.6, 0.5, 0.38 still lit blue-grey (the path's
+            // crop 85% blue pixels, round 261107-0850).
+            (material: "brown_mud_02", mask: Site("mud"), tint: (0.5, 0.37, 0.15), wets: 1.0),
             // Peat: the same mud darker and browner in drifts a few metres long, at its own
             // scale so its stones do not repeat the mud's, so the path's tone is patchy along
-            // it (round 261107-0607's judge: "one even blue-grey gravel sheet").
-            (material: "brown_mud_02", mask: Site("mud"), amount: 1.3, metres: 1.9,
-                tint: (0.4, 0.29, 0.18), wets: 1.0, breakup: (0.35, 1.3, 0.45, 0.6)),
+            // it (round 261107-0607's judge: "one even blue-grey gravel sheet"); over the
+            // banks' Mud rule's 1.6 so it shows on the path, which the puddles make a bank.
+            (material: "brown_mud_02", mask: Site("mud"), amount: 2.0, metres: 1.9,
+                tint: (0.34, 0.24, 0.08), wets: 1.0, breakup: (0.35, 1.3, 0.45, 0.6)),
             (material: "roots", mask: Site("roots"), tint: (1.3, 1.3, 1.3)),
             // The banks: a ragged band of wet black mud about a metre wide along every water
             // (the Mud rule, kit/ground.rs: full within 0.6 m, gone by 1.9 m, its edge
@@ -39,7 +42,7 @@
             // turf ran to the water's line (round 261107-0523's judge: "a hard cut from
             // smooth green turf to black water"). Amount over 1 so it beats the grass's full
             // mask in the height blend out to about a metre, mixing with it beyond.
-            (material: "brown_mud_02", mask: Mud, amount: 1.6, tint: (0.45, 0.37, 0.28),
+            (material: "brown_mud_02", mask: Mud, amount: 1.6, tint: (0.42, 0.31, 0.13),
                 wets: 0.5),
         ],
         // The glade's camp fire's ash, kept as the marsh drew it (by the near channel's

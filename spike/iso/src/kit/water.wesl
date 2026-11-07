@@ -199,7 +199,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let calm = mix(1.0 - look.ripple.w, 1.0, smoothstep(0.0, 4.0 * look.body.w, in.uv_b.x));
     let weed = scum(p, in.uv_b.x);
     let pad = pads(p, in.uv_b.x);
-    let floating = max(weed, pad.x);
+    // A pool (the second uv's y, `pooled` in water.rs): a puddle on a track, bare of scum
+    // and leaves to its soft rim, mirroring at least that share.
+    let pool = in.uv_b.y;
+    let floating = max(weed, pad.x) * (1.0 - smoothstep(0.0, 0.02, pool));
     let still = calm * (1.0 - floating);
     let n = normalize(vec3<f32>(-g.x * still, 1.0, -g.y * still));
     pbr_input.N = n;
@@ -219,7 +222,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // The mirror. V points from the face to the eye.
     let v = pbr_input.V;
     let cos_v = clamp(dot(n, v), 0.0, 1.0);
-    let fresnel = 0.02 + 0.98 * pow(1.0 - cos_v, 5.0);
+    let fresnel = max(0.02 + 0.98 * pow(1.0 - cos_v, 5.0), pool);
     let world = pbr_input.world_position.xyz;
     var reflected = vec3<f32>(0.0);
     if look.mirror.z > 0.0 {
