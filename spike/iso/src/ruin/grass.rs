@@ -2,6 +2,7 @@
 //! beyond the paving and along its broken edge, a few in the holes, none on whole flags. The
 //! blades are the glade's (forest.rs: solid, tapered, their normals leaning up so they shade
 //! as the ground does), straw and olive-brown, still: the scene's wind is not this module's.
+//! `Tufts` builds them anywhere (walls.rs grows them on the walls' broken tops).
 
 use super::ground::{paved, smooth};
 use crate::forest::Rng;
@@ -27,15 +28,92 @@ pub fn grassy(p: Vec2) -> f32 {
     earth * (0.25 + 0.75 * drift) * dry + 0.15 * super::scatter::strewn(p)
 }
 
+/// Tufts of dead grass gathered into one mesh.
+#[derive(Default)]
+pub struct Tufts {
+    pos: Vec<[f32; 3]>,
+    nor: Vec<[f32; 3]>,
+    col: Vec<[f32; 4]>,
+    idx: Vec<u32>,
+}
+
+impl Tufts {
+    /// A tuft of `blades` rooted round `at`, `tall` high, `dry` (0 to 1) its straw's share.
+    pub fn tuft(&mut self, rng: &mut Rng, at: Vec3, blades: usize, tall: f32, dry: f32) {
+        for _ in 0..blades {
+            let p = at.xz() + Vec2::new(rng.range(-0.12, 0.12), rng.range(-0.12, 0.12));
+            let h = tall * rng.range(0.6, 1.1);
+            let width = rng.range(0.012, 0.022);
+            let yaw = rng.f() * std::f32::consts::TAU;
+            let side = Vec3::new(yaw.cos(), 0.0, yaw.sin()) * width;
+            // Dead blades lean and fold over more than live ones.
+            let out = (p - at.xz()).normalize_or(Vec2::X);
+            let lean = Vec3::new(out.x, 0.0, out.y) * h * rng.range(0.3, 0.9);
+            let base = self.pos.len() as u32;
+            let segs = 3;
+            for k in 0..=segs {
+                let t = k as f32 / segs as f32;
+                let centre = Vec3::new(p.x, at.y, p.y) + Vec3::Y * h * t + lean * t * t;
+                let w = 1.0 - t * 0.9;
+                self.pos.push((centre - side * w).to_array());
+                self.pos.push((centre + side * w).to_array());
+                let n = (Vec3::Y * 0.8 + side.cross(Vec3::Y).normalize() * 0.2).normalize();
+                self.nor.push(n.to_array());
+                self.nor.push(n.to_array());
+                // Straw at the tips, olive-brown and dark at the root.
+                let g = 0.3 + 0.7 * t;
+                let c = Color::srgb(
+                    g * (0.3 + 0.12 * dry),
+                    g * (0.25 + 0.06 * dry),
+                    g * (0.13 + 0.03 * dry),
+                )
+                .to_linear()
+                .to_f32_array();
+                self.col.push(c);
+                self.col.push(c);
+            }
+            for k in 0..segs as u32 {
+                let a = base + k * 2;
+                self.idx
+                    .extend_from_slice(&[a, a + 1, a + 3, a, a + 3, a + 2]);
+            }
+        }
+    }
+
+    pub fn spawn(
+        self,
+        commands: &mut Commands,
+        meshes: &mut Assets<Mesh>,
+        materials: &mut Assets<StandardMaterial>,
+    ) {
+        let n = self.pos.len();
+        let mesh = Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nor)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0f32, 0.0]; n])
+        .with_inserted_indices(Indices::U32(self.idx));
+        commands.spawn((
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                perceptual_roughness: 0.9,
+                cull_mode: None,
+                double_sided: true,
+                ..default()
+            })),
+        ));
+    }
+}
+
 pub fn spawn(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let mut pos = Vec::new();
-    let mut nor = Vec::new();
-    let mut col = Vec::new();
-    let mut idx: Vec<u32> = Vec::new();
+    let mut tufts = Tufts::default();
     let mut rng = Rng::new(0xdead_6a55);
     let tries = ((AREA_X.1 - AREA_X.0) * (AREA_Z.1 - AREA_Z.0) * TRIES) as usize;
     for _ in 0..tries {
@@ -47,63 +125,9 @@ pub fn spawn(
         let blades = 6 + (rng.f() * 10.0 * want) as usize;
         let tall = rng.range(0.18, 0.45) * (0.6 + 0.5 * want);
         let dry = fbm(at * 0.5, 502);
-        for _ in 0..blades {
-            let p = at + Vec2::new(rng.range(-0.12, 0.12), rng.range(-0.12, 0.12));
-            let h = tall * rng.range(0.6, 1.1);
-            let width = rng.range(0.012, 0.022);
-            let yaw = rng.f() * std::f32::consts::TAU;
-            let side = Vec3::new(yaw.cos(), 0.0, yaw.sin()) * width;
-            // Dead blades lean and fold over more than live ones.
-            let out = (p - at).normalize_or(Vec2::X);
-            let lean = Vec3::new(out.x, 0.0, out.y) * h * rng.range(0.3, 0.9);
-            let base = pos.len() as u32;
-            let segs = 3;
-            for k in 0..=segs {
-                let t = k as f32 / segs as f32;
-                let centre = Vec3::new(p.x, -0.03, p.y) + Vec3::Y * h * t + lean * t * t;
-                let w = 1.0 - t * 0.9;
-                pos.push((centre - side * w).to_array());
-                pos.push((centre + side * w).to_array());
-                let n = (Vec3::Y * 0.8 + side.cross(Vec3::Y).normalize() * 0.2).normalize();
-                nor.push(n.to_array());
-                nor.push(n.to_array());
-                // Straw at the tips, olive-brown and dark at the root.
-                let g = 0.3 + 0.7 * t;
-                let c = Color::srgb(
-                    g * (0.3 + 0.12 * dry),
-                    g * (0.25 + 0.06 * dry),
-                    g * (0.13 + 0.03 * dry),
-                )
-                .to_linear()
-                .to_f32_array();
-                col.push(c);
-                col.push(c);
-            }
-            for k in 0..segs as u32 {
-                let a = base + k * 2;
-                idx.extend_from_slice(&[a, a + 1, a + 3, a, a + 3, a + 2]);
-            }
-        }
+        tufts.tuft(&mut rng, at.extend(-0.03).xzy(), blades, tall, dry);
     }
-    let n = pos.len();
-    let mesh = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0f32, 0.0]; n])
-    .with_inserted_indices(Indices::U32(idx));
-    commands.spawn((
-        Mesh3d(meshes.add(mesh)),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            perceptual_roughness: 0.9,
-            cull_mode: None,
-            double_sided: true,
-            ..default()
-        })),
-    ));
+    tufts.spawn(&mut commands, &mut meshes, &mut materials);
 }
 
 #[cfg(test)]

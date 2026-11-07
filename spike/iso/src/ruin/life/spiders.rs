@@ -69,9 +69,9 @@ pub const SPIDERS: [(Stone, &[Vec2], f32, f32); 3] = [
     (
         Stone::Face,
         &[
-            Vec2::new(3.95, 0.6),
-            Vec2::new(4.3, 1.2),
-            Vec2::new(4.7, 0.75),
+            Vec2::new(3.75, 0.5),
+            Vec2::new(4.15, 1.05),
+            Vec2::new(4.35, 0.6),
         ],
         2.5,
         3.0,
