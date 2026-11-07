@@ -353,6 +353,19 @@ pub struct Look {
     pub lit: Vec4,
 }
 
+impl Look {
+    /// A flash's core in its halo at `strength` (0 to 1): the kit's flashes, and a scene's
+    /// steady glow (marsh/wisps.rs), so the quad's falloff is soft, never a disc's edge.
+    pub fn flash(f: &Flash, strength: f32) -> Look {
+        Look {
+            core: nits(f.core, f.core_nits).extend(f.core_size),
+            rim: nits(f.rim, f.rim_nits).extend(f.falloff),
+            shape: Vec4::new(strength, 0.15, 0.0, 0.0),
+            lit: Vec4::ZERO,
+        }
+    }
+}
+
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
 pub struct Glow {
     #[uniform(0)]
@@ -643,9 +656,7 @@ fn play(
                     tr.scale = Vec3::splat(
                         f.size * (1.0 + f.swell * (1.0 - (-a / f.fall.max(0.001)).exp())),
                     );
-                    look.core = nits(f.core, f.core_nits).extend(f.core_size);
-                    look.rim = nits(f.rim, f.rim_nits).extend(f.falloff);
-                    look.shape = Vec4::new(fade, 0.15, 0.0, 0.0);
+                    look = Look::flash(&f, fade);
                     shown = true;
                 }
             }

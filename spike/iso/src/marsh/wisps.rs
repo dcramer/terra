@@ -1,5 +1,6 @@
-//! Will-o'-wisps and midges: cold orbs drifting low over the channels, each a hot core, a
-//! soft glow facing the camera and its own light mirrored in the water (`pool::Glint`),
+//! Will-o'-wisps and midges: cold orbs drifting low over the channels, each the `wisp`
+//! preset's glow (kit/effects.rs: a hot core in a soft halo facing the camera, no disc's
+//! edge) and its light, mirrored in the water (`pool::Glint`),
 //! swelling and fading on its own slow beat with a flicker through it; and clouds of midges
 //! dancing over the reeds, catching the light.
 
@@ -8,6 +9,7 @@ use super::land::{far, near};
 use crate::forest::Rng;
 use crate::motes::soft_image;
 use crate::pool::Glint;
+use crate::kit::effects::{Glow, Look, Preset};
 use crate::ruin::effects::kit::{Cam, Clock, glow};
 use bevy::prelude::*;
 
@@ -21,10 +23,8 @@ const HOMES: [Vec2; 4] = [
 ];
 const HIGH: f32 = 0.5;
 const DRIFT: f32 = 0.6;
-/// A wisp's colour (linear, over 1 drives the bloom), light (lumens) and beat (s): low and
-/// bright enough to lay a faint pool on the bank and the reeds under it.
-const COLD: LinearRgba = LinearRgba::rgb(2.2, 6.0, 5.0);
-const WISP_LM: f32 = 4000.0;
+/// A wisp's beat (s); its look and light (low and bright enough to lay a faint pool on the
+/// bank and the reeds under it) are the `wisp` preset's.
 const BEAT: f32 = 6.0;
 /// Midge clouds, the specks in each, and their size (m: under 0.05 they vanish at 960 px).
 const CLOUDS: usize = 5;
@@ -44,11 +44,11 @@ struct Wisp {
     part: Part,
 }
 
-#[derive(Clone, Copy, PartialEq)]
 enum Part {
-    Core,
-    Glow,
-    Light,
+    /// The glow's material (its strength follows the beat) and the quad's size (m).
+    Glow(Handle<Glow>, f32),
+    /// The light's lumens at full beat.
+    Light(f32),
 }
 
 #[derive(Component)]
@@ -62,46 +62,56 @@ fn spawn(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    mut glows: ResMut<Assets<Glow>>,
 ) {
     let soft = images.add(soft_image());
     let card = meshes.add(Rectangle::new(1.0, 1.0));
-    let core = meshes.add(Sphere::new(0.07));
-    let hot = materials.add(glow(COLD * 6.0, None));
-    // A small glow tight about a hot core, and a faint haze in the damp air about that: a
-    // bare core is a dot at 960 px (iso-art j19), but a 1.3 m orb read as 70 px of lens
-    // bokeh, not a light (blind-marsh3).
-    let orb = (meshes.add(Rectangle::new(0.5, 0.5)), materials.add(glow(COLD * 0.9, Some(soft.clone()))));
-    let haze = (meshes.add(Rectangle::new(1.4, 1.4)), materials.add(glow(COLD * 0.04, Some(soft.clone()))));
+    // A bare core is a dot at 960 px (iso-art j19), a 1.3 m orb 70 px of lens bokeh, not a
+    // light (blind-marsh3), a soft card over a hot sphere a flat disc (every marsh judge,
+    // 2026-11-06): the kit's glow, a narrow core in a Gaussian halo windowed to nothing.
+    let preset = Preset::load("wisp").unwrap_or_else(|e| {
+        eprintln!("{e}");
+        std::process::exit(2)
+    });
+    let (Some(flash), Some(lamp)) = (preset.flash, preset.lamps.first()) else {
+        eprintln!(
+            "marsh: the `wisp` preset (spike/iso/biomes/effects/wisp.ron) needs a `flash` and a \
+             lamp: wisps.rs draws the one and lights the other (D634)"
+        );
+        std::process::exit(2)
+    };
     for (i, h) in HOMES.iter().enumerate() {
         let home = h.extend(LEVEL + HIGH).xzy();
         let phase = i as f32 * 1.7;
+        let look = glows.add(Glow {
+            look: Look::flash(&flash, 1.0),
+        });
         commands.spawn((
-            Mesh3d(core.clone()),
-            MeshMaterial3d(hot.clone()),
+            Mesh3d(card.clone()),
+            MeshMaterial3d(look.clone()),
             Transform::from_translation(home),
             bevy::light::NotShadowCaster,
-            Wisp { home, phase, part: Part::Core },
+            Wisp {
+                home,
+                phase,
+                part: Part::Glow(look, flash.size),
+            },
         ));
-        for (mesh, mat) in [&orb, &haze] {
-            commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(mat.clone()),
-                Transform::from_translation(home),
-                bevy::light::NotShadowCaster,
-                Wisp { home, phase, part: Part::Glow },
-            ));
-        }
         commands.spawn((
             PointLight {
-                color: Color::LinearRgba(COLD),
-                intensity: WISP_LM,
-                range: 5.0,
+                color: lamp.colour.color(),
+                intensity: lamp.lm,
+                range: lamp.range,
                 radius: 0.05,
                 shadow_maps_enabled: false,
                 ..default()
             },
             Transform::from_translation(home),
-            Wisp { home, phase, part: Part::Light },
+            Wisp {
+                home,
+                phase,
+                part: Part::Light(lamp.lm),
+            },
             Glint,
         ));
     }
@@ -138,7 +148,12 @@ pub fn bright(t: f32, phase: f32) -> f32 {
     (0.25 + 0.75 * k * k) * flick
 }
 
-fn float(clock: Res<Clock>, cam: Res<Cam>, mut wisps: Query<(&Wisp, &mut Transform, Option<&mut PointLight>)>) {
+fn float(
+    clock: Res<Clock>,
+    cam: Res<Cam>,
+    mut glows: ResMut<Assets<Glow>>,
+    mut wisps: Query<(&Wisp, &mut Transform, Option<&mut PointLight>)>,
+) {
     let t = clock.t;
     for (w, mut tr, light) in &mut wisps {
         let p = w.phase;
@@ -150,15 +165,17 @@ fn float(clock: Res<Clock>, cam: Res<Cam>, mut wisps: Query<(&Wisp, &mut Transfo
             );
         let k = bright(t, p);
         tr.translation = at;
-        match w.part {
-            Part::Core => tr.scale = Vec3::splat(0.4 + 0.6 * k),
-            Part::Glow => {
+        match &w.part {
+            Part::Glow(look, size) => {
                 tr.rotation = cam.rot;
-                tr.scale = Vec3::splat(0.55 + 0.45 * k);
+                tr.scale = Vec3::splat(size * (0.7 + 0.3 * k));
+                if let Some(mut g) = glows.get_mut(look) {
+                    g.look.shape.x = k.min(1.0);
+                }
             }
-            Part::Light => {
+            Part::Light(lm) => {
                 if let Some(mut l) = light {
-                    l.intensity = WISP_LM * k;
+                    l.intensity = lm * k;
                 }
             }
         }

@@ -1,0 +1,15 @@
+// A will-o'-wisp over the marsh's water (marsh/wisps.rs draws four, each on its own beat and
+// drift; no biome lists it, so the kit spawns none): a small white-green core in a soft cold
+// halo, the kit's glow (effects.wesl's mode 0), and its light pooling on the bank and
+// glinting in the water. It replaces a flat soft-image card over a hot sphere, read as "flat
+// green discs" by every marsh judge. At the marsh's ev100 7.5 (exposure 1/217) the core is
+// ~25 linear, the halo's heart ~2 in green.
+(
+    cue: Loop(6.0),
+    at: Ground,
+    still: 0.0,
+    life: 6.0,
+    flash: (core: Srgb(0.8, 1.0, 0.92), core_nits: 5500.0, rim: Srgb(0.4, 1.0, 0.8), rim_nits: 450.0,
+        size: 1.2, core_size: 0.07, falloff: 6.0, swell: 0.0, fall: 1.0),
+    lamps: [(lm: 4000.0, colour: Srgb(0.64, 1.0, 0.92), up: 0.0, range: 5.0, fall: 1.0)],
+)
