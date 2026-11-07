@@ -33,6 +33,8 @@ pub enum Kind {
     Leaves,
     Fern,
     Tuft,
+    /// Matted dead grass (`mat`): no leaves beneath.
+    Mat,
 }
 
 /// One clump: where, how wide (m), its kind, its tint and whether a flower stands in it.
@@ -111,8 +113,14 @@ fn build(c: &Clump, land: &Land, rng: &mut Rng, leaves: &mut Cards, stems: &mut 
     let tip = rgba(c.tint);
     let foot = rgba(c.tint * FOOT);
     let spin = rng.f() * std::f32::consts::TAU;
+    let under = if c.kind == Kind::Mat {
+        mat(c, root, spin, rng, stems);
+        0
+    } else {
+        3
+    };
     // Dark leaves lying flat beneath, so the gaps between the clump's leaves fall dark.
-    for k in 0..3 {
+    for k in 0..under {
         let yaw = spin + k as f32 * 2.1 + rng.f();
         let out = Vec3::new(yaw.cos(), 0.0, yaw.sin());
         let len = c.radius * rng.range(1.1, 1.5);
@@ -159,6 +167,7 @@ fn build(c: &Clump, land: &Land, rng: &mut Rng, leaves: &mut Cards, stems: &mut 
                 leaves.graded(root + along * 0.5, a, b, FROND, up, foot, tip);
             }
         }
+        Kind::Mat => {}
         Kind::Tuft => {
             for k in 0..3 {
                 let yaw = spin + k as f32 * 1.05;
@@ -181,6 +190,46 @@ fn build(c: &Clump, land: &Land, rng: &mut Rng, leaves: &mut Cards, stems: &mut 
             up,
             rgba(Vec3::splat(0.85 * FOOT)),
             bloom,
+        );
+    }
+}
+
+/// A mat of dead grass and reed (`Kind::Mat`): blades lodged flat over one another in
+/// layers, darker the deeper they lie, and a few still leaning up out of it, as a marsh's
+/// or a moor's thatch lies after a winter (the tufts stand up over broad leaves instead).
+fn mat(c: &Clump, root: Vec3, spin: f32, rng: &mut Rng, stems: &mut Cards) {
+    for k in 0..4 {
+        let yaw = spin + k as f32 * 1.7 + rng.range(-0.4, 0.4);
+        let out = Vec3::new(yaw.cos(), 0.0, yaw.sin());
+        let rise = rng.range(0.12, 0.35);
+        let b = (out * rise.cos() + Vec3::Y * rise.sin()) * c.radius * rng.range(1.3, 1.9);
+        let a = Vec3::new(-out.z, 0.0, out.x) * c.radius * 1.5;
+        let deep = 0.45 + 0.15 * k as f32;
+        stems.graded(
+            root + b * 0.5 + Vec3::Y * (0.01 + 0.015 * k as f32),
+            a,
+            b,
+            TUFT,
+            |_| Vec3::Y,
+            rgba(c.tint * deep * 0.5),
+            rgba(c.tint * deep),
+        );
+    }
+    let up = |p: Vec3| ((p - root).with_y(0.0).normalize_or_zero() * 0.5 + Vec3::Y).normalize();
+    for k in 0..3 {
+        let yaw = spin + 0.5 + k as f32 * 2.1 + rng.range(-0.3, 0.3);
+        let out = Vec3::new(yaw.cos(), 0.0, yaw.sin());
+        let lean = rng.range(0.35, 0.8);
+        let b = (out * lean.sin() + Vec3::Y * lean.cos()) * c.radius * rng.range(1.0, 1.5);
+        let a = Vec3::new(-out.z, 0.0, out.x) * c.radius * 1.3;
+        stems.graded(
+            root + b * 0.5,
+            a,
+            b,
+            TUFT,
+            up,
+            rgba(c.tint * FOOT * 2.0),
+            rgba(c.tint),
         );
     }
 }
@@ -257,6 +306,51 @@ pub fn draw(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A mat lies low and lays no broad leaves: most of its cards top out under 0.8 of its
+    /// radius over the ground, where every card of a tuft as wide stands above that.
+    #[test]
+    fn a_mat_lies_low_with_no_leaves_beneath() {
+        let land = Land::new();
+        let tops = |kind| {
+            let c = Clump {
+                at: Vec2::new(3.0, 4.0),
+                radius: 0.4,
+                kind,
+                tint: Vec3::splat(0.5),
+                flower: None,
+            };
+            let (mut leaves, mut stems) = (Cards::default(), Cards::default());
+            build(&c, &land, &mut Rng::new(7), &mut leaves, &mut stems);
+            let ground = land.height(c.at);
+            let ys = |cards: Cards| {
+                let Some(bevy::mesh::VertexAttributeValues::Float32x3(pos)) =
+                    cards.mesh().attribute(Mesh::ATTRIBUTE_POSITION).cloned()
+                else {
+                    return Vec::new();
+                };
+                // A card's four corners: its highest over the ground.
+                pos.chunks(4)
+                    .map(|q| q.iter().map(|p| p[1] - ground).fold(f32::MIN, f32::max))
+                    .collect::<Vec<_>>()
+            };
+            (ys(leaves), ys(stems))
+        };
+        let (under, mat) = tops(Kind::Mat);
+        assert!(
+            under.is_empty(),
+            "a mat lays {} leaves beneath",
+            under.len()
+        );
+        let low = mat.iter().filter(|&&y| y < 0.32).count();
+        assert!(
+            low * 2 > mat.len(),
+            "{low} of a mat's {} cards lie low: {mat:?}",
+            mat.len()
+        );
+        let (_, tuft) = tops(Kind::Tuft);
+        assert!(tuft.iter().all(|&y| y > 0.32), "a tuft's cards: {tuft:?}");
+    }
 
     /// The lawn covers most of the open ground in the frame and none of the fight's: no clump
     /// on trodden earth or within reach of the cast, and most open points have one near.

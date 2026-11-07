@@ -44,9 +44,10 @@
     scatter: [
         // The matted cover over all the dry land, several layers deep (the old lawn tried
         // 8 clumps a m², iso-kit j18): last year's dead sedge and reed, gold-brown to straw,
-        // with this year's olive coming through.
-        (plant: (kind: Tuft, tint: [(0.56, 0.42, 0.17), (0.42, 0.32, 0.13), (0.36, 0.4, 0.15),
-            (0.3, 0.42, 0.14)]),
+        // with this year's olive coming through: lodged flat in layers (`Mat`), no leaves
+        // beneath.
+        (plant: (kind: Mat, tint: [(0.66, 0.5, 0.22), (0.52, 0.39, 0.17), (0.42, 0.42, 0.17),
+            (0.32, 0.42, 0.15)]),
             density: 5.0, scale: (0.18, 0.45), clump: (3.0, 0.7, 0.4), over: (0.05, 9.0),
             seed: 6),
         // Sedge tussocks on the hummocks' grass, olive to straw.
@@ -69,8 +70,8 @@
             density: 1.6, scale: (0.26, 0.6), clump: (6.0, 1.4, 0.8), over: (0.1, 9.0),
             seed: 7),
         // The bank's mat: dead rush, straw to wet brown, thick at the water's line, a few
-        // marsh marigolds in it.
-        (plant: (kind: Tuft, tint: [(0.42, 0.34, 0.16), (0.3, 0.26, 0.12), (0.22, 0.24, 0.1)],
+        // marsh marigolds in it, lodged over the water's line.
+        (plant: (kind: Mat, tint: [(0.48, 0.38, 0.18), (0.34, 0.28, 0.13), (0.24, 0.25, 0.11)],
             flowers: 0.04),
             density: 6.0, scale: (0.15, 0.45), on: Mud, clump: (3.0, 0.8, 0.5),
             over: (-0.04, 0.2), seed: 4),

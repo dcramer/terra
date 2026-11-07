@@ -233,6 +233,7 @@ pub fn plants(budget: &mut Budget, biome: &str, sets: &[Scatter], g: &Ground) ->
                     PlantKind::Tuft => Kind::Tuft,
                     PlantKind::Fern => Kind::Fern,
                     PlantKind::Leaves => Kind::Leaves,
+                    PlantKind::Mat => Kind::Mat,
                 },
                 tint: from.lerp(to, hue - k as f32) * dark,
                 flower,

@@ -257,6 +257,9 @@ pub enum PlantKind {
     Tuft,
     Fern,
     Leaves,
+    /// Matted dead grass and reed: blades lodged flat in layers with a few still leaning
+    /// up, no broad leaves beneath (a marsh's or a moor's thatch).
+    Mat,
 }
 
 /// Decals: a texture (a path under `assets/`) laid `count` times, `size` metres across
