@@ -27,6 +27,15 @@
             // moon, round 261107-0507).
             (material: "brown_mud_02", mask: Site("mud"), tint: (0.6, 0.5, 0.38), wets: 1.0),
             (material: "roots", mask: Site("roots"), tint: (1.3, 1.3, 1.3)),
+            // The banks: a ragged band of wet black mud about a metre wide along every water
+            // (the Mud rule, kit/ground.rs: full within 0.6 m, gone by 1.9 m, its edge
+            // wandering a metre), shelving under the face. The land's own mud site is only
+            // what lies under 0.22 m over the water, a hand's width on these banks, so the
+            // turf ran to the water's line (round 261107-0523's judge: "a hard cut from
+            // smooth green turf to black water"). Amount over 1 so it beats the grass's full
+            // mask in the height blend out to about a metre, mixing with it beyond.
+            (material: "brown_mud_02", mask: Mud, amount: 1.6, tint: (0.45, 0.37, 0.28),
+                wets: 0.5),
         ],
         // The glade's camp fire's ash, kept as the marsh drew it (by the near channel's
         // bank, not at the marsh's own fire).
@@ -53,8 +62,12 @@
         // 261107-0358-2: "no lily mats or scum"); at duckweed's own green (linear 0.09, 0.15, 0.025, clumps 2 m) it lay as a lime
         // band along every bank and the pads as lime confetti (round 261107-0412): rotting
         // olive scum in broken clumps, the pads a dark leaf green.
+        // The olive scum, opaque out to 0.22 m of seen depth, lay as smooth turf along every
+        // bank with the pads on it (round 261107-0523: "dark lily discs lie on dry turf"):
+        // drowned litter, brown as the forest pond's, in smaller broken clumps no farther out
+        // than 0.12 m, so the pads (from 0.06 m, full by 0.14 m) float on the open water.
         shore: 0.12,
-        scum: (colour: Linear(0.05, 0.065, 0.02), amount: 0.6, reach: 0.22, size: 1.2),
+        scum: (colour: Linear(0.045, 0.036, 0.017), amount: 0.5, reach: 0.12, size: 0.8),
         pads: (count: 1.4, radius: 0.24, colour: Linear(0.035, 0.06, 0.02)),
     ),
     // The ground cover and the debris by the water, the kit's scatter (kit/scatter.rs) over
@@ -97,7 +110,7 @@
         // Linear straw 0.2, 0.13, 0.026, brown 0.12, 0.07, 0.017, wet 0.06, 0.04, 0.012.
         (plant: (kind: Mat, tint: [(2.95, 1.23, 1.12), (1.77, 0.66, 0.73), (0.89, 0.38, 0.52)],
             flowers: 0.04),
-            density: 6.0, scale: (0.15, 0.45), on: Mud, clump: (3.0, 0.8, 0.5),
+            density: 9.0, scale: (0.15, 0.45), on: Mud, clump: (3.0, 0.8, 0.5),
             over: (-0.04, 0.2), seed: 4),
         // Matted reed trodden into the path's and the flats' mud in broken clumps, so its edges
         // break up (the judge: "crisp edges"): wet brown to olive straw, as above.
