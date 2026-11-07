@@ -44,7 +44,8 @@ pub struct Params {
     pub courses: [Vec4; COURSES],
     /// Each course's joints four to seven.
     pub joints: [Vec4; COURSES],
-    /// x the courses (0: the units are not told apart), y the marks, z the grit.
+    /// x the courses (0: the units are not told apart), y the marks, z the grit, w the
+    /// joints' sand.
     pub shape: Vec4,
     /// Each mark's centre (x, z) and half size.
     pub mark_at: [Vec4; MARKS],
@@ -199,7 +200,7 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
             laid.courses.len() as f32,
             laid.marks.len() as f32,
             laid.grit,
-            0.0,
+            laid.sand,
         ),
         ..default()
     };
@@ -295,6 +296,7 @@ mod tests {
             material: "large_grey_tiles".into(),
             metres: 3.0,
             joints: 0.3,
+            sand: 0.0,
             cracks: 0.25,
             grain: (0.5, 0.6),
             moss,

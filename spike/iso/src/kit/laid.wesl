@@ -184,6 +184,16 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         colour *= mix(1.0, mix(0.55, 1.45, hash(cell + 9.0)), speck);
     }
 
+    // Sand and soil washed into the joints over the grime and the drifts (which would bury
+    // it before), patchy along them and grainy, so an old court's joints read as earth, not
+    // shadow (shape.w, 0: the dark joints alone).
+    if laid.shape.w > 0.0 {
+        let fill = smoothstep(0.05, 0.45, joint) * smoothstep(0.2, 0.6, noise(p * 2.3 + 13.0) + 0.3);
+        let grains = mix(0.55, 1.45, hash(floor(p * 70.0) + 17.0));
+        let sand = vec3<f32>(0.4, 0.31, 0.2) * grains * (0.8 + 0.4 * noise(p * 9.0));
+        colour = mix(colour, sand, fill * laid.shape.w);
+    }
+
     // Hairline cracks across some units: thin wandering lines in patches.
     let warp = vec2<f32>(noise(p * 3.1), noise(p * 3.1 + 7.0)) - 0.5;
     let wall = cell_wall(p * 1.25 + warp * 0.35);

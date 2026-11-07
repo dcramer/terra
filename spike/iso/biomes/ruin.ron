@@ -17,7 +17,11 @@
             material: "large_grey_tiles",
             metres: 3.0,
             joints: 0.3,
-            cracks: 0.25,
+            // Sand and soil in the joints, not black lines (the open court read clean CG,
+            // judge 261107-0250-ruin).
+            sand: 0.75,
+            // No drawn crack web (at 0.25 "crack lines that look drawn on", judge 261107-0150).
+            cracks: 1.0,
             grain: (0.5, 0.6),
             moss: Site("mossy"),
             wet: Site("puddled"),

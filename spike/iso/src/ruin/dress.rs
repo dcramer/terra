@@ -8,7 +8,7 @@ use crate::scene::model;
 use bevy::prelude::*;
 
 /// Model, place, yaw in degrees, and a tip over (degrees about X, for a barrel on its side).
-const PROPS: [(&str, Vec2, f32, f32); 21] = [
+const PROPS: [(&str, Vec2, f32, f32); 19] = [
     (
         "models/iso/dead-tree-a.glb",
         Vec2::new(-11.0, -8.4),
@@ -35,8 +35,6 @@ const PROPS: [(&str, Vec2, f32, f32); 21] = [
     ("models/iso/skull.glb", Vec2::new(1.4, 1.5), 200.0, 0.0),
     ("models/iso/skull.glb", Vec2::new(-1.7, -0.8), 60.0, 0.0),
     ("models/iso/skull.glb", Vec2::new(3.6, 0.6), 320.0, 0.0),
-    ("models/iso/bone-pile.glb", Vec2::new(-6.6, -5.0), 0.0, 0.0),
-    ("models/iso/bone-pile.glb", Vec2::new(5.0, -0.6), 110.0, 0.0),
     (
         "models/props/barrow/Debris.glb",
         Vec2::new(-4.4, -5.4),

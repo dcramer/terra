@@ -124,6 +124,10 @@ pub struct Laid {
     /// The factor grime puts on the joints' colour (1 clean, 0 black).
     #[serde(default = "joints")]
     pub joints: f32,
+    /// Sand and soil washed into the joints over their grime, 0 (none: dark joints) to 1
+    /// (filled): an old court's joints are earth, not shadow (judge 261107-0250-ruin).
+    #[serde(default)]
+    pub sand: f32,
     /// The factor on the hairline cracks' colour (1: none).
     #[serde(default = "one")]
     pub cracks: f32,
