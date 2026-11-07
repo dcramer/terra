@@ -88,6 +88,8 @@ pub struct Ground {
     pub broad: (f32, f32),
     /// Up to four scorched points, x and z.
     pub scorch: Vec<(f32, f32)>,
+    /// A laid floor on the layout's paving (kit/laid.rs), if it has one.
+    pub laid: Option<Laid>,
 }
 
 impl Default for Ground {
@@ -96,8 +98,41 @@ impl Default for Ground {
             layers: Vec::new(),
             broad: (0.78, 1.15),
             scorch: Vec::new(),
+            laid: None,
         }
     }
+}
+
+/// A laid floor (kit/laid.rs): slabs, pavers, cobbles, bricks or kerbs, a scan of laid
+/// units (a folder of `assets/materials/` with its colour, normal and ARM maps) at its true
+/// size, drawn straight so its joints run true, weathered in them: grime packed in every
+/// joint (the scan's occlusion marks them), hairline cracks, the detail grain, moss out of
+/// the joints and over the units, and standing water, each where its mask lays it.
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Laid {
+    pub material: String,
+    /// Metres the scan covers.
+    pub metres: f32,
+    /// The factor grime puts on the joints' colour (1 clean, 0 black).
+    #[serde(default = "joints")]
+    pub joints: f32,
+    /// The factor on the hairline cracks' colour (1: none).
+    #[serde(default = "one")]
+    pub cracks: f32,
+    /// The detail grain (D362): metres it repeats, how strongly it shows (0 none).
+    #[serde(default)]
+    pub grain: (f32, f32),
+    /// Where moss grows out of the joints and over the units (none when `None`).
+    #[serde(default)]
+    pub moss: Option<Mask>,
+    /// Where water stands on the floor (none when `None`).
+    #[serde(default)]
+    pub wet: Option<Mask>,
+}
+
+fn joints() -> f32 {
+    0.3
 }
 
 /// A ground layer: a scanned material (a layer of the `materials/ground` stack, by name) at
@@ -274,7 +309,7 @@ mod tests {
         ground: (layers: [
             (material: "asphalt", mask: Base),
             (material: "grime", mask: Grime, amount: 0.6), (mask: Wet, wets: 0.8),
-        ]),
+        ], laid: (material: "concrete_pavement", metres: 1.8, wet: Site("gutter"))),
         scatter: [(models: ["models/bin.glb"], density: 0.05, scale: (0.9, 1.1), on: Some(Wear))],
         decals: [(texture: "decals/oil.png", count: 12, size: (0.5, 1.5))],
         water: Some((kind: Wet, deep: Some(Srgb(0.02, 0.02, 0.03)))),

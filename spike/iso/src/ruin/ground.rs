@@ -21,8 +21,24 @@ pub const TOP: f32 = 0.01;
 const EARTH: f32 = -0.03;
 /// The paving's mesh spacing: fine enough that its cut edge reads as broken stone.
 const CELL: f32 = 0.2;
-/// The flag texture's width in metres (assets/materials/README.md).
-const FLAGS_M: f32 = 3.0;
+/// The maps the paving carries for the kit's laid floor (kit/laid.rs `Place`): how mossy
+/// (litter::mossy) and how wet (water::puddled).
+const SITES: [&str; 3] = ["mossy", "puddled", ""];
+
+/// The biome's laid floor (ruin.ron's `ground.laid`), the ruin's own when run as a scene.
+fn laid(biome: Option<Res<crate::kit::biome::Biome>>) -> crate::kit::biome::Laid {
+    let b = biome.map_or_else(
+        || crate::kit::biome::Biome::load("ruin").unwrap_or_else(|e| panic!("{e}")),
+        |b| b.clone(),
+    );
+    b.ground.laid.unwrap_or_else(|| {
+        panic!(
+            "biome {:?} runs the ruin's layout without a laid floor. Fix: give its ground a \
+             `laid: (material: ..., metres: ...)` as biomes/ruin.ron does (kit/biome.rs, D634)",
+            b.refs
+        )
+    })
+}
 
 /// How much paving is left at `p`, 0 (earth) to 1 (whole): a soft rectangle with a ragged,
 /// noisy edge 2.5 m deep, and a few holes inside where slabs are gone.
@@ -46,8 +62,11 @@ pub fn spawn(
     asset: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut weathered: ResMut<Assets<super::flags::FlagsMaterial>>,
+    mut weathered: ResMut<Assets<crate::kit::laid::LaidMaterial>>,
+    biome: Option<Res<crate::kit::biome::Biome>>,
 ) {
+    let laid = laid(biome);
+    let flags_m = laid.metres;
     // The earth: a wide plane, its texture repeated every 2 m, dark as night soil.
     let mut earth = material(&asset, "packed_earth", Color::srgb(0.4, 0.36, 0.32));
     earth.uv_transform = Affine2::from_scale(Vec2::splat(40.0));
@@ -57,10 +76,11 @@ pub fn spawn(
         Transform::from_xyz(0.0, EARTH, 0.0),
     ));
 
-    let flags = materials.add(material(&asset, "large_grey_tiles", Color::WHITE));
+    let flags = materials.add(material(&asset, &laid.material, Color::WHITE));
+    let place = crate::kit::laid::Place { sites: SITES };
     commands.spawn((
-        Mesh3d(meshes.add(paving())),
-        MeshMaterial3d(weathered.add(super::flags::flags(&asset))),
+        Mesh3d(meshes.add(paving(flags_m))),
+        MeshMaterial3d(weathered.add(crate::kit::laid::material(&asset, &laid, &place))),
     ));
 
     // Loose slabs where the paving breaks: lifted, tipped and fallen, grey as the flags.
@@ -96,7 +116,7 @@ pub fn spawn(
             at,
             size,
             rot,
-            FLAGS_M,
+            flags_m,
             shift,
             Color::srgb(v, v * 0.97, v * 0.93),
         );
@@ -107,14 +127,14 @@ pub fn spawn(
 /// The paving's mesh: a grid over the court and its edge, cut where the paving gives out
 /// (`paved` below a half), its colour the grime (value only, darker in drifts and toward the broken edge, where dirt
 /// has washed over the flags), its height a little uneven where the ground has settled.
-fn paving() -> Mesh {
+fn paving(flags_m: f32) -> Mesh {
     let (x0, x1) = (PAVED_X.0 - 3.0, PAVED_X.1 + 3.0);
     let (z0, z1) = (PAVED_Z.0 - 3.0, PAVED_Z.1 + 3.0);
     let nx = ((x1 - x0) / CELL) as u32 + 1;
     let nz = ((z1 - z0) / CELL) as u32 + 1;
     let mut pos = Vec::new();
     let mut uv = Vec::new();
-    // The weather flags.wesl lays over the flags: how mossy, how wet.
+    // The weather kit/laid.wesl lays over the flags: how mossy, how wet.
     let mut weather = Vec::new();
     let mut col = Vec::new();
     let mut idx = Vec::new();
@@ -138,7 +158,8 @@ fn paving() -> Mesh {
                     let left = paved(*p);
                     let settle = (fbm(*p * 0.3, 311) - 0.5) * 0.03;
                     pos.push([p.x, TOP + settle, p.y]);
-                    uv.push((*p / FLAGS_M).to_array());
+                    uv.push((*p / flags_m).to_array());
+                    // The maps the laid floor reads (`SITES`): how mossy, how wet.
                     weather.push([super::litter::mossy(*p), super::water::puddled(*p)]);
                     // Grime: drifts of dirt washed over the flags, thickest at the broken edge.
                     let drift = smooth(0.35, 0.75, fbm(*p * 0.25, 312));
@@ -233,7 +254,7 @@ mod tests {
     /// The paving's triangles face up, so the flags are lit from above and not culled.
     #[test]
     fn paving_faces_up() {
-        let mesh = paving();
+        let mesh = paving(3.0);
         let Some(bevy::mesh::VertexAttributeValues::Float32x3(pos)) =
             mesh.attribute(Mesh::ATTRIBUTE_POSITION)
         else {

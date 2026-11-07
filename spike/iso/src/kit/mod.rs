@@ -6,6 +6,7 @@
 
 pub mod biome;
 pub mod ground;
+pub mod laid;
 pub mod light;
 
 use std::path::PathBuf;

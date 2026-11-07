@@ -11,7 +11,7 @@ mod dress;
 pub mod effects;
 pub mod fight;
 mod fire;
-mod flags;
+
 mod grass;
 mod ground;
 mod held;
@@ -46,7 +46,7 @@ pub fn plugin(app: &mut App) {
         )
         .add_plugins((
             crate::pool::plugin,
-            flags::plugin,
+            crate::kit::laid::plugin,
             fight::plugin,
             fire::plugin,
             effects::plugin,

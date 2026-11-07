@@ -5,9 +5,22 @@
 (
     kind: [Night],
     refs: "ruin",
-    // Its ground, scatter, decals, water, effects and life are still ruin/'s own code; they
-    // move here as the kit's jobs land (j4 ground, scatter and decals; j5 water; j6 effects;
-    // j7 weather and life).
+    // Its scatter, decals, water, effects and life are still ruin/'s own code; they move here
+    // as the kit's jobs land. The court's paving and its maps are the layout's (ruin/ground.rs).
     layout: Ruin,
     light: (preset: "ruin-night"),
+    ground: (
+        // The court's flags (kit/laid.rs): Poly Haven's Large Grey Tiles at their true 3 m,
+        // grime in the joints, cracks, the stone grain, moss and puddles where the court's
+        // maps lay them.
+        laid: (
+            material: "large_grey_tiles",
+            metres: 3.0,
+            joints: 0.3,
+            cracks: 0.25,
+            grain: (0.5, 0.6),
+            moss: Site("mossy"),
+            wet: Site("puddled"),
+        ),
+    ),
 )

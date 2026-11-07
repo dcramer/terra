@@ -50,7 +50,7 @@ fn wet(p: Vec2) -> f32 {
     super::water::pool(p).max(super::water::puddled(p))
 }
 
-/// How mossy the flags are at `p` (0..1, flags.wesl grows it): some in every joint, thick
+/// How mossy the flags are at `p` (0..1, kit/laid.wesl grows it): some in every joint, thick
 /// toward the walls and the broken edge, in patches; least where the fight's feet go.
 pub fn mossy(p: Vec2) -> f32 {
     let patch = smooth(0.3, 0.7, fbm(p * 0.45, 631));

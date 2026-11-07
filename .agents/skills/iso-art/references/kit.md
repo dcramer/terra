@@ -27,6 +27,7 @@ The fields after `light` are parsed and carried, each naming the iso-kit job tha
 - Layers height-blend where their masks overlap (Mishkinis' splat: the highest of weight x 1.4 plus the scan's height wins over 0.25), then the broad variation, wet (darker 0.65, roughness 0.45), the wear slot's packed soil and the scorches.
 - A mask is the layout's own map, `Site("grass")` (terrain.rs `SITES`: grass, leaves, moss, rock, mud, roots, per vertex; shade and wear in UV_0), or a rule baked from the land into two textures at 0.25 m: `Mud` (within ~1.5 m of water, under 0.5 m over it), `Wet` (~1 m, a few cm over it; `weather.rain` wets hollows), `Moss` (shade or creases, not steep), `Snow` (faces up; its `amount` takes it down steeper), `Grime` (hollows, the heights' Laplacian), `Steep`; each edge ragged by noise at two scales. Each rule has a test.
 - A paved street is the same file: its scans stacked first (no asphalt or concrete in the stack yet).
+- A laid floor (slabs, pavers, cobbles, bricks, kerbs) is `ground.laid` (`src/kit/laid.rs`, `laid.wesl`): one scan of `assets/materials/` at its true `metres`, drawn straight through StandardMaterial on the layout's paving mesh so its joints run true; grime in the joints (`joints`, the scan's AO marks them), `cracks`, the detail `grain`, `moss` and `wet` by the paving's maps (`Site(name)` from `laid::Place`, the second UV's x, y and the colour's alpha) or `Base`. The ruin's court is one.
 
 ## Adding a biome
 

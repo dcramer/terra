@@ -40,7 +40,7 @@ pub fn pool(p: Vec2) -> f32 {
 }
 
 /// How wet the flags are at `p` under the puddles (0..1). A puddle is wet stone drawn by
-/// the flags' own material (flags.wesl: darker, near-mirror smooth, a sharp water line), not
+/// the flags' own material (kit/laid.wesl: darker, near-mirror smooth, a sharp water line), not
 /// a film of water over them: the film's mirrored sky drew them as violet ovals (judge r8).
 pub fn puddled(p: Vec2) -> f32 {
     PUDDLES
