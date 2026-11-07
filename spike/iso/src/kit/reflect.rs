@@ -22,6 +22,10 @@
 //!   compiled; the cameras then go. A film or a still after that has the probe from its
 //!   first frame.
 //!
+//! - `diffuse` splits the two (uc-reflect j2): Bevy scales an environment map's diffuse and
+//!   specular by one intensity, so the capture is filtered twice, as is and lowered, and the
+//!   view lights with the first's specular map and the second's diffuse.
+//!
 //! Next (the lane's handoff): several probes placed by the biome file as Bevy `LightProbe`s
 //! with parallax boxes, then screen-space reflections if they work at the ortho camera.
 
@@ -33,7 +37,7 @@ use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{ClearColorConfig, Exposure, RenderTarget};
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::diagnostic::FrameCount;
-use bevy::light::GeneratedEnvironmentMapLight;
+use bevy::light::{EnvironmentMapLight, GeneratedEnvironmentMapLight};
 use bevy::prelude::*;
 use bevy::render::gpu_readback::{Readback, ReadbackComplete, ReadbackOnce};
 use bevy::render::render_resource::{
@@ -58,6 +62,41 @@ pub struct Reflections {
     /// What a face shows where nothing is drawn; the light preset's sky fill if none.
     #[serde(default)]
     pub sky: Option<Sky>,
+    /// The diffuse light's own scale, apart from the reflections' `gain` (none: `gain`
+    /// lights both, as Bevy's environment map does), so a street's specular can mirror its
+    /// lamps at full while its shade is lifted less (uc-reflect j1's risk: the pools of
+    /// light flattened). Bevy scales an environment map's two maps by one intensity, so the
+    /// capture is filtered twice, once as is for the specular and once times
+    /// `diffuse / gain` for the diffuse, and the view takes a map from each (`join`).
+    /// Not an irradiance volume: a whole-place one segfaulted the spike on the worker the
+    /// frame after it came up, twice (uc-reflect j2).
+    #[serde(default)]
+    pub diffuse: Option<f32>,
+}
+
+/// A copy of a captured cube with every texel's colour times `k`.
+pub fn scaled(cube: &Image, k: f32) -> Image {
+    let mut copy = cube.clone();
+    let s = cube.texture_descriptor.size;
+    for layer in 0..s.depth_or_array_layers {
+        for y in 0..s.height {
+            for x in 0..s.width {
+                let Ok(c) = cube.get_color_at_3d(x, y, layer) else {
+                    continue;
+                };
+                let c = c.to_linear();
+                let c = Color::linear_rgba(c.red * k, c.green * k, c.blue * k, c.alpha);
+                let _ = copy.set_color_at_3d(x, y, layer, c);
+            }
+        }
+    }
+    copy
+}
+
+/// The two filterings of `diffuse` (`Reflections::diffuse`), each its own map's source.
+#[derive(Component)]
+struct Half {
+    specular: bool,
 }
 
 fn one() -> f32 {
@@ -86,7 +125,42 @@ struct Reading(usize);
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Capture>()
-        .add_systems(Update, (place, read).chain());
+        .add_systems(Update, (place, read, join).chain());
+}
+
+/// With `diffuse`: the view's environment light from the two filterings' maps (the
+/// specular of the capture as is, the diffuse of its lowered copy), once Bevy has made
+/// them; their GPU filtering goes on writing into the same textures.
+fn join(
+    mut commands: Commands,
+    biome: Option<Res<Biome>>,
+    halves: Query<(&Half, &EnvironmentMapLight)>,
+    main: Query<(Entity, Option<&Exposure>), (With<MainCamera>, Without<EnvironmentMapLight>)>,
+) {
+    let Some(r) = biome.as_ref().and_then(|b| b.reflect) else {
+        return;
+    };
+    let (mut specular_map, mut diffuse_map) = (None, None);
+    for (half, light) in &halves {
+        if half.specular {
+            specular_map = Some(light.specular_map.clone());
+        } else {
+            diffuse_map = Some(light.diffuse_map.clone());
+        }
+    }
+    let (Some(specular_map), Some(diffuse_map)) = (specular_map, diffuse_map) else {
+        return;
+    };
+    let Ok((camera, exposure)) = main.single() else {
+        return;
+    };
+    let k = exposure.copied().unwrap_or_default().exposure();
+    commands.entity(camera).insert(EnvironmentMapLight {
+        diffuse_map,
+        specular_map,
+        intensity: r.gain / k,
+        ..default()
+    });
 }
 
 /// Each cube face's look direction and up, in wgpu's layer order (+X, -X, +Y, -Y, +Z, -Z)
@@ -245,13 +319,34 @@ fn read(
     });
     cube.texture_descriptor.usage |= TextureUsages::COPY_SRC | TextureUsages::TEXTURE_BINDING;
     let k = exposure.copied().unwrap_or_default().exposure();
-    commands
-        .entity(camera)
-        .insert(GeneratedEnvironmentMapLight {
-            environment_map: images.add(cube),
-            intensity: r.gain / k,
-            ..default()
-        });
+    match r.diffuse {
+        // Two filterings on entities of their own (Bevy's generator makes an
+        // `EnvironmentMapLight` on whatever holds the `GeneratedEnvironmentMapLight`, and only a
+        // view or a `LightProbe` lights with one); `join` puts a map of each on the view.
+        Some(d) if r.gain > 0.0 => {
+            let lower = scaled(&cube, d / r.gain);
+            for (specular, source) in [(true, cube), (false, lower)] {
+                commands.spawn((
+                    Name::new("Reflections' filtering"),
+                    GeneratedEnvironmentMapLight {
+                        environment_map: images.add(source),
+                        ..default()
+                    },
+                    Half { specular },
+                ));
+            }
+            info!("reflect: the diffuse apart, at {d} x");
+        }
+        _ => {
+            commands
+                .entity(camera)
+                .insert(GeneratedEnvironmentMapLight {
+                    environment_map: images.add(cube),
+                    intensity: r.gain / k,
+                    ..default()
+                });
+        }
+    }
     for c in &cameras {
         commands.entity(c).despawn();
     }
@@ -319,6 +414,51 @@ mod tests {
     fn a_biome_names_its_probe() {
         let r: Reflections =
             crate::kit::parse("(at: (0.0, 1.5, 0.0))", "r.ron", "reflect.rs").unwrap();
-        assert_eq!((r.gain, r.size, r.sky), (1.0, 256, None));
+        assert_eq!((r.gain, r.size, r.sky, r.diffuse), (1.0, 256, None, None));
+    }
+
+    /// A captured cube, each face one colour.
+    fn cube(size: u32, faces: [f32; 6]) -> Image {
+        let mut image = Image::new_fill(
+            Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: 6,
+            },
+            TextureDimension::D2,
+            &[0; 8],
+            TextureFormat::Rgba16Float,
+            RenderAssetUsages::MAIN_WORLD,
+        );
+        for (layer, l) in faces.into_iter().enumerate() {
+            for y in 0..size {
+                for x in 0..size {
+                    image
+                        .set_color_at_3d(x, y, layer as u32, Color::linear_rgb(l, l, l))
+                        .unwrap();
+                }
+            }
+        }
+        image
+    }
+
+    /// The lowered copy is every face's texels times the scale, the cube's shape kept, so
+    /// the diffuse filtered from it is the capture's times `diffuse / gain`.
+    #[test]
+    fn the_lowered_copy_is_the_capture_times_the_scale() {
+        let faces = [0.2, 0.4, 0.8, 1.0, 2.0, 4.0];
+        let low = scaled(&cube(32, faces), 0.4);
+        assert_eq!(low.texture_descriptor.size.depth_or_array_layers, 6);
+        for (layer, l) in faces.into_iter().enumerate() {
+            let c = low
+                .get_color_at_3d(17, 9, layer as u32)
+                .unwrap()
+                .to_linear();
+            assert!(
+                (c.red - l * 0.4).abs() < 2e-3 * l,
+                "face {layer}: {}",
+                c.red
+            );
+        }
     }
 }
