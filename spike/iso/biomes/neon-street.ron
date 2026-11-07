@@ -23,7 +23,7 @@
         // Overhead (kit/cables.rs, iso-kit j46; the refs' Shibuya wires): black wires in
         // twos and threes strung from the north fronts at 5.6 to 6.4 m down to the low south
         // shops' eaves, hanging half a metre; a pair of feeds along the north face over the
-        // shops; grey downpipes at the 9 m front's ends and a conduit up from the utility box.
+        // shops; grey downpipes at the middle front's ends and a conduit up from the utility box.
         // Their radii 0.8 to 1.1 cm (iso-kit j49, the judge's "thick even black strokes
         // slicing the frame"), and the single wire moved off the left walker.
         cables: [
@@ -36,9 +36,9 @@
             (from: (-1.2, 5.9, -6.9), to: (8.5, 3.4, 6.9), sag: 0.6, radius: 0.008),
             (from: (-9.0, 3.6, -6.6), to: (6.0, 3.55, -6.6), sag: 0.14, radius: 0.009,
              count: 2, every: (0.0, -0.07, 0.03)),
-            (from: (-8.72, 9.0, -6.84), to: (-8.72, 0.15, -6.84), radius: 0.05,
+            (from: (-8.72, 18.0, -6.84), to: (-8.72, 0.15, -6.84), radius: 0.05,
              colour: Srgb(0.2, 0.2, 0.19), rough: 0.5),
-            (from: (5.72, 9.0, -6.84), to: (5.72, 0.15, -6.84), radius: 0.05,
+            (from: (5.72, 18.0, -6.84), to: (5.72, 0.15, -6.84), radius: 0.05,
              colour: Srgb(0.2, 0.2, 0.19), rough: 0.5),
             (from: (1.05, 1.1, -6.86), to: (1.05, 3.15, -6.86), radius: 0.025,
              colour: Srgb(0.35, 0.36, 0.34), rough: 0.55, count: 2, every: (0.3, 0.0, 0.0)),
@@ -142,7 +142,10 @@
                             cloth: [Srgb(0.55, 0.12, 0.1), Srgb(0.75, 0.62, 0.4)],
                             shutters: [Srgb(0.42, 0.45, 0.43), Srgb(0.45, 0.35, 0.25)],
                             spill: (60000.0, 2.2), windows: [2]))),
-            (side: North, along: (-9.0, 6.0), height: 9.0, material: "rusty_corrugated_iron",
+            // 18 m (was 9): the road's mirror rises 55 to 64 degrees at this camera, so its
+            // middle meets the north fronts 9 to 25 m up; over a 9 m roof it mirrored only
+            // the 2-nit sky, black at Fresnel's 2% (iso-kit j72). Its roof is never in frame.
+            (side: North, along: (-9.0, 6.0), height: 18.0, material: "rusty_corrugated_iron",
              metres: 2.0, tint: (0.7, 0.7, 0.72), roof: "asphalt_02",
              bays: (model: "models/iso/city/facade-apartments.glb",
                     ground: [3, 2, 1, 3, 2], upper: [6, 7], top: 8, pier: 9,
@@ -201,6 +204,29 @@
             (texture: "models/iso/city/signs/24h.png", side: North, at: 9.0, height: 4.4,
              size: (2.2, 1.0), colour: Srgb(1.0, 0.19, 0.09), nits: 30.0, lumens: 50000.0,
              range: 5.0, shadows: true, pool: (32.0, 1.8, 100000.0)),
+            // Signs up the fronts, 9.5 to 15 m, as a neon street's climb its storeys (the
+            // refs' Shibuya): above the frame, they are what the near road and its puddles
+            // mirror (iso-kit j72: the puddle under the camera mirrored the 21 m front 11 m
+            // up, a dark wall, and nothing lit stood where the rest of the road's mirror
+            // looked). Flat, so the mirror sees their faces; a small glow each on its wall.
+            (texture: "models/iso/city/signs/bar.png", side: North, at: 8.8, height: 11.8,
+             size: (4.0, 1.6), colour: Srgb(0.1, 0.82, 1.0), nits: 30.0, lumens: 6000.0,
+             range: 2.5),
+            (texture: "models/iso/city/signs/ramen.png", side: North, at: 11.6, height: 9.6,
+             size: (1.0, 3.5), colour: Srgb(1.0, 0.16, 0.55), nits: 30.0, lumens: 6000.0,
+             range: 2.5),
+            (texture: "models/iso/city/signs/24h.png", side: North, at: -5.0, height: 12.0,
+             size: (3.6, 1.6), colour: Srgb(1.0, 0.19, 0.09), nits: 30.0, lumens: 6000.0,
+             range: 2.5),
+            (texture: "models/iso/city/signs/drug.png", side: North, at: 1.0, height: 13.5,
+             size: (1.6, 3.2), colour: Srgb(0.22, 1.0, 0.42), nits: 30.0, lumens: 6000.0,
+             range: 2.5),
+            (texture: "models/iso/city/signs/ramen.png", side: North, at: -15.5, height: 11.0,
+             size: (1.1, 3.85), colour: Srgb(1.0, 0.16, 0.55), nits: 30.0, lumens: 6000.0,
+             range: 2.5),
+            (texture: "models/iso/city/signs/bar.png", side: North, at: -19.0, height: 12.0,
+             size: (3.4, 1.3), colour: Srgb(0.1, 0.82, 1.0), nits: 30.0, lumens: 6000.0,
+             range: 2.5),
         ],
         props: [
             (model: "models/iso/city/rollershutter-door.glb", side: North, line: Wall,
@@ -210,7 +236,7 @@
             (model: "models/iso/city/trash-can.glb", side: North, line: Wall,
              at: [-4.7, 10.6], out: 0.05),
             (model: "models/iso/city/propane-tank.glb", side: North, line: Wall, at: [-8.6]),
-            // Hung on the 9 m front (iso-kit j46, the refs' clutter): air conditioners on
+            // Hung on the middle front (iso-kit j46, the refs' clutter): air conditioners on
             // brackets under the first floor's windows (its bays 3 m, centred -7.5 to 4.5),
             // a payphone by the shutter; a jerrycan by the tank, crates by the 24H shop.
             (model: "models/iso/city/aircon-unit.glb", side: North, line: Wall,
