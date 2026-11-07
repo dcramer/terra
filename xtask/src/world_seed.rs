@@ -39,10 +39,16 @@ const SYSTEM_RANDOMNESS: [&str; 8] = [
 
 /// Where the system's randomness is the point: a secret, which must not be repeatable and
 /// never reaches the world. The file, and why. Nothing else may read it.
-const SECRETS: &[(&str, &str)] = &[(
-    "crates/terra_walker/src/net/session.rs",
-    "a hosted server's challenge secret (D592): a hello overheard on one run must not pass on another, and the world's seed is public",
-)];
+const SECRETS: &[(&str, &str)] = &[
+    (
+        "crates/terra_walker/src/net/session.rs",
+        "a hosted server's challenge secret (D592): a hello overheard on one run must not pass on another, and the world's seed is public",
+    ),
+    (
+        "crates/terra_game/src/play/title/profile.rs",
+        "a player's identity secret (D592), made once on their machine: it must be nobody else's, and no world's seed may give it",
+    ),
+];
 
 /// Seeds written in that are not the world's, each with why it may be: the file, and why.
 const ALLOWED: &[(&str, &str)] = &[
