@@ -45,15 +45,22 @@
         // The matted cover over all the dry land, several layers deep (the old lawn tried
         // 8 clumps a m², iso-kit j18): last year's dead sedge and reed, gold-brown to straw,
         // with this year's olive coming through: lodged flat in layers (`Mat`), no leaves
-        // beneath.
-        (plant: (kind: Mat, tint: [(0.66, 0.5, 0.22), (0.52, 0.39, 0.17), (0.42, 0.42, 0.17),
-            (0.32, 0.42, 0.15)]),
+        // beneath. A Mat's card is the atlas's green rush (cards.png cell 0.75, 0.75, its
+        // blades' mean linear 0.068, 0.106, 0.023), so each tint is the albedo wanted over
+        // that, channel by channel, over 1 where the card lacks it (iso-kit j27): straw at
+        // linear 0.26, 0.175, 0.03, tan 0.18, 0.11, 0.022, olive straw 0.15, 0.125, 0.025
+        // and this year's olive 0.08, 0.09, 0.02, as the refs' matted reed (canoe-in-reeds,
+        // 1 : 0.67 : 0.16). Under 1 everywhere (to round 261107-0032) it only darkened the
+        // green: dark sedge; at 1 : 0.59 : 0.18 (round 261107-0142) rust-purple under the moon.
+        (plant: (kind: Mat, tint: [(3.83, 1.66, 1.29), (2.65, 1.04, 0.95), (2.21, 1.18, 1.08),
+            (1.18, 0.85, 0.86)]),
             density: 5.0, scale: (0.18, 0.45), clump: (3.0, 0.7, 0.4), over: (0.05, 9.0),
             seed: 6),
         // Sedge tussocks on the hummocks' grass, olive to straw, matted (round 261107-0030:
         // as tufts, each over three broad leaves, they read as a carpet of leaf rosettes).
-        (plant: (kind: Mat, tint: [(0.38, 0.5, 0.16), (0.46, 0.46, 0.17), (0.56, 0.44, 0.18),
-            (0.64, 0.48, 0.2)]),
+        // Linear olive 0.09, 0.1, 0.02 to straw 0.26, 0.175, 0.03 over the rush card, as above.
+        (plant: (kind: Mat, tint: [(1.33, 0.95, 0.86), (2.06, 1.09, 1.03), (2.95, 1.33, 1.21),
+            (3.83, 1.66, 1.29)]),
             density: 7.0, scale: (0.24, 0.55), on: Site("grass"), clump: (5.0, 1.2, 0.4),
             over: (0.05, 9.0), seed: 1),
         // Ferns in the moss's cushions, and a few real ferns among them.
@@ -68,7 +75,8 @@
             over: (0.08, 9.0), seed: 3),
         // The bank's mat: dead rush, straw to wet brown, thick at the water's line, a few
         // marsh marigolds in it, lodged over the water's line.
-        (plant: (kind: Mat, tint: [(0.48, 0.38, 0.18), (0.34, 0.28, 0.13), (0.24, 0.25, 0.11)],
+        // Linear straw 0.2, 0.13, 0.026, brown 0.12, 0.07, 0.017, wet 0.06, 0.04, 0.012.
+        (plant: (kind: Mat, tint: [(2.95, 1.23, 1.12), (1.77, 0.66, 0.73), (0.89, 0.38, 0.52)],
             flowers: 0.04),
             density: 6.0, scale: (0.15, 0.45), on: Mud, clump: (3.0, 0.8, 0.5),
             over: (-0.04, 0.2), seed: 4),
