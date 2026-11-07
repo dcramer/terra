@@ -1,7 +1,9 @@
 // Dust kicked up off the ground under the blow (kit/effects.rs): a few faint, low puffs lit
 // by the hit's lamps and the key and sky, widening along the ground as they settle. iso-kit
 // j43 moved it from the bite, 1.5 m up (warm hot-gas puffs about the flash), to the ground
-// under it as dust: no glow of its own (0.32 dense was unseen in every still).
+// under it as dust: no glow of its own (0.32 dense was unseen in every still). iso-kit j50:
+// lit by the hit's pool 0.5 m over it, 0.5 dense read as "a flat orange disc" (the marsh's
+// judge); with the pool 1 m up and the flash light out toward the camera, 0.35.
 (
     cue: Blow,
     at: Ground,
@@ -9,6 +11,6 @@
     still: 0.1,
     life: 1.4,
     puffs: (count: 7, size: (0.4, 1.3), life: (0.7, 1.3), rise: 0.18, spread: 0.55,
-        albedo: Srgb(0.5, 0.46, 0.4), density: 0.5, delay: 0.03,
+        albedo: Srgb(0.5, 0.46, 0.4), density: 0.35, delay: 0.03,
         glow: Srgb(1.0, 0.5, 0.2), glow_nits: 0.0, grain: 0.7, soft: 0.35),
 )

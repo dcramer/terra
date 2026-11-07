@@ -109,6 +109,23 @@ pub struct Lamp {
     pub ground: bool,
     pub range: f32,
     pub fall: f32,
+    /// How far it stands from the anchor toward the camera, along the ground (m): a hit's
+    /// light at the bite lights the faces of knight and foe turned to each other, which the
+    /// camera does not see (iso-kit j43's FOUND); set out toward the camera and up, it lights
+    /// the faces it does, as the ARPGs cheat theirs (see `lamp_at`).
+    #[serde(default)]
+    pub toward: f32,
+}
+
+/// Where a light set `toward` metres out from `base` toward the camera stands: along the
+/// ground (the camera's facing laid flat), so the light's height is the preset's `up`. An
+/// ARPG's hit and projectile lights are placed for the camera, not for the contact (Diablo
+/// III's and Path of Exile's hit flashes light the near side of the bodies fighting; Last
+/// Epoch's skills offset their lights the same way): with no shadows, a light behind the
+/// bodies only rims what the camera sees.
+pub fn lamp_at(base: Vec3, toward: f32, cam: Quat) -> Vec3 {
+    let f = cam * Vec3::Z;
+    base + Vec3::new(f.x, 0.0, f.z).normalize_or(Vec3::Z) * toward
 }
 
 /// Streaks: how many, speed (m/s) and life (s) ranges, thickness (m), the cone about the
@@ -459,6 +476,8 @@ enum Kind {
 struct Lit {
     effect: usize,
     lamp: usize,
+    /// Where it stands before it is set out toward the camera (`lamp_at`, each frame).
+    base: Vec3,
 }
 
 /// Each played effect's anchor and the way its sparks fly.
@@ -610,7 +629,11 @@ fn spawn(
                     ..default()
                 },
                 Transform::from_translation(base + Vec3::Y * l.up),
-                Lit { effect: i, lamp: j },
+                Lit {
+                    effect: i,
+                    lamp: j,
+                    base: base + Vec3::Y * l.up,
+                },
             ));
         }
     }
@@ -632,20 +655,21 @@ fn play(
     cues: Res<Cues>,
     cam: Res<Cam>,
     light: Option<Res<Light>>,
-    mut lamps: Query<(&Lit, &mut PointLight, &GlobalTransform)>,
+    mut lamps: Query<(&Lit, &mut PointLight, &mut Transform), Without<Quad>>,
     others: Query<(&PointLight, &GlobalTransform), Without<Lit>>,
     mut quads: Query<(&Quad, &mut Transform)>,
     mut glows: ResMut<Assets<Glow>>,
 ) {
     let ages: Vec<f32> = fx.0.iter().map(|e| age(&e.1, &clock, &cues)).collect();
     let mut points: Vec<(Vec3, Vec3, f32, f32)> = Vec::new();
-    for (lit, mut pl, g) in &mut lamps {
+    for (lit, mut pl, mut tr) in &mut lamps {
         let p = &fx.0[lit.effect].1;
         let l = &p.lamps[lit.lamp];
         pl.intensity = lamp_lm(l, ages[lit.effect], p.life);
+        tr.translation = lamp_at(lit.base, l.toward, cam.rot);
         let c = pl.color.to_linear();
         points.push((
-            g.translation(),
+            tr.translation,
             Vec3::new(c.red, c.green, c.blue),
             pl.intensity,
             pl.range,
@@ -765,6 +789,37 @@ mod tests {
             ground: true,
             range: 3.0,
             fall: 0.1,
+            toward: 0.0,
+        }
+    }
+
+    /// A hit's light set out toward the camera lights the faces of the two bodies the camera
+    /// sees more than one at the bite, and the faces turned from it less: the irradiance on
+    /// each body's near and far side, knight and foe a couple of metres apart across the view
+    /// (the ruin's stage, its camera at 55 degrees down, 20 round).
+    #[test]
+    fn a_hit_light_set_toward_the_camera_lights_what_it_sees() {
+        let (pitch, yaw) = (55f32.to_radians(), 20f32.to_radians());
+        let cam = Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-pitch);
+        let to_eye = cam * Vec3::Z;
+        assert!(to_eye.y > 0.5, "the camera looks down");
+        let near = Vec3::new(to_eye.x, 0.0, to_eye.z).normalize();
+        let bite = Vec3::new(1.0, 1.5, -0.7);
+        let bodies = [Vec3::new(0.0, 1.2, 0.0), Vec3::new(2.0, 1.3, -1.4)];
+        // A face's irradiance from a point light (Lambert over r^2).
+        let e = |light: Vec3, at: Vec3, n: Vec3| {
+            let d = light - at;
+            (d.normalize().dot(n)).max(0.0) / d.length_squared()
+        };
+        let set = lamp_at(bite + Vec3::Y * 0.5, 1.0, cam);
+        assert!(
+            (set.y - 2.0).abs() < 1e-5,
+            "set out along the ground, not down the view"
+        );
+        for b in bodies {
+            let (seen, hidden) = (near, -near);
+            assert!(e(set, b + seen * 0.25, seen) > 2.0 * e(bite, b + seen * 0.25, seen));
+            assert!(e(set, b - seen * 0.25, hidden) <= e(bite, b - seen * 0.25, hidden));
         }
     }
 

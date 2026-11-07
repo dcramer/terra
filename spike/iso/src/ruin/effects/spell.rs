@@ -14,7 +14,7 @@
 use super::Stage;
 use super::kit::{Cam, Clock};
 use super::mark::{Mark, mark, mark_image};
-use crate::kit::effects::{Cues, Effects, Glow, Look};
+use crate::kit::effects::{Cues, Effects, Glow, Look, lamp_at};
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -42,11 +42,20 @@ const HEAD_STRETCH: f32 = 1.8;
 /// crop of blind-ruin6/a.png; all three judges: "the bolts light nothing").
 /// 30k, with its pool at 25k, washed the ruin's floor white about the fight (p95 0.20
 /// against the refs' 0.13, the judge): both cut, in the same ratio.
-const BOLT_LM: f32 = 18_000.0;
-/// So a second light rides under each bolt, `POOL_UP` over the floor: at 0.5 m its light
-/// falls to a fifth a metre out, a tight cold pool under the spell (d4-lightning).
-const POOL_LM: f32 = 15_000.0;
-const POOL_UP: f32 = 0.5;
+/// It rides `BOLT_TOWARD` m out from the head toward the camera and `BOLT_UP` over it
+/// (kit/effects.rs `lamp_at`), so it lights the faces of the hero, the foe and the scenery
+/// the camera sees as it passes, not their tops and far sides (iso-kit j50: the forest's
+/// judge, "the blue spell arcs cast almost no light on the ground or figures"); out there,
+/// 18k -> 22k, as much as keeps the pool four times its light on the floor (the test).
+const BOLT_LM: f32 = 22_000.0;
+const BOLT_TOWARD: f32 = 0.7;
+const BOLT_UP: f32 = 0.3;
+/// So a second light rides under each bolt, `POOL_UP` over the ground under it (the land's,
+/// in the forest and the marsh: the stage's floor is only the knight's), a cold pool
+/// following the spell along its path (d4-lightning). 0.5 m up at 15k lm was a bright spot
+/// a metre across, too small to read in the forest's shade; 0.8 m spreads it to two.
+const POOL_LM: f32 = 22_000.0;
+const POOL_UP: f32 = 0.8;
 /// The trail's strip width (m), the same down its length: the streak's halo fades well inside
 /// it and narrows down the trail itself (effects.wesl). The two ribbons it replaces were 0.24
 /// and 0.07 wide at the bolt, tapering to the tail.
@@ -219,6 +228,7 @@ fn fly(
     )>,
     mut meshes: ResMut<Assets<Mesh>>,
     stage: Res<Stage>,
+    land: Option<Res<crate::terrain::Land>>,
     walking: Option<Res<crate::ruin::walk::Walking>>,
 ) {
     let stage = &*stage;
@@ -254,11 +264,12 @@ fn fly(
                 };
             }
             Part::Light => {
-                tr.unwrap().translation = head;
+                tr.unwrap().translation = lamp_at(head + Vec3::Y * BOLT_UP, BOLT_TOWARD, cam.rot);
                 light.unwrap().intensity = if flying { BOLT_LM } else { 0.0 };
             }
             Part::Pool => {
-                tr.unwrap().translation = Vec3::new(head.x, stage.floor + POOL_UP, head.z);
+                tr.unwrap().translation =
+                    stage.ground(land.as_deref(), head.xz()) + Vec3::Y * POOL_UP;
                 light.unwrap().intensity = if flying { POOL_LM } else { 0.0 };
             }
             Part::Trail(mesh, width) => {
@@ -319,7 +330,7 @@ mod tests {
     fn the_pool_under_a_bolt_is_tight_and_bright() {
         let st = Stage::default();
         let high = (0..=10)
-            .map(|j| path(&st, 1, j as f32 / 10.0).y - st.floor)
+            .map(|j| path(&st, 1, j as f32 / 10.0).y + BOLT_UP - st.floor)
             .fold(9.0, f32::min);
         let under = POOL_LM / (POOL_UP * POOL_UP);
         assert!(

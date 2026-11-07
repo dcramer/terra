@@ -9,9 +9,12 @@
     life: 0.45,
     flash: (core: Srgb(0.85, 0.92, 1.0), core_nits: 6000.0, rim: Srgb(0.3, 0.55, 1.0), rim_nits: 320.0,
         size: 0.8, core_size: 0.1, falloff: 6.0, swell: 0.4, fall: 0.1),
+    // Set out toward the camera and up as the hit's are (iso-kit j50), so the foe's near side
+    // and the ground before it take the blue, not its bark's far side.
     lamps: [
-        (lm: 55000.0, colour: Srgb(0.55, 0.7, 1.0), up: 0.2, range: 5.0, fall: 0.15),
-        (lm: 20000.0, colour: Srgb(0.45, 0.62, 1.0), up: 0.5, ground: true, range: 2.5, fall: 0.3),
+        (lm: 90000.0, colour: Srgb(0.55, 0.7, 1.0), up: 0.5, toward: 1.1, range: 4.5, fall: 0.13),
+        (lm: 14000.0, colour: Srgb(0.45, 0.62, 1.0), up: 1.0, toward: 0.4, ground: true, range: 3.0,
+            fall: 0.25),
     ],
     sparks: (count: 16, speed: (1.5, 4.5), life: (0.15, 0.4), width: 0.013, spread: 0.9,
         gravity: 6.0, shutter: 0.02, hot: Srgb(0.9, 0.95, 1.0), hot_nits: 5000.0,

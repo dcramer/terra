@@ -4,12 +4,17 @@
 // glinting in the water. It replaces a flat soft-image card over a hot sphere, read as "flat
 // green discs" by every marsh judge. At the marsh's ev100 7.5 (exposure 1/217) the core is
 // ~25 linear, the halo's heart ~2 in green.
+// iso-kit j50: that heart, 2 linear, tonemapped to a flat green disc with a hard rim ("flat
+// glowing discs that light nothing", the marsh's judge): the halo a third as bright (~0.65
+// linear, a gradient, not a plate) and a little wider, so the glow is the bloom's and the
+// light's, and the light three times as strong in a shorter reach, a green pool on the reeds
+// and the mud of the bank it hangs over.
 (
     cue: Loop(6.0),
     at: Ground,
     still: 0.0,
     life: 6.0,
-    flash: (core: Srgb(0.8, 1.0, 0.92), core_nits: 5500.0, rim: Srgb(0.4, 1.0, 0.8), rim_nits: 450.0,
-        size: 1.2, core_size: 0.07, falloff: 6.0, swell: 0.0, fall: 1.0),
-    lamps: [(lm: 4000.0, colour: Srgb(0.64, 1.0, 0.92), up: 0.0, range: 5.0, fall: 1.0)],
+    flash: (core: Srgb(0.8, 1.0, 0.92), core_nits: 4500.0, rim: Srgb(0.4, 1.0, 0.8), rim_nits: 150.0,
+        size: 1.4, core_size: 0.06, falloff: 7.0, swell: 0.0, fall: 1.0),
+    lamps: [(lm: 12000.0, colour: Srgb(0.64, 1.0, 0.92), up: 0.0, range: 3.5, fall: 1.0)],
 )
