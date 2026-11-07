@@ -125,11 +125,16 @@ impl MaterialExtension for RimExt {
 
 pub fn plugin(app: &mut App) {
     embedded_asset!(app, "shaders/rim.wesl");
-    app.add_plugins(MaterialPlugin::<RimMaterial>::default())
-        .init_resource::<Swapped>()
-        .init_resource::<Mirrored>()
-        .add_systems(Startup, (canopy_map, scans))
-        .add_systems(Update, (swap, fighters, tint, mirror).chain());
+    // A biome's finishes (kit/finish.rs) set a model's material as it loads, before it is
+    // spawned and swapped here, so the swapped copy carries them.
+    app.add_plugins((
+        MaterialPlugin::<RimMaterial>::default(),
+        crate::kit::finish::plugin,
+    ))
+    .init_resource::<Swapped>()
+    .init_resource::<Mirrored>()
+    .add_systems(Startup, (canopy_map, scans))
+    .add_systems(Update, (swap, fighters, tint, mirror).chain());
 }
 
 /// The ground's scan array, loaded as kit/ground.rs loads it.

@@ -45,6 +45,10 @@ pub struct Biome {
     /// What lives and moves in it (iso-kit j7).
     #[serde(default)]
     pub life: Vec<Life>,
+    /// Models' materials regraded at spawn: sheen, metal, colour (kit/finish.rs, iso-kit
+    /// j60). None by default: a model looks as its file made it.
+    #[serde(default)]
+    pub finishes: Vec<super::finish::Finish>,
 }
 
 /// The kind of a reference and a still.

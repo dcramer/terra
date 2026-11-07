@@ -9,6 +9,7 @@ pub mod cables;
 pub mod contact;
 pub mod effects;
 pub mod facade;
+pub mod finish;
 pub mod ground;
 pub mod laid;
 pub mod light;
