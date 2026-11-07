@@ -46,6 +46,12 @@
             dirt: 0.7,
             damp: 0.6,
             feet: Site("walls"),
+            // An abandoned court's grime (iso-kit j67, every ruin judge's first gap: "clean
+            // flat slabs with crack decals"): earth and dark moss soaked 15 cm in from the
+            // joints, blotches a metre to a hand, each flag its own staining; lichen crusts in
+            // patches, dark damp spots 3-10 cm (under ~5 cm blurs away at the camera); dead
+            // leaves drifted at the walls' feet and in the broken corners.
+            grime: (edges: 0.15, blotch: 0.8, spots: 4.0, size: 0.1, earth: 1.0, lichen: 0.35, litter: 60.0),
         ),
     ),
     // The rain pool by the west brazier, the kit's water (kit/water.rs, ruin/water.rs, iso-kit

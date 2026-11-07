@@ -210,10 +210,11 @@ pub struct Wear {
     pub round: f32,
 }
 
-/// A city floor's grime (none by default), as a street's paving and road are in
+/// A floor's grime (none by default), as a street's paving and road are in
 /// photographs at night: dirt soaked into each unit along its joints, blotches of trodden
 /// and spilt grime, some units far dirtier than the next, dark wet dirt banked at `feet`,
-/// and spots (chewing gum on a pavement, oil drips on a road), each its own size and tone.
+/// and spots (chewing gum on a pavement, oil drips on a road, lichen on an old court), each
+/// its own size and tone; an abandoned court's earthier, with dead leaves drifted.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Grime {
@@ -230,6 +231,18 @@ pub struct Grime {
     /// The largest spot's width (m); the rest down to a third of it.
     #[serde(default)]
     pub size: f32,
+    /// How far its dirt is the soil's brown and the moss's dark green (an abandoned court's
+    /// earth), 0 (the city's grey-black grime) to 1.
+    #[serde(default)]
+    pub earth: f32,
+    /// How much of the stone lichen crusts, 0 (none) to 1: pale grey-green and ochre patches
+    /// with crisp lobed edges, on some units and not others, never in a joint.
+    #[serde(default)]
+    pub lichen: f32,
+    /// Dead leaves a square metre (0: none) where they drift: against the walls' feet
+    /// (`feet`), in the broken corners and gone units, along the joints; up to 200.
+    #[serde(default)]
+    pub litter: f32,
 }
 
 /// A mark on a laid floor: a rectangle `size` metres (along its own x and z) centred `at`

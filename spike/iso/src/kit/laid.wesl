@@ -28,6 +28,7 @@ struct Params {
     wear: vec4<f32>,
     seams: vec4<f32>,
     grime: vec4<f32>,
+    aged: vec4<f32>,
     mark_at: array<vec4<f32>, 24>,
     mark_turn: array<vec4<f32>, 24>,
     mark_rep: array<vec4<f32>, 24>,
@@ -421,7 +422,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         }
     }
 
-    // A city floor's grime (`grime`, biome.rs `Grime`, all 0 but the street's), over the
+    // A floor's grime (`grime`, biome.rs `Grime`, the street's and the ruin's), over the
     // marks as a street's is over its paint, as paving and asphalt are at night in
     // photographs: dark wet dirt soaked in from each unit's joints, patchy along them; broad
     // blotches of trodden and spilt grime, each unit dirtier or cleaner than the next; dirt
@@ -430,7 +431,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     if laid.grime.x + laid.grime.y + laid.grime.z > 0.0 {
         // Its own grain at a few centimetres (finer blurs away under a pixel at the camera).
         let speck = hash(floor(p * 25.0) + 23.0) * 0.6 + noise(p * 9.0 + 5.0) * 0.4;
-        let filth = colour * 0.3 + vec3<f32>(0.016, 0.014, 0.011) * (0.3 + 1.4 * speck);
+        let city = colour * 0.3 + vec3<f32>(0.016, 0.014, 0.011) * (0.3 + 1.4 * speck);
+        // An abandoned court's (`earth`): the soil's brown, the moss's dark green in patches.
+        let greened = smoothstep(0.45, 0.7, noise(p * 1.3 + 91.0) * 0.6 + noise(p * 5.0 + 13.0) * 0.4);
+        let soil = mix(vec3<f32>(0.046, 0.034, 0.022), vec3<f32>(0.026, 0.036, 0.016), greened);
+        let filth = mix(city, colour * 0.28 + soil * (0.45 + 1.1 * speck), laid.aged.x);
         let along = noise(p * 4.0 + 61.0) * 0.6 + noise(p * 13.0 + 3.0) * 0.4;
         let reach = laid.grime.x * (0.3 + 1.4 * along) * (0.5 + unit_dirt);
         let soak = (1.0 - smoothstep(0.0, max(reach, 1e-4), edge)) * step(1e-4, laid.grime.x)
@@ -458,6 +463,17 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             colour *= mix(1.0, mix(0.12, 0.45, hash(c + 223.0)), spot);
             mark_rough *= mix(1.0, 0.6, spot);
         }
+        // Lichen (`lichen`, how much of the stone it crusts): pale grey-green and ochre
+        // patches with crisp lobed edges, 5 to 20 cm, on some flags and stretches and not
+        // others, never in a joint (round discs read as polka dots, round 261107-0910).
+        if laid.aged.y > 0.0 {
+            let patchy = noise(p * 0.7 + 131.0) * 0.6 + unit_dirt * 0.4;
+            let l = noise(p * 11.0 + 137.0) * 0.55 + noise(p * 29.0 + 139.0) * 0.3 + noise(p * 70.0 + 3.0) * 0.15;
+            let crust = smoothstep(0.66, 0.69, l + (patchy - 0.5) * 0.5 + (laid.aged.y - 0.5) * 0.3)
+                * (1.0 - joint);
+            let tone = mix(vec3<f32>(0.3, 0.32, 0.26), vec3<f32>(0.38, 0.29, 0.12), smoothstep(0.4, 0.6, noise(p * 2.1 + 141.0)));
+            colour = mix(colour, tone * (0.8 + 0.4 * noise(p * 40.0 + 7.0)), crust * 0.6);
+        }
     }
 
     // Moss: out of the joints first, then over the units where it is mossiest.
@@ -484,6 +500,38 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         colour = mix(colour, earth, gone);
     }
 
+    // Dead leaves (`aged.z` a square metre, biome.rs `Grime.litter`) drifted where the wind
+    // drops them: against the walls' feet, into the gone units and broken corners, along
+    // the joints, a few blown over the open floor; 5 to 8 cm each (smaller blurs away at
+    // the camera), turned their own way, dark brown to ochre, curled darker along one side;
+    // two jittered grids so they overlap.
+    var leaf = 0.0;
+    if laid.aged.z > 0.0 {
+        let lay = feet * 0.9 + gone * 0.8 + gone_rim * 0.5 + joint * 0.25
+            + (noise(p * 0.8 + 101.0) * 0.6 + noise(p * 3.5 + 7.0) * 0.4 - 0.5) * 0.7;
+        let drift = smoothstep(0.3, 0.75, lay);
+        let cell_m = 0.14;
+        for (var g = 0u; g < 2u; g++) {
+            let k = f32(g) * 57.0;
+            let s = p + f32(g) * vec2<f32>(0.07, 0.05);
+            let c = floor(s / cell_m);
+            let has = select(0.0, 1.0, hash(c + 301.0 + k) < laid.aged.z * cell_m * cell_m * (0.04 + drift));
+            let d = s - (c + vec2<f32>(hash(c + 303.0 + k), hash(c + 305.0 + k)) * 0.4 + 0.3) * cell_m;
+            let ang = hash(c + 307.0 + k) * 6.2832;
+            let cs = vec2<f32>(cos(ang), sin(ang));
+            let u = vec2<f32>(dot(d, cs), dot(d, vec2<f32>(-cs.y, cs.x)));
+            let len = mix(0.025, 0.04, hash(c + 309.0 + k));
+            let wid = len * mix(0.35, 0.55, hash(c + 311.0 + k));
+            let t = clamp(u.x / len, -1.0, 1.0);
+            let sd = min(len - abs(u.x), wid * (1.0 - t * t) - abs(u.y));
+            let cover = clamp(sd / max(px, 1e-4) + 0.5, 0.0, 1.0) * has;
+            var lc = mix(vec3<f32>(0.07, 0.045, 0.025), vec3<f32>(0.32, 0.17, 0.05), hash(c + 313.0 + k));
+            lc *= mix(0.65, 1.1, smoothstep(-wid, wid, u.y));
+            colour = mix(colour, lc, cover);
+            leaf = max(leaf, cover);
+        }
+    }
+
     // Puddles: the water line sharp and a little ragged, the water creeping out along the
     // joints; damp stone a hand's width round it.
     let rag = (noise(p * 6.0) - 0.5) * 0.12 + joint * 0.12;
@@ -497,7 +545,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     colour *= mix(1.0, 0.7, damp_patch);
     var rough = clamp(pbr_input.material.perceptual_roughness * rough_k, 0.05, 1.0);
     rough = mix(rough, 1.0, dirty) * mix(1.0, 0.55, damp_patch) * mark_rough;
-    rough = mix(mix(rough, 0.55, paint), 1.0, gone);
+    rough = mix(mix(mix(rough, 0.55, paint), 1.0, gone), 0.95, leaf);
     pbr_input.material.perceptual_roughness = mix(mix(rough, rough * 0.6, damp), 0.09, wet);
     // Each unit tilted its own way; standing water is flat: the units' relief shows only
     // faintly through it; soil has none of the stone's.

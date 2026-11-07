@@ -57,6 +57,9 @@ pub struct Params {
     /// The floor's grime (biome.rs `Grime`): x how far (m) it soaks in from the joints, y
     /// how dark its blotches and banks, z its spots a square metre, w the largest spot (m).
     pub grime: Vec4,
+    /// The grime's age (biome.rs `Grime`): x how earthy its dirt, y the lichen's share of
+    /// the spots, z dead leaves a square metre where they drift.
+    pub aged: Vec4,
     /// Each mark's centre (x, z) and half size.
     pub mark_at: [Vec4; MARKS],
     /// Each mark's turn's cos and sin and its repeats' spacing.
@@ -223,18 +226,24 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
         ),
         seams: Vec4::new(laid.wear.gap, laid.wear.uneven, laid.wear.round, 0.0),
         grime: Vec4::new(g.edges, g.blotch, g.spots, g.size),
+        aged: Vec4::new(g.earth, g.lichen, g.litter, 0.0),
         ..default()
     };
     let bad_grime = g.edges < 0.0
         || g.edges > 0.5
         || !(0.0..=1.0).contains(&g.blotch)
         || !(0.0..=64.0).contains(&g.spots)
-        || (g.spots > 0.0 && !(0.005..=0.5).contains(&g.size));
+        || (g.spots > 0.0 && !(0.005..=0.5).contains(&g.size))
+        || !(0.0..=1.0).contains(&g.earth)
+        || !(0.0..=1.0).contains(&g.lichen)
+        || !(0.0..=200.0).contains(&g.litter);
     if bad_grime {
         return Err(format!(
             "laid grime {g:?}: edges 0 to 0.5 m, blotch 0 to 1, spots 0 to 64 a square \
-             metre, and with any spots a size 0.005 to 0.5 m (the largest spot's width). \
-             Fix: chewing gum is about 0.025 m, an oil drip about 0.12 m (kit/laid.rs, D634)"
+             metre, and with any spots a size 0.005 to 0.5 m (the largest spot's width); \
+             earth and lichen 0 to 1, litter 0 to 200 leaves a square metre. Fix: chewing \
+             gum is about 0.025 m, an oil drip about 0.12 m, a damp spot about 0.1 m \
+             (kit/laid.rs, D634)"
         ));
     }
     let bad_mark = |m: &Mark| {
@@ -346,26 +355,37 @@ mod tests {
         }
     }
 
-    /// Grime is the street's alone: a floor naming none (the ruin's court) passes the
-    /// shader zeros, so it draws as before; the street's pavements and road both carry it,
-    /// the gum on the flags smaller than the oil on the road; a bad one names its fix.
+    /// Grime is named, never assumed: a floor naming none passes the shader zeros, so it
+    /// draws as before; the street's pavements and road carry the city's (grey-black, no
+    /// lichen or leaves), the gum on the flags smaller than the oil on the road; the ruin's
+    /// court an abandoned one's (earthy, lichen spots, leaves drifted); a bad one names its fix.
     #[test]
-    fn grime_is_the_streets_alone() {
-        assert_eq!(params(&laid(None, None), &PLACE).unwrap().grime, Vec4::ZERO);
-        let ruin = super::super::biome::Biome::load("ruin").unwrap();
-        let p = params(&ruin.ground.laid.unwrap(), &PLACE).unwrap();
-        assert_eq!(p.grime, Vec4::ZERO, "the ruin's court is unchanged");
+    fn grime_is_named_city_or_abandoned() {
+        let none = params(&laid(None, None), &PLACE).unwrap();
+        assert_eq!((none.grime, none.aged), (Vec4::ZERO, Vec4::ZERO));
         let b = super::super::biome::Biome::load("neon-street").unwrap();
-        let flags = params(&b.ground.laid.unwrap(), &PLACE).unwrap().grime;
+        let flags = params(&b.ground.laid.unwrap(), &PLACE).unwrap();
         let road = b.street.expect("the street").asphalt;
-        let road = params(&road, &PLACE).unwrap().grime;
-        assert!(flags.x > 0.0 && flags.y > 0.0 && flags.z > 0.0, "{flags}");
-        assert!(road.y > 0.0 && road.z > 0.0, "{road}");
-        assert!(flags.w < road.w, "gum {} under oil {}", flags.w, road.w);
+        let road = params(&road, &PLACE).unwrap();
+        let (fg, rg) = (flags.grime, road.grime);
+        assert!(fg.x > 0.0 && fg.y > 0.0 && fg.z > 0.0, "{fg}");
+        assert!(rg.y > 0.0 && rg.z > 0.0, "{rg}");
+        assert!(fg.w < rg.w, "gum {} under oil {}", fg.w, rg.w);
+        assert_eq!((flags.aged, road.aged), (Vec4::ZERO, Vec4::ZERO), "a city's grime");
+        let ruin = super::super::biome::Biome::load("ruin").unwrap();
+        let court = params(&ruin.ground.laid.unwrap(), &PLACE).unwrap();
+        let (g, a) = (court.grime, court.aged);
+        assert!(g.x > 0.0 && g.y > 0.0 && g.z > 0.0, "{g}");
+        assert!(a.x > 0.5 && a.y > 0.0 && a.z > 0.0, "an old court's earth, lichen, leaves {a}");
+        assert!(g.w > fg.w, "damp spots {} over gum {}", g.w, fg.w);
         let mut bad = laid(None, None);
         bad.grime.spots = 4.0;
         let e = params(&bad, &PLACE).unwrap_err();
         assert!(e.contains("Fix:") && e.contains("size"), "{e}");
+        let mut bad = laid(None, None);
+        bad.grime.litter = 500.0;
+        let e = params(&bad, &PLACE).unwrap_err();
+        assert!(e.contains("Fix:") && e.contains("litter"), "{e}");
     }
 
     fn mark(size: (f32, f32), every: (f32, f32), count: (u32, u32), turn: f32) -> Mark {
