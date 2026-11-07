@@ -19,6 +19,10 @@ pub struct Biome {
     /// Its references' folder, `~/.cache/terra-review/iso-kit/refs/<refs>/` (iso-kit j2).
     pub refs: String,
     pub layout: Layout,
+    /// The street's road, kerbs, fronts, lamps, signs and props, when the layout is
+    /// `Street` (kit/street.rs).
+    #[serde(default)]
+    pub street: Option<super::street::Street>,
     pub light: LightRef,
     /// The ground's layers and how they blend (kit/ground.rs draws it, iso-kit j6).
     #[serde(default)]
@@ -66,6 +70,9 @@ pub enum Layout {
     Forest,
     /// Mud banks between open channels (marsh/).
     Marsh,
+    /// A kerbed road between pavements and building fronts, as the biome's `street` says
+    /// (kit/street.rs): any town's, a city's at night or a wasteland's.
+    Street,
 }
 
 /// The light: a preset in `biomes/light/`, and the numbers this biome changes of it.

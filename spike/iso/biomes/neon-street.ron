@@ -1,0 +1,104 @@
+// A city street at night after rain (iso-kit j11): a kerbed road between pavements, tall
+// fronts to the north with storeys of windows, low shops to the south, sodium lamps over the
+// road and neon signs on the walls, each lighting the wet asphalt in its colour. Drawn by the
+// kit's Street layout (kit/street.rs); rain, steam, holograms, drones and litter are later
+// jobs. The schema: spike/iso/src/kit/biome.rs; how to add a biome: the iso-art skill's kit.md.
+(
+    kind: [Night, Rain],
+    refs: "neon-street",
+    layout: Street,
+    street: (
+        road: 7.0,
+        walk: 3.2,
+        kerb: (0.3, 0.15),
+        length: 70.0,
+        focus: (0.0, -1.0),
+        // The road: Poly Haven's worn, cracked Asphalt 02 at its 3 m, wet all over and
+        // standing in patches and along the gutters.
+        asphalt: (
+            material: "asphalt_02",
+            metres: 3.0,
+            joints: 0.0,
+            cracks: 0.5,
+            grain: (0.4, 0.5),
+            wet: Site("puddled"),
+            dirt: 0.3,
+            damp: 0.9,
+            feet: Site("walls"),
+        ),
+        kerbs: (
+            material: "granite_tile_04",
+            metres: 2.0,
+            joints: 0.3,
+            cracks: 0.3,
+            grain: (0.4, 0.5),
+            wet: Site("gutter"),
+            damp: 0.6,
+        ),
+        fronts: [
+            (side: North, along: (-35.0, -9.0), height: 16.0, material: "concrete_wall_006",
+             metres: 2.0, roof: "asphalt_02",
+             windows: (storey: 3.3, from: 4.4, every: 2.6, size: (1.4, 1.7), lit: 0.3,
+                       colours: [Srgb(1.0, 0.72, 0.42), Srgb(0.62, 0.8, 1.0)], nits: 6.0)),
+            (side: North, along: (-9.0, 6.0), height: 9.0, material: "rusty_corrugated_iron",
+             metres: 2.0, tint: (0.7, 0.7, 0.72), roof: "asphalt_02",
+             windows: (storey: 3.3, from: 5.0, every: 3.0, size: (1.8, 1.2), lit: 0.35,
+                       colours: [Srgb(1.0, 0.72, 0.42)], nits: 5.0)),
+            (side: North, along: (6.0, 35.0), height: 20.0, material: "concrete_wall_006",
+             metres: 2.0, tint: (0.85, 0.8, 0.74), roof: "asphalt_02",
+             windows: (storey: 3.2, from: 4.4, every: 2.4, size: (1.3, 1.7), lit: 0.25,
+                       colours: [Srgb(1.0, 0.72, 0.42), Srgb(0.62, 0.8, 1.0), Srgb(1.0, 0.9, 0.75)],
+                       nits: 6.0)),
+            (side: South, along: (-35.0, -4.0), height: 4.0, material: "concrete_wall_006",
+             metres: 2.0, roof: "asphalt_02"),
+            (side: South, along: (-4.0, 35.0), height: 3.6, material: "rusty_corrugated_iron",
+             metres: 2.0, tint: (0.7, 0.7, 0.72), roof: "asphalt_02"),
+        ],
+        // Sodium lamps (about 2000 K) over the road, sides taking turns.
+        lamps: (every: 16.0, start: -24.0, height: 6.5, reach: 1.6,
+                colour: Srgb(1.0, 0.62, 0.25), lumens: 300000.0, angle: 60.0, range: 14.0,
+                shadows: true),
+        // Textures from text by ffmpeg (assets/models/iso/city/README.md, signs).
+        signs: [
+            (texture: "models/iso/city/signs/ramen.png", side: North, at: -12.0, height: 6.5,
+             size: (0.9, 3.15), blade: true, colour: Srgb(1.0, 0.16, 0.55), nits: 30.0,
+             lumens: 50000.0),
+            (texture: "models/iso/city/signs/bar.png", side: North, at: -3.0, height: 4.6,
+             size: (2.9, 1.1), colour: Srgb(0.1, 0.82, 1.0), nits: 30.0, lumens: 50000.0),
+            (texture: "models/iso/city/signs/drug.png", side: North, at: 3.6, height: 5.6,
+             size: (1.0, 2.0), colour: Srgb(0.22, 1.0, 0.42), nits: 30.0, lumens: 35000.0),
+            (texture: "models/iso/city/signs/24h.png", side: North, at: 9.0, height: 4.4,
+             size: (2.2, 1.0), colour: Srgb(1.0, 0.19, 0.09), nits: 30.0, lumens: 40000.0),
+        ],
+        props: [
+            (model: "models/iso/city/rollershutter-door.glb", side: North, line: Wall,
+             at: [-16.0, -6.0, 13.0, 19.0], out: -0.2),
+            (model: "models/iso/city/trash-bag.glb", side: North, line: Wall,
+             at: [-7.9, -7.4, 10.6], out: 0.2),
+            (model: "models/iso/city/propane-tank.glb", side: North, line: Wall, at: [-8.6]),
+            (model: "models/iso/city/utility-box.glb", side: North, line: Wall, at: [1.2]),
+            (model: "models/iso/city/oil-barrel.glb", side: South, line: Wall, at: [-9.0, -8.3]),
+            (model: "models/iso/city/trash-bag.glb", side: South, line: Wall, at: [-2.0, 5.5],
+             turn: 40.0),
+            (model: "models/iso/city/old-tyre.glb", side: South, line: Kerb, at: [-5.5],
+             turn: 30.0),
+            (model: "models/iso/city/manhole-cover.glb", side: North, line: Road, at: [4.0],
+             out: 1.2),
+        ],
+    ),
+    light: (preset: "city-night-rain"),
+    ground: (
+        // The pavements: Poly Haven's Concrete Pavement flags at their 1.8 m.
+        laid: (
+            material: "concrete_pavement",
+            metres: 1.8,
+            joints: 0.4,
+            cracks: 0.3,
+            grain: (0.4, 0.5),
+            wet: Site("puddled"),
+            dirt: 0.4,
+            damp: 0.7,
+            feet: Site("walls"),
+        ),
+    ),
+)

@@ -182,6 +182,10 @@ fn main() {
             .run();
         return;
     }
+    if args.layout == Some(Layout::Street) {
+        app.add_plugins((mipmaps::plugin, kit::street::plugin)).run();
+        return;
+    }
     if args.layout == Some(Layout::Marsh) {
         // The glade's ground material, then the marsh's own land over it.
         app.add_plugins((mipmaps::plugin, terrain::plugin, rim::plugin, marsh::plugin))

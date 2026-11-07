@@ -27,3 +27,7 @@ Scanned and photo-textured street props for the iso experiment's neon street at 
 | `wheel-rim.glb` | [Rusted Wheel Rim 01](https://polyhaven.com/a/rusted_wheel_rim_01) | John Hutcheson | 16,440 over | 0.40 x 0.40 x 0.15 | |
 
 No building shells yet: Kenney's City Kit Commercial (CC0) downloads only through its page's script, and its flat-coloured low-poly kit would read toy-like against these scans (D634).
+
+## Signs (`signs/`, iso-kit j11)
+
+Neon sign faces for the kit's street (kit/street.rs `signs`), made here from text with ffmpeg's drawtext (a coloured tube with a pale core, a 14 px glow, black ground: the emissive texture): `ramen.png` (ラーメン, 256x896, a blade), `bar.png` (BAR, 768x288), `drug.png` (薬局, pharmacy, 256x512), `24h.png` (24H, 640x288). Fonts: Noto Sans CJK Medium and Liberation Sans Bold (both SIL OFL 1.1); no trademarks. Recipe: `color=c=black:s=WxH,format=rgb24`, drawtext with `borderw=7` in the tube's colour, drawtext again in the pale core, `split`, `gblur=sigma=14`, `blend=all_mode=screen` (in rgb24: in a YUV or planar format the blend tints the ground).
