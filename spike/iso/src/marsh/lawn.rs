@@ -86,6 +86,7 @@ fn spawn(
     scatter::draw_plants(
         &mut commands,
         &asset,
+        &mut budget,
         &land,
         &mut meshes,
         &mut materials,

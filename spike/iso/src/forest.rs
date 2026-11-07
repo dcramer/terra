@@ -121,6 +121,11 @@ impl Cards {
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
+    /// The triangles drawn so far, two a card.
+    pub fn triangles(&self) -> usize {
+        self.idx.len() / 3
+    }
+
     pub fn mesh(self) -> Mesh {
         Mesh::new(PrimitiveTopology::TriangleList, default())
             .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)

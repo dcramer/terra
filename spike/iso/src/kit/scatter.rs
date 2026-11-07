@@ -151,12 +151,83 @@ pub fn place(set: &Scatter, index: usize, g: &Ground) -> Result<Vec<Placed>, Str
     Ok(out)
 }
 
-/// What the scatter put down: a line a set, and the models whose triangles are counted once
-/// they load.
+/// What the scatter put down: a line a set, the models whose triangles are counted once
+/// they load and the plant sets' cards, counted as `draw_plants` builds them.
 #[derive(Resource, Default)]
 pub struct Budget {
-    pub sets: Vec<(String, usize, Vec<(Handle<Gltf>, usize)>)>,
+    pub sets: Vec<Set>,
+    /// The first of the plant sets `plants` pushed last, whose cards `draw_plants` counts.
+    drawn: usize,
     pub done: bool,
+}
+
+/// A set's line: its name, how many it put down, each model with how many of it, and a
+/// plant set's cards' triangles (two a card).
+pub struct Set {
+    pub name: String,
+    pub count: usize,
+    pub models: Vec<(Handle<Gltf>, usize)>,
+    pub cards: usize,
+}
+
+impl Budget {
+    /// Count the cards of the plant sets `plants` pushed last, from each clump's triangles in
+    /// the clumps' order (wood/lawn.rs's `cards`).
+    fn count_cards(&mut self, each: &[usize]) {
+        let fix = "Fix: draw the clumps `plants` returned, all of them, straight after it \
+                   (kit/scatter.rs, D634)";
+        let mut rest = each;
+        for set in &mut self.sets[self.drawn..] {
+            let Some((mine, more)) = rest.split_at_checked(set.count) else {
+                panic!(
+                    "scatter: {} put down {} clumps but only {} were drawn. {fix}",
+                    set.name,
+                    set.count,
+                    rest.len()
+                );
+            };
+            set.cards = mine.iter().sum();
+            rest = more;
+        }
+        assert!(
+            rest.is_empty(),
+            "scatter: {} clumps drawn that no plant set put down. {fix}",
+            rest.len()
+        );
+        self.drawn = self.sets.len();
+    }
+
+    /// The printout and its total: a line a set, its count and triangles, models' and
+    /// cards'; `None` while a model (`tris`) is still loading.
+    fn report(&self, tris: impl Fn(&Handle<Gltf>) -> Option<usize>) -> Option<(usize, String)> {
+        let mut lines = Vec::new();
+        let (mut models, mut cards) = (0, 0);
+        for set in &self.sets {
+            let mut t = set.cards;
+            for (h, n) in &set.models {
+                t += tris(h)? * n;
+            }
+            models += t - set.cards;
+            cards += set.cards;
+            lines.push(format!(
+                "  {:>5} {}: {}k triangles",
+                set.count,
+                set.name,
+                t / 1000
+            ));
+        }
+        let total = models + cards;
+        Some((
+            total,
+            format!(
+                "scatter: {}k triangles, {}k of models and {}k of plant cards\n{}",
+                total / 1000,
+                models / 1000,
+                cards / 1000,
+                lines.join("\n")
+            ),
+        ))
+    }
 }
 
 /// Spawn every model set of `sets` on `g` (plant sets are the layout's to draw, `plants`),
@@ -189,9 +260,12 @@ pub fn spawn(
             .iter()
             .zip(counts)
             .map(|(m, n)| (asset.load(m.clone()), n));
-        budget
-            .sets
-            .push((set.models.join(" "), placed.len(), models.collect()));
+        budget.sets.push(Set {
+            name: set.models.join(" "),
+            count: placed.len(),
+            models: models.collect(),
+            cards: 0,
+        });
     }
 }
 
@@ -199,6 +273,7 @@ pub fn spawn(
 /// tinted between its colours by broad noise and darkened at random.
 pub fn plants(budget: &mut Budget, biome: &str, sets: &[Scatter], g: &Ground) -> Vec<Clump> {
     let mut out = Vec::new();
+    budget.drawn = budget.sets.len();
     for (i, set) in sets.iter().enumerate() {
         let Some(Plant {
             kind,
@@ -239,30 +314,40 @@ pub fn plants(budget: &mut Budget, biome: &str, sets: &[Scatter], g: &Ground) ->
                 flower,
             });
         }
-        budget
-            .sets
-            .push((format!("{kind:?} clumps"), placed.len(), Vec::new()));
+        budget.sets.push(Set {
+            name: format!("{kind:?} clumps"),
+            count: placed.len(),
+            models: Vec::new(),
+            cards: 0,
+        });
     }
     out
 }
 
-/// Draw the plant clumps on the land (the foliage plugin's materials).
+/// The seed the plant clumps' cards are turned by.
+const CARDS: u32 = 0x5ca7;
+
+/// Draw the plant clumps `plants` returned on the land (the foliage plugin's materials),
+/// counting their cards' triangles in the budget.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_plants(
     commands: &mut Commands,
     asset: &AssetServer,
+    budget: &mut Budget,
     land: &Land,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<crate::foliage::FoliageMaterial>,
     mats: &mut crate::foliage::Mats,
     clumps: &[Clump],
 ) {
-    crate::wood::lawn::draw(
-        commands, asset, land, meshes, materials, mats, clumps, 0x5ca7,
+    let each = crate::wood::lawn::draw(
+        commands, asset, land, meshes, materials, mats, clumps, CARDS,
     );
+    budget.count_cards(&each);
 }
 
 /// Print the scatter's budget once every model has loaded: a line a set, its count and
-/// triangles, and the total.
+/// triangles, models' and plant cards', and the total.
 fn budget(
     mut b: ResMut<Budget>,
     gltfs: Res<Assets<Gltf>>,
@@ -283,22 +368,10 @@ fn budget(
         }
         Some(n)
     };
-    let mut lines = Vec::new();
-    let mut total = 0;
-    for (name, count, models) in &b.sets {
-        let mut t = 0;
-        for (h, n) in models {
-            let Some(each) = tris(h) else { return };
-            t += each * n;
-        }
-        total += t;
-        lines.push(format!("  {count:>5} {name}: {}k triangles", t / 1000));
-    }
-    println!(
-        "scatter: {}k triangles of models\n{}",
-        total / 1000,
-        lines.join("\n")
-    );
+    let Some((_, report)) = b.report(tris) else {
+        return;
+    };
+    println!("{report}");
     b.done = true;
 }
 
@@ -448,5 +521,46 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The budget's total is the set's real count: the models' triangles and every plant
+    /// card drawn, two a card, each plant set its own clumps' cards.
+    #[test]
+    fn the_budget_counts_the_plant_cards() {
+        let land = Land::new();
+        // Two triangles a card, from the mesh's corners (four a card), not its indices.
+        let quads = |c: &[Clump]| {
+            let (leaves, stems, _) = crate::wood::lawn::cards(&land, c, CARDS);
+            (leaves.mesh().count_vertices() + stems.mesh().count_vertices()) / 4 * 2
+        };
+        with(|g| {
+            let plant = |kind| {
+                let mut s = set(1.5, None);
+                s.models.clear();
+                s.plant = Some(Plant {
+                    kind,
+                    tint: vec![(0.3, 0.5, 0.15)],
+                    flowers: 0.3,
+                });
+                s
+            };
+            let mut b = Budget::default();
+            b.sets.push(Set {
+                name: "a".into(),
+                count: 3,
+                models: vec![(Handle::default(), 3)],
+                cards: 0,
+            });
+            let sets = [plant(PlantKind::Mat), plant(PlantKind::Leaves)];
+            let clumps = plants(&mut b, "test", &sets, g);
+            let (_, _, each) = crate::wood::lawn::cards(&land, &clumps, CARDS);
+            b.count_cards(&each);
+            let (total, report) = b.report(|_| Some(100)).unwrap();
+            let first = b.sets[1].count;
+            assert!(first > 0 && b.sets[2].count > 0, "{report}");
+            assert_eq!(b.sets[1].cards, quads(&clumps[..first]), "{report}");
+            assert_eq!(total, 300 + quads(&clumps), "{report}");
+            assert!(report.contains("of plant cards"), "{report}");
+        });
     }
 }

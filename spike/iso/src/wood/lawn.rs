@@ -261,9 +261,25 @@ fn spawn(
     );
 }
 
+/// The cards of `clumps`, each card's turn drawn from `seed`: the leaves, the tufts and
+/// flowers, and each clump's triangles in order (the scatter's budget counts them).
+pub fn cards(land: &Land, clumps: &[Clump], seed: u32) -> (Cards, Cards, Vec<usize>) {
+    let mut leaves = Cards::default();
+    leaves.leaf = true;
+    let mut stems = Cards::default();
+    let mut rng = Rng::new(seed);
+    let mut each = Vec::with_capacity(clumps.len());
+    for c in clumps {
+        let before = leaves.triangles() + stems.triangles();
+        build(c, land, &mut rng, &mut leaves, &mut stems);
+        each.push(leaves.triangles() + stems.triangles() - before);
+    }
+    (leaves, stems, each)
+}
+
 /// Spawns `clumps` as two meshes of cards on the tree crowns' atlas (the leaves fluttering,
 /// the tufts and flowers bending), each card's turn drawn from `seed`: the forest's lawn and
-/// the marsh's (marsh/lawn.rs).
+/// the marsh's (marsh/lawn.rs). Returns each clump's triangles, as `cards`.
 #[allow(clippy::too_many_arguments)]
 pub fn draw(
     commands: &mut Commands,
@@ -274,14 +290,8 @@ pub fn draw(
     mats: &mut crate::foliage::Mats,
     clumps: &[Clump],
     seed: u32,
-) {
-    let mut leaves = Cards::default();
-    leaves.leaf = true;
-    let mut stems = Cards::default();
-    let mut rng = Rng::new(seed);
-    for c in clumps {
-        build(c, land, &mut rng, &mut leaves, &mut stems);
-    }
+) -> Vec<usize> {
+    let (leaves, stems, each) = cards(land, clumps, seed);
     // The tree crowns' cards' material, its leaves fluttering a little and its stems bending.
     let cards = StandardMaterial {
         base_color_texture: Some(asset.load("materials/foliage/cards.png")),
@@ -301,6 +311,7 @@ pub fn draw(
             Transform::default(),
         ));
     }
+    each
 }
 
 #[cfg(test)]
