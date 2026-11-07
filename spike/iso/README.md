@@ -20,6 +20,8 @@ The second scene, an action RPG's night fight in a ruined court (src/ruin/, expe
 
 A biome is a data file on the shared kit (src/kit/, D634, experiment iso-kit): `cargo run -- --biome ruin` reads `biomes/ruin.ron` (its layout, its light preset from `biomes/light/`); `--scene ruin|forest|marsh` is the same.
 
+Playing a biome (src/play.rs): `cd spike/iso && cargo run --release -- --biome neon-street` (or `ruin`, `forest`, `marsh`) opens a window with the hero as the player. WASD runs him relative to the screen (W up it), Shift walks; a left click on the ground turns him to it and swings (moving held for the swing), and the creatures in its arc within 3 m fall; the camera follows him at its fixed angle. A `--shot`/`--film` run stays the staged fight unless `--play`, scripted by `--press wd@50-85` (keys held over those frames) and `--click 700,800@95` (a click at those pixels on that frame): `cargo run --release -- --biome neon-street --play --film 100 --frames 40 --shot out/play/neon.jpg --press d@50-85 --click 700,800@95`.
+
 ## What it is
 
 - One fixed orthographic camera, 42° down and turned 28°, never rotated, as the Infinity Engine's painted backgrounds are; drawn live in 3D instead (PBR, cascaded and point-light shadows, SSAO, TAA, bloom, distance haze). Day, dusk (the blue hour) and night (`T`); AgX by day, Tony McMapface at dusk and night, which keeps a fire orange.
