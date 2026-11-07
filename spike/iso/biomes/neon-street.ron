@@ -255,10 +255,12 @@
              out: 0.05),
             (model: "models/iso/city/old-tyre.glb", side: South, line: Kerb, at: [-5.5],
              turn: 30.0),
-            // A car parked at the north kerb before the crossing, under a tarp (1.78 m wide,
-            // 4.34 m long, -8.2 to -3.8, clear of the zebra), its near side 0.25 m off the
+            // A car parked at the north kerb before the crossing, a 1980s compact Japanese
+            // sedan in deep red gloss paint, its glass, lamps and interior real (1.77 m wide,
+            // 4.35 m long, -8.2 to -3.8, clear of the zebra; was a car under a black tarp, every
+            // judge's "featureless black capsule", iso-kit j77), its near side 0.25 m off the
             // kerb's face, where the frame shows the most road.
-            (model: "models/iso/city/covered-car.glb", side: North, line: Road, at: [-6.0],
+            (model: "models/iso/city/sedan.glb", side: North, line: Road, at: [-6.0],
              out: 2.36, turn: 90.0),
             (model: "models/iso/city/manhole-cover.glb", side: North, line: Road, at: [4.0],
              out: 1.2),
