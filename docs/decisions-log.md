@@ -1252,3 +1252,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-06**: D637 decided (by the developers): a player's body leaves the world at once on disconnect, the character saved where it stood; "players disappear when they disconnect for now".
 - **2026-11-06**: D638 added, Leaning (by the agent, server j1): a hosted world is its own server (a listen server) until realms run as instances; "always a client" to the letter waits for the instance host.
 - **2026-11-07**: D639 added, Leaning (by the agent, front lead): Host and Join on the title screen, one connection kept through the load, the player's profile beside the worlds.
+- **2026-11-07**: D111 noted (by the developers): the second sex is set aside for now, "I'm not sure about hairstyle. we can ignore doing the second gender for now"; the creator ships for the man, the woman's body stays built and unoffered.
