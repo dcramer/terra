@@ -19,6 +19,7 @@ use bevy::input::InputSystems;
 use bevy::prelude::*;
 use std::time::Duration;
 
+mod footprint;
 mod strike;
 
 /// How far the swing reaches (m, from his feet) and half its arc (degrees): the staged
@@ -75,6 +76,7 @@ pub fn plugin(app: &mut App) {
     app.add_systems(Startup, (ground, street_hero))
         .add_systems(PreUpdate, script.after(InputSystems))
         .add_systems(Update, (adopt, rig, control, follow).chain())
+        .add_systems(Update, footprint::take.after(adopt).before(control))
         .add_plugins(strike::plugin);
     // The street stages no fight, so nothing else hangs the sword on its hero (held.rs) or
     // draws his blows: its stage (the effects aim at it from Startup) and play's effects.
@@ -183,9 +185,13 @@ fn ground(mut commands: Commands, args: Res<Args>, biome: Option<Res<Biome>>) {
                 Vec2::new(fx - 20.0, 0.45 - wall),
                 Vec2::new(fx + 20.0, wall - 0.45),
             );
+            // The lamp poles are the kit's own meshes, no model's footprint (footprint.rs).
+            let (poles, r) = st.poles();
+            let poles: Vec<Vec2> = poles.into_iter().map(|(_, f)| f.xz()).collect();
+            let r = r + footprint::BODY;
             Ground {
                 floor: Box::new(move |p| if p.y.abs() > half { rise } else { 0.0 }),
-                open: Box::new(inside),
+                open: Box::new(move |p| inside(p) && poles.iter().all(|c| c.distance(p) > r)),
             }
         }
         None => return,
@@ -363,14 +369,26 @@ fn control(
         Option<ResMut<crate::ruin::walk::Walking>>,
     ),
     mut hero: Query<(Entity, &mut Transform, &mut Rig), With<Hero>>,
-    foes: Query<(Entity, &Transform), (With<Pose>, Without<Hero>, Without<Fallen>)>,
+    (foes, footprints): (
+        Query<(Entity, &Transform), (With<Pose>, Without<Hero>, Without<Fallen>)>,
+        Query<(&footprint::Footprint, &GlobalTransform), Without<Hero>>,
+    ),
     mut players: Query<&mut AnimationPlayer>,
     mut transitions: Query<&mut AnimationTransitions>,
+    mut queued: Local<Option<Vec2>>,
 ) {
     // The staged fight's blow, slash and bolts held back while he plays (walk.rs).
     if let Some(mut w) = walking {
         w.now = true;
     }
+    // A click: the window's cursor, or the script's at this frame. The last one is kept until
+    // he can swing (his rig not up yet, or a swing under way), not dropped.
+    let click = if mouse.just_pressed(MouseButton::Left) {
+        windows.single().ok().and_then(|w| w.cursor_position())
+    } else {
+        args.clicks.iter().find(|c| c.1 == frame.0).map(|c| c.0)
+    };
+    *queued = click.or(*queued);
     let (Some(ground), Ok((body, mut tr, mut rig))) = (ground, hero.single_mut()) else {
         return;
     };
@@ -380,15 +398,9 @@ fn control(
     else {
         return;
     };
-    // A click: the window's cursor, or the script's at this frame.
-    let click = if mouse.just_pressed(MouseButton::Left) {
-        windows.single().ok().and_then(|w| w.cursor_position())
-    } else {
-        args.clicks.iter().find(|c| c.1 == frame.0).map(|c| c.0)
-    };
     if rig.swing.is_none()
-        && let Some(px) = click
         && let Ok((cam, cam_tr)) = camera.single()
+        && let Some(px) = queued.take()
         && let Ok(ray) = cam.viewport_to_world(cam_tr, px)
         && let Some(d) = ray.intersect_plane(tr.translation, InfinitePlane3d::new(Vec3::Y))
     {
@@ -400,6 +412,7 @@ fn control(
             .set_speed(SWING_SPEED);
         rig.playing = Some(rig.attack);
         rig.swing = Some((face, false));
+        debug!("swing at frame {}", frame.0);
     }
     if let Some((face, landed)) = rig.swing {
         let t = p.animation(rig.attack).map_or(SWING.1, |a| a.seek_time());
@@ -458,15 +471,25 @@ fn control(
     if dir == Vec2::ZERO {
         return;
     }
-    let open = |q: Vec2| (ground.open)(q) && nav.as_ref().is_none_or(|n| n.open_at(q));
+    // The props and creatures he walks round (footprint.rs).
+    let circles = footprint::world(&footprints);
+    let open = |q: Vec2| {
+        (ground.open)(q)
+            && nav.as_ref().is_none_or(|n| n.open_at(q))
+            && !footprint::blocked(&circles, here, q)
+    };
     let step = dir * if walk { WALK } else { RUN } * dt;
     // Slide along what blocks him: the whole step, else along x or z alone.
-    if let Some(to) = [step, Vec2::new(step.x, 0.0), Vec2::new(0.0, step.y)]
+    match [step, Vec2::new(step.x, 0.0), Vec2::new(0.0, step.y)]
         .into_iter()
         .map(|s| here + s)
         .find(|q| open(*q))
     {
-        tr.translation = to.extend((ground.floor)(to)).xzy();
+        Some(to) => tr.translation = to.extend((ground.floor)(to)).xzy(),
+        None => debug!("hero blocked at {here:.2}, frame {}", frame.0),
+    }
+    if frame.0.is_multiple_of(10) {
+        debug!("hero at {:.2}, frame {}", tr.translation.xz(), frame.0);
     }
     let k = 1.0 - (-TURN * dt).exp();
     tr.rotation = tr.rotation.slerp(facing(dir), k);

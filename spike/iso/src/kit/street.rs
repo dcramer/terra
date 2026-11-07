@@ -249,6 +249,23 @@ impl Street {
         (half, half + self.kerb.0, half + self.kerb.0 + self.walk)
     }
 
+    /// The lamp poles' feet (lamps() and play's ground): from `start` every `every` along
+    /// the street, north and south by turns, just out from the kerb; and their radius.
+    pub fn poles(&self) -> (Vec<(Side, Vec3)>, f32) {
+        let Some(lp) = &self.lamps else {
+            return (Vec::new(), 0.0);
+        };
+        let (_, kerb, _) = self.edges();
+        let mut out = Vec::new();
+        let mut x = lp.start;
+        while x <= self.length / 2.0 {
+            let side = [Side::North, Side::South][out.len() % 2];
+            out.push((side, Vec3::new(x, self.kerb.1, side.z() * (kerb + 0.35))));
+            x += lp.every;
+        }
+        (out, POLE)
+    }
+
     /// Where a prop's foot stands on `side`'s `line`, `out` metres out.
     pub fn spot(&self, side: Side, line: Line, x: f32, out: f32) -> Vec3 {
         let (_, kerb, wall) = self.edges();
@@ -845,6 +862,9 @@ fn fronts(
     }
 }
 
+/// A lamp pole's radius (m).
+const POLE: f32 = 0.07;
+
 /// The street lamps: a dark pole by the kerb, an arm over the road, a glowing head and its
 /// spot straight down.
 fn lamps(
@@ -854,7 +874,6 @@ fn lamps(
     st: &Street,
 ) {
     let Some(lp) = &st.lamps else { return };
-    let (_, kerb, _) = st.edges();
     let steel = materials.add(StandardMaterial {
         base_color: Color::srgb(0.08, 0.085, 0.09),
         metallic: 0.7,
@@ -866,15 +885,11 @@ fn lamps(
         emissive: lp.colour.color().to_linear() * 400.0,
         ..default()
     });
-    let pole = meshes.add(Cylinder::new(0.07, lp.height));
+    let pole = meshes.add(Cylinder::new(POLE, lp.height));
     let arm = meshes.add(Cuboid::new(0.06, 0.06, lp.reach));
     let head = meshes.add(Cuboid::new(0.32, 0.08, 0.6));
-    let mut x = lp.start;
-    let mut k = 0;
-    while x <= st.length / 2.0 {
-        let side = if k % 2 == 0 { Side::North } else { Side::South };
+    for (side, foot) in st.poles().0 {
         let s = side.z();
-        let foot = Vec3::new(x, st.kerb.1, s * (kerb + 0.35));
         commands.spawn((
             Mesh3d(pole.clone()),
             MeshMaterial3d(steel.clone()),
@@ -907,8 +922,6 @@ fn lamps(
                 .looking_at(lamp - Vec3::Y * 5.0, Vec3::Z),
             Glint,
         ));
-        x += lp.every;
-        k += 1;
     }
 }
 
