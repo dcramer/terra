@@ -42,6 +42,14 @@ The fields after `light` but `ground`, `scatter` (marsh and street) and the mars
 - A set is `models` (GLBs, one picked a place) or a `plant` (Tuft, Fern, Leaves: wood/lawn.rs's cards, `tint` a palette walked by broad noise); `density` a m² at a full mask and a clump's heart; `on` a `Site(..)` of the layout's maps or a baked rule (Mud, Wet, Moss, Snow, Grime, Steep); `clump: (broad, fine, amount)` two-scale noise gathering it; `scale` log-uniform; `tilt` degrees, `sink` m; `over: (from, to)` m over the water's face, fading at both ends; sets sharing a `seed` share clumps.
 - A layout offers its `Ground` (maps, height, water, baked rules, `keep` for the fight and props, the span): the marsh (marsh/lawn.rs) and the street (`strew`) so far. `budget` prints each set's count and triangles once loaded. Tests: density follows the mask, sizes spread, none outside `over`, clumps gather, a bad set names its fix.
 
+## The effects (`src/kit/effects.rs`, `effects.wesl`)
+
+- A biome's `effects: [(preset, at)]` names presets in `biomes/effects/<name>.ron` (slash, hit-spark, smoke-puff, spell-burst, steam, embers); none listed, the staged fight's four. An unknown name stops the run naming the folder's presets.
+- A preset: its `cue` (Blow, Bolt, Swing, Loop(s)), `at` (Strike, Bark, Hero, Ground, or the file's `at`), `still` (the age a still shows), `life`; a `flash` (core in a halo), `lamps` (a light, `ground` a pool), `sparks` (streaks stretched by a `shutter`, falling), `puffs` (smoke lit by the lights at it plus the key and sky), a `trail` (slash.rs's strip). Values are nits and lumens, times the view's exposure.
+- Cues: hit.rs writes `Cues.blow` as the blow lands, spell.rs `Cues.bolt` as a bolt strikes; a Swing's lamps stay dark in the kit (slash.rs's light rides the edge).
+- One shader, three modes (glow, lit puff, trail: a hot edge, a smear dissolving into streaks down its age, premultiplied), each soft against the depth prepass (Lorach 2007); a view drawing them or the fight's decals needs `DepthPrepass` (the water's mirror camera too).
+- Budget: 400 quads and 8 lights a biome, printed at startup.
+
 ## Adding a biome
 
 1. Its references first: `refs/<name>/` with `960/` copies, measured into `refs/stats.json` (`node tools/iso-art/stats.ts`, judging.md).

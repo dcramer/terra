@@ -5,9 +5,6 @@
 //! something. How to add one: .agents/skills/iso-art/references/kit.md.
 
 pub mod biome;
-// Not yet in a scene's plugins: iso-kit j15 wires it in place of ruin/effects' hit, slash
-// and spell impacts (~/.cache/terra-handoff/iso-kit-j14.md).
-#[allow(dead_code)]
 pub mod effects;
 pub mod ground;
 pub mod laid;

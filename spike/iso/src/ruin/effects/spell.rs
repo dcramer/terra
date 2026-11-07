@@ -2,15 +2,17 @@
 //! as Path of Exile's and Diablo IV's are drawn: each bolt a small white-hot core drawn out
 //! along its flight inside a thin blue halo (the bloom does the rest), a sharp streak behind
 //! it (a white inner ribbon in a blue outer one) fading to nothing, its own light casting a
-//! blue pool on the stones under it; and where it lands, a hard star flash a few frames
-//! long, blue-white sparks thrown back off the bark, and a short bright light (Last Epoch's
-//! "a number of lights" in a skill). Every part is a function of the clock: in a still the
-//! first bolt has just struck and the other two are in the air.
+//! blue pool on the stones under it, and a frost mark where it lands. The impact itself (a
+//! white-hot flash in a blue halo, sparks thrown back off the bark, its lights: Last Epoch's
+//! "a number of lights" in a skill) is the biome's `spell-burst` preset (kit/effects.rs),
+//! cued by `Cues::bolt` at each strike; the bolts all end at the same place, the stage's
+//! bark. Every part is a function of the clock: in a still the first bolt has just struck
+//! and the other two are in the air.
 
 use super::Stage;
-use super::kit::{Burst, Cam, Clock, Noise, glow, image, smooth, sparks, star_image};
+use super::kit::{Cam, Clock, glow};
 use super::mark::{Mark, mark, mark_image};
-use crate::forest::Rng;
+use crate::kit::effects::Cues;
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -45,27 +47,6 @@ const POOL_UP: f32 = 0.5;
 /// 0.11 and 0.035 were a hairline at 70 px a metre; as wide as the head, tapering to the tail.
 const OUTER: f32 = 0.24;
 const INNER: f32 = 0.07;
-/// The impact's light at its height, in lumens, and how fast it dies (s).
-/// 40k dying in 0.09 s left a faint burst at the still's 0.08 s (the judges).
-/// 150k lit the floor a metre or two round the impact white in the ruin (p95 0.20): 90k.
-const FLASH_LM: f32 = 90_000.0;
-const FLASH_FALL: f32 = 0.15;
-/// The impact's star: its size at its height (m) and how long it lasts (s). A 1.5 m white
-/// star for 0.28 s hid the target (and in the forest the caster) in every biome's judge
-/// (2026-11-06): now a small blue glint gone in a tenth, the impact carried by the shell,
-/// the sparks, the light and the mark, as Diablo IV's and Path of Exile 2's impacts are
-/// built (a hot flash a few frames long, an expanding shell, debris, a light, a decal).
-const STAR: f32 = 0.6;
-const STAR_LIFE: f32 = 0.1;
-/// The shell: a ring card swelling from `SHELL.0` to `SHELL.1` m across over `SHELL_LIFE` s.
-const SHELL: (f32, f32) = (0.3, 1.7);
-const SHELL_LIFE: f32 = 0.26;
-/// The impact's light on the floor under it, and how fast it dies (s). 70k over 3.5 m
-/// washed the ruin's floor (its still's p95 0.20 against the refs' 0.13, the judge): halved,
-/// its reach cut to 2.5 m.
-const GLINT_LM: f32 = 35_000.0;
-const GLINT_RANGE: f32 = 2.5;
-const GLINT_FALL: f32 = 0.3;
 /// The frost mark under the impact: its size (m) and life (s).
 const MARK: f32 = 1.5;
 const MARK_LIFE: f32 = 1.6;
@@ -77,11 +58,7 @@ enum Part {
     Light,
     Pool,
     Trail(Handle<Mesh>, f32),
-    Flash(Handle<StandardMaterial>),
-    Shell(Handle<StandardMaterial>),
-    Glint,
     Mark,
-    Bang,
 }
 
 #[derive(Component)]
@@ -122,14 +99,10 @@ fn spawn(
     stage: Res<Stage>,
 ) {
     let stage = &*stage;
-    let mut rng = Rng::new(0x5be11);
     let soft = images.add(crate::motes::soft_image());
-    let star = images.add(star_image());
-    let ring = images.add(shell_image());
     let frost = images.add(mark_image());
     let ball = meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap());
     let card = meshes.add(Rectangle::new(1.0, 1.0));
-    let streak = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
     let core = materials.add(glow(LinearRgba::rgb(32.0, 36.0, 44.0), None));
     let halo = materials.add(glow(LinearRgba::rgb(0.35, 0.85, 3.4), Some(soft.clone())));
     let ribbon_of = |c: LinearRgba| StandardMaterial {
@@ -139,7 +112,6 @@ fn spawn(
     };
     let outer = materials.add(ribbon_of(LinearRgba::rgb(0.9, 2.2, 8.0)));
     let inner = materials.add(ribbon_of(LinearRgba::rgb(6.0, 9.0, 16.0)));
-    let spark = materials.add(glow(LinearRgba::rgb(8.0, 12.0, 24.0), None));
     let off = Transform::from_scale(Vec3::ZERO);
     for i in 0..BOLTS {
         commands.spawn((Mesh3d(ball.clone()), MeshMaterial3d(core.clone()), off, Bolt(i, Part::Core)));
@@ -177,50 +149,7 @@ fn spawn(
                 Bolt(i, Part::Trail(mesh, width)),
             ));
         }
-        let flash = materials.add(glow(LinearRgba::rgb(6.0, 8.0, 14.0), Some(star.clone())));
-        commands.spawn((
-            Mesh3d(card.clone()),
-            MeshMaterial3d(flash.clone()),
-            off,
-            Bolt(i, Part::Flash(flash)),
-        ));
-        commands.spawn((
-            PointLight {
-                color: Color::srgb(0.6, 0.75, 1.0),
-                intensity: 0.0,
-                // 7 m carried the flash across the whole court: the burst lights the bodies
-                // about it, the glint the floor.
-                range: 4.0,
-                radius: 0.2,
-                ..default()
-            },
-            Transform::from_translation(path(stage, i, 1.0)),
-            Bolt(i, Part::Bang),
-        ));
-        let at = path(stage, i, 1.0);
-        let burst = commands.spawn((Burst { at, age: -1.0 }, Bolt(i, Part::Bang))).id();
-        let back = (stage.hero() - stage.bark()).normalize() + Vec3::Y * 0.6;
-        sparks(&mut commands, burst, &streak, &spark, &mut rng, 30, back, 0.9, (3.0, 9.0), 0.026);
-        let shell = materials.add(glow(LinearRgba::rgb(1.2, 2.6, 8.0), Some(ring.clone())));
-        commands.spawn((
-            Mesh3d(card.clone()),
-            MeshMaterial3d(shell.clone()),
-            off,
-            bevy::light::NotShadowCaster,
-            Bolt(i, Part::Shell(shell)),
-        ));
-        let ground = stage.ground(land.as_deref(), at.xz());
-        commands.spawn((
-            PointLight {
-                color: Color::srgb(0.35, 0.6, 1.0),
-                intensity: 0.0,
-                range: GLINT_RANGE,
-                radius: 0.1,
-                ..default()
-            },
-            Transform::from_translation(ground + Vec3::Y * POOL_UP),
-            Bolt(i, Part::Glint),
-        ));
+        let ground = stage.ground(land.as_deref(), path(stage, i, 1.0).xz());
         let m = mark(
             &mut commands,
             &mut decals,
@@ -233,32 +162,6 @@ fn spawn(
         );
         commands.entity(m).insert(Bolt(i, Part::Mark));
     }
-}
-
-/// The impact's shell as a white texture, its brightness in the alpha: a shockwave as the
-/// ARPGs' impact flipbooks draw one (an eroded shell, not a drawn circle: a perfect ring
-/// read as "UI circles", the lead's judges, 2026-11-06), its rim wandering in and out,
-/// thick and thin, broken into arcs by noise round it, with streaks thrown inward.
-fn shell_image() -> Image {
-    let (round, arcs) = (Noise::new(8, 0x5e11), Noise::new(16, 0x5e12));
-    let n = 128;
-    image(n, n, |x, y| {
-        let p = (Vec2::new(x as f32, y as f32) + 0.5) / n as f32 * 2.0 - 1.0;
-        let a = p.y.atan2(p.x) / std::f32::consts::TAU + 0.5;
-        let (wander, broken) = (round.at(Vec2::new(a * 8.0, 0.5)), arcs.at(Vec2::new(a * 16.0, p.length() * 3.0)));
-        [1.0, 1.0, 1.0, shell(p.length(), wander, broken)]
-    })
-}
-
-/// The shell's brightness at `r` of its radius, its rim moved and thickened by `wander`
-/// and broken by `broken` (both 0 to 1, noise round it).
-fn shell(r: f32, wander: f32, broken: f32) -> f32 {
-    let at = 0.8 + 0.1 * (wander - 0.5) * 2.0;
-    let width = 0.035 + 0.06 * wander;
-    let gaps = smooth(0.3, 0.62, broken);
-    let rim = (-((r - at) / width).powi(2)).exp() * gaps;
-    let inside = 0.3 * (r / at).powi(5) * (1.0 - smooth(at, at + 0.04, r)) * smooth(0.45, 0.8, broken);
-    (rim + inside).min(1.0) * (1.0 - smooth(0.93, 0.99, r))
 }
 
 /// A ribbon `width` wide at the bolt through `points` (tail first) facing the camera at
@@ -296,20 +199,19 @@ fn ribbon(points: &[Vec3], eye: Vec3, width: f32) -> Mesh {
 fn fly(
     clock: Res<Clock>,
     cam: Res<Cam>,
+    mut cues: ResMut<Cues>,
     mut parts: Query<(
         &Bolt,
         Option<&mut Transform>,
         Option<&mut PointLight>,
-        Option<&mut Burst>,
         Option<&mut Mark>,
     )>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     stage: Res<Stage>,
 ) {
     let stage = &*stage;
     let p = if clock.still { STILL } else { clock.t.rem_euclid(PERIOD) };
-    for (Bolt(i, part), tr, light, burst, mark) in &mut parts {
+    for (Bolt(i, part), tr, light, mark) in &mut parts {
         let (s, struck) = flight(*i, p);
         let flying = (0.0..1.0).contains(&s);
         let head = path(stage, *i,s.clamp(0.0, 1.0));
@@ -350,53 +252,18 @@ fn fly(
                     *m = ribbon(&points, cam.pos, *width);
                 }
             }
-            Part::Flash(mat) => {
-                // A hard star at full size at once, shrinking a little as it dies; each
-                // bolt's turned its own way so the three are not one stamp.
-                let mut tr = tr.unwrap();
-                let on = (0.0..STAR_LIFE).contains(&struck);
-                let k = (struck / STAR_LIFE).clamp(0.0, 1.0);
-                tr.translation = path(stage, *i, 1.0);
-                tr.rotation = cam.rot * Quat::from_rotation_z(0.35 + *i as f32 * 0.5);
-                tr.scale = Vec3::splat(if on { STAR * (1.0 - 0.35 * k) } else { 0.0 });
-                if let Some(mut m) = materials.get_mut(mat) {
-                    let f = (1.0 - k).powf(1.5);
-                    m.base_color = LinearRgba::rgb(4.0 * f, 7.0 * f, 18.0 * f).into();
-                }
-            }
-            Part::Shell(mat) => {
-                let mut tr = tr.unwrap();
-                let k = (struck / SHELL_LIFE).clamp(0.0, 1.0);
-                let on = (0.0..SHELL_LIFE).contains(&struck);
-                tr.translation = path(stage, *i, 1.0);
-                // Each bolt's shell turned its own way and turning as it swells, so its
-                // gaps are not one stamp.
-                tr.rotation = cam.rot * Quat::from_rotation_z(*i as f32 * 2.1 + 0.8 * k);
-                let grow = 1.0 - (1.0 - k) * (1.0 - k);
-                tr.scale = Vec3::splat(if on { SHELL.0 + (SHELL.1 - SHELL.0) * grow } else { 0.0 });
-                if let Some(mut m) = materials.get_mut(mat) {
-                    let f = (1.0 - k).powf(1.3);
-                    m.base_color = LinearRgba::rgb(1.2 * f, 2.6 * f, 8.0 * f).into();
-                }
-            }
-            Part::Glint => {
-                light.unwrap().intensity =
-                    if struck >= 0.0 { GLINT_LM * (-struck / GLINT_FALL).exp() } else { 0.0 };
-            }
             Part::Mark => mark.unwrap().age = struck,
-            Part::Bang => {
-                if let Some(mut light) = light {
-                    light.intensity = if struck >= 0.0 {
-                        FLASH_LM * (-struck / FLASH_FALL).exp()
-                    } else {
-                        0.0
-                    };
-                }
-                if let Some(mut b) = burst {
-                    b.age = struck;
-                }
-            }
         }
+    }
+    // The impact preset's cue: the latest strike in this volley (one effect retriggered
+    // by each bolt, as they all end at the bark).
+    if !clock.still
+        && let Some(latest) = (0..BOLTS)
+            .map(|i| flight(i, p).1)
+            .filter(|&struck| struck >= 0.0)
+            .reduce(f32::min)
+    {
+        cues.bolt = clock.t - latest;
     }
 }
 
@@ -423,29 +290,6 @@ mod tests {
         assert!(under > 4.0 * BOLT_LM / (high * high), "pool {under} vs bolt at {high} m");
         let out = POOL_LM * POOL_UP / (1.0 + POOL_UP * POOL_UP).powf(1.5);
         assert!(out < 0.25 * under, "a metre out the pool is {out} of {under}");
-    }
-
-    /// The shell is broken: round it the rim's brightest is under a third of its peak in
-    /// places (gaps) and whole in others, and nothing reaches the card's border.
-    #[test]
-    fn the_shell_is_broken_not_a_circle() {
-        let img = shell_image();
-        let d = img.data.as_ref().unwrap();
-        let alpha = |x: usize, y: usize| d[(y * 128 + x) * 4 + 3];
-        let best: Vec<u8> = (0..90)
-            .map(|j| {
-                let a = j as f32 / 90.0 * std::f32::consts::TAU;
-                (40..64)
-                    .map(|s| alpha((64.0 + a.cos() * s as f32) as usize, (64.0 + a.sin() * s as f32) as usize))
-                    .max()
-                    .unwrap()
-            })
-            .collect();
-        let peak = *best.iter().max().unwrap();
-        let gaps = best.iter().filter(|&&b| (b as f32) < peak as f32 / 3.0).count();
-        let whole = best.iter().filter(|&&b| (b as f32) > peak as f32 * 0.8).count();
-        assert!(peak > 200 && gaps > 9 && whole > 9, "peak {peak}, {gaps} gaps, {whole} whole of 90");
-        assert!((0..128).all(|k| alpha(k, 0) == 0 && alpha(0, k) == 0 && alpha(127, k) == 0));
     }
 
     /// Each bolt leaves the hero and ends at the target, above the floor all the way.

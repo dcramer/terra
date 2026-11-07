@@ -466,6 +466,9 @@ fn follow(
             placed,
             bevy::camera::Hdr,
             Msaa::Off,
+            // The fight's marks (Bevy's ForwardDecal) and the kit's soft effects read the
+            // depth prepass; without it the decal's shader fails for this view.
+            bevy::core_pipeline::prepass::DepthPrepass,
             Tonemapping::None,
             exposure,
             layers.without(LAYER),

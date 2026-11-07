@@ -66,7 +66,15 @@ pub struct Strike;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Stage>()
-        .add_plugins((kit::plugin, flame::plugin, spell::plugin, hit::plugin, slash::plugin, mark::plugin))
+        .add_plugins((
+            kit::plugin,
+            crate::kit::effects::plugin,
+            flame::plugin,
+            spell::plugin,
+            hit::plugin,
+            slash::plugin,
+            mark::plugin,
+        ))
         .add_systems(Startup, |mut commands: Commands, stage: Res<Stage>| {
             commands.spawn((Strike, Transform::from_translation(stage.strike())));
         });

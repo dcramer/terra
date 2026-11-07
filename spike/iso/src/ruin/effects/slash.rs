@@ -11,23 +11,19 @@
 //! on the hand bone, held.rs) after each pose is applied; then the clip goes back where it
 //! stood. The trail at any clip time is the baked path over the 0.2 s before it.
 //!
-//! The strip's look is the realtime-VFX sword trail as Unreal's Niagara ribbon tutorials and
-//! content examples build it (and Diablo IV's and PoE 2's slashes read): a gradient texture
-//! along U (the age, white-hot at the blade, a saturated orange-red body, a deep red tail),
-//! streaked by noise along V and eroded by it against the age (the "dissolve" a ribbon's
-//! tail breaks into wisps by, never a fade of the whole), drawn premultiplied: its body
-//! hides what is behind it and adds its own light, so it stays orange-red over a sunlit
-//! floor instead of washing out to peach as a purely additive one did (the lead's judges,
-//! 2026-11-06), while its thin hot edge adds over bloom.
+//! The strip's look and its light are the biome's `slash` preset (biomes/effects/slash.ron,
+//! drawn by kit/effects.wesl's trail mode): a thin white-hot edge near the tip, a streaked
+//! smear inside it fading back from the blade, its body premultiplied so it hides a little of
+//! what is behind it and stays orange-red over a sunlit floor instead of washing out to peach
+//! as a purely additive one did (the lead's judges, 2026-11-06).
 
 use super::super::held::Held;
 use super::Stage;
-use super::kit::{Noise, smooth};
+use crate::kit::effects::{Effects, Glow};
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
 /// The part of the attack clip that leaves a trail (s): from the top of the wind-up to the
 /// blade's stop after the chop (fight.rs: arms up at 1.1, the blow at 1.25, bent over at 1.4).
@@ -42,12 +38,6 @@ const POINTS: usize = 28;
 const BLADE: f32 = 0.95;
 const INNER: f32 = 0.3;
 const OUTER: f32 = 1.12;
-/// The light riding the edge, in lumens, a third of the way in from the tip. 45k with the
-/// bite's washed the ruin's floor round the blow (p95 0.20 against the refs' 0.13): 28k.
-const EDGE_LM: f32 = 28_000.0;
-/// The texture's scale to linear light: its hot edge is this bright (over bloom), its body
-/// about a tenth of it (an orange-red near 1, which the tonemapper keeps saturated).
-const GAIN: f32 = 10.0;
 
 #[derive(Default, Clone, Copy)]
 enum Bake {
@@ -71,7 +61,8 @@ struct Blade {
 #[derive(Component)]
 enum Part {
     Trail(Handle<Mesh>),
-    Light,
+    /// The light riding the edge, its lumens at the blade (the preset's first lamp's).
+    Light(f32),
 }
 
 pub fn plugin(app: &mut App) {
@@ -83,18 +74,13 @@ pub fn plugin(app: &mut App) {
 fn spawn(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut images: ResMut<Assets<Image>>,
+    mut glows: ResMut<Assets<Glow>>,
+    fx: Res<Effects>,
 ) {
-    let material = materials.add(StandardMaterial {
-        base_color: LinearRgba::rgb(GAIN, GAIN, GAIN).into(),
-        base_color_texture: Some(images.add(gradient_image())),
-        unlit: true,
-        alpha_mode: AlphaMode::Premultiplied,
-        double_sided: true,
-        cull_mode: None,
-        ..default()
-    });
+    // A biome without a slash draws none (kit/effects.rs lists the presets it loaded).
+    let Some(preset) = fx.get("slash") else { return };
+    let Some(look) = &preset.trail else { return };
+    let material = glows.add(Glow::trail(look, 0.37));
     let mesh = meshes.add(strip(&[]));
     commands.spawn((
         Mesh3d(mesh.clone()),
@@ -104,76 +90,20 @@ fn spawn(
         bevy::light::NotShadowCaster,
         Part::Trail(mesh),
     ));
-    commands.spawn((
-        PointLight {
-            color: Color::srgb(1.0, 0.62, 0.3),
-            intensity: 0.0,
-            range: 5.0,
-            radius: 0.15,
-            ..default()
-        },
-        Transform::default(),
-        Part::Light,
-    ));
-}
-
-/// The texture's size: along the trail (u, the age) and across it (v, inner to outer).
-const TEX: (u32, u32) = (128, 128);
-
-/// The strip at `u` (its age, 0 at the blade) and `v` (0 inner, 1 outer): premultiplied
-/// linear light over `GAIN` and the share of what lies behind it hidden. A thin white-hot
-/// leading edge just inside the outer border and a hot head at the blade, over an
-/// orange-red body thickening outward and darkening to a deep red down the trail; streaks
-/// along the swing (noise stretched along u, fine across v) and the tail eroded into them.
-fn texel(streaks: &Noise, grain: &Noise, u: f32, v: f32) -> [f32; 4] {
-    let n = 0.62 * streaks.at(Vec2::new(u * 3.0, v * 11.0)) + 0.38 * grain.at(Vec2::new(u * 9.0, v * 29.0));
-    // The dissolve: the threshold climbs with age, so the tail breaks into the streaks.
-    let t = 0.88 * u.powf(1.25) - 0.08;
-    let kept = smooth(t - 0.06, t + 0.14, n);
-    let body = smooth(0.04, 0.62, v) * (1.0 - smooth(0.965, 1.0, v)) * kept;
-    let rim = (-((v - 0.925) / 0.032).powi(2)).exp() * (1.0 - smooth(0.25, 0.85, u)) * (0.75 + 0.5 * n).min(1.0);
-    let head = (-(u / 0.05).powi(2)).exp() * smooth(0.25, 0.85, v) * (1.0 - smooth(0.965, 1.0, v));
-    let hot = (rim + 0.7 * head).min(1.0);
-    let c = Vec3::new(1.0, 0.2, 0.018).lerp(Vec3::new(0.55, 0.035, 0.008), smooth(0.0, 1.0, u));
-    let lit = c * (0.12 * body * (0.8 + 0.4 * n)) + Vec3::new(1.0, 0.82, 0.6) * hot;
-    [lit.x, lit.y, lit.z, (0.7 * body).max(0.3 * hot)]
-}
-
-/// The strip's texture, `texel` in half floats (8 bits banded its dim red body).
-fn gradient_image() -> Image {
-    let (streaks, grain) = (Noise::new(16, 0x51a5), Noise::new(32, 0x51a6));
-    let (w, h) = TEX;
-    let mut data = Vec::with_capacity((w * h * 8) as usize);
-    for y in 0..h {
-        for x in 0..w {
-            let u = (x as f32 + 0.5) / w as f32;
-            let v = (y as f32 + 0.5) / h as f32;
-            for c in texel(&streaks, &grain, u, v) {
-                data.extend(half(c).to_le_bytes());
-            }
-        }
+    // The kit leaves a Swing's lamps dark (kit/effects.rs `age`): the slash's rides the edge.
+    if let Some(l) = preset.lamps.first() {
+        commands.spawn((
+            PointLight {
+                color: l.colour.color(),
+                intensity: 0.0,
+                range: l.range,
+                radius: 0.15,
+                ..default()
+            },
+            Transform::default(),
+            Part::Light(l.lm),
+        ));
     }
-    Image::new(
-        Extent3d {
-            width: w,
-            height: h,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba16Float,
-        RenderAssetUsages::RENDER_WORLD,
-    )
-}
-
-/// A 0 to 1 value as an IEEE half float's bits (values under 2^-14 flush to zero).
-fn half(x: f32) -> u16 {
-    let b = x.clamp(0.0, 1.0).to_bits();
-    let e = ((b >> 23) & 0xff) as i32 - 127 + 15;
-    if e <= 0 {
-        return 0;
-    }
-    ((e as u32) << 10 | (b & 0x7f_ffff) >> 13) as u16
 }
 
 /// Finds the knight's player and the sword in his hand.
@@ -319,12 +249,12 @@ fn show(
                     *m = strip(&points);
                 }
             }
-            Part::Light => {
+            Part::Light(lm) => {
                 let (Some(mut tr), Some(mut light)) = (tr, light) else { continue };
                 match points.last() {
                     Some(&(i, o, age)) => {
                         tr.translation = i.lerp(o, 0.7);
-                        light.intensity = EDGE_LM * (1.0 - age);
+                        light.intensity = lm * (1.0 - age);
                     }
                     None => light.intensity = 0.0,
                 }
@@ -366,43 +296,4 @@ mod tests {
         assert!(trail(&path, TO + AGE + 0.01).iter().all(|p| p.2 >= 1.0 - 1e-4));
     }
 
-    /// Across the new strip: nothing at the hilt, a saturated orange-red body (red several
-    /// times its green) that hides most of what is behind it, and a near-white edge outside
-    /// several times as bright as the body.
-    #[test]
-    fn the_strip_is_white_hot_outside_over_a_red_body() {
-        let (s, g) = (Noise::new(16, 0x51a5), Noise::new(32, 0x51a6));
-        let mean = |u: f32, v: f32| {
-            (0..32).fold([0.0; 4], |m, j| {
-                let t = texel(&s, &g, u + j as f32 * 0.002, v);
-                [m[0] + t[0] / 32.0, m[1] + t[1] / 32.0, m[2] + t[2] / 32.0, m[3] + t[3] / 32.0]
-            })
-        };
-        let (hilt, body, edge) = (mean(0.15, 0.01), mean(0.15, 0.7), mean(0.15, 0.925));
-        assert!(hilt[0] < 0.005 && hilt[3] < 0.02, "hilt {hilt:?}");
-        assert!(body[0] > 4.0 * body[1] && body[3] > 0.4, "body {body:?}");
-        assert!(edge[1] > 0.6 * edge[0] && edge[0] > 4.0 * body[0], "edge {edge:?} body {body:?}");
-    }
-
-    /// Down the trail the strip is eroded, not faded whole: near the tail streaks remain
-    /// as strong as at the blade while most of the strip is gone.
-    #[test]
-    fn the_tail_breaks_into_streaks() {
-        let (s, g) = (Noise::new(16, 0x51a5), Noise::new(32, 0x51a6));
-        let cover = |u: f32| -> Vec<f32> { (0..200).map(|j| texel(&s, &g, u, 0.3 + j as f32 * 0.003)[3]).collect() };
-        let (new, old) = (cover(0.05), cover(0.8));
-        let gone = old.iter().filter(|&&a| a < 0.05).count();
-        let strong = old.iter().cloned().fold(0.0, f32::max);
-        assert!(new.iter().all(|&a| a > 0.1), "the new strip is whole");
-        assert!(gone > 80 && strong > 0.5 * new.iter().cloned().fold(0.0, f32::max), "{gone} of 200 gone, strongest {strong}");
-    }
-
-    /// The half floats are exact where it matters: 0, 1, a half, and small values close.
-    #[test]
-    fn half_floats() {
-        assert_eq!((half(0.0), half(1.0), half(0.5)), (0, 0x3c00, 0x3800));
-        let h = half(0.01);
-        let back = 2f32.powi(((h >> 10) as i32) - 15) * (1.0 + (h & 0x3ff) as f32 / 1024.0);
-        assert!((back - 0.01).abs() < 1e-5, "{back}");
-    }
 }

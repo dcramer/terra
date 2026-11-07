@@ -71,4 +71,6 @@
             over: (-0.1, 0.3), seed: 5),
     ],
     weather: (wind: (0.86, 0.5)),
+    // The staged fight's effects (biomes/effects/, kit/effects.rs).
+    effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst")],
 )

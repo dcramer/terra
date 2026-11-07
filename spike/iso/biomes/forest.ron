@@ -31,4 +31,6 @@
         // The camp's fire (scene::FIRE).
         scorch: [(0.0, 3.0)],
     ),
+    // The staged fight's effects (biomes/effects/, kit/effects.rs).
+    effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst")],
 )

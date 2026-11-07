@@ -34,4 +34,6 @@
             feet: Site("walls"),
         ),
     ),
+    // The staged fight's effects (biomes/effects/, kit/effects.rs).
+    effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst")],
 )

@@ -1,13 +1,14 @@
 //! The hero's blow landing on the ogre, as the ARPGs sell a hit when the clip alone cannot
-//! (Tripo has no hit preset): sparks thrown off the blade's edge, a flash of light where it
-//! bites, the ogre lit white then red for a tenth of a second (the hit flash), the ogre
-//! thrown back a few degrees and recovering (an additive flinch of the whole body, about its
-//! feet), and both clips held for a hit-stop of 80 ms. The blow lands each time the
-//! knight's attack passes `BLOW`; in a still, the moment is `STILL_AGE` after it.
+//! (Tripo has no hit preset): the ogre lit white then red for a tenth of a second (the hit
+//! flash), the ogre thrown back a few degrees and recovering (an additive flinch of the
+//! whole body, about its feet), both clips held for a hit-stop of 80 ms, and a scuff on the
+//! floor. The blow's flash, sparks, smoke and lights are the biome's effect presets
+//! (kit/effects.rs, cued by `Cues::blow`). The blow lands each time the knight's attack
+//! passes `BLOW`; in a still, the moment is `STILL_AGE` after it.
 
 use super::Stage;
-use super::kit::{Burst, Cam, Clock, glow, sparks};
-use crate::forest::Rng;
+use super::kit::Clock;
+use crate::kit::effects::Cues;
 use bevy::prelude::*;
 
 /// Where the knight and the ogre stand is the stage's (mod.rs), to find them by.
@@ -20,25 +21,6 @@ const STOP: f32 = 0.08;
 const FLINCH: f32 = 0.15;
 const RISE: f32 = 0.05;
 const FALL: f32 = 0.16;
-/// The star flash at the bite: its size (m) and life (s). A metre of white star hid the
-/// blow's bite in all three biomes (the lead's judges, 2026-11-06); the slash (slash.rs)
-/// carries the blow now, the star a small hot glint at the bite.
-const STAR: f32 = 0.5;
-const STAR_LIFE: f32 = 0.12;
-/// The light at the bite (lumens) and how fast it dies (s): 25k over 0.06 s was spent by
-/// the still's 0.05 s and lit no ground (the judges: "the sword's sparks don't light the
-/// ground"). A second light half a metre over the floor under the bite pools on the
-/// ground, as the ARPGs fake an impact's light (spell.rs's pool, traps.md). 70k with the
-/// slash's light washed the ruin's floor two metres round the blow (p95 0.20 against the
-/// refs' 0.13, the judge): 40k, the pool lighting the ground under the bite.
-const BITE_LM: f32 = 40_000.0;
-const BITE_FALL: f32 = 0.14;
-/// 45k over 3.5 m washed the ruin's floor with the spell's glint (p95 0.20 against the
-/// refs' 0.13, the judge): halved, its reach cut to 2.5 m.
-const POOL_LM: f32 = 22_000.0;
-const POOL_RANGE: f32 = 2.5;
-const POOL_UP: f32 = 0.5;
-const POOL_FALL: f32 = 0.2;
 /// The warm scuff the blow leaves on the floor under the bite: its size (m) and life (s).
 const MARK: f32 = 1.4;
 const MARK_LIFE: f32 = 0.7;
@@ -54,14 +36,9 @@ struct Hit {
     stopped: bool,
 }
 
+/// The scuff under the bite.
 #[derive(Component)]
-enum Part {
-    Flash(Handle<StandardMaterial>),
-    Light,
-    Pool,
-    Burst,
-    Mark,
-}
+struct Scuff;
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(Hit {
@@ -74,26 +51,12 @@ pub fn plugin(app: &mut App) {
 
 fn spawn(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
     mut decals: ResMut<Assets<super::mark::Decal>>,
     land: Option<Res<crate::terrain::Land>>,
     stage: Res<Stage>,
 ) {
-    let strike = stage.strike();
-    let ground = stage.ground(land.as_deref(), strike.xz());
-    commands.spawn((
-        PointLight {
-            color: Color::srgb(1.0, 0.62, 0.32),
-            intensity: 0.0,
-            range: POOL_RANGE,
-            radius: 0.1,
-            ..default()
-        },
-        Transform::from_translation(ground + Vec3::Y * POOL_UP),
-        Part::Pool,
-    ));
+    let ground = stage.ground(land.as_deref(), stage.strike().xz());
     let scuff = images.add(super::mark::mark_image());
     let mark = super::mark::mark(
         &mut commands,
@@ -105,36 +68,7 @@ fn spawn(
         LinearRgba::rgb(4.0, 1.3, 0.25),
         LinearRgba::new(0.04, 0.03, 0.025, 0.55),
     );
-    commands.entity(mark).insert(Part::Mark);
-    let mut rng = Rng::new(0x41771);
-    let star = images.add(super::kit::star_image());
-    let flash = materials.add(glow(LinearRgba::rgb(9.0, 6.5, 4.0), Some(star)));
-    commands.spawn((
-        Mesh3d(meshes.add(Rectangle::new(1.0, 1.0))),
-        MeshMaterial3d(flash.clone()),
-        Transform::from_scale(Vec3::ZERO),
-        bevy::light::NotShadowCaster,
-        Part::Flash(flash),
-    ));
-    commands.spawn((
-        PointLight {
-            color: Color::srgb(1.0, 0.82, 0.6),
-            intensity: 0.0,
-            range: 6.0,
-            radius: 0.1,
-            ..default()
-        },
-        Transform::from_translation(strike + Vec3::Y * 0.2),
-        Part::Light,
-    ));
-    let burst = commands
-        .spawn((Burst { at: strike, age: -1.0 }, Part::Burst))
-        .id();
-    let out = (stage.foe - stage.knight).normalize().extend(0.0).xzy() + Vec3::Y * 0.45;
-    let streak = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
-    let spark = materials.add(glow(LinearRgba::rgb(14.0, 6.5, 1.6), None));
-    // 30 streaks 1.8 cm thick read as a tiny spark star (the judges): more, thicker.
-    sparks(&mut commands, burst, &streak, &spark, &mut rng, 44, out, 0.8, (4.0, 11.0), 0.032);
+    commands.entity(mark).insert(Scuff);
 }
 
 /// Finds the knight and the ogre by where they stand, and the ogre's materials once its
@@ -178,6 +112,7 @@ fn find(
 fn blow(
     clock: Res<Clock>,
     mut hit: ResMut<Hit>,
+    mut cues: ResMut<Cues>,
     children: Query<&Children>,
     mut players: Query<&mut AnimationPlayer>,
 ) {
@@ -203,6 +138,7 @@ fn blow(
     let crossed = (last < BLOW && seek >= BLOW) || (seek < last && (last < BLOW || seek >= BLOW));
     let speed = if crossed && !hit.stopped {
         hit.at = clock.t;
+        cues.blow = clock.t;
         hit.stopped = true;
         0.0
     } else if hit.stopped && clock.t - hit.at >= STOP {
@@ -248,44 +184,15 @@ fn flash(a: f32) -> LinearRgba {
 
 fn show(
     clock: Res<Clock>,
-    cam: Res<Cam>,
     hit: Res<Hit>,
-    mut parts: Query<(
-        &Part,
-        Option<&mut Transform>,
-        Option<&mut PointLight>,
-        Option<&mut Burst>,
-        Option<&mut super::mark::Mark>,
-    )>,
-    mut bodies: Query<&mut Transform, (With<WorldAssetRoot>, Without<Part>)>,
+    mut scuffs: Query<&mut super::mark::Mark, With<Scuff>>,
+    mut bodies: Query<&mut Transform, With<WorldAssetRoot>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     stage: Res<Stage>,
 ) {
     let a = if clock.still { STILL_AGE } else { clock.t - hit.at };
-    for (part, tr, light, burst, mark) in &mut parts {
-        match part {
-            Part::Flash(m) => {
-                // A hard star where the blade bites (kit::star), full at once and gone in
-                // a seventh of a second, not a swelling soft disc.
-                let k = (a / STAR_LIFE).clamp(0.0, 1.0);
-                let mut tr = tr.unwrap();
-                tr.translation = stage.strike();
-                tr.rotation = cam.rot * Quat::from_rotation_z(0.2);
-                tr.scale = Vec3::splat(if (0.0..STAR_LIFE).contains(&a) { STAR * (1.0 - 0.4 * k) } else { 0.0 });
-                if let Some(mut m) = materials.get_mut(m) {
-                    let f = (1.0 - k).powf(1.5);
-                    m.base_color = LinearRgba::rgb(9.0 * f, 6.5 * f, 4.0 * f).into();
-                }
-            }
-            Part::Light => {
-                light.unwrap().intensity = if a >= 0.0 { BITE_LM * (-a / BITE_FALL).exp() } else { 0.0 };
-            }
-            Part::Pool => {
-                light.unwrap().intensity = if a >= 0.0 { POOL_LM * (-a / POOL_FALL).exp() } else { 0.0 };
-            }
-            Part::Burst => burst.unwrap().age = a,
-            Part::Mark => mark.unwrap().age = a,
-        }
+    for mut mark in &mut scuffs {
+        mark.age = a;
     }
     let Some(ogre) = hit.ogre else { return };
     if let Ok(mut tr) = bodies.get_mut(ogre) {

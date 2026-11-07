@@ -1,12 +1,14 @@
 // The knight's slash (kit/effects.rs; slash.rs sweeps the strip along the blade's path): a
-// lit motion trail, a thin white-hot edge near the tip, a streaked orange smear inside it
-// fading back from the blade, and a light riding the edge.
+// lit motion trail, a thin white-hot edge near the tip, a streaked orange-red smear inside it
+// darkening down the trail and dissolving into its streaks, and a light riding the edge.
+// Started at the texture slash.rs drew before it (iso-kit j16): its hot edge ~10 and body ~1.2
+// in linear light at the ruin's ev100 8 (exposure 1/307), edge at 0.925 of the strip.
 (
     cue: Swing,
     at: Strike,
     still: 0.0,
     life: 0.2,
     lamps: [(lm: 28000.0, colour: Srgb(1.0, 0.62, 0.3), up: 0.0, range: 5.0, fall: 1.0)],
-    trail: (core: Srgb(1.0, 0.95, 0.85), core_nits: 1800.0, rim: Srgb(1.0, 0.45, 0.15), rim_nits: 120.0,
-        edge: 0.86, width: 0.07, smear: 0.5, tail: 1.6, soft: 0.2),
+    trail: (core: Srgb(1.0, 0.92, 0.8), core_nits: 3000.0, rim: Srgb(1.0, 0.48, 0.14), rim_nits: 370.0,
+        edge: 0.925, width: 0.032, smear: 1.0, tail: 0.8, soft: 0.2),
 )
