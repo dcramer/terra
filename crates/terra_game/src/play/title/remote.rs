@@ -44,6 +44,7 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "joining": menu.and_then(|menu| menu.joining.clone()),
         "player": menu.map(|menu| menu.player.clone()),
         "address": menu.map(|menu| menu.address.clone()),
+        "features": menu.map(|menu| &menu.features),
     }))
 }
 

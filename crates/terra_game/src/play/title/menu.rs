@@ -3,6 +3,10 @@
 //! keys and clicks (`super`).
 
 use super::super::worlds::{self, World};
+use terra_walker::creator::{Feature, Features, creator};
+
+/// The body a new character stands on: the man's, the one the wardrobe has (D599).
+const BODY: &str = "male";
 
 /// The pages of the title screen.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -14,6 +18,8 @@ pub enum Page {
     Host,
     /// Joining: the player's name and the host's address.
     Join,
+    /// The player's character: its features, each turned through what is on offer (D111).
+    Character,
     /// Asking before the world at this place in the list is deleted.
     Delete(usize),
 }
@@ -26,6 +32,9 @@ pub enum Item {
     NewWorld,
     Host,
     Join,
+    Character,
+    /// One of the character's features.
+    Feature(Feature),
     Yard,
     Settings,
     Quit,
@@ -97,6 +106,9 @@ pub struct Menu {
     /// What is being joined, while the host has yet to answer: nothing else is chosen until
     /// it does or the player goes back.
     pub joining: Option<String>,
+    /// The player's character as chosen so far, and the body it is of.
+    pub features: Features,
+    pub body: String,
 }
 
 /// The most digits a seed takes: a 64-bit number's.
@@ -121,6 +133,8 @@ impl Menu {
             player: String::new(),
             address: String::new(),
             joining: None,
+            features: creator().first(BODY),
+            body: BODY.into(),
         };
         // Continue first when there is a world to continue, else New world.
         menu.at = usize::from(menu.worlds.is_empty()) * 2;
@@ -136,6 +150,7 @@ impl Menu {
                 Item::NewWorld,
                 Item::Host,
                 Item::Join,
+                Item::Character,
                 Item::Yard,
                 Item::Settings,
                 Item::Quit,
@@ -151,6 +166,9 @@ impl Menu {
                 .chain([Item::Back])
                 .collect(),
             Page::Join => vec![Item::Player, Item::Address, Item::Connect, Item::Back],
+            Page::Character => (Feature::ALL.into_iter().map(Item::Feature))
+                .chain([Item::Back])
+                .collect(),
             Page::Delete(_) => vec![Item::Back, Item::ConfirmDelete],
         }
     }
@@ -215,6 +233,7 @@ impl Menu {
             Page::New => self.go(Page::Main, 2),
             Page::Host => self.go(Page::Main, 3),
             Page::Join => self.go(Page::Main, 4),
+            Page::Character => self.go(Page::Main, 5),
             Page::Delete(world) => self.go(Page::Worlds, world),
         }
     }
@@ -237,6 +256,8 @@ impl Menu {
             }
             Item::Host => self.go(Page::Host, 1),
             Item::Join => self.go(Page::Join, 1),
+            Item::Character => self.go(Page::Character, 0),
+            Item::Feature(feature) => self.features.turn(&self.body, feature, true),
             Item::Player => self.at = 1,
             Item::HostWorld(at) => return self.worlds.get(at).cloned().map(Act::Host),
             Item::Address => self.at = 2,

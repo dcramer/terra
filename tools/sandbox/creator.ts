@@ -4,15 +4,18 @@
 // colour on offer, and the game says what its body then shows (`creator.state`): which
 // pieces, and what the skin's, hair's and eyes' parts are drawn with. Each must be what
 // assets/models/character/creator.json says that choice is, on every part, and a name not
-// on offer must be refused.
+// on offer must be refused. Then the screen: the title screen's Character page turns four
+// features, which the figure behind it wears, as does the player of a world made after, and
+// the next game still has them.
 //
 //   node tools/sandbox/creator.ts
 //
 // Node 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 
@@ -108,6 +111,59 @@ try {
   if (refused.ok || !refused.out.includes(data.eyes[0].name)) throw new Error(`an eye colour not on offer was not refused with those that are: ${refused.out}`);
   if (state().features?.eyes !== data.eyes.at(-1)!.name) throw new Error("a refused choice changed the player's eyes");
   console.log("✓ refused: a colour not on offer changes nothing and is told which are");
+  remote("stop");
+
+  // The screen: chosen on the title screen's Character page, worn by the figure behind it
+  // as each is turned, by the player of a world made after, and kept for the next game.
+  const worlds = mkdtempSync(join(tmpdir(), "terra-creator-"));
+  try {
+    const title = () => JSON.parse(call("title.state")) as { screen: string; picked: string | null; page: string | null; features: Record<string, string | null> | null };
+    const until = async (what: string, test: () => boolean, seconds = 240) => {
+      for (let waited = 0; waited < seconds; waited += 0.5) {
+        if (test()) return;
+        await sleep(0.5);
+      }
+      throw new Error(`${what}, after ${seconds} s`);
+    };
+    const pick = async (choice: string, key?: string) => {
+      for (let tries = 0; tries < 12 && title().picked !== choice; tries++) {
+        remote("press", "down");
+        await sleep(0.3);
+      }
+      if (title().picked !== choice) throw new Error(`the title screen never offered ${choice}: it shows ${JSON.stringify(title())}`);
+      if (key) remote("press", key);
+      await sleep(0.3);
+    };
+    const begin = async () => {
+      const started = remote("start", "--real-time", "--", "--experiment", "play", "--offscreen", "--title", `--worlds=${worlds}`);
+      if (!started.ok) throw new Error(`the game did not start on its title screen:\n${started.out}`);
+      await until("the title screen never came up", () => title().screen === "Title");
+    };
+    await begin();
+    const before = title().features!;
+    await pick("Character", "enter");
+    await pick("Feature(Hair)", "right");
+    await pick("Feature(Beard)", "right");
+    await pick("Feature(Skin)", "left");
+    await pick("Feature(Eyes)", "enter");
+    const chosen = title().features!;
+    const turned = ["hair", "beard", "skin", "eyes"].filter((each) => chosen[each] !== before[each]);
+    if (turned.length !== 4) throw new Error(`of hair, beard, skin and eyes only ${turned.join(", ") || "none"} turned: ${JSON.stringify(chosen)}`);
+    const worn = (now: State) => JSON.stringify(now.features) === JSON.stringify(chosen) && now.pieces.some((piece) => piece.endsWith(file(chosen.hair!))) && now.pieces.some((piece) => piece.endsWith(file(chosen.beard!)));
+    await until(`the figure behind the page never wore what was chosen: ${JSON.stringify(state())}`, () => worn(state()), 30);
+    await pick("Back", "enter");
+    await pick("NewWorld", "enter");
+    await pick("Create", "enter");
+    await until("the new world never began", () => title().screen === "Playing");
+    await until(`the world's player never wore what was chosen: ${JSON.stringify(state())}`, () => worn(state()), 60);
+    remote("stop");
+    await begin();
+    const kept = title().features!;
+    if (JSON.stringify(kept) !== JSON.stringify(chosen)) throw new Error(`the next game's character is ${JSON.stringify(kept)}, not the ${JSON.stringify(chosen)} chosen: the profile did not keep it`);
+    console.log(`✓ screen: four features turned on the Character page are worn by the figure behind it, by the player of a world made after, and kept for the next game (${chosen.hair}, ${chosen.beard}, ${chosen.skin}, ${chosen.eyes})`);
+  } finally {
+    rmSync(worlds, { recursive: true, force: true });
+  }
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 } finally {

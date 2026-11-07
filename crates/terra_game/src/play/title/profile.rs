@@ -10,8 +10,14 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use terra_net::identity::Identity;
+use terra_walker::creator::{Features, creator};
 
 const FILE: &str = "player.ron";
+
+/// A character nobody has chosen yet: the first of each choice, on the man's body (D599).
+fn new_features() -> Features {
+    creator().first("male")
+}
 
 #[derive(Resource, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Profile {
@@ -19,6 +25,9 @@ pub struct Profile {
     secret: [u8; 32],
     #[serde(default)]
     pub address: String,
+    /// How their character looks (D111), in every world.
+    #[serde(default = "new_features")]
+    pub features: Features,
     /// Where it is kept, if anywhere.
     #[serde(skip)]
     path: Option<PathBuf>,
@@ -50,6 +59,7 @@ impl Profile {
             name: "Player".into(),
             secret,
             address: String::new(),
+            features: new_features(),
             path,
         };
         profile.save();
@@ -86,6 +96,8 @@ mod tests {
         assert_eq!(first.name, "Player");
         first.name = "Ada".into();
         first.address = "203.0.113.7".into();
+        first.features.eyes = "Blue".into();
+        first.features.beard = Some("male_beard_full".into());
         first.save();
         let again = Profile::load(Some(&dir));
         assert_eq!(again, first);

@@ -16,6 +16,7 @@ mod menu;
 mod view;
 
 pub use leaving::Leaving;
+mod character;
 mod joining;
 mod leaving;
 mod profile;
@@ -50,7 +51,12 @@ pub fn plugin(app: &mut App) {
         .add_systems(OnEnter(Screen::Title), (view::show, hold))
         .add_systems(OnExit(Screen::Title), (view::hide, release))
         .add_systems(OnEnter(Screen::Playing), offer)
-        .add_plugins((leaving::plugin, joining::plugin, remote::plugin))
+        .add_plugins((
+            leaving::plugin,
+            joining::plugin,
+            character::plugin,
+            remote::plugin,
+        ))
         .add_systems(
             Update,
             quit_to_title
@@ -87,6 +93,7 @@ fn open(mut commands: Commands, root: Option<Res<Root>>, dice: Option<Res<worlds
     let mut menu = Menu::new(worlds);
     menu.dice = dice.map_or_else(worlds::Dice::from_clock, |dice| *dice).0;
     (menu.player, menu.address) = (profile.name.clone(), profile.address.clone());
+    menu.features = profile.features.clone();
     commands.insert_resource(profile);
     commands.insert_resource(Title(menu));
 }
@@ -200,6 +207,12 @@ fn keys(
         && menu.picked() == Some(Item::Mode)
     {
         menu.turn();
+    } else if let (Some(Item::Feature(feature)), true) = (
+        menu.picked(),
+        pressed(&[KeyCode::ArrowLeft, KeyCode::ArrowRight]),
+    ) {
+        let body = menu.body.clone();
+        (menu.features).turn(&body, feature, pressed(&[KeyCode::ArrowRight]));
     } else if pressed(&[KeyCode::Delete])
         && let Some(Item::World(at)) = menu.picked()
     {

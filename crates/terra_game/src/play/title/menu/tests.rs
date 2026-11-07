@@ -272,3 +272,22 @@ fn a_players_name_is_held_to_what_the_wire_carries() {
     assert_eq!(menu.player.chars().count(), 16);
     assert_eq!(PLAYER_BYTES, terra_net::proto::MOST_NAME);
 }
+
+#[test]
+fn the_characters_page_turns_each_feature_and_back_returns_to_it() {
+    let mut menu = Menu::new(Vec::new());
+    assert_eq!(choose(&mut menu, Item::Character), None);
+    assert_eq!(menu.page, Page::Character);
+    let began = menu.features.clone();
+    for feature in Feature::ALL {
+        let before = menu.features.clone();
+        assert_eq!(choose(&mut menu, Item::Feature(feature)), None);
+        assert_ne!(menu.features, before, "{feature:?} did not turn");
+    }
+    assert_ne!(menu.features.hair, began.hair);
+    menu.back();
+    assert_eq!(
+        (menu.page, menu.picked()),
+        (Page::Main, Some(Item::Character))
+    );
+}

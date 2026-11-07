@@ -173,6 +173,7 @@ pub(super) fn draw(
             (menu.page, menu.worlds.len(), typing),
             (&menu.name, &menu.seed, menu.seed_typed, menu.creative),
             (&menu.player, &menu.address, &menu.joining, &menu.notice),
+            &menu.features,
         )
     ));
     if drawn.0 != page {
@@ -234,6 +235,7 @@ fn heading(menu: &Menu) -> Option<String> {
         Page::New => Some("A new world".into()),
         Page::Host => Some("Host a world: friends join at this machine's address".into()),
         Page::Join => Some("Join a friend's world".into()),
+        Page::Character => Some("Your character".into()),
         Page::Delete(at) => menu
             .worlds
             .get(at)
@@ -264,6 +266,18 @@ fn words(menu: &Menu, item: Item) -> (String, Option<String>) {
             Some("Play a world of yours with friends".into()),
         ),
         Item::Join => ("Join".into(), Some("Play in a friend's world".into())),
+        Item::Character => (
+            "Character".into(),
+            Some("How you look, in every world".into()),
+        ),
+        Item::Feature(feature) => (
+            format!(
+                "{}   <  {}  >",
+                feature.label(),
+                menu.features.words(feature)
+            ),
+            None,
+        ),
         Item::Player => {
             let caret = if menu.picked() == Some(item) { "_" } else { "" };
             (

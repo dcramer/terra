@@ -80,6 +80,7 @@ fn leave(world: &mut World) {
     menu.notice = notice;
     if let Some(profile) = world.get_resource::<super::profile::Profile>() {
         (menu.player, menu.address) = (profile.name.clone(), profile.address.clone());
+        menu.features = profile.features.clone();
     }
     world.insert_resource(Title(menu));
     world.resource_mut::<Chosen>().0 = None;

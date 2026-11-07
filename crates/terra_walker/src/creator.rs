@@ -131,7 +131,108 @@ impl Creator {
     }
 }
 
+/// One of the choices a creator's screen offers, in the order it shows them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Feature {
+    Hair,
+    Beard,
+    HairColour,
+    Skin,
+    Eyes,
+}
+
+impl Feature {
+    pub const ALL: [Feature; 5] = [
+        Feature::Hair,
+        Feature::Beard,
+        Feature::HairColour,
+        Feature::Skin,
+        Feature::Eyes,
+    ];
+
+    /// What a screen calls it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Feature::Hair => "Hair",
+            Feature::Beard => "Beard",
+            Feature::HairColour => "Hair colour",
+            Feature::Skin => "Skin",
+            Feature::Eyes => "Eyes",
+        }
+    }
+}
+
+impl Creator {
+    /// What is on offer for a feature of a body, in order, as the names features keep: for
+    /// hair and a beard none comes first of the beards and last of the hairstyles.
+    pub fn offered(&self, body: &str, feature: Feature) -> Vec<Option<&str>> {
+        let tones = |tones: &'static [Tone]| tones.iter().map(|t| Some(t.name.as_str())).collect();
+        match feature {
+            Feature::Hair => (self.pieces(body, HAIR).into_iter().map(Some))
+                .chain([None])
+                .collect(),
+            Feature::Beard => [None]
+                .into_iter()
+                .chain(self.pieces(body, BEARD).into_iter().map(Some))
+                .collect(),
+            Feature::HairColour => tones(&creator().hair),
+            Feature::Skin => tones(&creator().skin),
+            Feature::Eyes => (creator().eyes.iter())
+                .map(|e| Some(e.name.as_str()))
+                .collect(),
+        }
+    }
+}
+
 impl Features {
+    fn of(&self, feature: Feature) -> Option<&str> {
+        match feature {
+            Feature::Hair => self.hair.as_deref(),
+            Feature::Beard => self.beard.as_deref(),
+            Feature::HairColour => Some(&self.hair_colour),
+            Feature::Skin => Some(&self.skin),
+            Feature::Eyes => Some(&self.eyes),
+        }
+    }
+
+    /// Turns a feature to the next on offer for the body, or the one before, round and
+    /// round. One the data no longer has turns from the first.
+    pub fn turn(&mut self, body: &str, feature: Feature, forward: bool) {
+        let offered = creator().offered(body, feature);
+        if offered.is_empty() {
+            return;
+        }
+        let at = (offered.iter().position(|each| *each == self.of(feature))).unwrap_or(0);
+        let step = if forward { 1 } else { offered.len() - 1 };
+        let next = offered[(at + step) % offered.len()].map(str::to_string);
+        match feature {
+            Feature::Hair => self.hair = next,
+            Feature::Beard => self.beard = next,
+            Feature::HairColour => self.hair_colour = next.unwrap_or_default(),
+            Feature::Skin => self.skin = next.unwrap_or_default(),
+            Feature::Eyes => self.eyes = next.unwrap_or_default(),
+        }
+    }
+
+    /// A feature as a screen says it: a colour by its name, a piece by its own words
+    /// (`male_hair_slick_back` is "Slick back"), none as "None".
+    pub fn words(&self, feature: Feature) -> String {
+        let Some(name) = self.of(feature) else {
+            return "None".into();
+        };
+        let slot = match feature {
+            Feature::Hair => HAIR,
+            Feature::Beard => BEARD,
+            _ => return name.to_string(),
+        };
+        let own = (name.split_once(&format!("_{slot}_"))).map_or(name, |(_, own)| own);
+        let mut words = own.replace('_', " ");
+        if let Some(first) = words.get_mut(..1) {
+            first.make_ascii_uppercase();
+        }
+        words
+    }
+
     /// These features as the wardrobe is asked for them: the person's own piece, or none,
     /// for each slot that is theirs.
     pub fn own(&self) -> [(&'static str, Option<&str>); 2] {
@@ -209,6 +310,35 @@ mod tests {
             let any = styles.iter().chain(&beards).any(|s| shown.contains(s));
             assert!(!any, "{look}: hair shown on a bare head: {shown:?}");
         }
+    }
+
+    #[test]
+    fn a_feature_turns_through_all_on_offer_and_back_and_reads_in_words() {
+        let creator = creator();
+        for feature in Feature::ALL {
+            let mut features = creator.first("male");
+            let began = features.clone();
+            let offered = creator.offered("male", feature);
+            let mut seen = vec![features.words(feature)];
+            for _ in 1..offered.len() {
+                features.turn("male", feature, true);
+                seen.push(features.words(feature));
+            }
+            let mut unique = seen.clone();
+            unique.sort();
+            unique.dedup();
+            assert_eq!(unique.len(), offered.len(), "{feature:?}: {seen:?}");
+            features.turn("male", feature, true);
+            assert_eq!(features, began, "{feature:?} comes round");
+            features.turn("male", feature, false);
+            features.turn("male", feature, true);
+            assert_eq!(features, began, "{feature:?} back and forth");
+        }
+        let mut features = creator.first("male");
+        features.hair = Some("male_hair_slick_back".into());
+        assert_eq!(features.words(Feature::Hair), "Slick back");
+        assert_eq!(features.words(Feature::Beard), "None");
+        assert_eq!(features.words(Feature::Skin), creator.skin[0].name);
     }
 
     /// A name the data does not have paints as the first on offer, never as nothing.
