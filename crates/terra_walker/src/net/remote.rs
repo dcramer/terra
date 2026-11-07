@@ -8,7 +8,7 @@
 //!   hosted there. It must have made the same world (the same `--seed`).
 //! - `net.say {"text": "…"}`: words to everyone in the world, as the host or as a guest.
 //! - `net.leave`: stop hosting (every guest is told the host left) or leave the hosted world.
-//! - `net.state`: who is connected, where each guest and puppet stands, how often this
+//! - `net.state`: who is connected, where each guest and puppet stands and how it looks, how often this
 //!   game's prediction was corrected, how many operations have shaped its ground and how many
 //!   of its own the host has yet to order back, and why a link ended if one did.
 
@@ -16,6 +16,7 @@ use super::link::{Ended, Link, Puppet};
 use super::session;
 use super::{Guest, Host, realm_of};
 use crate::IsLocalPlayer;
+use crate::creator::Features;
 use bevy::prelude::*;
 use bevy::remote::{BrpResult, builtin_methods::parse_some};
 use serde::Deserialize;
@@ -103,15 +104,19 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
     let place = |transform: &Transform| json!(transform.translation.to_array());
     let mut mine = world.query_filtered::<&Transform, IsLocalPlayer>();
     let mine = mine.iter(world).next().map(place);
-    let mut guests = world.query::<(&Guest, &Transform)>();
+    let mut guests = world.query::<(&Guest, &Transform, Option<&Features>)>();
     let guests: Vec<Value> = guests
         .iter(world)
-        .map(|(guest, transform)| json!({ "peer": guest.0 .0, "at": place(transform) }))
+        .map(|(guest, transform, looks)| {
+            json!({ "peer": guest.0.0, "at": place(transform), "looks": looks })
+        })
         .collect();
-    let mut puppets = world.query::<(&Puppet, &Transform)>();
+    let mut puppets = world.query::<(&Puppet, &Transform, Option<&Features>)>();
     let puppets: Vec<Value> = puppets
         .iter(world)
-        .map(|(puppet, transform)| json!({ "id": puppet.id.0, "at": place(transform) }))
+        .map(|(puppet, transform, looks)| {
+            json!({ "id": puppet.id.0, "at": place(transform), "looks": looks })
+        })
         .collect();
     let host = world.get_resource::<Host>();
     let link = world.get_resource::<Link>();

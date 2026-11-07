@@ -28,8 +28,8 @@ pub fn plugin(app: &mut App) {
     app.add_systems(Update, (pose.run_if(in_state(Screen::Title)), wear));
 }
 
-/// This machine's player wears the profile's features: on arriving in a world, and as they
-/// are chosen. A run with no profile (no title screen) leaves its player as its look is.
+/// This machine's player wears the profile's features on arriving in a world, and on the
+/// character's page each as it is chosen. A run with no profile (no title screen) leaves its player as its look is.
 fn wear(
     mut commands: Commands,
     profile: Option<Res<Profile>>,
@@ -44,7 +44,9 @@ fn wear(
         .filter(|title| *screen.get() == Screen::Title && title.0.page == Page::Character);
     let features = choosing.map_or(&profile.features, |title| &title.0.features);
     for (player, worn) in &players {
-        if worn != Some(features) {
+        // A player arriving has none yet; on the page each turn is worn. In a world what a
+        // player wears is theirs to change (a barber's, later; a script's, now).
+        if worn.is_none() || (choosing.is_some() && worn != Some(features)) {
             commands.entity(player).insert(features.clone());
         }
     }

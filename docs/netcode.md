@@ -74,7 +74,8 @@ On the real mover (four men walking, sprinting and jumping for 30 simulated minu
 3. The area arrives by the ordinary paths (operations for its regions, then state); the client is `Ready` when its own region's record is whole.
 4. Leaving, by choice or timeout (10 s): the character is saved where it stood (D592) and its body leaves the world at once (D637); built for where it stood, kept while the world is hosted, so one who comes back is put there. When the host leaves, every client is told why, the world is saved and the session ends; built, on the game's closing and on `net.leave`.
 5. From the title screen (D639), built: Host opens the world played (`net::session::open`); Join asks the address typed with no realm of its own, and the welcome's realm (seed and size) is the land the game then makes, the link kept while its clock is held (`link::wait`: heard and answered each frame, no tick walked; the clock and body begin again from the server's newest word, and a clock starting believes no stamp until the server holds an intent of its run). A connection lost before any welcome says nobody answered. Known limit: the guest's body stands in the host's world while its game loads.
-6. Who is here and what they say, built: each client is told of the others as they come and go, and what one says everyone hears, by name, on the ordered lane (to all, while a world holds a handful; by area with D52).
+6. How each player looks (D111), built: its features are the walker's fourth part of its entity (`net::looks`), a guest's as its game says, as what is worn is.
+7. Who is here and what they say, built: each client is told of the others as they come and go, and what one says everyone hears, by name, on the ordered lane (to all, while a world holds a handful; by area with D52).
 
 ## How each crate crosses
 

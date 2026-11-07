@@ -16,6 +16,7 @@
 
 pub mod ground;
 pub mod link;
+pub mod looks;
 pub mod remote;
 pub mod session;
 pub mod worn;
@@ -61,7 +62,12 @@ pub fn parts() -> Vec<PartSpec> {
         audience: Audience::Public,
         weight: 0.3,
     };
-    vec![part(Audience::Public), part(Audience::Owner), worn]
+    // How a player looks changes more rarely still.
+    let looks = PartSpec {
+        audience: Audience::Public,
+        weight: 0.2,
+    };
+    vec![part(Audience::Public), part(Audience::Owner), worn, looks]
 }
 
 /// What a player means to do and where they look, on a tick: what a client sends up.
@@ -256,6 +262,18 @@ pub fn plugin(app: &mut App) {
     .add_systems(Last, farewell)
     .init_resource::<ground::Ground>()
     .init_resource::<worn::Said>()
+    .init_resource::<looks::Said>()
+    .add_systems(
+        FixedUpdate,
+        (
+            looks::host.in_set(Sim::End).before(tell).run_if(hosted),
+            looks::joined
+                .in_set(Sim::End)
+                .after(link::show)
+                .run_if(joined),
+            looks::unjoined.in_set(Sim::End).run_if(not(joined)),
+        ),
+    )
     .add_systems(
         FixedUpdate,
         (

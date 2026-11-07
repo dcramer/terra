@@ -33,6 +33,7 @@ fn hosted() -> (World, Entity, Network) {
     world.init_resource::<Movers>();
     world.init_resource::<ground::Ground>();
     world.init_resource::<worn::Said>();
+    world.init_resource::<looks::Said>();
     world.init_resource::<Messages<crate::movement::Fell>>();
     world.init_resource::<Messages<crate::movement::Drowned>>();
     let mut time = Time::<()>::default();
@@ -266,6 +267,7 @@ fn joined(network: &Network, conditions: Conditions) -> (World, Entity) {
     world.init_resource::<Movers>();
     world.init_resource::<ground::Ground>();
     world.init_resource::<worn::Said>();
+    world.init_resource::<looks::Said>();
     world.init_resource::<Messages<crate::movement::Fell>>();
     world.init_resource::<Messages<crate::movement::Drowned>>();
     let mut time = Time::<()>::default();
@@ -361,6 +363,7 @@ impl Together {
                 self.client.run_system_once(link::show).unwrap();
                 self.client.run_system_once(ground::joined).unwrap();
                 self.client.run_system_once(worn::joined).unwrap();
+                self.client.run_system_once(looks::joined).unwrap();
                 let tick = self.client.resource::<link::Link>().tick();
                 let body = self.client.resource::<Movers>().body(self.player);
                 if let (Some(tick), Some(body)) = (tick, body) {
@@ -373,6 +376,7 @@ impl Together {
             self.host.run_system_once(walk).unwrap();
             self.host.run_system_once(ground::host).unwrap();
             self.host.run_system_once(worn::host).unwrap();
+            self.host.run_system_once(looks::host).unwrap();
             self.host.run_system_once(tell).unwrap();
             let mut guests = self.host.query_filtered::<Entity, With<Guest>>();
             if let Some(guest) = guests.iter(&self.host).next()
@@ -880,4 +884,62 @@ fn a_link_not_kept_while_held_fails_the_check() {
         pair.checked(resumed) < 400 || !pair.mispredicted(resumed).is_empty(),
         "a clock ten seconds behind walked with the host"
     );
+}
+
+/// Two players tell each other apart (D111): each looks, in the other's game, as its player
+/// made it, a change follows, and a name too long for the wire is refused.
+#[test]
+fn each_player_looks_in_the_others_game_as_its_player_made_it() {
+    use crate::creator::{Features, creator};
+    let made = |hair: Option<&str>, skin: &str, eyes: &str| Features {
+        hair: hair.map(str::to_string),
+        beard: None,
+        hair_colour: creator().hair[1].name.clone(),
+        skin: skin.into(),
+        eyes: eyes.into(),
+    };
+    let (hosts, mine) = (
+        made(Some("male_hair_dreads"), "Deep", "Brown"),
+        made(None, "Pale", "Blue"),
+    );
+    let mut together = Together::new(rough());
+    let (host_player, player) = (together.host_player, together.player);
+    together.host.entity_mut(host_player).insert(hosts.clone());
+    together.client.entity_mut(player).insert(mine.clone());
+    together.run(0..90);
+    let mut puppets = together
+        .client
+        .query_filtered::<&Features, With<link::Puppet>>();
+    let mut guests = together.host.query_filtered::<&Features, With<Guest>>();
+    assert_eq!(
+        puppets.single(&together.client).expect("the host's puppet"),
+        &hosts
+    );
+    assert_eq!(guests.single(&together.host).expect("the guest"), &mine);
+    // The joined player grows a beard; the host shaves its head.
+    let (bearded, shaved) = (
+        Features {
+            beard: Some("male_beard_full".into()),
+            ..mine
+        },
+        Features {
+            hair: None,
+            ..hosts
+        },
+    );
+    together.client.entity_mut(player).insert(bearded.clone());
+    together.host.entity_mut(host_player).insert(shaved.clone());
+    together.run(90..150);
+    assert_eq!(
+        puppets.single(&together.client).expect("the host's puppet"),
+        &shaved
+    );
+    assert_eq!(guests.single(&together.host).expect("the guest"), &bearded);
+    use terra_net::wire::Wire;
+    assert_eq!(Features::decoded(&bearded.encoded()), Ok(bearded.clone()));
+    let long = Features {
+        skin: "x".repeat(65),
+        ..bearded
+    };
+    assert!(Features::decoded(&long.encoded()).is_err());
 }

@@ -3,7 +3,7 @@
 // copies of the game, each on its title screen, driven by its keys. One makes a world and
 // hosts it; the other, behind whose title screen is another land, joins by typing the
 // host's address, is welcomed, makes the host's land and plays in it, each holding the
-// other. The host then quits to its title screen: the joined game comes back to its own,
+// other, and each looking in the other's game as its player made it. The host then quits to its title screen: the joined game comes back to its own,
 // told the host left; asking again finds nobody, and it is told that too. Checked with no
 // picture, by what each game says (`title.state`, `net.state`).
 //
@@ -104,6 +104,21 @@ try {
   const names = net(host).players ?? [];
   if (!names.some((name) => name.includes("the friend"))) throw new Error(`the host lists ${names.join(", ")}: the friend's typed name is not there`);
   console.log(`✓ joined from the title screen: welcomed to seed ${land} from seed ${behind}, its land made; each holds the other, the friend ${(off * 100).toFixed(1)} cm from where the host has it; players ${names.join(", ")}`);
+
+  // Each makes its character its own, and is that person in the other's game (D111).
+  type Looks = { hair: string | null; beard: string | null; skin: string; eyes: string } | null;
+  const looks = (port: number, who: "guests" | "puppets") => (net(port)[who][0] as { looks?: Looks } | undefined)?.looks ?? null;
+  remote(host, "call", "creator.set", JSON.stringify({ hair: "male_hair_dreads", skin: "Deep", beard: null }));
+  remote(friend, "call", "creator.set", JSON.stringify({ hair: null, beard: "male_beard_full", eyes: "Blue" }));
+  await until(`the friend's game never showed the host as it made itself: ${JSON.stringify(looks(friend, "puppets"))}`, () => {
+    const seen = looks(friend, "puppets");
+    return seen?.hair === "male_hair_dreads" && seen.skin === "Deep" && seen.beard === null;
+  }, 60);
+  await until(`the host's game never showed the friend as it made itself: ${JSON.stringify(looks(host, "guests"))}`, () => {
+    const seen = looks(host, "guests");
+    return seen?.hair === null && seen.beard === "male_beard_full" && seen.eyes === "Blue";
+  }, 60);
+  console.log("✓ each is the person its player made in the other's game: the host's dreads and deep skin on the friend's puppet, the friend's bare head, beard and blue eyes on the host's guest");
 
   // The host quits to its title screen: the friend is brought back to its own, told why.
   remote(host, "call", "title.leave");

@@ -5,7 +5,7 @@ Each of [v0's](v0-goals.md) tracks (D589): what it has, what it needs and when i
 ## Front (1)
 
 - **Have**: the title screen (D579, `--title`): Continue, Worlds, New world, The yard, Settings, Quit. Several worlds, each with a name, mode and seed (rolled, or typed; D596), kept on disk. Deleting asks first. Quit to title leaves the world in place, with no new process (launcher.md). Host and Join (D639): a world hosted from its list, a friend's joined by address, the host's land made from its welcome, and every way a session ends told on the title screen in words (`node tools/sandbox/join.ts`).
-- **Need**: of the creator (D111), whose page and choices for the man are built (hair, beard, hair colour, skin, eyes; `node tools/sandbox/creator.ts`): the woman's body, so sex can be chosen (D599), and each player's features seen in the other's game, so two players can tell each other apart.
+- **Need**: of the creator (D111), whose page and choices for the man are built (hair, beard, hair colour, skin, eyes; `node tools/sandbox/creator.ts`): the woman's body, so sex can be chosen (D599). Each player's features are seen in the other's game (`net::looks`, `node tools/sandbox/join.ts`), so two players tell each other apart.
 - **Done when**: a scripted run makes two worlds from different seeds, sees different land, and returns to the title and loads the first, in one process. It does: `node tools/sandbox/title.ts`.
 
 ## Realms (2)
