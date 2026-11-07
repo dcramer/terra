@@ -90,6 +90,14 @@ try {
     const [there] = said[realm];
     const off = Math.hypot(mine[0] - there[0], mine[1] - there[1], mine[2] - there[2]);
     if (off > NEAR_M) throw new Error(`playing seed ${seed}, the game stands ${off.toFixed(2)} m from where its realm has it (the game at ${mine.map((x) => x.toFixed(2))}, the realm at ${there.map((x) => x.toFixed(2))})`);
+    if (off > 0.05) {
+      // More than two games differ by: say what the game has standing where the realm put
+      // its body (2 m east of the start), which the realm, with no solids, does not (D640).
+      type Near = { at: [number, number]; gap: number | null; apart: number; top: number | null }[];
+      const near = JSON.parse(remote("call", "world.obstacles", JSON.stringify({ at: [2, 0], within: 1.5 }))) as Near;
+      const said = near.slice(0, 3).map((thing) => `one ${(thing.gap ?? thing.apart).toFixed(2)} m off, ${thing.top === null ? "low" : `${thing.top.toFixed(1)} m tall`}`);
+      console.log(`  seed ${seed}: ${(off * 100).toFixed(0)} cm from the realm's place; trees or rocks the game has within 1.5 m of it: ${near.length}${said.length ? ` (${said.join("; ")})` : ""}`);
+    }
     return off;
   };
   const first = await stands(SEED, 0);
