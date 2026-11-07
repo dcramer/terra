@@ -165,6 +165,29 @@ pub struct Laid {
     /// painted lines and crossings, wheel paths' and oil's stains, patched repairs.
     #[serde(default)]
     pub marks: Vec<Mark>,
+    /// How worn the units are, each by its own hash (none by default): split, tilted,
+    /// broken and gone (kit/laid.rs `Wear`).
+    #[serde(default)]
+    pub wear: Wear,
+}
+
+/// An old floor's units, each told apart (`courses`) and worn its own way, as Substance
+/// Designer's Tile Generator varies each tile by a random per cell (its size, luminance and
+/// tilt) and texture bombing a cell's stamp (Glanville, GPU Gems ch. 20): the shares of
+/// units split in two (and again, so the flags vary in size), broken across, and gone to
+/// soil and moss, and how far a unit tilts (its normal, radians), so each catches the light
+/// its own way. All 0: the scan's units as laid.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Wear {
+    #[serde(default)]
+    pub split: f32,
+    #[serde(default)]
+    pub tilt: f32,
+    #[serde(default)]
+    pub broken: f32,
+    #[serde(default)]
+    pub missing: f32,
 }
 
 /// A mark on a laid floor: a rectangle `size` metres (along its own x and z) centred `at`

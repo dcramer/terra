@@ -47,6 +47,9 @@ pub struct Params {
     /// x the courses (0: the units are not told apart), y the marks, z the grit, w the
     /// joints' sand.
     pub shape: Vec4,
+    /// The units' wear (biome.rs `Wear`): x the share split, y the tilt (radians), z the
+    /// share broken, w the share gone.
+    pub wear: Vec4,
     /// Each mark's centre (x, z) and half size.
     pub mark_at: [Vec4; MARKS],
     /// Each mark's turn's cos and sin and its repeats' spacing.
@@ -203,6 +206,12 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
             laid.grit,
             laid.sand,
         ),
+        wear: Vec4::new(
+            laid.wear.split,
+            laid.wear.tilt,
+            laid.wear.broken,
+            laid.wear.missing,
+        ),
         ..default()
     };
     let bad_mark = |m: &Mark| {
@@ -309,6 +318,7 @@ mod tests {
             damp: 0.5,
             feet: Some(Mask::Site("walls".into())),
             marks: vec![],
+            wear: Default::default(),
         }
     }
 
@@ -439,6 +449,11 @@ mod tests {
     fn the_ruins_floor_resolves() {
         let b = super::super::biome::Biome::load("ruin").unwrap();
         let l = b.ground.laid.expect("the ruin lays its court");
-        params(&l, &PLACE).unwrap();
+        let p = params(&l, &PLACE).unwrap();
+        // Its flags worn (split, tilted, broken, gone), each a share or an angle the shader
+        // reads in that order; a floor that names no wear lays the scan's units as they are.
+        assert!(p.wear.x > 0.0 && p.wear.y > 0.0 && p.wear.z > 0.0 && p.wear.w > 0.0);
+        assert!(p.wear.x <= 1.0 && p.wear.z <= 1.0 && p.wear.w <= 1.0 && p.wear.y < 0.2);
+        assert_eq!(params(&laid(None, None), &PLACE).unwrap().wear, Vec4::ZERO);
     }
 }

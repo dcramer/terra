@@ -46,7 +46,7 @@ const TAKEN: [(Vec2, f32); 14] = [
 /// Where bricks are tried, and how many a square metre; the field keeps a share.
 const AREA_X: (f32, f32) = (-9.0, 11.0);
 const AREA_Z: (f32, f32) = (-6.3, 7.5);
-const BRICK_TRIES: f32 = 16.0;
+const BRICK_TRIES: f32 = 22.0;
 /// The bones placed: skulls and heaps, each at least `APART` from the others (12 and 6
 /// at 1.1 m read as a few white dots, r15; 20 and 12 the same heap stamped over the court,
 /// judge 261107-0150; at two the court lost its bones, round 261107-0259-2): a few skulls
@@ -136,8 +136,10 @@ pub fn loose(p: Vec2) -> f32 {
     let patch = smooth(0.25, 0.75, fbm(p * 1.3, 733));
     (0.35 + 0.65 * patch) * off_feet(p) * dry(p)
 }
-/// Loose pieces tried a square metre (the field keeps a share, about half).
-const LOOSE_TRIES: f32 = 12.0;
+/// Loose pieces tried a square metre (the field keeps a share, about half): a few stones
+/// over the open floor, which the paving's own wear now breaks up (at 12 "even confetti of
+/// identical small brick cuboids sprinkled over the floor", judge 261107-0358-2-ruin).
+const LOOSE_TRIES: f32 = 2.0;
 
 /// Whether a skull or heap at `p` stands clear of what is already there and of `placed`.
 fn free(p: Vec2, placed: &[Vec2]) -> bool {
@@ -166,14 +168,17 @@ pub fn spawn(
             continue;
         }
         // In clumps where it lies thick, as a brick breaks and its shards lie together: a
-        // heap's pieces piled a little over one another.
-        for k in 0..1 + (rng.f() * 8.0 * s) as usize {
+        // heap's pieces piled over one another, its core a mound a hand or two high
+        // (judge 261107-0358-2-ruin: the refs pile rubble at the wall feet and corners).
+        for k in 0..1 + (rng.f() * 12.0 * s) as usize {
             let p = centre + Vec2::new(rng.range(-0.45, 0.45), rng.range(-0.45, 0.45));
-            if strewn(p) == 0.0 {
+            let here = strewn(p);
+            if here == 0.0 {
                 continue;
             }
             let size = lump(rng.f().powf(1.0 + 0.8 * (1.0 - s)));
-            brick(&mut bricks, &mut rng, p, k as f32 * 0.025 * s, size);
+            let lift = k as f32 * 0.02 * s + 0.12 * here * here * rng.f();
+            brick(&mut bricks, &mut rng, p, lift, size);
         }
     }
     // The loose layer over the open floor: single chips and grit, now and then a pair or
@@ -224,11 +229,11 @@ pub fn chip(u: f32) -> f32 {
 /// part-way into the soil, some stained by it.
 fn brick(bricks: &mut Blocks, rng: &mut Rng, p: Vec2, lift: f32, s: f32) {
     // A broken piece is squarer than a whole brick; a big one a lump of courses.
-    let long = 0.25 * s * rng.range(0.6, 1.2);
+    let long = 0.25 * s * rng.range(0.5, 1.25);
     let size = Vec3::new(
         long,
         0.075 * s.sqrt() * rng.range(0.8, 1.3),
-        0.12 * s * rng.range(0.7, 1.1),
+        0.12 * s * rng.range(0.55, 1.25),
     );
     let on_edge = rng.f() < 0.15;
     let rot = Quat::from_euler(
@@ -250,13 +255,20 @@ fn brick(bricks: &mut Blocks, rng: &mut Rng, p: Vec2, lift: f32, s: f32) {
         v * (0.95 - 0.2 * soil),
         v * (0.9 - 0.3 * soil),
     );
-    bricks.add(
+    // Its corners knocked off: a whole brick's a little, a shard's a lot, so no two pieces
+    // are one cuboid (judge 261107-0358-2-ruin: "identical small brick cuboids").
+    let broken = if s > 0.9 { 0.15 } else { 0.45 };
+    let cut: [Vec3; 8] = std::array::from_fn(|_| {
+        Vec3::new(rng.f(), rng.f(), rng.f()) * Vec3::splat(broken) * rng.f().sqrt()
+    });
+    bricks.chunk(
         Vec3::new(p.x, floor + lift + up * (0.5 - sink), p.y),
         size,
         rot,
         2.0,
         Vec2::new(rng.f(), rng.f()),
         tint,
+        cut,
     );
 }
 

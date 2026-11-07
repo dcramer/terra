@@ -79,7 +79,8 @@ pub fn leafy(p: Vec2) -> f32 {
 pub fn rubbly(p: Vec2) -> f32 {
     let heap = smooth(0.3, 0.65, fbm(p * 0.5, 611));
     let broken = 1.0 - smooth(0.3, 0.85, paved(p));
-    let lie = (0.08 + 0.8 * by_walls(p) + 0.45 * broken) * (0.35 + 0.65 * heap);
+    // Hardly any on the open floor (0.08 there sprinkled it, judge 261107-0358-2-ruin).
+    let lie = (0.03 + 0.8 * by_walls(p) + 0.45 * broken) * (0.35 + 0.65 * heap);
     let lie = lie * (0.2 + 0.8 * open(p)) * (1.0 - smooth(0.4, 0.7, wet(p)));
     (lie + 0.5 * strewn(p)).min(1.0)
 }
@@ -220,13 +221,16 @@ pub fn spawn(
         );
         let v = rng.range(0.3, 0.6);
         let floor = if paved(p) > 0.5 { TOP } else { -0.03 };
-        stones.add(
+        // Each its own lump of broken stone (blocks.rs `chunk`), not one cuboid repeated.
+        let cut: [Vec3; 8] = std::array::from_fn(|_| Vec3::new(rng.f(), rng.f(), rng.f()) * 0.45);
+        stones.chunk(
             Vec3::new(p.x, floor + size.y * 0.3, p.y),
             size,
             rot,
             3.0,
             Vec2::new(rng.f(), rng.f()),
             Color::srgb(v, v * 0.97, v * 0.92),
+            cut,
         );
     }
     commands.spawn((

@@ -25,6 +25,7 @@ struct Params {
     courses: array<vec4<f32>, 4>,
     joints: array<vec4<f32>, 4>,
     shape: vec4<f32>,
+    wear: vec4<f32>,
     mark_at: array<vec4<f32>, 24>,
     mark_turn: array<vec4<f32>, 24>,
     mark_rep: array<vec4<f32>, 24>,
@@ -113,6 +114,131 @@ fn unit(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(tile, f32(r), c);
 }
 
+// The `i`th joint across course `r` (u; 2 past its last).
+fn joint_u(r: u32, i: u32) -> f32 {
+    if i < 3u {
+        return laid.courses[r][i + 1u];
+    }
+    return laid.joints[r][i - 3u];
+}
+
+// A unit as it has worn (`wear`): the piece of it a point lies in, its new joints and
+// their chipped arrises, its tilt, and where it is gone to soil.
+struct Flag {
+    key: vec2<f32>,
+    joint: f32,
+    bevel: f32,
+    tilt: vec3<f32>,
+    gone: f32,
+    rim: f32,
+}
+
+// Per-cell variation as Substance Designer's Tile Generator gives each tile (random size by
+// splitting, luminance, tilt) and texture bombing's random per cell (Glanville, GPU Gems
+// ch. 20): each unit of the scan, found by `unit`, hashed to decide whether it was split in
+// two (and a half again, so the flags vary in size), broken across with its far side sunk
+// and tilted its own way, or lost a corner or the whole to soil; more of them by the walls'
+// feet, where the walls fell on them. Distances in metres (`uv_m` the metres a uv unit).
+fn flag(uv: vec2<f32>, uv_m: f32, p: vec2<f32>, feet: f32) -> Flag {
+    let u = unit(uv);
+    let r = u32(u.z);
+    let c = u32(u.w + 0.5);
+    let n = u32(laid.shape.x);
+    var nj = 1u;
+    for (var i = 0u; i < 7u; i++) {
+        if joint_u(r, i) < 1.5 {
+            nj = i + 1u;
+        }
+    }
+    let x0 = joint_u(r, max(c, 1u) - 1u);
+    var x1 = joint_u(r, 0u) + 1.0;
+    if c < nj {
+        x1 = joint_u(r, c);
+    }
+    let y0 = laid.courses[r].x;
+    var y1 = laid.courses[0].x + 1.0;
+    if r + 1u < n {
+        y1 = laid.courses[r + 1u].x;
+    }
+    let f = uv - u.xy;
+    var q = (f - vec2<f32>(x0, y0)) * uv_m;
+    var sz = (vec2<f32>(x1, y1) - vec2<f32>(x0, y0)) * uv_m;
+    var key = u.xy * vec2<f32>(5.31, 7.17) + u.zw * vec2<f32>(1.73, 3.11) + 0.5;
+    let w = laid.wear;
+    let worn = 1.0 + feet * 1.5;
+
+    // Split across its longer side, a third to two thirds along, and a half split again.
+    var seam = 8.0;
+    for (var k = 0; k < 2; k++) {
+        let fk = f32(k);
+        if hash(key + 31.0 + fk * 13.0) < w.x * select(1.0, 0.55, k == 1) {
+            let t = 0.36 + 0.28 * hash(key + 37.0 + fk * 5.0);
+            if sz.x >= sz.y {
+                let s = sz.x * t;
+                seam = min(seam, abs(q.x - s));
+                if q.x >= s {
+                    q.x -= s;
+                    sz.x -= s;
+                    key += vec2<f32>(53.0, 0.0);
+                } else {
+                    sz.x = s;
+                    key += vec2<f32>(0.0, 29.0);
+                }
+            } else {
+                let s = sz.y * t;
+                seam = min(seam, abs(q.y - s));
+                if q.y >= s {
+                    q.y -= s;
+                    sz.y -= s;
+                    key += vec2<f32>(41.0, 0.0);
+                } else {
+                    sz.y = s;
+                    key += vec2<f32>(0.0, 67.0);
+                }
+            }
+        }
+    }
+    seam += (noise(p * 37.0) - 0.5) * 0.006;
+    var joint = 1.0 - smoothstep(0.004, 0.012, seam);
+    var bevel = 1.0 - smoothstep(0.004, 0.05, seam);
+
+    // Broken across: a wandering crack, the far side sunk and tilted its own way.
+    var sunk = 0.0;
+    if hash(key + 71.0) < w.z * worn {
+        let ca = hash(key + 73.0) * 6.2832;
+        let c0 = sz * (0.3 + 0.4 * vec2<f32>(hash(key + 79.0), hash(key + 83.0)));
+        let d = dot(q - c0, vec2<f32>(cos(ca), sin(ca))) + (noise(p * 6.0 + key) - 0.5) * 0.08
+            + (noise(p * 23.0) - 0.5) * 0.015;
+        joint = max(joint, 1.0 - smoothstep(0.002, 0.008, abs(d)));
+        bevel = max(bevel, 0.7 * (1.0 - smoothstep(0.002, 0.03, abs(d))));
+        if d > 0.0 {
+            key += vec2<f32>(97.0, 89.0);
+            sunk = 1.0;
+        }
+    }
+
+    // Tilted: settled out of true, so it takes the light its own way; a sunk piece more.
+    let a = hash(key + 67.0) * 6.2832;
+    let tl = w.y * hash(key + 61.0) * hash(key + 61.0) * (1.0 + sunk);
+    let tilt = vec3<f32>(cos(a), 0.0, sin(a)) * tl;
+
+    // Gone: the whole piece, or a corner broken off it, its edge ragged.
+    let ragged = (noise(p * 8.0) - 0.5) * 0.1 + (noise(p * 29.0) - 0.5) * 0.03;
+    var depth = -1.0;
+    if hash(key + 91.0) < w.w * worn {
+        let e = min(min(q.x, sz.x - q.x), min(q.y, sz.y - q.y));
+        depth = e + ragged - 0.05;
+    } else if hash(key + 101.0) < w.z * worn * 0.6 {
+        let ck = u32(hash(key + 103.0) * 3.99);
+        let cp = vec2<f32>(select(0.0, sz.x, (ck & 1u) == 1u), select(0.0, sz.y, (ck & 2u) == 2u));
+        let rr = min(sz.x, sz.y) * (0.25 + 0.25 * hash(key + 107.0));
+        depth = rr - length(q - cp) + ragged;
+    }
+    let gone = smoothstep(-0.006, 0.006, depth);
+    let rim = gone * (1.0 - smoothstep(0.0, 0.07, depth));
+    return Flag(key, joint, bevel, tilt, gone, rim);
+}
+
 // How far `p` lies outside mark `k`'s nearest repeat (negative inside), in metres, and
 // where it lies in that repeat's own frame (kit/laid.rs's `mark_edge`, tested there).
 fn mark_edge(k: u32, p: vec2<f32>) -> vec3<f32> {
@@ -148,24 +274,39 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 
     // The joints: dark in the scan's occlusion.
     let ao = textureSample(arm, arm_sampler, in.uv).r;
-    let joint = 1.0 - smoothstep(0.5, 0.75, ao);
+    var joint = 1.0 - smoothstep(0.5, 0.75, ao);
 
     // Fine grain, so the units hold the refs' sharpness at the camera's distance.
     let grain = textureSample(detail, detail_sampler, p / laid.look.z).rgb * 2.0;
     colour *= mix(vec3<f32>(1.0), grain, laid.look.w);
 
     // Each unit its own stone: its value, warmth and roughness wander (quarried and worn
-    // apart), the step hidden in the joint.
+    // apart), the step hidden in the joint; and worn its own way (`wear`, biome.rs `Wear`):
+    // split, tilted, broken across, a corner or the whole gone to soil.
     var rough_k = 1.0;
     let feet = source(laid.masks.w, in);
+    let uv_m = length(dpdx(p)) / max(length(dpdx(in.uv)), 1e-6);
+    var tilt_n = vec3<f32>(0.0);
+    var gone = 0.0;
+    var gone_rim = 0.0;
+    var joint_all = joint;
     if laid.shape.x > 0.5 {
-        let u = unit(in.uv);
-        let key = u.xy * vec2<f32>(5.31, 7.17) + u.zw * vec2<f32>(1.73, 3.11) + 0.5;
-        let inner = 1.0 - joint;
-        colour *= 1.0 + laid.vary.x * (hash(key) * 2.0 - 1.0) * inner;
+        let f = flag(in.uv, uv_m, p, feet);
+        joint_all = max(joint, f.joint);
+        let key = f.key;
+        let inner = 1.0 - joint_all;
+        // A third of the units far from the rest, an old court's mixed stone.
+        let odd = select(1.0, mix(0.62, 1.3, hash(key + 5.0)), hash(key + 3.0) < 0.3 * step(0.001, laid.wear.x + laid.wear.z));
+        colour *= (1.0 + laid.vary.x * (hash(key) * 2.0 - 1.0)) * mix(1.0, odd, inner);
         colour *= mix(vec3<f32>(1.0), vec3<f32>(1.06, 1.0, 0.92), hash(key + 11.0) * inner * laid.vary.x * 2.0);
         rough_k = 1.0 + laid.vary.y * (hash(key + 23.0) * 2.0 - 1.0) * inner;
+        // Each piece's edge chipped and its arris worn: a soft shade along its new joints.
+        colour *= 1.0 - 0.22 * f.bevel;
+        tilt_n = f.tilt;
+        gone = f.gone;
+        gone_rim = f.rim;
     }
+    joint = joint_all;
 
     // Grime packed in every joint, and in a band at the walls' feet.
     colour *= mix(1.0, laid.look.x, joint);
@@ -256,6 +397,18 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let moss_c = mix(m1, m2, smoothstep(0.3, 0.7, noise(p * 0.13 + 7.0))) * 0.75;
     colour = mix(colour, moss_c, moss * 0.9);
 
+    // Where a unit or its corner is gone: the soil it was bedded in a few centimetres down,
+    // grit and moss in it, shadowed under the broken rim.
+    if gone > 0.0 {
+        let s = noise(p * 4.0 + 19.0) * 0.6 + noise(p * 17.0) * 0.4;
+        var earth = vec3<f32>(0.085, 0.07, 0.055) * (0.7 + 0.6 * s);
+        earth *= mix(1.0, mix(0.6, 1.5, hash(floor(p * 60.0) + 7.0)), 0.5);
+        let weeds = smoothstep(0.45, 0.7, noise(p * 3.3 + 2.0) * 0.7 + mossy * 0.5);
+        earth = mix(earth, moss_c * 0.8, weeds * 0.8);
+        earth *= 1.0 - 0.6 * gone_rim;
+        colour = mix(colour, earth, gone);
+    }
+
     // Puddles: the water line sharp and a little ragged, the water creeping out along the
     // joints; damp stone a hand's width round it.
     let rag = (noise(p * 6.0) - 0.5) * 0.12 + joint * 0.12;
@@ -269,10 +422,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     colour *= mix(1.0, 0.7, damp_patch);
     var rough = clamp(pbr_input.material.perceptual_roughness * rough_k, 0.05, 1.0);
     rough = mix(rough, 1.0, dirty) * mix(1.0, 0.55, damp_patch) * mark_rough;
-    rough = mix(rough, 0.55, paint);
+    rough = mix(mix(rough, 0.55, paint), 1.0, gone);
     pbr_input.material.perceptual_roughness = mix(mix(rough, rough * 0.6, damp), 0.09, wet);
-    // Standing water is flat: the units' relief shows only faintly through it.
-    pbr_input.N = normalize(mix(pbr_input.N, pbr_input.world_normal, wet * 0.85));
+    // Each unit tilted its own way; standing water is flat: the units' relief shows only
+    // faintly through it; soil has none of the stone's.
+    pbr_input.N = normalize(mix(normalize(pbr_input.N + tilt_n), pbr_input.world_normal, max(wet * 0.85, gone * 0.7)));
 
     pbr_input.material.base_color = vec4<f32>(colour, 1.0);
     var out: FragmentOutput;

@@ -32,7 +32,13 @@
                 (0.345, [0.086, 0.399, 0.726]),
                 (0.677, [0.005, 0.337, 0.630]),
             ],
-            spread: (0.22, 0.3),
+            spread: (0.3, 0.35),
+            // An old court's flags (judge 261107-0358-2-ruin: "a regular grid of same-size,
+            // same-tone flags ... reads as one tiled texture"): nearly half split in two (a
+            // half again), so they vary in size; settled out of true up to 4.5 degrees; one in
+            // seven cracked across, its far side sunk, or a corner gone; one in twenty gone
+            // to soil and moss; more of each by the walls' feet.
+            wear: (split: 0.45, tilt: 0.08, broken: 0.15, missing: 0.05),
             dirt: 0.7,
             damp: 0.6,
             feet: Site("walls"),
