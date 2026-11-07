@@ -50,7 +50,11 @@
             // Blotched with dust and old oil, no spots (j2's 0.3 m spots read as round black
             // tar splats all over the road) and no patched repairs (their sealed edges read
             // as rectangles drawn in dark outline): a dead road's surface is its cracks.
-            grime: (blotch: 0.8, earth: 0.6),
+            // Broad dark tar a metre to a few across, sealcoat and old spills soaked in, as
+            // on the derelict lot's broken asphalt (round 1510's road read as one clean
+            // uniform sheet: thin crack seal and oil stains, round 1513/1514, barely showed;
+            // `damp: 1.0`'s soft glossy patches read as wet, round 261107-1518).
+            grime: (blotch: 1.0, earth: 0.8, tar: 0.7),
             marks: [
                 (kind: Stain, at: (0.0, 1.75), size: (80.0, 0.6), every: (0.0, 3.5),
                  count: (1, 2), amount: 0.45),

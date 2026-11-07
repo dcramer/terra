@@ -476,6 +476,25 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         }
     }
 
+    // Old tar (`aged.w`, biome.rs `Grime.tar`): sealcoat and oil soaked into an old lot's
+    // asphalt in broad patches a metre to a few metres across, near black-brown, dry (only a
+    // little less rough), their edges crisp and ragged, a darker tide line where each dried
+    // out, the road's own grain and grit showing faintly through (as the derelict lot's ref;
+    // the blotches alone left the wasteland's road one clean sheet, and `damp`'s soft glossy
+    // patches read as wet in the desert, round 261107-1518).
+    if laid.aged.w > 0.0 {
+        let t = noise(p * 0.32 + 151.0) * 0.55 + noise(p * 1.15 + 157.0) * 0.25
+            + noise(p * 4.3 + 163.0) * 0.13 + noise(p * 15.0 + 167.0) * 0.07;
+        let thr = mix(0.72, 0.52, laid.aged.w) - feet * 0.05;
+        let tar = smoothstep(thr, thr + 0.012, t);
+        let tide = smoothstep(thr, thr + 0.006, t) * (1.0 - smoothstep(thr + 0.012, thr + 0.03, t));
+        let flake = hash(floor(p * 30.0) + 171.0) * 0.6 + noise(p * 7.0 + 173.0) * 0.4;
+        let dark = colour * 0.24 + vec3<f32>(0.009, 0.008, 0.007) * (0.5 + flake);
+        colour = mix(colour, dark, tar * 0.9);
+        colour *= mix(1.0, 0.7, tide);
+        mark_rough *= mix(1.0, 0.85, tar);
+    }
+
     // Moss: out of the joints first, then over the units where it is mossiest.
     let tuft = noise(p * 2.3) * 0.6 + noise(p * 7.7 + 2.0) * 0.4;
     mossy = min(mossy + feet * 0.4, 1.0);

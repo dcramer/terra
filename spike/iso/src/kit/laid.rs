@@ -58,7 +58,7 @@ pub struct Params {
     /// how dark its blotches and banks, z its spots a square metre, w the largest spot (m).
     pub grime: Vec4,
     /// The grime's age (biome.rs `Grime`): x how earthy its dirt, y the lichen's share of
-    /// the spots, z dead leaves a square metre where they drift.
+    /// the spots, z dead leaves a square metre where they drift, w old tar's share.
     pub aged: Vec4,
     /// Each mark's centre (x, z) and half size.
     pub mark_at: [Vec4; MARKS],
@@ -226,7 +226,7 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
         ),
         seams: Vec4::new(laid.wear.gap, laid.wear.uneven, laid.wear.round, 0.0),
         grime: Vec4::new(g.edges, g.blotch, g.spots, g.size),
-        aged: Vec4::new(g.earth, g.lichen, g.litter, 0.0),
+        aged: Vec4::new(g.earth, g.lichen, g.litter, g.tar),
         ..default()
     };
     let bad_grime = g.edges < 0.0
@@ -236,12 +236,13 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
         || (g.spots > 0.0 && !(0.005..=0.5).contains(&g.size))
         || !(0.0..=1.0).contains(&g.earth)
         || !(0.0..=1.0).contains(&g.lichen)
-        || !(0.0..=200.0).contains(&g.litter);
+        || !(0.0..=200.0).contains(&g.litter)
+        || !(0.0..=1.0).contains(&g.tar);
     if bad_grime {
         return Err(format!(
             "laid grime {g:?}: edges 0 to 0.5 m, blotch 0 to 1, spots 0 to 64 a square \
              metre, and with any spots a size 0.005 to 0.5 m (the largest spot's width); \
-             earth and lichen 0 to 1, litter 0 to 200 leaves a square metre. Fix: chewing \
+             earth, lichen and tar 0 to 1, litter 0 to 200 leaves a square metre. Fix: chewing \
              gum is about 0.025 m, an oil drip about 0.12 m, a damp spot about 0.1 m \
              (kit/laid.rs, D634)"
         ));
@@ -386,6 +387,14 @@ mod tests {
         bad.grime.litter = 500.0;
         let e = params(&bad, &PLACE).unwrap_err();
         assert!(e.contains("Fix:") && e.contains("litter"), "{e}");
+        let mut bad = laid(None, None);
+        bad.grime.tar = 1.5;
+        let e = params(&bad, &PLACE).unwrap_err();
+        assert!(e.contains("Fix:") && e.contains("tar"), "{e}");
+        // The wasteland's road is the one floor tarred, its share passed on as named.
+        let w = super::super::biome::Biome::load("wasteland").unwrap();
+        let road = params(&w.street.expect("the street").asphalt, &PLACE).unwrap();
+        assert!(road.aged.w > 0.0, "the wasteland road's tar {}", road.aged);
     }
 
     fn mark(size: (f32, f32), every: (f32, f32), count: (u32, u32), turn: f32) -> Mark {

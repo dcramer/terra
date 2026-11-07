@@ -245,6 +245,12 @@ pub struct Grime {
     /// (`feet`), in the broken corners and gone units, along the joints; up to 200.
     #[serde(default)]
     pub litter: f32,
+    /// How much of the floor old tar covers, 0 (none) to 1: broad patches a metre to a few
+    /// metres across, sealcoat and oil soaked in, dark and dry with crisp ragged edges, as
+    /// on an old lot's asphalt (the wasteland's road read as one clean sheet without them;
+    /// `damp`'s soft glossy patches read as wet in the desert, round 261107-1518).
+    #[serde(default)]
+    pub tar: f32,
 }
 
 /// A mark on a laid floor: a rectangle `size` metres (along its own x and z) centred `at`
