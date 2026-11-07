@@ -7,7 +7,7 @@
 // How to use it: the iso-art skill's "The loop a job follows"; tests: loop.test.ts.
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, extname, join, resolve } from "node:path";
 import { decodeAny, measure, type Rgb, type Stats } from "../../tools/iso-art/stats.ts";
@@ -308,8 +308,9 @@ function script(biomes: string[], film: boolean): string {
   const lines = [`d=${OUT}; rm -rf $d; mkdir -p $d`, `cargo test --release --manifest-path spike/iso/Cargo.toml > $d/test.txt 2>&1`];
   for (const b of biomes) {
     lines.push(`${run} --biome ${b} --shot $d/${b}.png > $d/run-${b}.txt 2>&1`);
-    // scene.md's film: 480 frames at a fixed 30 a game second from frame 300, 16 s.
-    if (film) lines.push(`mkdir -p $d/film-${b}; ${run} --biome ${b} --size 1280x720 --frames 300 --film 480 --shot $d/film-${b}/f.jpg > $d/film-${b}.txt 2>&1`);
+    // scene.md's film: 480 frames at a fixed 30 a game second from frame 300, 16 s, at the
+    // still's 1920x1080 so the desk's 1600-wide encode scales down, never up.
+    if (film) lines.push(`mkdir -p $d/film-${b}; ${run} --biome ${b} --frames 300 --film 480 --shot $d/film-${b}/f.jpg > $d/film-${b}.txt 2>&1`);
   }
   return lines.join("; ") + "; true";
 }
@@ -405,11 +406,20 @@ function fileBiome(round: string, b: string, out: string, film: boolean, kept: K
   return e;
 }
 
+/** The film's encode for the developer's desk (under 15 MB for 16 s), in the round and as
+ * the biome's latest film in KIT/films/, where the desk links it. */
 function makeFilm(b: string, out: string, dir: string, say: (l: string) => void): string | undefined {
   const mp4 = join(dir, `${b}.mp4`);
-  const r = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-framerate", "30", "-i", join(out, `film-${b}`, "f-%04d.jpg"), "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", mp4], { encoding: "utf8" });
-  if (r.status === 0) return mp4;
-  say(`✗ ${b}: its film's frames did not make a film (${r.stderr.trim().split("\n").pop()}); its run log ${join(out, `film-${b}.txt`)}`);
+  const enc = ["-c:v", "libx264", "-crf", "28", "-preset", "slow", "-vf", "scale=1600:-2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"];
+  const r = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-framerate", "30", "-i", join(out, `film-${b}`, "f-%04d.jpg"), "-an", ...enc, mp4], { encoding: "utf8" });
+  if (r.status !== 0) {
+    say(`✗ ${b}: its film's frames did not make a film (${r.stderr.trim().split("\n").pop()}); its run log ${join(out, `film-${b}.txt`)}`);
+    return;
+  }
+  mkdirSync(join(KIT, "films"), { recursive: true });
+  copyFileSync(mp4, join(KIT, "films", `${b}.mp4`));
+  say(`  ${b}: film ${mp4} (${(statSync(mp4).size / 1e6).toFixed(1)} MB), the desk's copy ${join(KIT, "films", `${b}.mp4`)}`);
+  return mp4;
 }
 
 function record(argv: string[], say: (l: string) => void) {
