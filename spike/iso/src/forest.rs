@@ -265,10 +265,12 @@ fn grass(land: &Land, lo: Vec2, size: f32, rng: &mut Rng, nav: &Nav) -> Option<M
             nor.push(n.to_array());
             nor.push(n.to_array());
             let g = 0.35 + 0.65 * t;
+            // An olive blade, not a lime one: its blue a fifth of its green read as lime
+            // dashes over the sunlit ferns (judge 261107-0556, iso-kit j55).
             let c = [
-                g * (0.2 + 0.25 * dry),
-                g * (0.34 + 0.04 * dry),
-                g * (0.07 + 0.03 * dry),
+                g * (0.24 + 0.2 * dry),
+                g * (0.32 + 0.03 * dry),
+                g * (0.13 + 0.04 * dry),
                 1.0,
             ];
             col.push(c);

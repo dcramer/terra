@@ -74,6 +74,35 @@ const SPRIGS: [Shrub; 3] = [
     },
 ];
 
+/// Each kind's cell's mean linear colour over its alpha-cut texels (measured from
+/// materials/foliage/cards.png, iso-kit j55): the frond's green is twice its red and its blue
+/// a seventh of it, so a green tint over it doubled the hue into lime (judge 261107-0556:
+/// "sunlit grass and ferns blotchy lime-yellow").
+fn cell_mean(kind: Kind) -> Vec3 {
+    match kind {
+        Kind::Fern => Vec3::new(0.070, 0.146, 0.021),
+        Kind::Tuft | Kind::Mat => Vec3::new(0.067, 0.104, 0.023),
+        Kind::Leaves => Vec3::new(0.051, 0.126, 0.032),
+        Kind::Sprig(0) => Vec3::new(0.064, 0.106, 0.028),
+        Kind::Sprig(1) => Vec3::new(0.095, 0.154, 0.038),
+        Kind::Sprig(_) => Vec3::new(0.021, 0.047, 0.011),
+    }
+}
+
+/// How far a forest clump's tint takes its cell's own hue out (1: a grey card the tint
+/// colours alone), so the tint, not the atlas, sets the green.
+const NEUTRAL: f32 = 0.8;
+
+/// The factor that takes `kind`'s cell `NEUTRAL` of the way to a grey of its own luminance,
+/// its value unchanged.
+fn grade(kind: Kind) -> Vec3 {
+    let m = cell_mean(kind);
+    let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+    let l = luma(m);
+    let g = (Vec3::splat(l) / m).powf(NEUTRAL);
+    g * l / luma(m * g)
+}
+
 /// A size between `lo` and `hi`, log-uniform, so small ones are as common as large.
 fn spread(rng: &mut Rng, (lo, hi): (f32, f32)) -> f32 {
     lo * (hi / lo).powf(rng.f())
@@ -119,10 +148,11 @@ pub fn clumps(land: &Land, trees: &[Spot]) -> Vec<Clump> {
         // Shade under the oaks (scene::canopy: 1 in the open) turns the green blue and dark.
         let open = smooth(0.55, 0.95, crate::scene::canopy(p, trees));
         let hue = terrain::fbm(p * 0.21, 73);
-        let deep = Vec3::new(0.34, 0.56, 0.5).lerp(Vec3::new(0.4, 0.6, 0.38), hue);
-        // In the sun a green leaf, not a lime one (judge 261107-0250: "lime-yellow where
-        // the sun hits"): j23's warm (0.7, 0.78, 0.42) less red, more blue.
-        let warm = Vec3::new(0.56, 0.7, 0.46).lerp(Vec3::new(0.5, 0.68, 0.46), hue);
+        // Over a near-grey card (`grade`) the tint is the leaf's hue: dark blue-green in the
+        // shade, an olive to a mid green in the sun, as the refs' woodland floor (their sunlit
+        // greens' saturation 0.25 to 0.26 against the kept still's 0.63, iso-kit j55).
+        let deep = Vec3::new(0.36, 0.54, 0.42).lerp(Vec3::new(0.42, 0.56, 0.34), hue);
+        let warm = Vec3::new(0.62, 0.7, 0.46).lerp(Vec3::new(0.5, 0.66, 0.46), hue);
         let tint = deep.lerp(warm, open * 0.7) * rng.range(0.45, 0.9) * (0.75 + 0.25 * open);
         // Shrubs of hand-sized leaves in the main, ferns at true size (fronds 0.6 to 1.2 m),
         // grass, and a few broad-leaved herbs at a burdock's 0.25 to 0.4 m; each clump its own
@@ -144,7 +174,7 @@ pub fn clumps(land: &Land, trees: &[Spot]) -> Vec<Clump> {
             at: p,
             radius: radius * (0.9 + 0.2 * mass),
             kind,
-            tint,
+            tint: tint * grade(kind),
             flower,
         });
     }
@@ -160,7 +190,9 @@ pub fn floor(land: &Land) -> Vec<Clump> {
     let area = (hi.x - lo.x) * (hi.y - lo.y);
     let cast = [super::KNIGHT, super::FOE, super::TARGET, super::SECOND];
     let mut out = Vec::new();
-    for _ in 0..(area * 4.0) as usize {
+    // 6.5 tries a m2 (was 4): the paths' sunlit edges read as a smooth blur with a few
+    // blades (judge 261107-0556: "path and ground read as mush"), so more tufts hold there.
+    for _ in 0..(area * 6.5) as usize {
         let p = lo + Vec2::new(rng.f(), rng.f()) * (hi - lo);
         let t = trodden(p);
         let islands = smooth(0.35, 0.6, terrain::fbm(p * 0.8, 151));
@@ -191,7 +223,7 @@ pub fn floor(land: &Land) -> Vec<Clump> {
             at: p,
             radius,
             kind,
-            tint,
+            tint: tint * grade(kind),
             flower: None,
         });
     }
@@ -483,6 +515,34 @@ mod tests {
         );
         let (_, tuft) = tops(Kind::Tuft);
         assert!(tuft.iter().all(|&y| y > 0.32), "a tuft's cards: {tuft:?}");
+    }
+
+    /// A graded cell keeps its value and loses most of its own hue: the fern's mean, lime
+    /// (green over twice its red, blue a seventh), comes out near grey at the same luminance.
+    #[test]
+    fn grading_takes_a_cells_hue_out_and_keeps_its_value() {
+        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        let chroma = |c: Vec3| (c.max_element() - c.min_element()) / c.max_element();
+        for kind in [
+            Kind::Fern,
+            Kind::Tuft,
+            Kind::Leaves,
+            Kind::Sprig(0),
+            Kind::Sprig(2),
+        ] {
+            let m = cell_mean(kind);
+            let out = m * grade(kind);
+            assert!(
+                (luma(out) - luma(m)).abs() < 1e-4 * luma(m).max(1.0),
+                "{kind:?}: {out}"
+            );
+            assert!(
+                chroma(out) < 0.5 * chroma(m),
+                "{kind:?}: chroma {} from {}",
+                chroma(out),
+                chroma(m)
+            );
+        }
     }
 
     /// The lawn covers most of the open ground in the frame and none of the fight's: no clump
