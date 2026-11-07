@@ -1,29 +1,26 @@
 # Judging
 
-Every round: measure the still, a harsh judge scores it on the rubric, and a blind pairwise judge says whether it beat the last kept one. The pairwise answer decides whether the change is kept. The working copies live outside the repository in `~/.cache/terra-review/iso-art/`: `judge.md` (the rubric below), `refs/` (the stills, `refs.md`, `stats.json`); the measure is `tools/iso-art/stats.ts`. If they are missing, rebuild them from this page.
+Quality is judged by an adversarial loop toward realism (D634): a harsh judge scores each biome's still against that biome's realistic references with its gaps; fix and judge again until it approves (7) or two rounds bring no gain. A blind pairwise judge says only whether a change won. The working copies live outside the repository in `~/.cache/terra-review/iso-kit/`: `judge.md` (the rubric and the pair brief), `refs/<biome>/` (the 1920 px refs, their judges' copies in `960/`, `refs.md` with each one's source, licence, author, what it shows and the ranges), `refs/stats.json`; the measure is `tools/iso-art/stats.ts`. If they are missing, rebuild them from this page.
+
+## The bar
+
+The developer: "you should use adversary loops for it when you are trying to assess quality. we don't mean to compare to baldurs gate anymore, not for graphics, the name of the game is high quality, realistic topdown game", and "realistic meaning leaning into realism". Believable materials, light, scale, weathering and detail; not a photo match and not stylised fantasy. The judge rewards each step toward realism, faults anything cartoonish, toy-like or plasticky, does not demand photorealism, and still requires that figures, hits and paths read from the camera.
 
 ## The references (never commit them)
 
-Fourteen Steam store screenshots, 1920x1080, first-party, two or three a game, picked from all 108 store frames of the five games (kept in `refs/raw/`) for a fight at the closest game camera. The URL is `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/` + the source below. Hero is the hero's head-to-foot height over the frame's, by eye on 960x540, ±20%.
+Per biome, two to four drone or aerial photographs at or near the camera's angle (looking down 50-55 degrees from 15-20 m, a person 0.10-0.15 of the frame), the bar for materials, scale and weathering; beside them the most realistic top-down game frames found, the bar for a night key, effects and figures at this camera. Collected 2026-11-06 (iso-kit j2, j3):
 
-| File | Source (after the prefix) | Kind | Hero | p5 | p50 | p95 | Fine | Sat |
-|---|---|---|---|---|---|---|---|---|
-| d4-dungeon-fight | 2344520/ee4b4e1ba9c8a07f40aff563c7c43fd04477d60c/ss_ee4b4e1ba9c8a07f40aff563c7c43fd04477d60c.1920x1080.jpg | night | 0.11 | 0.0007 | 0.0077 | 0.043 | 0.13 | 0.42 |
-| d4-lightning | 2344520/7905f91c07b2cb828d0036389bc783300350fb74/ss_7905f91c07b2cb828d0036389bc783300350fb74.1920x1080.jpg | dungeon | 0.09 | 0.0006 | 0.0045 | 0.026 | 0.21 | 0.44 |
-| d4-fire-breath | 2344520/73d3413a15dcde01592a1e8e3c998ec128ef9676/ss_73d3413a15dcde01592a1e8e3c998ec128ef9676.1920x1080.jpg | day, snow | 0.13 | 0.036 | 0.148 | 0.439 | 0.06 | 0.10 |
-| poe2-nest-fight | 2694490/578654a7e1e88e6e186ffe1d3c055e9c1ceb0300/ss_578654a7e1e88e6e186ffe1d3c055e9c1ceb0300.1920x1080.jpg | skylit | 0.13 | 0.0034 | 0.023 | 0.265 | 0.28 | 0.37 |
-| poe2-shock-nova | 2694490/2028c61a964a5e1f8a7ff3e6d8a6bee64153af1f/ss_2028c61a964a5e1f8a7ff3e6d8a6bee64153af1f.1920x1080.jpg | day | 0.16 | 0.0072 | 0.090 | 0.305 | 0.23 | 0.27 |
-| poe2-fire-spiral | 2694490/03c29d83816331321cbb49dc1e7230da9207de79/ss_03c29d83816331321cbb49dc1e7230da9207de79.1920x1080.jpg | night | 0.13 | 0.0006 | 0.0086 | 0.138 | 0.23 | 0.69 |
-| le-dungeon-slash | 899770/b147fd10d7b8dd0213c4acb99a6bc69be23ef220/ss_b147fd10d7b8dd0213c4acb99a6bc69be23ef220.1920x1080.jpg | dungeon | 0.20 | 0.0043 | 0.018 | 0.122 | 0.15 | 0.65 |
-| le-river-beam | 899770/6a329eefc0bd1545843f235b4fac5564b7b6dba7/ss_6a329eefc0bd1545843f235b4fac5564b7b6dba7.1920x1080.jpg | day, water | 0.10 | 0.0063 | 0.060 | 0.295 | 0.15 | 0.47 |
-| le-desert-fight | 899770/ss_3d0b726afdabc5b741065fab2ca45516c92e5189.1920x1080.jpg | day | 0.11 | 0.019 | 0.105 | 0.396 | 0.10 | 0.38 |
-| vr-pond-slash | 1604030/ss_0fd29f799db0e9351a92b932899d9fa98b43b9c1.1920x1080.jpg | night, water | 0.11 | 0.0036 | 0.038 | 0.184 | 0.13 | 0.72 |
-| vr-lamplit-street | 1604030/ss_949ccc5fc9042f8c8b186de7213f2173a96d18a4.1920x1080.jpg | night | 0.16 | 0.0002 | 0.0145 | 0.127 | 0.14 | 0.75 |
-| vr-fog-lightning | 1604030/ss_230c0a379a2205b52be1c257d460e7a4ffa37428.1920x1080.jpg | fog | 0.15 | 0.0028 | 0.060 | 0.337 | 0.06 | 0.38 |
-| h2-glade-fight | 1145350/ss_ef0f63061d0a0a9a7e46f3b84f125d25330e8f19.1920x1080.jpg | painted 2D | 0.07 | 0.0019 | 0.017 | 0.166 | 0.14 | 0.51 |
-| h2-torch-street | 1145350/ss_f366f20f4fb699f6735581e04c7c45a1ef7bd1b8.1920x1080.jpg | painted 2D, night | 0.08 | 0.0010 | 0.018 | 0.666 | 0.08 | 0.45 |
+| Biome | Photos | Game frames | p50 | Fine | Sat |
+|---|---|---|---|---|---|
+| neon-street | 3 Pexels (steep night streets, a wet intersection), 1 Commons (Shibuya in rain, shallow) | The Ascent x2 | 0.008-0.085 | 0.116-0.246 | 0.12-0.65 |
+| forest | 3 Pexels (a pond with a footbridge, a park pond, trees into water) | Titan Quest II | 0.031-0.101 | 0.149-0.244 | 0.26-0.69 |
+| marsh | 4 Pexels (a reed channel with a heron, a boardwalk over dark channels at dusk, dark water, a boat in reeds) | Gord (night swamp, cropped off its UI), Titan Quest II | 0.021-0.145 | 0.084-0.237 | 0.23-0.44 |
+| ruin | 3 Pexels (a stone court at 50 deg, roofless walls from above, a floodlit theatre at night) | Diablo IV (night court), Titan Quest II | 0.005-0.091 | 0.165-0.211 | 0.29-0.71 |
+| wasteland | 4 Pexels (a ruined gas station, a derelict lot, a junk lot, overgrown concrete ruins) | Wasteland 3 (half realistic), Diablo IV, Titan Quest II | 0.042-0.233 | 0.103-0.146 | 0.21-0.54 |
 
-What each shows is in `refs/refs.md` (D4: candle and brazier pools, decals, near-black floor; PoE2: flipbook fire and embers on a mossy ruin; Last Epoch: ribbon slashes, river glints; V Rising: lamplit cobbles, volumetric fog; Hades II: a style apart, not a target). A new biome adds two or three refs of its own kind (a forest by day, a marsh) the same way: store frames of a fight at the closest camera, the URL kept, measured.
+Each `refs.md` says how to read its biome's refs (the marsh and ruin photos are day or dusk: materials and scale from them, the night key from the game frames) and what is still missing (a marsh or unlit ruin at night from the camera's height; rusted cars at the angle). To add one: `WebFetch https://www.pexels.com/search/<query>/?orientation=landscape` asking for each photo's id, photographer slug and alt text, then curl `https://images.pexels.com/photos/<id>/pexels-photo-<id>.jpeg?auto=compress&w=640` (candidates, viewed at 640 px) or `w=1920` (kept); Steam frames from `store.steampowered.com/api/appdetails?appids=<id>`. curl to pexels.com itself is blocked; Commons and Openverse searches return mostly ground-level or 100 m+ shots. The scripts are in `~/.cache/terra-handoff/iso-kit-scripts/`.
+
+D628's stylised ARPG store frames (Diablo IV, Path of Exile 2, Last Epoch, V Rising, Hades II, in `~/.cache/terra-review/iso-art/refs/`) were the bar until D634 and are not any more.
 
 ## The measures (stats.ts)
 
@@ -33,32 +30,33 @@ Each image resized to 960x540 (Lanczos), so any size compares at one. `L` is lin
 - `saturation`: mean (max-min)/max of the sRGB channels over pixels with max over 0.02.
 - `dark_share` L under 0.05, `mid_share` 0.05 to 0.35, `bright_share` over 0.35.
 
-`node tools/iso-art/stats.ts <out.json> <still>...` adds each still to the JSON and prints every row (`name=path` copies the still beside the JSON first). Node, no dependencies: a PNG decoded with node:zlib, a JPEG through ffmpeg, the downscale Pillow's own Lanczos (its fixed point, horizontal pass first), so a PNG's numbers are the old `stats.py`'s to the fourth place and a JPEG's within 0.0005 (ffmpeg's decoder against libjpeg's). Put every still's line in the handoff against the refs of its kind.
+`node tools/iso-art/stats.ts <out.json> <still>...` adds each still to the JSON and prints every row (`name=path` copies the still beside the JSON first). Node, no dependencies: a PNG decoded with node:zlib, a JPEG through ffmpeg, the downscale Pillow's own Lanczos, so a PNG's numbers are the old `stats.py`'s to the fourth place and a JPEG's within 0.0005. Put every still's line in the handoff against its biome's ranges, comparing it with the refs that show the same thing (a night still with the night ones).
 
 ## The rubric (judge.md)
 
-Be harsh: the bar is a shipped ARPG's store screenshot, not "good for a spike". Scale for both kinds:
-- **9**: could be one of the refs with no one picking it out; every corner dressed, light and effects as good as poe2-fire-spiral or vr-lamplit-street.
-- **7**: a shipped indie ARPG, the same bracket as le-desert-fight with one or two tells (a flat material, a bland corner, a weak effect). **Approve at 7.**
-- **5**: a good vertical slice: right camera, readable hero and creatures, light that works, but plainly a prototype beside the refs (blurry or clean textures, placeholder effects, empty ground, lifted blacks).
-- **3**: a tech demo: right camera only; assets untextured-looking or wrong scale, flat light, effects absent or programmer art.
-- Between is allowed, naming the nearest anchor. Judges spread ±0.5: a change under 0.5 is noise, so the pair decides.
+**(a) The scene.** Inputs: the 1920x1080 still at the game camera (a frame strip or film when atmosphere or effects are judged), its stats line. A harsh judge, briefed to find what makes the frame read unreal, scores 0 to 10: 1 materials (each reads as itself; roughness varies; no plastic sheen or tiling); 2 light (a key for the hour, pools with falloff, true blacks, contact shadows, grade in the refs' range); 3 scale (true sizes, a person 1.7-1.8 m; nothing a miniature or toy); 4 weathering and detail (grime, moss, debris, wear where things meet; dressed ground; fine detail in range); 5 atmosphere and life (haze, weather, motes, moving water and foliage, never hiding the fight); 6 effects (a hot core, light cast, smoke, a fade; no cartoon shapes or sprite edges); 7 readability from the camera (hero, enemies, hits and paths at a glance). Anchors:
+- **9**: taken for a shipped realistic top-down game's frame at its best beside the refs, its materials holding up next to the photos; nothing toy-like.
+- **7**: a shipped realistic top-down game with one or two tells (a material that reads as a texture, a clean corner, a sprite-like effect); nothing cartoonish or plasticky. **Approve at 7.**
+- **5**: right camera, readable, light that works, plainly CG beside the refs: uniform or clean materials, scale off in places, thin weathering, lifted blacks or flat light, blob effects.
+- **3**: a tech demo or a toy: plastic sheen, tiling, wrong scale, clean seams at the ground, flat light, programmer-art effects.
 
-**(a) One asset.** Inputs: the asset at the game camera in the scene's light at the scene's frame height, a crop of a ref hero or creature at the same on-screen size beside it (a hero at 0.13 of 1080p is about 140 px), and a strip of 6 to 8 frames of each clip. Score 0 to 10: 1 silhouette (filled black at game size it says what it is; head, weapon, limbs separate; reads against the scene's ground); 2 material read (metal, cloth, leather, fur, chitin at that size; PBR response, a rim, a glint; no plastic sheen or baked light); 3 texture detail (against the ref crop; no blur, noise or shimmer); 4 style match (docs/art-style.md and the ref's bracket; Tripo tells: melted details, wrong-handed straps, mush hands, seams); 5 animation read (each clip's key pose reads at game size: anticipation, contact, follow-through; feet planted; the attack's arc not along the camera's axis; a death falls). Overall is not the mean: the worse of silhouette and style caps it. Output: the five, overall, three biggest gaps (what, where, why it reads unshipped, likely cause), approve yes or no.
+Between is allowed, naming the nearest anchor; judges spread ±0.5, so a change under 0.5 is noise. Overall is the nearest anchor, not the mean, at most 1 above the lowest of materials, light, scale and readability. Output: the seven, overall, the three biggest gaps (what, where in the frame, why it reads unreal against which ref, the likely cause someone can act on), approve yes or no.
 
-**(b) The scene.** Inputs: the 1920x1080 still at the game camera, a 3 to 6 s film or a frame strip, its stats line, the last kept still. Score 0 to 10: 1 composition (the hero and fight read first; dressed ground and framing props at the edges; depth front to back); 2 light (a key and two or more local sources with pools and falloff; true blacks between; rim or contrast lifting the figures); 3 effects (shape and colour at a glance, a bright core over bloom, light on the ground, fading not popping; hit-stop or a flash at contact in the film); 4 ambient (fog, motes or embers, moving foliage, glinting water, noticed in the film, never hiding the fight); 5 detail and contrast (each measure with its number and the refs' of the same kind). Output: the five with numbers, overall, three biggest gaps, what is now good, approve yes or no.
+**(b) The blind pair.** Two stills of one biome as `a.png` and `b.png` in random order: which leans further toward the refs' realism, A, B or same; slight, clear or strong; the one thing that decided it. Nothing else.
 
-## The blind pairwise step
+**(c) One asset** (D628's, its bar now the biome's refs): the asset at the game camera in the scene's light at its frame height, beside a figure cropped from the biome's game frames at the same on-screen size, and a strip of 6 to 8 frames of each clip. Score silhouette, material read, texture detail, realism (no plastic, melted details, wrong-handed straps, mush hands, seams) and animation read; the worse of silhouette and realism caps the overall.
 
-The iso-forest spike's absolute scores stopped at 4.0 while a pairwise judge still saw gains, so every round also runs this, in a fresh subagent that has seen neither the scores nor what changed:
-1. Copy the new still and the last kept one to `blind/a.png` and `blind/b.png` in random order (note which is which outside the brief), with two refs of the same kind.
-2. Ask: which is closer to the refs as a shipped game's frame, A or B, or "same"; how sure (slight, clear, strong); the one thing that decided it.
-3. Keep the change if the new one wins clearly or strongly; slight or same is no gain. Two rounds in a row with no gain stops the line of work.
+## The loop (D634)
+
+1. Render each biome's still on the worker (D319) and measure it against its biome's ranges.
+2. The scene judge scores it; take its first gap, fix it, render, judge again. Stop at approval (7) or when two rounds bring no gain.
+3. The blind pair judges a change against the biome's last kept still: it says whether the change won, never how good the frame is.
+4. The ratchet over all biomes: a change to the kit is kept only if no biome loses its pair (a clear or strong loss, or a slight loss twice with the order swapped); a biome whose still did not change ties without a judge. Each round's scores, pairs and stats go in the history.
 
 ## Briefing a judge
 
-A `general-purpose` subagent, one at a time, told to read the rubric and `refs/refs.md` itself (paths given), the still's stats line and the refs' in the brief, and to write its verdict to `<round>/verdict.md`; it costs about 87k of its own tokens. It judges only: no edits, renders or GPU. Run the pairwise judge before the scorer, and the scorer after a gain. Before calling a biome done, the adversarial review gate (the environment skill) is this judge at the bar of 7.
+A `general-purpose` subagent, one at a time, given the paste-in brief at the end of `judge.md`: it reads only `judge.md`, the biome's `refs.md` and `refs/<biome>/960/` images, and the stills given, about 20k of its own tokens (the old brief that read everything cost 87k). It judges only: no edits, renders or GPU; it writes its verdict to `<round>/verdict.md`. Keep which pair file is which outside its brief. The adversarial review gate before a biome is called done (the environment skill) is this judge at 7.
 
-## Scores so far (the ruin at night)
+## Scores so far
 
-r1 3.5 (scene-r1/step3-ruin: a tile slab over nothing, programmer-art fire, a fight that does not read); r3 4.5, won its pair (scene-r3/step3-fight); scene-r4/step1-closer, camera at 19 m, unjudged. The open gaps: an empty, clean floor (fine 0.063 against 0.13+), soft-blob spells and hits, figures without a rim and the knight with no visible sword.
+Against D628's store frames each biome stood near 5 of 10 ([research note](../../../../research/2026-11-05-iso-arpg-art-pipeline.md)); those scores do not carry over. Every biome is re-baselined against its realistic refs (D634).
