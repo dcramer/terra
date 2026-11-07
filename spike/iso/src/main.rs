@@ -12,6 +12,7 @@ mod mipmaps;
 mod motes;
 mod nav;
 mod party;
+mod play;
 mod rest;
 mod rim;
 mod ruin;
@@ -56,6 +57,20 @@ pub struct Args {
     /// `--asset NAME` with `--shot dir/NAME.png`: the asset view (view.rs), one asset alone;
     /// with `--film N`, N frames of its walk and run as the game plays them, dir/NAME-f0000.jpg on.
     pub asset: Option<String>,
+    /// `--play`: the hero is the player (play.rs), the default when a window opens on a
+    /// biome; a `--shot`/`--film` run plays only with it, and `--press wd@120-160` (keys
+    /// held over those frames) and `--click X,Y@170` (a left click at those pixels on that
+    /// frame) script it.
+    pub play: bool,
+    pub press: Vec<(String, u32, u32)>,
+    pub clicks: Vec<(Vec2, u32)>,
+}
+
+impl Args {
+    /// A still: every clip and effect held at its set moment (not while playing).
+    pub fn still(&self) -> bool {
+        self.shot.is_some() && self.film == 0 && !self.play
+    }
 }
 
 /// A film's frame rate in game time, whatever the machine draws.
@@ -75,6 +90,9 @@ fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
         layout: None,
         film: 0,
         asset: None,
+        play: false,
+        press: Vec::new(),
+        clicks: Vec::new(),
     };
     let mut hour = None;
     let mut it = std::env::args().skip(1);
@@ -90,6 +108,20 @@ fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
             "--scene" => {
                 let name = val();
                 a.biome = (name != "glade").then_some(name);
+            }
+            "--play" => a.play = true,
+            "--press" => {
+                let v = val();
+                let (keys, span) = v.split_once('@').expect("--press KEYS@FROM-TO");
+                let (from, to) = span.split_once('-').expect("--press KEYS@FROM-TO");
+                a.press
+                    .push((keys.into(), from.parse().unwrap(), to.parse().unwrap()));
+            }
+            "--click" => {
+                let v = val();
+                let (xy, at) = v.split_once('@').expect("--click X,Y@FRAME");
+                let p: Vec<f32> = xy.split(',').map(|s| s.parse().unwrap()).collect();
+                a.clicks.push((Vec2::new(p[0], p[1]), at.parse().unwrap()));
             }
             "--demo-at" => a.demo_at = val().parse().unwrap(),
             "--zoom" => a.zoom = val().parse().unwrap(),
@@ -113,6 +145,7 @@ fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
     }
     let loaded = biome(&mut a);
     a.hour = hour.unwrap_or(a.hour);
+    a.play = loaded.is_some() && (a.play || a.shot.is_none());
     (a, loaded)
 }
 
@@ -175,6 +208,9 @@ fn main() {
     use kit::biome::Layout;
     if let Some((biome, light)) = loaded {
         app.insert_resource(biome).insert_resource(light);
+    }
+    if args.play {
+        app.add_plugins(play::plugin);
     }
     if args.layout == Some(Layout::Ruin) {
         app.add_plugins((mipmaps::plugin, rim::plugin, ruin::plugin))

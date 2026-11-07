@@ -8,7 +8,7 @@
 //! The glade's ground layers draw the land (terrain.rs's `Land` on this scene's shape).
 
 mod dress;
-mod fight;
+pub(crate) mod fight;
 // Its shelving depth (`seen_depth`) draws the forest's pond too.
 pub mod land;
 mod lawn;

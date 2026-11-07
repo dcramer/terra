@@ -38,6 +38,11 @@ impl Nav {
         c.x >= 0 && c.y >= 0 && c.x < N && c.y < N
     }
 
+    /// Whether a body may stand at `p` (play.rs).
+    pub fn open_at(&self, p: Vec2) -> bool {
+        !self.is_blocked(cell(p))
+    }
+
     pub fn is_blocked(&self, c: IVec2) -> bool {
         !Self::inside(c) || self.blocked[(c.y * N + c.x) as usize]
     }

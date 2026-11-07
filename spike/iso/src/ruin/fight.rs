@@ -201,7 +201,7 @@ pub fn pose(
         if !pose.once {
             playing.repeat();
         }
-        if args.shot.is_some() && args.film == 0 {
+        if args.still() {
             playing.set_speed(0.0);
         }
         commands

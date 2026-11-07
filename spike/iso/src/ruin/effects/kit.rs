@@ -51,7 +51,7 @@ fn tick(
     mut cam: ResMut<Cam>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
 ) {
-    clock.still = args.shot.is_some() && args.film == 0;
+    clock.still = args.still();
     clock.t = time.elapsed_secs();
     if let Ok(c) = camera.single() {
         let b = c.back();

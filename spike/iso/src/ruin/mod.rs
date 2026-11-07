@@ -13,15 +13,15 @@ pub mod fight;
 mod fire;
 
 mod grass;
-mod ground;
+pub(crate) mod ground;
 mod held;
 mod life;
 mod light;
 mod litter;
 mod scatter;
 pub mod walk;
-mod walls;
-mod water;
+pub(crate) mod walls;
+pub(crate) mod water;
 
 use bevy::prelude::*;
 
