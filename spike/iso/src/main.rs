@@ -6,6 +6,7 @@ mod camp;
 mod command;
 mod foliage;
 mod forest;
+mod kit;
 mod mipmaps;
 mod motes;
 mod nav;

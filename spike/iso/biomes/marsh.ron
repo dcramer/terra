@@ -1,0 +1,13 @@
+// The marsh at dusk (iso-art): mud banks and mossy hummocks between open channels of still
+// dark water, reeds in the wind, dead trees in the water, low fog, fireflies and wisps, a
+// camp fire and a lantern for the warm pools; the knight fights on a mud bank.
+// `--biome marsh`, or `--scene marsh`.
+// The schema: spike/iso/src/kit/biome.rs; how to add a biome: the iso-art skill's kit.md.
+(
+    kind: [Dusk, Water],
+    refs: "marsh",
+    // Its ground, scatter, water, effects and life are still marsh/'s own code; they move
+    // here as the kit's jobs land (j4 to j7). Its water's moon lane reads this light's key.
+    layout: Marsh,
+    light: (preset: "marsh-dusk"),
+)

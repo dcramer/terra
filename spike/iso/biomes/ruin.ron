@@ -1,0 +1,13 @@
+// The ruin at night (iso-art): an action RPG's night fight in a ruined court, a knight
+// against an ogre and a tree monster on broken flagstones between fallen walls, lit by the
+// moon and by braziers and torches. `--biome ruin`, or `--scene ruin`.
+// The schema: spike/iso/src/kit/biome.rs; how to add a biome: the iso-art skill's kit.md.
+(
+    kind: [Night],
+    refs: "ruin",
+    // Its ground, scatter, decals, water, effects and life are still ruin/'s own code; they
+    // move here as the kit's jobs land (j4 ground, scatter and decals; j5 water; j6 effects;
+    // j7 weather and life).
+    layout: Ruin,
+    light: (preset: "ruin-night"),
+)

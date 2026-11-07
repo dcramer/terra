@@ -1,0 +1,13 @@
+// The temperate wood by day (iso-art): the glade's land, oaks, grass, pond and beasts, and
+// in its clearing by the pond the knight fighting tree creatures; a moose on the far bank,
+// birds, pollen in the sun. `--biome forest`, or `--scene forest`; `--hour dusk|night`
+// runs the glade's light at that hour instead of this preset.
+// The schema: spike/iso/src/kit/biome.rs; how to add a biome: the iso-art skill's kit.md.
+(
+    kind: [Day, Water],
+    refs: "forest",
+    // Its ground, scatter, water and life are still wood/'s and the glade's own code; they
+    // move here as the kit's jobs land (j4, j5, j7).
+    layout: Forest,
+    light: (preset: "forest-day"),
+)

@@ -1,0 +1,20 @@
+// The night (the ruin's, iso-art): a cold moon low from the north-west, casting long soft
+// shadows off the walls, and a faint blue sky's fill, low enough that the shade goes truly
+// black (the ARPGs' night frames: the darkest twentieth of the frame under 0.001 of white,
+// refs/stats.json). Moved from ruin/light.rs and ruin/camera.rs (iso-kit j1), not retuned.
+// The schema: spike/iso/src/kit/light.rs.
+(
+    hour: Night,
+    key: (
+        // Behind the back wall, to the left as the camera sees it, 35 degrees up.
+        toward: Angles(elevation: 35.0, azimuth: 225.0),
+        colour: Srgb(0.45, 0.6, 1.0),
+        lux: 190.0,
+        shadows: (cascades: 2, first: 30.0, far: 60.0, soft: 1.0),
+    ),
+    sky: (colour: Srgb(0.45, 0.55, 1.0), nits: 1.5),
+    // A night's: the moonlit stone dark, the firelight's pools bright.
+    ev100: 8.0,
+    // Keeps a fire gold and orange where AgX bleaches it beige.
+    curve: TonyMcMapface,
+)

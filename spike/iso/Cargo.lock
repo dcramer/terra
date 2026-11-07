@@ -3258,6 +3258,8 @@ name = "iso"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "ron",
+ "serde",
  "terra_core",
 ]
 

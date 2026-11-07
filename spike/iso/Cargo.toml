@@ -10,6 +10,10 @@ publish = false
 [dependencies]
 bevy = { version = "0.20", features = ["jpeg", "experimental_pbr_pcss"] }
 terra_core = { path = "../../crates/terra_core" }
+# The biome kit's files (src/kit/, D634): RON through serde, both already in the lock
+# through Bevy, at its versions.
+ron = "0.12.2"
+serde = { version = "1.0.229", features = ["derive"] }
 
 # The same Bevy changes the game carries (patches/README.md).
 [patch.crates-io]

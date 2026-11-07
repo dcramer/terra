@@ -1,0 +1,41 @@
+// The temperate wood by day (iso-art): a high sun from the south-east over a blue sky's
+// fill. Moved from wood/mod.rs and the glade's day (scene.rs's `light_the_hour`), iso-kit
+// j1, not retuned. The sun is the glade's (scene.rs spawns it, its shadows its own: two
+// cascades to 70 and 140 m, soft 1.5); the forest sets the rest of it from here each time
+// the hour turns to day.
+//
+// Why these numbers: the glade's day (sun 1,200 lux, sky 450 nits, EV 9, AgX) left the
+// still murky: luma p50 0.046, p95 0.12, saturation 0.17, bright share 0.007, against the
+// day refs' (le-river-beam, poe2-shock-nova, le-desert-fight) 0.06 to 0.10, 0.30 to 0.40,
+// 0.27 to 0.47 and 0.03 to 0.11. A sun of 2,600 alone moved p95 only to 0.13 (the floor is
+// dark grass and soil), so the exposure opens a stop, the sky's fill drops so the shade
+// stays dark, Tony McMapface replaces AgX (which greys greens and a flame) and the grade
+// adds saturation. At r4 (EV 8, sun 3,200, sky 330) the frame still graded as dusk: p50
+// 0.044, p95 0.216, saturation 0.23 (judge forest-r4), the fight's ground in an oak's
+// shade; half a stop more, a brighter sun over a darker sky fill, the fight in a sun break
+// (wood/clearing.rs).
+(
+    hour: Day,
+    key: (
+        toward: Angles(elevation: 52.0, azimuth: -40.0),
+        colour: Srgb(1.0, 0.96, 0.9),
+        lux: 4200.0,
+    ),
+    sky: (colour: Srgb(0.75, 0.85, 1.0), nits: 300.0),
+    ev100: 7.5,
+    curve: TonyMcMapface,
+    grade: (
+        // 1.45 at r1 made the sunlit grass acid lime (judge forest-r1, both judges); 1.3
+        // keeps the shade's greens. The midtones get their own (the greens' band) over it.
+        saturation: 1.3,
+        // 1.15 left saturation 0.254 (the day refs' 0.27 to 0.47).
+        mid_saturation: 1.25,
+    ),
+    // The glade's day haze over the land beyond the fight; none toward the sun.
+    haze: Some((
+        colour: Srgba(0.62, 0.7, 0.78, 0.55),
+        toward_key: Srgba(0.0, 0.0, 0.0, 0.0),
+        start: -2.0,
+        end: 70.0,
+    )),
+)
