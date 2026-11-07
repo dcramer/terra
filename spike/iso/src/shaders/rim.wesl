@@ -78,18 +78,31 @@ struct Dressed {
     occlusion: f32,
 }
 
-fn dress(base: vec3<f32>, world: vec3<f32>, n: vec3<f32>) -> Dressed {
-    let own = base * 0.8;
+// `n` is the mesh's normal, `relief` the normal map's (pbr_input.N): the masks follow the
+// scan's own relief, not the 700-triangle mesh's facets, whose straight edges cut the moss
+// into flat sheets and the lichen into pale triangles (uc-gaps fault c, "rocks read as clay
+// or plastic"). Megascans' and Unreal's world-aligned blends take the pixel's normal so.
+fn dress(base: vec3<f32>, world: vec3<f32>, n: vec3<f32>, relief: vec3<f32>) -> Dressed {
+    // Cavity from the normal map: where the scan's relief turns well off the mesh's
+    // surface it is a crack or a hollow's wall, darkened in the albedo as a cavity map is
+    // multiplied into a scan's base colour; in full sun the stone then keeps its relief
+    // instead of reading as one smooth clay tone.
+    let cavity = mix(0.62, 1.0, smoothstep(0.6, 0.97, dot(relief, n)));
+    let own = base * 0.8 * cavity;
     let m = textureSample(scans, scans_sampler, world.xz / stone.w, u32(stone.z)).rgb;
     let grain = dot(m, vec3<f32>(0.3, 0.55, 0.15));
     let patches = noise(world.xz * 2.6 + world.y * 1.3) * 0.65 + noise(world.xz * 0.8 + 7.0) * 0.35;
-    let up = smoothstep(0.2, 0.8, n.y);
+    let ny = mix(n.y, relief.y, 0.75);
+    let up = smoothstep(0.2, 0.8, ny);
     let cover = smoothstep(0.45, 0.62, up * moss.a + (patches - 0.5) * 0.7 + (grain - 0.25) * 0.6);
-    var c = mix(own, m * moss.rgb, cover);
-    // Lichen: grey-green blotches a hand across on the sides and shoulders.
-    let side = smoothstep(-0.1, 0.25, n.y) * (1.0 - cover);
+    var c = mix(own, m * moss.rgb * mix(0.75, 1.0, cavity), cover);
+    // Lichen: grey-green blotches a hand across on the sides and shoulders, paler than the
+    // stone by about twice, not a fixed pale grey: at (0.34, 0.36, 0.29) they stood six to
+    // eight times the scans' 0.04-0.06 and read as white stickers in the sun.
+    let side = smoothstep(-0.1, 0.25, ny) * (1.0 - cover);
     let lichen = smoothstep(0.68, 0.76, noise(world.xz * 7.0 + world.y * 5.0)) * side;
-    c = mix(c, vec3<f32>(0.34, 0.36, 0.29), lichen * 0.8);
+    let value = dot(own, vec3<f32>(0.3, 0.55, 0.15));
+    c = mix(c, vec3<f32>(0.95, 1.0, 0.8) * min(value * 2.2, 0.16), lichen * 0.8);
     // The soil splashed and grown up its foot, and the ground's occlusion there.
     let over = world.y - stone.y;
     let foot = 1.0 - smoothstep(-0.02, 0.28, over + (patches - 0.5) * 0.12);
@@ -111,7 +124,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         n = -n;
     }
     if stone.x > 0.0 {
-        let d = dress(pbr_input.material.base_color.rgb, in.world_position.xyz, n);
+        let d = dress(pbr_input.material.base_color.rgb, in.world_position.xyz, n, pbr_input.N);
         pbr_input.material.base_color = vec4<f32>(d.colour, pbr_input.material.base_color.a);
         pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 1.0, d.matte);
         pbr_input.diffuse_occlusion *= vec3<f32>(d.occlusion);

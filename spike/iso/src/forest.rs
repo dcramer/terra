@@ -476,7 +476,12 @@ fn plant(
                 rng.f() * 6.28,
                 scale,
             );
-            commands.entity(e).insert(crate::rim::Shade);
+            // Dressed as the clearing's stones are (rim.rs `Stone`: moss on top, lichen,
+            // grime and occlusion at the foot): as plain `Shade` the boulder by the fight
+            // and the pond's stones read as smooth tan clay (uc-gaps fault c).
+            commands
+                .entity(e)
+                .insert(crate::rim::Stone { floor: on(p).y });
         };
     let mut x = -46.0;
     while x < 46.0 {
