@@ -28,7 +28,11 @@ const SHADE_OAK: Vec2 = Vec2::new(0.3, 11.6);
 const BREAK: f32 = 3.5;
 /// Litter cards tried a square metre of the clearing's box, small stones and ferns in all,
 /// and stones at the pond's waterline.
-const LEAF_TRIES: f32 = 3.0;
+const LEAF_TRIES: f32 = 14.0;
+/// A litter card's side (m): an oak leaf is about 0.45 of an atlas cell, so 0.18 to 0.3 m
+/// lays leaves 8 to 13 cm long, a beech's 4 to 6 (forest judge 261106-2239: at 0.3 to
+/// 0.6 they lay the size of the hero's head).
+const LEAF_CARD: (f32, f32) = (0.18, 0.3);
 const STONES: usize = 12;
 const FERNS: usize = 10;
 const SHORE_STONES: usize = 7;
@@ -137,7 +141,7 @@ fn spawn(
             cards.add(
                 &land,
                 p,
-                rng.range(0.3, 0.6),
+                rng.range(LEAF_CARD.0, LEAF_CARD.1),
                 rng.range(0.0, 6.28),
                 cell,
                 Color::srgb(v, v * 0.92, v * 0.85),
