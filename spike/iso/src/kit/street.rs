@@ -15,6 +15,7 @@
 //! its `level` over the road and the pavements: the mirror and the lights' streaks.
 
 use super::biome::{Biome, Laid};
+use super::contact::Grounded;
 use super::laid::{LaidMaterial, Place};
 use super::light::Colour;
 use super::water::{Glint, KitWater};
@@ -23,6 +24,7 @@ use crate::forest::Rng;
 use crate::scene::{material, model};
 use crate::terrain::{fbm, smooth};
 use bevy::asset::RenderAssetUsages;
+use bevy::light::NotShadowCaster;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use serde::Deserialize;
@@ -145,7 +147,9 @@ pub struct Lamps {
 
 /// A sign: a texture (under `assets/`) on a card `size` metres (wide, tall), its middle at x
 /// `at` and `height` up a front of `side`, flat on the wall or a `blade` standing out from
-/// it; it glows at `nits` and lights the street around it in `colour` at `lumens`.
+/// it; it glows at `nits` and lights the street around it in `colour` at `lumens`, out to
+/// `range` metres (a short one makes a pool that falls off to dark), its light `shadows`
+/// cast or not.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Sign {
@@ -159,6 +163,14 @@ pub struct Sign {
     pub colour: Colour,
     pub nits: f32,
     pub lumens: f32,
+    #[serde(default = "nine")]
+    pub range: f32,
+    #[serde(default)]
+    pub shadows: bool,
+}
+
+fn nine() -> f32 {
+    9.0
 }
 
 /// Where a prop stands across the street: by the kerb on the pavement, against the wall, or
@@ -395,6 +407,7 @@ pub fn plugin(app: &mut App) {
         super::scatter::plugin,
         super::weather::plugin,
         super::facade::plugin,
+        super::contact::plugin,
     ))
     .add_systems(Startup, (spawn, strew))
     // Rigged props stand in their clips (the ruin's poser).
@@ -445,7 +458,7 @@ fn strew(
             Vec2::new(st.focus.0 + STREWN, wall),
         ),
     };
-    super::scatter::spawn(
+    let strewn = super::scatter::spawn(
         &mut commands,
         &asset,
         &mut budget,
@@ -453,6 +466,11 @@ fn strew(
         &biome.scatter,
         &g,
     );
+    // Each piece of litter on its own contact shadow and stain (kit/contact.rs).
+    for (e, at) in strewn {
+        let floor = height(at.xz());
+        commands.entity(e).insert(Grounded { floor });
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -582,6 +600,11 @@ fn spawn(
             let at = st.spot(p.side, p.line, *x, p.out);
             let yaw = p.side.facing() + p.turn.to_radians();
             let body = model(&mut commands, &asset, &p.model, at, yaw, p.scale);
+            // A rigged body's bounds are its bind pose's, a square far wider than its feet
+            // (j40's walker stood in a 1.5 m black square): only still props are grounded.
+            if p.pose.is_none() {
+                commands.entity(body).insert(Grounded { floor: at.y });
+            }
             if let Some((clip, time)) = &p.pose {
                 // The pose names its clip for the life of the app: a few names, once, at
                 // startup.
@@ -838,6 +861,9 @@ fn signs(
             Mesh3d(meshes.add(Cuboid::new(depth.x, depth.y, depth.z))),
             MeshMaterial3d(backing.clone()),
             Transform::from_translation(mid + Vec3::Z * s * 0.125 * (!sg.blade as u8 as f32)),
+            // Its own light sits in it (a blade's) or just before it: a shadowed one would
+            // black out its own pool, as a brazier's bowl did (traps.md).
+            NotShadowCaster,
         ));
         let to_road = Vec3::Z * -s;
         // A blade shows a card on each face of its box, a flat sign one toward the road.
@@ -856,16 +882,21 @@ fn signs(
             ]
         };
         for t in cards {
-            commands.spawn((Mesh3d(card.clone()), MeshMaterial3d(face.clone()), t));
+            commands.spawn((
+                Mesh3d(card.clone()),
+                MeshMaterial3d(face.clone()),
+                t,
+                NotShadowCaster,
+            ));
         }
         let lamp = mid + to_road * if sg.blade { 0.4 } else { 0.6 };
         commands.spawn((
             PointLight {
                 color: sg.colour.color(),
                 intensity: sg.lumens,
-                range: 9.0,
+                range: sg.range,
                 radius: (w.max(h) * 0.3).min(0.6),
-                shadow_maps_enabled: false,
+                shadow_maps_enabled: sg.shadows,
                 ..default()
             },
             Transform::from_translation(lamp),

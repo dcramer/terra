@@ -4,16 +4,18 @@
 // lamps and signs make the pools, warm sodium against cold neon, and the wet asphalt mirrors
 // them (the water kit's job). The fill is the rain cloud's cold blue-grey (iso-kit j11),
 // dark enough that an alley's shade is black. Exposed as the ruin's night; a little less
-// saturation over the whole frame so the signs' colour carries it, not the walls.
+// saturation over the whole frame so the signs' colour carries it, not the walls. The glow
+// and fill cut to 15 lux and the ruin's 1.5 nits (iso-kit j40: 40 and 4 lifted the gaps
+// between the pools into one wash), so the lamps' and signs' pools stand in near black.
 (
     hour: Night,
     key: (
         toward: Angles(elevation: 70.0, azimuth: 160.0),
         colour: Srgb(0.55, 0.65, 0.8),
-        lux: 40.0,
+        lux: 15.0,
         shadows: (cascades: 2, first: 30.0, far: 60.0, soft: 3.0),
     ),
-    sky: (colour: Srgb(0.45, 0.52, 0.65), nits: 4.0),
+    sky: (colour: Srgb(0.45, 0.52, 0.65), nits: 1.5),
     ev100: 6.5,
     curve: TonyMcMapface,
     grade: (saturation: 0.95, mid_saturation: 1.0),

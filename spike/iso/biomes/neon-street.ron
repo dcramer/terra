@@ -119,37 +119,47 @@
             (side: South, along: (-4.0, 35.0), height: 3.6, material: "rusty_corrugated_iron",
              metres: 2.0, tint: (0.7, 0.7, 0.72), roof: "asphalt_02"),
         ],
-        // Sodium lamps (about 2000 K) over the road, sides taking turns.
+        // Sodium lamps (about 2000 K) over the road, sides taking turns: each a pool about
+        // 6 m across under its head (a 42 degree cone, out to 10.5 m, so it falls to dark
+        // before the next; iso-kit j40, the judge's "a frame-wide wash, not pools").
         lamps: (every: 16.0, start: -24.0, height: 6.5, reach: 1.6,
-                colour: Srgb(1.0, 0.62, 0.25), lumens: 600000.0, angle: 60.0, range: 14.0,
+                colour: Srgb(1.0, 0.62, 0.25), lumens: 600000.0, angle: 42.0, range: 10.5,
                 shadows: true),
-        // Textures from text by ffmpeg (assets/models/iso/city/README.md, signs).
+        // Textures from text by ffmpeg (assets/models/iso/city/README.md, signs). Each lights
+        // the wall and pavement under it out to 6 to 6.5 m, so its pool falls off to dark
+        // before the next sign's, and casts the props' and the frames' shadows (iso-kit j40).
         signs: [
             (texture: "models/iso/city/signs/ramen.png", side: North, at: -12.0, height: 6.5,
              size: (0.9, 3.15), blade: true, colour: Srgb(1.0, 0.16, 0.55), nits: 30.0,
-             lumens: 100000.0),
+             lumens: 100000.0, range: 7.0, shadows: true),
             (texture: "models/iso/city/signs/bar.png", side: North, at: -3.0, height: 4.6,
-             size: (2.9, 1.1), colour: Srgb(0.1, 0.82, 1.0), nits: 30.0, lumens: 100000.0),
+             size: (2.9, 1.1), colour: Srgb(0.1, 0.82, 1.0), nits: 30.0, lumens: 150000.0,
+             range: 6.5, shadows: true),
             (texture: "models/iso/city/signs/drug.png", side: North, at: 3.6, height: 5.6,
-             size: (1.0, 2.0), colour: Srgb(0.22, 1.0, 0.42), nits: 30.0, lumens: 70000.0),
+             size: (1.0, 2.0), colour: Srgb(0.22, 1.0, 0.42), nits: 30.0, lumens: 60000.0,
+             range: 6.5, shadows: true),
             (texture: "models/iso/city/signs/24h.png", side: North, at: 9.0, height: 4.4,
-             size: (2.2, 1.0), colour: Srgb(1.0, 0.19, 0.09), nits: 30.0, lumens: 80000.0),
+             size: (2.2, 1.0), colour: Srgb(1.0, 0.19, 0.09), nits: 30.0, lumens: 80000.0,
+             range: 6.0, shadows: true),
         ],
         props: [
             (model: "models/iso/city/rollershutter-door.glb", side: North, line: Wall,
              at: [-17.22, -8.5, 12.25, 18.05], out: -0.2),
-            (model: "models/iso/city/trash-bag.glb", side: North, line: Wall,
-             at: [-7.9, -7.4, 10.6], out: 0.2),
+            // Wheelie bins against the wall (two side by side, one rusted), under the bar's
+            // sign and by the 24H shop; scanned, where the bin bags read as smooth blobs.
+            (model: "models/iso/city/trash-can.glb", side: North, line: Wall,
+             at: [-4.7, 10.6], out: 0.05),
             (model: "models/iso/city/propane-tank.glb", side: North, line: Wall, at: [-8.6]),
             (model: "models/iso/city/utility-box.glb", side: North, line: Wall, at: [1.2]),
             (model: "models/iso/city/oil-barrel.glb", side: South, line: Wall, at: [-9.0, -8.3]),
-            (model: "models/iso/city/trash-bag.glb", side: South, line: Wall, at: [-2.0, 5.5],
-             turn: 40.0),
+            (model: "models/iso/city/trash-can.glb", side: South, line: Wall, at: [-2.0, 5.5],
+             out: 0.05),
             (model: "models/iso/city/old-tyre.glb", side: South, line: Kerb, at: [-5.5],
              turn: 30.0),
-            // A car parked at the north kerb past the crossing, under a tarp (1.78 m wide,
-            // 4.34 m long), its near side 0.25 m off the kerb's face.
-            (model: "models/iso/city/covered-car.glb", side: North, line: Road, at: [8.5],
+            // A car parked at the north kerb before the crossing, under a tarp (1.78 m wide,
+            // 4.34 m long, -8.2 to -3.8, clear of the zebra), its near side 0.25 m off the
+            // kerb's face, where the frame shows the most road.
+            (model: "models/iso/city/covered-car.glb", side: North, line: Road, at: [-6.0],
              out: 2.36, turn: 90.0),
             (model: "models/iso/city/manhole-cover.glb", side: North, line: Road, at: [4.0],
              out: 1.2),
@@ -201,12 +211,10 @@
         ),
     ),
     // Litter by the wall feet and the kerbs (kit/scatter.rs on the street's `walls` map):
-    // bin bags heaped in piles, flattened and tipped boxes among them, as a city's back
-    // street leaves them out the night before collection.
+    // boxes left out in clumps, each flat on the paving (a 25 degree lean stood one on a
+    // corner in mid-air), on its contact shadow and stain (kit/contact.rs, iso-kit j40).
     scatter: [
-        (models: ["models/iso/city/trash-bag.glb"], density: 0.9, scale: (0.55, 1.15),
-            on: Site("walls"), clump: (4.0, 0.8, 0.9), tilt: 15.0, seed: 7),
-        (models: ["models/iso/city/cardboard-box.glb"], density: 0.15, scale: (0.6, 1.3),
-            on: Site("walls"), clump: (4.0, 0.8, 0.9), tilt: 25.0, seed: 7),
+        (models: ["models/iso/city/cardboard-box.glb"], density: 0.25, scale: (0.6, 1.3),
+            on: Site("walls"), clump: (4.0, 0.8, 0.9), tilt: 3.0, sink: 0.01, seed: 7),
     ],
 )

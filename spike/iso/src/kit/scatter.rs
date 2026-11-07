@@ -231,7 +231,8 @@ impl Budget {
 }
 
 /// Spawn every model set of `sets` on `g` (plant sets are the layout's to draw, `plants`),
-/// recording each in the budget; panics naming the fix on a bad set (D556).
+/// recording each in the budget; panics naming the fix on a bad set (D556). Returns each
+/// model spawned and where its foot stands, for a layout that grounds them (kit/contact.rs).
 pub fn spawn(
     commands: &mut Commands,
     asset: &AssetServer,
@@ -239,7 +240,8 @@ pub fn spawn(
     biome: &str,
     sets: &[Scatter],
     g: &Ground,
-) {
+) -> Vec<(Entity, Vec3)> {
+    let mut spawned = Vec::new();
     for (i, set) in sets.iter().enumerate() {
         let placed = place(set, i, g).unwrap_or_else(|e| panic!("biome {biome:?}: {e}"));
         if set.plant.is_some() {
@@ -254,6 +256,7 @@ pub fn spawn(
                     .with_rotation(p.rotation)
                     .with_scale(Vec3::splat(p.scale)),
             );
+            spawned.push((e, p.at));
         }
         let models = set
             .models
@@ -267,6 +270,7 @@ pub fn spawn(
             cards: 0,
         });
     }
+    spawned
 }
 
 /// The plant sets of `sets` as the kit's clumps (drawn by wood/lawn.rs's `draw`), each
