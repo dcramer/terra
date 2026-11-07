@@ -439,6 +439,8 @@ pub fn plugin(app: &mut App) {
         super::facade::plugin,
         super::contact::plugin,
         crate::ruin::walk::plugin,
+        // The plant scatter's cards (dry grass in a wasteland's gutters).
+        crate::foliage::plugin,
     ))
     .add_systems(Startup, (spawn, strew))
     // Rigged props stand in their clips (the ruin's poser).
@@ -449,35 +451,28 @@ pub fn plugin(app: &mut App) {
 /// a margin.
 const STREWN: f32 = 18.0;
 
-/// The biome's scatter over the street (kit/scatter.rs): on its maps (`SITES`), the road at
-/// 0 and the pavements the kerb's rise up, kept off each prop's foot.
-fn strew(
-    mut commands: Commands,
-    asset: Res<AssetServer>,
-    biome: Res<Biome>,
-    mut budget: ResMut<super::scatter::Budget>,
-) {
-    let Some(st) = biome.street.as_ref() else {
-        return;
-    };
-    let (half, _, wall) = st.edges();
+/// The street's floor height at `p`: the road at 0, the pavements the kerb's rise up.
+fn floor(st: &Street, p: Vec2) -> f32 {
+    if p.y.abs() <= st.edges().0 {
+        0.0
+    } else {
+        st.kerb.1
+    }
+}
+
+/// The street as the scatter's ground (kit/scatter.rs): its maps (`SITES`) and floor, kept
+/// off each prop's foot, over the frame and a margin each side of the focus.
+fn with_ground<R>(st: &Street, f: impl FnOnce(&super::scatter::Ground) -> R) -> R {
+    let (_, _, wall) = st.edges();
     let site = |k: usize, p: Vec2| [st.gutter(p), st.puddled(p), st.walls(p)][k];
-    let height = |p: Vec2| if p.y.abs() <= half { 0.0 } else { st.kerb.1 };
+    let height = |p: Vec2| floor(st, p);
     let feet: Vec<Vec2> = st
         .props
         .iter()
         .flat_map(|p| p.at.iter().map(|x| st.spot(p.side, p.line, *x, p.out).xz()))
         .collect();
     let keep = |p: Vec2| feet.iter().any(|f| f.distance(p) < 0.7);
-    // The weather's floor (kit/weather.rs): the road and the pavements, no standing water.
-    commands.insert_resource(super::weather::Floor::sample(
-        Vec2::new(st.focus.0 - STREWN, -wall),
-        Vec2::new(st.focus.0 + STREWN, wall),
-        0.25,
-        None,
-        height,
-    ));
-    let g = super::scatter::Ground {
+    f(&super::scatter::Ground {
         sites: &SITES,
         site: &site,
         height: &height,
@@ -488,20 +483,65 @@ fn strew(
             Vec2::new(st.focus.0 - STREWN, -wall),
             Vec2::new(st.focus.0 + STREWN, wall),
         ),
+    })
+}
+
+/// The biome's scatter over the street (kit/scatter.rs): its models, and its plant sets'
+/// clumps as cards on the street's floor (uc-wasteland j3: the street drew no plant set, so
+/// the wasteland's dry grass came out nowhere, silently).
+#[allow(clippy::too_many_arguments)]
+fn strew(
+    mut commands: Commands,
+    asset: Res<AssetServer>,
+    biome: Res<Biome>,
+    mut budget: ResMut<super::scatter::Budget>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut foliage: ResMut<Assets<crate::foliage::FoliageMaterial>>,
+    mut mats: ResMut<crate::foliage::Mats>,
+) {
+    let Some(st) = biome.street.as_ref() else {
+        return;
     };
-    let strewn = super::scatter::spawn(
+    let (_, _, wall) = st.edges();
+    // The weather's floor (kit/weather.rs): the road and the pavements, no standing water.
+    commands.insert_resource(super::weather::Floor::sample(
+        Vec2::new(st.focus.0 - STREWN, -wall),
+        Vec2::new(st.focus.0 + STREWN, wall),
+        0.25,
+        None,
+        |p| floor(st, p),
+    ));
+    let (strewn, clumps) = with_ground(st, |g| {
+        let strewn = super::scatter::spawn(
+            &mut commands,
+            &asset,
+            &mut budget,
+            &biome.refs,
+            &biome.scatter,
+            g,
+        );
+        let clumps = super::scatter::plants(&mut budget, &biome.refs, &biome.scatter, g);
+        (strewn, clumps)
+    });
+    // Each piece of litter on its own contact shadow and stain (kit/contact.rs).
+    for (e, at) in strewn {
+        let y = floor(st, at.xz());
+        commands.entity(e).insert(Grounded { floor: y });
+    }
+    // The cards stand on the land the foliage reads (its heights, and the wind's breath
+    // reads it every frame): the street's floor on the terrain's grid.
+    let land = crate::terrain::Land::from_shape(|p| floor(st, p));
+    super::scatter::draw_plants(
         &mut commands,
         &asset,
         &mut budget,
-        &biome.refs,
-        &biome.scatter,
-        &g,
+        &land,
+        &mut meshes,
+        &mut foliage,
+        &mut mats,
+        &clumps,
     );
-    // Each piece of litter on its own contact shadow and stain (kit/contact.rs).
-    for (e, at) in strewn {
-        let floor = height(at.xz());
-        commands.entity(e).insert(Grounded { floor });
-    }
+    commands.insert_resource(land);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -992,6 +1032,24 @@ mod tests {
     #[test]
     fn the_neon_street_lays_out() {
         neon().check().unwrap_or_else(|e| panic!("{e}"));
+    }
+
+    /// The wasteland's dry grass is put down on its street (uc-wasteland j3: the street
+    /// drew no plant set), in the gutters and at the walls' feet, never mid-road.
+    #[test]
+    fn a_streets_plant_sets_come_up_where_their_maps_lie() {
+        let biome = Biome::load("wasteland").unwrap();
+        let st = biome.street.as_ref().unwrap();
+        st.check().unwrap_or_else(|e| panic!("{e}"));
+        let mut budget = super::super::scatter::Budget::default();
+        let clumps = with_ground(st, |g| {
+            super::super::scatter::plants(&mut budget, &biome.refs, &biome.scatter, g)
+        });
+        assert!(clumps.len() > 50, "only {} clumps", clumps.len());
+        let (half, _, _) = st.edges();
+        for c in &clumps {
+            assert!(c.at.y.abs() > half - 1.2, "a clump mid-road at {}", c.at);
+        }
     }
 
     /// A sign off every front fails, naming the sign and the fix.
