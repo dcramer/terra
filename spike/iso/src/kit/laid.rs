@@ -44,7 +44,7 @@ pub struct Params {
     pub courses: [Vec4; COURSES],
     /// Each course's joints four to seven.
     pub joints: [Vec4; COURSES],
-    /// x the courses (0: the units are not told apart), y the marks.
+    /// x the courses (0: the units are not told apart), y the marks, z the grit.
     pub shape: Vec4,
     /// Each mark's centre (x, z) and half size.
     pub mark_at: [Vec4; MARKS],
@@ -190,7 +190,7 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
         look: Vec4::new(laid.joints, laid.cracks, laid.grain.0.max(1e-3), laid.grain.1),
         masks: Vec4::new(moss, wet, moss_m, feet),
         vary: Vec4::new(laid.spread.0, laid.spread.1, laid.dirt, laid.damp),
-        shape: Vec4::new(laid.courses.len() as f32, laid.marks.len() as f32, 0.0, 0.0),
+        shape: Vec4::new(laid.courses.len() as f32, laid.marks.len() as f32, laid.grit, 0.0),
         ..default()
     };
     let bad_mark = |m: &Mark| {
@@ -285,6 +285,7 @@ mod tests {
             courses: vec![(0.0, vec![0.5]), (0.5, vec![0.25, 0.75])],
             spread: (0.2, 0.3),
             dirt: 0.5,
+            grit: 1.0,
             damp: 0.5,
             feet: Some(Mask::Site("walls".into())),
             marks: vec![],

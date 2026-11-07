@@ -28,6 +28,7 @@
             grain: (0.2, 0.7),
             wet: Site("puddled"),
             dirt: 0.3,
+            grit: 0.25,
             damp: 0.9,
             feet: Site("walls"),
             // A city road's marks (kit/laid.rs), the road along x, its lanes' middles at z
@@ -148,6 +149,7 @@
             grain: (0.3, 0.6),
             wet: Site("puddled"),
             dirt: 0.4,
+            grit: 0.2,
             damp: 0.7,
             feet: Site("walls"),
         ),

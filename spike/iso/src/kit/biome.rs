@@ -147,6 +147,10 @@ pub struct Laid {
     /// strewn over all, 0 (none) to 1.
     #[serde(default)]
     pub dirt: f32,
+    /// How strongly the dirt's grit shows, 0 (none) to 1 (loose soil's grit over stone,
+    /// the default): a swept street's paving wants little (at 1 its specks read as confetti).
+    #[serde(default = "one")]
+    pub grit: f32,
     /// Broad patches of damp stone, darker and glossier, 0 (none) to 1.
     #[serde(default)]
     pub damp: f32,

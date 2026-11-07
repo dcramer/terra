@@ -180,7 +180,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let soil = vec3<f32>(0.115, 0.095, 0.075) * (0.7 + 0.6 * noise(p * 23.0));
         colour = mix(colour, soil, dirty);
         let cell = floor(p * 45.0);
-        let speck = smoothstep(0.86, 0.94, hash(cell + 3.0)) * laid.vary.z;
+        let speck = smoothstep(0.86, 0.94, hash(cell + 3.0)) * laid.vary.z * laid.shape.z;
         colour *= mix(1.0, mix(0.55, 1.45, hash(cell + 9.0)), speck);
     }
 
@@ -217,8 +217,18 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             colour *= 1.0 - 0.5 * s;
             mark_rough *= 1.0 - 0.4 * s;
         } else {
-            let wear = noise(m.yz * vec2<f32>(0.9, 2.5) + seed) * 0.55 + noise(m.yz * 14.0 + seed) * 0.45;
-            let cover = (1.0 - smoothstep(-0.003, 0.003, m.x)) * smoothstep(0.0, 0.2, wear - (1.0 - amount));
+            // Worn in broad soft patches, their edges frayed by the surface's own grain
+            // (the aggregate's high points lose their paint first), never by a value
+            // noise's grid thresholded sharp (it read as blocks, round 261107-0109). Read
+            // in the mark's frame before its repeats, so each stripe of a zebra and each
+            // dash wears its own way (in the repeat's frame all seven wore alike).
+            let turn = laid.mark_turn[k].xy;
+            let d = p - laid.mark_at[k].xy;
+            let u = vec2<f32>(dot(d, turn), dot(d, vec2<f32>(-turn.y, turn.x)));
+            let wear = noise(u * vec2<f32>(0.7, 1.8) + seed) * 0.65
+                + noise(u * vec2<f32>(3.1, 5.3) + seed) * 0.2
+                + (grain_v - 1.0) * 0.3 + 0.075;
+            let cover = (1.0 - smoothstep(-0.003, 0.003, m.x)) * smoothstep(0.05, 0.25, wear - (1.0 - amount));
             let tint = select(vec3<f32>(0.6, 0.6, 0.58), vec3<f32>(0.62, 0.45, 0.07), kind == 1u);
             colour = mix(colour, tint * mix(1.0, grain_v, 0.6), cover);
             paint = max(paint, cover);
