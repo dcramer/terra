@@ -63,7 +63,7 @@ First numbers, each a reading until its test has a planted fault (D632); they se
 | Server, per client per tick, to pick and pack | 20 µs | 3.9 µs |
 | A late joiner correct around itself, on loopback | under 1 s | under 1 s (asserted) |
 
-On the real mover (two men walking, sprinting and jumping, 100 ms, 1% loss): 3.0 kB/s down and 1.3 kB/s up a player, a body shown in 19 bytes, and no correction in 20 s once the clock has its margin.
+On the real mover (four men walking, sprinting and jumping for 30 simulated minutes, 100 ms, 1% loss): 3.1 kB/s down and 1.3 kB/s up a player, a body shown in 19 bytes, and no correction at all once the clocks have their margin.
 
 ## Connecting
 
@@ -88,7 +88,7 @@ Each check has a planted fault beside it (D632).
 
 - **Milestone D** (engine.md), built: a server and two clients on loopback over a toy state end the same; a third joining late catches up. Faults: an operation dropped from one region's record, and a thing moved with nothing sent, must each fail the check.
 - **Soak**, built: four clients, 100 ms, 1% loss, jitter and copies, 30 simulated minutes in 2 s of real time: no lasting mismatch, a packet at rest carrying nothing, bytes a player a second reported. Fault: acknowledgements cut off must show as state never settling.
-- **Prediction**, built (`terra_motion::mover::net`): two men on the real mover at 100 ms and 1% loss: every tick a client first predicts is where the server put the body, to a millimetre; a shove from the server is mispredicted for under 24 ticks and no longer. Fault: a client whose man is a tenth faster must fail the check.
+- **Prediction**, built (`terra_motion::mover::net`): two men on the real mover at 100 ms and 1% loss: every tick a client first predicts is where the server put the body, to a millimetre; a shove from the server is mispredicted for under 24 ticks and no longer; and the Server track's bar on the mover: four men for 30 simulated minutes (4.5 s of real time), never mispredicted, those who walk apart forgotten. Fault: a client whose man is a tenth faster must fail the check.
 - **The reader**, built: random bytes never panic the wire, the server or a client; on the ordered lane they cost only their sender its connection.
 
 ## Build order

@@ -43,7 +43,7 @@ fn with_world<T>(run: impl FnOnce(&World) -> T) -> T {
 /// What a player does on a tick: eight seconds of walking, sprinting, standing, a jump and
 /// turns, round again; the second player the same, the other way.
 fn script(tick: u32, seat: usize) -> Intent {
-    let side = if seat == 0 { 1.0 } else { -1.0 };
+    let side = if seat.is_multiple_of(2) { 1.0 } else { -1.0 };
     let (wish, sprint) = match (tick / 64) % 8 {
         0 | 1 => (Vec3::X, false),
         2 => (Vec3::Z, true),
@@ -98,6 +98,11 @@ struct Walk {
 
 impl Walk {
     fn new() -> Walk {
+        Walk::of(2)
+    }
+
+    /// A server and so many players, each over its own rough link.
+    fn of(seats: u64) -> Walk {
         let network = Network::new();
         let part = |audience| PartSpec {
             audience,
@@ -116,7 +121,7 @@ impl Walk {
             truth: BTreeMap::new(),
             shove: None,
         };
-        for seat in 0..2u64 {
+        for seat in 0..seats {
             let conditions = Conditions {
                 latency_s: 0.05,
                 jitter_s: 0.01,
@@ -260,6 +265,12 @@ impl Walk {
         });
     }
 
+    /// A seat's body, by the number the server gave it. Players are welcomed in the order
+    /// their hellos arrive, which is the links', not the seats'.
+    fn id(&self, seat: usize) -> u32 {
+        self.seats[seat].you.expect("welcomed")
+    }
+
     /// The check: the ticks from one on where a seat's first prediction of its body was more
     /// than a millimetre from where the server put it.
     fn mispredicted(&self, seat: usize, from: u32) -> Vec<u32> {
@@ -317,7 +328,7 @@ fn a_predicted_walk_is_the_servers_walk_and_each_sees_the_other() {
         );
         // The other, as shown: where the server had it on the tick the newest word is of,
         // to the wire's 2 mm a axis.
-        let (_, other) = walk.players[1 - seat];
+        let other = walk.id(1 - seat);
         let entity = walk.seats[seat]
             .client
             .entity(EntityId(other))
@@ -349,13 +360,63 @@ fn a_predicted_walk_is_the_servers_walk_and_each_sees_the_other() {
     );
 }
 
+/// The Server track's bar (docs/v0-tracks.md), on the real mover: four clients for thirty
+/// minutes at 100 ms and 1% loss, with no lasting mismatch. Here no mismatch at all: every
+/// tick each client predicted is the server's, though the players walk out of each other's
+/// sight and the clocks run for half an hour.
+#[test]
+fn four_men_for_half_an_hour_are_never_mispredicted() {
+    let began = std::time::Instant::now();
+    let mut walk = Walk::of(4);
+    let ticks = 30 * 60 * 64;
+    walk.run(ticks);
+    for seat in 0..4 {
+        let you = walk.seats[seat].you.expect("welcomed");
+        let checked = walk.seats[seat]
+            .first
+            .keys()
+            .filter(|tick| **tick >= WARM && walk.truth.contains_key(&(you, **tick)))
+            .count();
+        assert!(
+            checked > 29 * 60 * 64,
+            "seat {seat}: only {checked} ticks were checked"
+        );
+        assert_eq!(
+            walk.mispredicted(seat, WARM),
+            Vec::<u32>::new(),
+            "seat {seat}"
+        );
+    }
+    // Those who walk the same way stay in sight: seat 0 holds seat 2 where the server has it.
+    let other = walk.id(2);
+    let entity = walk.seats[0]
+        .client
+        .entity(EntityId(other))
+        .expect("seat 2 is near seat 0");
+    let sample = &entity.part(SHOWN).expect("shown").newer;
+    let shown = Shown::decoded(&sample.bytes).expect("the server's bytes");
+    assert!(shown.feet.distance(walk.truth[&(other, sample.tick)]) < 0.004);
+    // Those who walk apart are out of it, and forgotten.
+    let gone = walk.id(1);
+    assert!(walk.seats[0].client.entity(EntityId(gone)).is_none());
+    let corrections: u64 = walk.seats.iter().map(|seat| seat.history.corrections).sum();
+    let traffic = walk.network.traffic();
+    let seconds = f64::from(ticks) * f64::from(TICK);
+    eprintln!(
+        "soak on the mover: {:.0} B/s down and {:.0} B/s up a player (payload, four men, 100 ms, 1% loss, 30 min); {corrections} corrections; {:.1} s",
+        (traffic.down_state + traffic.down_ordered) as f64 / seconds / 4.0,
+        (traffic.up_state + traffic.up_ordered) as f64 / seconds / 4.0,
+        began.elapsed().as_secs_f64(),
+    );
+}
+
 /// A shove from the server, which no client can foresee: mispredicted, corrected, and right
 /// again within a round trip and a half.
 #[test]
 fn a_shove_is_corrected_within_a_round_trip() {
     let mut walk = Walk::new();
     walk.run(8);
-    let (_, shoved) = walk.players[0];
+    let shoved = walk.id(0);
     let at = 640;
     walk.shove = Some((at, shoved, Vec3::new(0.0, 4.0, 6.0)));
     walk.run(WALKED);
