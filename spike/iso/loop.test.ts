@@ -2,7 +2,8 @@
 // biome file and of the refs' stats, and the line a biome prints. Run: node --test spike/iso/loop.test.ts
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -18,9 +19,59 @@ test("a loss is clear or strong, or slight twice with the order swapped", () => 
   assert.equal(outcome(changed(pair("new", "kept", "slight"), pair("kept", "kept", "slight"))), "loss");
   assert.equal(outcome(changed(pair("new", "kept", "slight"), pair("kept", "new", "slight"))), "tie");
   assert.equal(outcome(changed(pair("new", "kept", "slight"), pair("kept", "same"))), "tie");
-  assert.equal(outcome(changed(pair("new", "new", "slight"))), "win");
+  assert.equal(outcome(changed(pair("new", "new", "clear"))), "win");
   assert.equal(outcome(changed(pair("new", "same"))), "tie");
   assert.equal(outcome(changed(pair("new"))), "pending");
+});
+
+test("a slight win waits for its swap and wins only when the same side wins both orders", () => {
+  assert.equal(outcome(changed(pair("new", "new", "slight"))), "pending");
+  assert.equal(outcome(changed(pair("new", "new", "slight"), pair("kept", "new", "slight"))), "win");
+  // The same letter twice (A, new then kept): the judge's position bias, lead 8's 0930 and 0959.
+  assert.equal(outcome(changed(pair("new", "new", "slight"), pair("kept", "kept", "slight"))), "tie");
+  assert.equal(outcome(changed(pair("new", "new", "slight"), pair("kept", "same"))), "tie");
+});
+
+test("a round whose changed biomes only tied is TIED, never a KEEP; an unchanged round still keeps", () => {
+  const still = { changed: false, pairs: [] };
+  const bias = changed(pair("new", "new", "slight"), pair("kept", "kept", "slight"));
+  assert.equal(verdict({ ruin: changed(pair("new", "same")), forest: still }).result, "TIED");
+  assert.deepEqual(verdict({ ruin: bias, forest: still }).tied, ["ruin"]);
+  assert.equal(verdict({ ruin: bias, marsh: changed(pair("new", "new", "clear")) }).result, "KEEP", "a win elsewhere carries the round");
+  assert.equal(verdict({ ruin: still, forest: still }).result, "KEEP", "nothing moved: the kept stills stay the same look");
+});
+
+test("verdict refuses to keep a tied round's stills, and --revert records it with the kept still untouched", () => {
+  const dir = mkdtempSync(join(tmpdir(), "iso-verdict-"));
+  try {
+    const keptStill = join(dir, "kept", "ruin.png");
+    const roundStill = join(dir, "r1-ruin.png");
+    mkdirSync(join(dir, "kept"));
+    writeFileSync(keptStill, "kept look");
+    writeFileSync(roundStill, "reverted look");
+    const h: History = {
+      kept: { ruin: { round: "r0", still: keptStill, stats: {} as never } },
+      rounds: {
+        r0: { at: "2026-11-07T08:00:00Z", rev: "a", dirty: false, job: "j", biomes: {}, verdict: { result: "KEEP", losers: [], at: "2026-11-07T08:01:00Z" } },
+        r1: { at: "2026-11-07T09:00:00Z", rev: "b", dirty: true, job: "j", biomes: { ruin: { still: roundStill, stats: {} as never, changed: true, against: "r0", pairs: [pair("new", "new", "slight"), pair("kept", "kept", "slight")] } } },
+      },
+    };
+    writeFileSync(join(dir, "history.json"), JSON.stringify(h));
+    const run = (...args: string[]) => spawnSync(process.execPath, [join(import.meta.dirname, "loop.ts"), "verdict", ...args], { env: { ...process.env, ISO_KIT_HOME: dir }, encoding: "utf8" });
+    const refused = run("r1");
+    assert.equal(refused.status, 1, refused.stdout + refused.stderr);
+    assert.match(refused.stdout, /only tied.*--revert/s);
+    assert.equal(readFileSync(keptStill, "utf8"), "kept look", "the tie's still did not become the kept one");
+    assert.equal(JSON.parse(readFileSync(join(dir, "history.json"), "utf8")).rounds.r1.verdict, undefined);
+    const reverted = run("r1", "--revert");
+    assert.equal(reverted.status, 0, reverted.stdout + reverted.stderr);
+    const after: History = JSON.parse(readFileSync(join(dir, "history.json"), "utf8"));
+    assert.equal(after.rounds.r1.verdict?.result, "REVERT");
+    assert.equal(after.kept.ruin.round, "r0");
+    assert.equal(readFileSync(keptStill, "utf8"), "kept look");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("an unchanged biome ties with no judge; one with no kept still is new", () => {

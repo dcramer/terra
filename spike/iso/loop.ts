@@ -146,19 +146,25 @@ export function outcome(e: Pick<Entry, "changed" | "pairs">): Outcome {
   const [p1, p2] = e.pairs;
   if (!p1?.winner) return "pending";
   if (p1.winner === "same") return "tie";
-  if (p1.winner === "new") return "win";
-  if (p1.margin !== "slight") return "loss";
+  if (p1.margin !== "slight") return p1.winner === "new" ? "win" : "loss";
+  // A slight answer either way is confirmed by the swapped pair: the same side twice is a win
+  // or a loss, the same letter twice (the other side) is the judge's position bias, a tie.
   if (!p2?.winner) return "pending";
-  if (p2.winner === "kept") return "loss"; // slight twice, or worse the second time
+  if (p2.winner === p1.winner) return p1.winner === "new" ? "win" : "loss";
   return "tie";
 }
 
-/** The round's verdict: KEEP when no biome lost; pending biomes block it. */
+/** The round's verdict: REVERT when a biome lost; TIED when it changed biomes and none of them
+ * won, so keeping its stills would make a look no judge preferred the kept one (lead 8's trap,
+ * 261107-0959); KEEP otherwise. Pending biomes block it. */
 export function verdict(biomes: Record<string, Pick<Entry, "changed" | "pairs">>) {
   const out = Object.fromEntries(Object.entries(biomes).map(([b, e]) => [b, outcome(e)]));
   const pending = Object.keys(out).filter((b) => out[b] === "pending");
   const losers = Object.keys(out).filter((b) => out[b] === "loss");
-  return { out, pending, losers, result: pending.length ? null : losers.length ? ("REVERT" as const) : ("KEEP" as const) };
+  const moved = Object.keys(out).filter((b) => biomes[b].changed === true);
+  const tied = moved.length > 0 && moved.every((b) => out[b] === "tie");
+  const result = pending.length ? null : losers.length ? ("REVERT" as const) : tied ? ("TIED" as const) : ("KEEP" as const);
+  return { out, pending, losers, tied: tied ? moved : [], result };
 }
 
 /** Which side goes in a.png: random for the first pair, the other way round for the second. */
@@ -479,11 +485,11 @@ function record(argv: string[], say: (l: string) => void) {
     p!.margin = margin;
     const n = e!.pairs.length;
     say(`${biome} ${round}: pair ${n} recorded`);
-    if (n === 1 && p!.winner === "kept" && margin === "slight") {
+    if (n === 1 && p!.winner !== "same" && margin === "slight") {
       const kept = h.kept[biome];
       const q = preparePair(round, biome, e!, kept, refsOf(biome).dir);
       e!.pairs.push(q);
-      say(`a slight answer against the change: a second pair, the order swapped, confirms it; brief ${q.brief}`);
+      say(`a slight answer ${p!.winner === "new" ? "for" : "against"} the change: a second pair, the order swapped, confirms it (the same letter twice is a tie); brief ${q.brief}`);
     }
   } else fail(`record takes "pair" or "score": record <round> <biome> pair <A|B|same> <slight|clear|strong>, or record <round> <biome> score <overall> "<gaps>"`);
   updateHistory(HISTORY, (now) => {
@@ -542,7 +548,8 @@ export function staleAgainst(h: Pick<History, "kept" | "rounds">, round: string)
 }
 
 function judgeVerdict(argv: string[], say: (l: string) => void) {
-  const round = argv[0];
+  const round = argv.find((a) => !a.startsWith("--"))!;
+  const revert = argv.includes("--revert");
   const h = loadHistory(say);
   const rnd = h.rounds[round];
   if (!rnd) fail(`no round ${round}: \`node spike/iso/loop.ts history\` lists them`);
@@ -559,7 +566,10 @@ function judgeVerdict(argv: string[], say: (l: string) => void) {
     const briefs = v.pending.map((b) => rnd!.biomes[b].pairs.find((p) => !p.winner)?.brief).filter(Boolean);
     fail(`no verdict yet: ${v.pending.join(", ")} wait for a pair's answer; run ${briefs.join(", ")} and record each`);
   }
-  if (v.result === "KEEP") {
+  if (v.result === "TIED" && !revert)
+    fail(`${round}: ${v.tied.join(", ")} changed and only tied, so no judge preferred the change; keeping it would make its stills the kept ones while the change is reverted (D634's ratchet moves only on a gain). Revert the change and record it: \`node spike/iso/loop.ts verdict ${round} --revert\` (the kept stills stay); to keep the look anyway, land it and judge a new round`);
+  const result = revert || v.result !== "KEEP" ? ("REVERT" as const) : ("KEEP" as const);
+  if (result === "KEEP") {
     mkdirSync(join(KIT, "kept"), { recursive: true });
     for (const [b, e] of Object.entries(rnd!.biomes)) {
       if (stale.ties.includes(b)) continue;
@@ -569,11 +579,11 @@ function judgeVerdict(argv: string[], say: (l: string) => void) {
     }
     if (stale.ties.length) say(`${stale.ties.join(", ")}: tied only an older kept still, so the newer kept one stays`);
     say(`KEEP ${round}: no biome lost; its stills are the kept ones now (${join(KIT, "kept")})`);
-  } else say(`REVERT ${round}: ${v.losers.join(", ")} lost; undo the change shot in it (${rnd!.rev}${rnd!.dirty ? " with uncommitted changes" : ""}: git revert, never a force-push); the kept stills stay`);
-  const said = { result: v.result!, losers: v.losers, at: new Date().toISOString() };
+  } else say(`REVERT ${round}: ${v.losers.length ? `${v.losers.join(", ")} lost` : v.tied.length ? `${v.tied.join(", ")} only tied` : "reverted by hand"}; undo the change shot in it (${rnd!.rev}${rnd!.dirty ? " with uncommitted changes" : ""}: git revert, never a force-push); the kept stills stay`);
+  const said = { result, losers: v.losers, at: new Date().toISOString() };
   updateHistory(HISTORY, (now) => {
     now.rounds[round].verdict = said;
-    if (v.result === "KEEP") for (const b of Object.keys(rnd!.biomes)) now.kept[b] = h.kept[b];
+    if (result === "KEEP") for (const b of Object.keys(rnd!.biomes)) now.kept[b] = h.kept[b];
   });
 }
 
@@ -619,7 +629,7 @@ const USAGE = `usage: node spike/iso/loop.ts
   shoot [--biomes a,b] [--film] [--dirty]   every biome's still on the worker, measured and judged against its kept one
   record <round> <biome> pair <A|B|same> <slight|clear|strong>
   record <round> <biome> score <overall> "<gaps>"
-  verdict <round>                           KEEP if no biome lost, else REVERT
+  verdict <round> [--revert]                KEEP if no biome lost and a changed one won, REVERT if one lost; a round whose changes only tied is refused unless --revert
   rebase <round> "<why>"                    its stills kept unjudged, when how stills are shot changed, never the look
   history                                   each biome's rounds, pairs, scores and kept still`;
 
