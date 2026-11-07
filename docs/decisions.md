@@ -48,6 +48,7 @@ What we are building, its tenets, scope and players.
 | [D592](decisions/D592.md) | Characters are saved on the server | Design | Developers | Decided | A character's record is kept by the server it plays on… |
 | [D629](decisions/D629.md) | The iso experiment's camera follows the hero as an ARPG's does, or stays the spike's fixed Baldur's Gate II view | Design | — | Open | Two cameras for the 2.5D isometric experiment… |
 | [D635](decisions/D635.md) | The iso experiment is one game with the main game, under an iso camera, modular enough not to collide | Design | Developers | Decided | The 2.5D top-down experiment (`crates/terra_iso`, once… |
+| [D637](decisions/D637.md) | A player's body leaves the world when they disconnect | Design | Developers | Decided | When a player disconnects, by choice or by a lost… |
 
 ## Worlds and realms
 

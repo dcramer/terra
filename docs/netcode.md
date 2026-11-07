@@ -67,7 +67,7 @@ First numbers, each a reading until its test has a planted fault (D632); they se
 1. `Hello`: the protocol's version (a hash of the wire schema and the game's data fingerprint), the player's identity and name. The identity is a public key whose secret stays on the player's machine (D592); the server proves it by a signed challenge. Steam's identity replaces it with the relay (D34).
 2. `Refuse` with a reason a player can read (wrong version, world full, not allowed), or `Welcome`: the tick, the room's realm and seed (v0's second seam: the seed is all a client needs to make the land), the world's clock, the entity that is yours.
 3. The area arrives by the ordinary paths (operations for its regions, then state); the client is `Ready` when its own region's record is whole.
-4. Leaving, by choice or timeout (10 s): the character is saved where it stood (D592) and its body leaves the world. When the host leaves, every client is told why, the world is saved and the session ends.
+4. Leaving, by choice or timeout (10 s): the character is saved where it stood (D592) and its body leaves the world at once (D637). When the host leaves, every client is told why, the world is saved and the session ends.
 
 ## How each crate crosses
 
@@ -95,7 +95,3 @@ Each check has a planted fault beside it (D632).
 3. The `udp` transport and connecting: version, identity, refusals.
 4. The game as a client of its own server (the Bevy side), then a second player in it.
 5. The fight, the pack and creatures across the seam, each with its track.
-
-## Open, for the developers
-
-- **A body on disconnect**: recommended, it leaves at once and the character is saved where it stood; the other choice is a sleeping body that can be hurt.
