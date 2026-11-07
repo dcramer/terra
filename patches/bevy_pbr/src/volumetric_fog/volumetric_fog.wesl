@@ -152,6 +152,14 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     // faces of the AABB, this is the current fragment's depth.
     let view_start_pos = position_ndc_to_view(frag_coord_to_ndc(frag_coord));
 
+    // Terra's patch (iso-kit j52, D594's line): under an orthographic projection every ray runs
+    // straight down the view's -z from its fragment, not from the view's origin through it.
+    // Bevy took the perspective ray for both: an orthographic view's ray from its origin
+    // through the near plane's point (x, y, -near) ran nearly sideways, so the march stayed at
+    // the volume's front face and a ground mist a metre under it was never sampled (the iso
+    // spike's marsh mist, unseen in three rounds).
+    let orthographic_ray = view.clip_from_view[3].w == 1.0;
+
     // Calculate the end position of the ray. This requires us to raytrace the
     // back faces of the AABB to find the one that our ray intersects.
     var end_depth_view = 0.0;
@@ -165,11 +173,19 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
 
         // Calculate the intersection of the ray and the plane. The ray must
         // intersect in front of us (t > 0).
-        let t = -plane.w / dot(plane.xyz, view_start_pos.xyz);
+        var t = -plane.w / dot(plane.xyz, view_start_pos.xyz);
+        var hit_pos = view_start_pos.xyz * t;
+        if (orthographic_ray) {
+            // Along (0, 0, -1) from the fragment: past it, so not its own entry face.
+            t = (dot(plane.xyz, view_start_pos.xyz) + plane.w) / plane.z;
+            hit_pos = view_start_pos.xyz - vec3(0.0, 0.0, t);
+            if (abs(plane.z) < 1e-6 || t <= 1e-4) {
+                continue;
+            }
+        }
         if (t < 0.0) {
             continue;
         }
-        let hit_pos = view_start_pos.xyz * t;
 
         // The intersection point must be in front of the other backfaces.
         // If those tests pass, we found our backface.
@@ -206,7 +222,8 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     // Calculate the ray origin (`Ro`) and the ray direction (`Rd`) in NDC,
     // view, and world coordinates.
     let Rd_ndc = vec3(frag_coord_to_ndc(position).xy, 1.0);
-    let Rd_view = normalize(position_ndc_to_view(Rd_ndc));
+    // Terra's patch (iso-kit j52): straight down the view under an orthographic projection.
+    let Rd_view = select(normalize(position_ndc_to_view(Rd_ndc)), vec3(0.0, 0.0, -1.0), orthographic_ray);
     var Ro_world = position_view_to_world(view_start_pos.xyz);
     // Terra's patch (D594): the ray's direction turned from view space, not the near plane's
     // point less the camera's. On a world kilometres across both are tens of kilometres from

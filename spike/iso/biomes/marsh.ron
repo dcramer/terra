@@ -14,14 +14,18 @@
     // The kit's ground (kit/ground.rs) over marsh/land.rs's maps (terrain.rs `SITES`).
     ground: (
         layers: [
-            (material: "leafy_grass", mask: Site("grass"), tint: (1.55, 2.1, 1.2)),
+            // Olive going to straw under the matted reed, not a lawn's green (round 261107-0507's
+            // judge: "a flat clean green lawn" at 1.55, 2.1, 1.2; sat 0.447 over the refs' 0.23-0.44).
+            (material: "leafy_grass", mask: Site("grass"), tint: (1.3, 1.36, 0.9)),
             (material: "forest_leaves_04", mask: Site("leaves"), tint: (1.5, 1.45, 1.35),
                 breakup: (0.21, 0.9, 0.65, 0.35)),
             (material: "dry_decay_leaves", mask: Site("leaves"), tint: (1.45, 1.4, 1.3),
                 breakup: (0.21, 0.9, 0.35, 0.65)),
-            (material: "moss_004", mask: Site("moss"), tint: (5.0, 6.0, 3.2)),
-            // The black mud at the water's line, in the hollows and down the path: wet.
-            (material: "brown_mud_02", mask: Site("mud"), wets: 1.0),
+            (material: "moss_004", mask: Site("moss"), tint: (4.2, 4.5, 2.5)),
+            // The black mud at the water's line, in the hollows and down the path: wet, dark
+            // and brown (untinted the scan's pale pebbles read as grey-blue gravel under the
+            // moon, round 261107-0507).
+            (material: "brown_mud_02", mask: Site("mud"), tint: (0.6, 0.5, 0.38), wets: 1.0),
             (material: "roots", mask: Site("roots"), tint: (1.3, 1.3, 1.3)),
         ],
         // The glade's camp fire's ash, kept as the marsh drew it (by the near channel's
@@ -95,6 +99,11 @@
             flowers: 0.04),
             density: 6.0, scale: (0.15, 0.45), on: Mud, clump: (3.0, 0.8, 0.5),
             over: (-0.04, 0.2), seed: 4),
+        // Matted reed trodden into the path's and the flats' mud in broken clumps, so its edges
+        // break up (the judge: "crisp edges"): wet brown to olive straw, as above.
+        (plant: (kind: Mat, tint: [(1.77, 0.66, 0.73), (0.89, 0.38, 0.52), (2.21, 1.18, 1.08)]),
+            density: 2.5, scale: (0.15, 0.4), on: Site("mud"), clump: (2.5, 0.6, 0.6),
+            over: (0.15, 9.0), seed: 7),
         // Sticks and branches half sunk at the edge, and stones in the mud.
         (models: ["models/props/Log.glb"], density: 0.25, scale: (0.15, 0.5), on: Mud,
             clump: (4.0, 1.0, 0.5), tilt: 10.0, sink: 0.03, over: (-0.08, 0.25), seed: 5),
@@ -120,9 +129,14 @@
     // shows pale over the dark. At glow 2.5 (round 261107-0308) a faint veil, unseen by the
     // judge (round 261107-0358-2: "no mist or haze anywhere"): glow 6, so it lifts the mids
     // where it lies thick, over the channels and in the hollows.
-    weather: (wind: (0.86, 0.5), mist: 1.0, layer: (height: 0.35, water: 2.5, drift: 0.9,
-        thick: 0.3, forward: 0.0, glow: 6.0,
-        colour: Srgb(0.8, 0.82, 0.85), keylit: true, lamps: false,
+    // None of that was ever drawn: Bevy's volumetric fog marched an orthographic view's rays
+    // sideways from the volume's top face, a metre over the mist (patches/bevy_pbr's
+    // volumetric_fog.wesl, iso-kit j52). Drawn, it is tuned afresh: thin over the land (0.12
+    // a metre), five times that over the open water, in banks 5 m across, at a glow of 2 (6
+    // would be a white sheet), its colour warm so the blue moon lights it a grey.
+    weather: (wind: (0.86, 0.5), mist: 1.0, layer: (height: 0.35, water: 5.0, hollows: 1.5,
+        drift: 0.9, banks: 5.0, thick: 0.12, forward: 0.0, glow: 2.0,
+        colour: Srgb(1.0, 0.88, 0.66), keylit: true, lamps: false,
         clear: [(-1.8, 1.35, 4.5)])),
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
