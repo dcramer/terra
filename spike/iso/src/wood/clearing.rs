@@ -245,13 +245,14 @@ fn toward_sun() -> Vec3 {
     Vec3::new(el.cos() * az.sin(), el.sin(), el.cos() * az.cos())
 }
 
-/// Whether an oak's crown (about 5 to 14 m up at scale 1) throws its shade within
-/// `BREAK` metres of the fight's middle. At j27's first still, OAKS[0]'s alone cast out, the
-/// knight still stood in another crown's shade.
+/// Whether an oak's crown (about 5 to 14 m up at scale 1, `TALL` times as high at its true
+/// proportions) throws its shade within `BREAK` metres of the fight's middle. At j27's
+/// first still, OAKS[0]'s alone cast out, the knight still stood in another crown's shade.
 fn shades_the_fight(trunk: Vec2, scale: f32) -> bool {
     let t = toward_sun();
     let down = -Vec2::new(t.x, t.z) / t.y;
-    let (a, b) = (trunk + down * 5.0 * scale, trunk + down * 14.0 * scale);
+    let up = scale * crate::forest::TALL;
+    let (a, b) = (trunk + down * 5.0 * up, trunk + down * 14.0 * up);
     let ab = b - a;
     let k = ((MIDDLE - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0);
     MIDDLE.distance(a + ab * k) < BREAK
@@ -308,7 +309,11 @@ mod tests {
             miss < 2.5,
             "the shade oak's shadow lands {miss} m from the fight"
         );
-        assert!(shades_the_fight(SHADE_OAK, 1.0));
+        let (_, scale, _) = super::super::dress::OAKS
+            .iter()
+            .find(|(o, ..)| *o == SHADE_OAK)
+            .unwrap();
+        assert!(shades_the_fight(SHADE_OAK, *scale));
         // The break is the fight's: the wood about keeps its dapple.
         let wood = crate::forest::tree_spots(&Land::new());
         let open = wood

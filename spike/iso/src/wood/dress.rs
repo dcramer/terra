@@ -12,14 +12,16 @@ use bevy::prelude::*;
 /// lower-left corner, near the camera, its crown up the left edge; the top-left and top
 /// edge, trunks and lower boughs going off the frame; the top right, two behind the
 /// moose's walk; before the fight, by the camera, its crown rising up the frame
-/// over the cast and open about each of them.
+/// over the cast and open about each of them. At true proportions (forest::TALL, iso-kit
+/// j24): trunks 0.85 to 1.1 m across, 12 to 16 m tall, crowns about as wide as at the
+/// models' old 0.6 to 0.8.
 pub const OAKS: [(Vec2, f32, f32); 6] = [
-    (Vec2::new(0.3, 11.6), 0.75, 1.0),
-    (Vec2::new(-4.3, 2.4), 0.7, 2.3),
-    (Vec2::new(0.9, -1.6), 0.65, 4.1),
-    (Vec2::new(7.4, -4.4), 0.7, 0.4),
-    (Vec2::new(12.0, -3.6), 0.8, 5.2),
-    (Vec2::new(4.5, 9.8), 0.6, 3.0),
+    (Vec2::new(0.3, 11.6), 0.345, 1.0),
+    (Vec2::new(-4.3, 2.4), 0.32, 2.3),
+    (Vec2::new(0.9, -1.6), 0.3, 4.1),
+    (Vec2::new(7.4, -4.4), 0.32, 0.4),
+    (Vec2::new(12.0, -3.6), 0.37, 5.2),
+    (Vec2::new(4.5, 9.8), 0.28, 3.0),
 ];
 
 /// The bare ground dressed: the pond's north bank (x 7.5 to 13.5, z -4.5 to 3.7, the frame's

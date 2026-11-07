@@ -96,7 +96,7 @@ pub fn model(
 pub fn canopy(p: Vec2, trees: &[crate::forest::Spot]) -> f32 {
     let mut open = 1.0 - 0.25 * terrain::woods(p);
     for t in trees {
-        let r = 7.0 * t.scale;
+        let r = 7.0 * t.scale * crate::forest::SPREAD;
         let d = t.at.distance(p) + 1.5 * (terrain::fbm(p * 0.5, 41) - 0.5);
         if d < r {
             open *= 1.0 - 0.6 * terrain::smooth(r, r * 0.25, d);

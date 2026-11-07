@@ -149,8 +149,20 @@ struct Shell {
 }
 
 /// A crown of cards at a tree's clumps, normals bent out from its middle so it shades as
-/// one mass, its inside darker.
+/// one mass, its inside darker. The clumps stand at `x * SPREAD, y * TALL, z * SPREAD` of
+/// the model's, each card `SPREAD` times its size: an oak's true proportions (`TALL`).
 fn crown(tips: &[Tip], rng: &mut Rng) -> (Mesh, Shell) {
+    let stretch = Vec3::new(SPREAD, TALL, SPREAD);
+    let tips: Vec<Tip> = tips
+        .iter()
+        .map(|t| Tip {
+            at: t.at * stretch,
+            dir: (t.dir * stretch).normalize_or(Vec3::Y),
+            size: t.size * SPREAD,
+            mass: t.mass,
+        })
+        .collect();
+    let tips = &tips[..];
     let n = tips.len() as f32;
     let middle = tips.iter().map(|t| t.at).sum::<Vec3>() / n;
     let (lo, hi) = tips.iter().fold((Vec3::MAX, Vec3::MIN), |(l, h), t| {
@@ -283,6 +295,21 @@ fn grass(land: &Land, lo: Vec2, size: f32, rng: &mut Rng, nav: &Nav) -> Option<M
 #[derive(Resource, Default)]
 pub struct Extra(pub Vec<Spot>);
 
+/// An oak's true proportions out of the stubby models (iso-kit j24). At scale 1 OakBough2's
+/// trunk is 3.0 m across 4 m up, OakBough's 4.6 m, both 24 m tall, their crowns 11 to 23 m
+/// across (the GLBs' median width of a 0.25 m slice, iso-kit j23): a height 5 to 8 times
+/// the trunk, a crown 4 to 7, where a grown oak's are about 15 and 10. Scaled alone to a
+/// true trunk they stood 6 to 9 m with 3 to 7 m crowns and the frame lost its canopy (j23).
+/// So each trunk stands `TALL` times as high at its girth and the crown spreads `SPREAD`
+/// times as wide: at a spot's scale of 0.27 to 0.37, trunks 0.8 to 1.1 m across at chest
+/// height, oaks 12 to 16 m tall, crowns 7 to 13 m.
+pub const TALL: f32 = 1.8;
+pub const SPREAD: f32 = 2.0;
+
+/// Each model's trunk across against its height, so both trunks match: OakBough at 0.75 is
+/// 3.4 m across a spot's scale (OakBough2's 3.0), stretched 2.4 times up to stand as tall.
+const GIRTH: [f32; 2] = [0.75, 1.0];
+
 #[allow(clippy::too_many_arguments)]
 /// Where an oak stands, how large and turned.
 #[derive(Clone, Copy)]
@@ -301,13 +328,16 @@ pub fn tree_spots(land: &Land) -> Vec<Spot> {
     while trees.len() < 80 && tries < 20_000 {
         tries += 1;
         let p = Vec2::new(rng.range(-50.0, 50.0), rng.range(-50.0, 50.0));
+        // As far apart as at the models' old 0.55 to 0.85: their crowns at true proportions
+        // (`TALL`) are about as wide. Closer (5 to 7.5 m, up to 100) the frame went dark
+        // (dark share 0.35 -> 0.47, iso-kit j24).
         let spacing = rng.range(5.5, 8.5);
-        let scale = rng.range(0.55, 0.85);
+        let scale = rng.range(0.27, 0.37);
         // Seen from above at the camera's slant, a crown stands up the screen from its
         // trunk (about a metre for each metre up): it must lie over the wood too, not
         // hang over the clearing, or it reads as a bush floating by the camp.
         let toward = crate::camera::offset();
-        let crown = p - Vec2::new(toward.x, toward.z).normalize() * 12.0 * scale;
+        let crown = p - Vec2::new(toward.x, toward.z).normalize() * 12.0 * scale * TALL;
         if terrain::woods(p) < 0.6
             || terrain::woods(crown) < 0.3
             || terrain::pond(p) > -0.3
@@ -387,8 +417,10 @@ fn plant(
     for (i, t) in spots.iter().enumerate() {
         let (p, scale, yaw) = (&t.at, t.scale, t.yaw);
         let (trunk, crown, shell) = &kinds[i % kinds.len()];
+        let girth = GIRTH[i % kinds.len()];
         let rot = Quat::from_rotation_y(yaw);
-        nav.block_circle(*p, 0.9 * scale);
+        // The trunk's own half-width: 1.5 m at OakBough2's scale 1.
+        nav.block_circle(*p, 1.5 * scale * girth);
         let at = on(*p) - Vec3::Y * 0.15;
         let root = commands
             .spawn((
@@ -401,6 +433,7 @@ fn plant(
         commands.spawn((
             Mesh3d(trunk.clone()),
             MeshMaterial3d(bark.clone()),
+            Transform::from_scale(Vec3::new(girth, TALL, girth)),
             ChildOf(root),
         ));
         commands.spawn((
