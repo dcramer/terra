@@ -113,6 +113,7 @@ impl Client {
             name: name.to_string(),
         };
         transport.send(Lane::Ordered, &hello.encoded());
+        transport.flush();
     }
 
     /// Takes what the transport has for it.
@@ -310,6 +311,7 @@ impl Client {
             before = Some(bytes);
         }
         transport.send(Lane::State, &to.finish());
+        transport.flush();
     }
 
     /// Asks the server for an operation: it shows when the server orders it (D651).

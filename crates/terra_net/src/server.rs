@@ -508,6 +508,7 @@ impl Server {
                 replicate::send(session, &world, peer, transport, &mut self.scratch);
             }
         }
+        transport.flush();
         self.tick += 1;
     }
 }

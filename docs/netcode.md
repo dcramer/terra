@@ -1,6 +1,6 @@
 # Netcode
 
-Status: **designed, 2026-11-06; build steps 1 and 2 built** (D34, D651, D652, D636): `terra_net` passes milestone D and the soak on the in-memory transport, and two men walk together on the real mover, each predicting its own body. Steps 3 to 5 are not built. How the server of [multiplayer.md](multiplayer.md) (D51) talks to its clients: what is sent, when, and how a client stays smooth. The survey behind it is [research/2026-11-06-netcode.md](../research/2026-11-06-netcode.md). It serves v0 (a host and a few friends, four clients at 100 ms and 1% loss, two realms on one host) and keeps D52's thousand possible: nothing is sent to everyone, and every cost is per area.
+Status: **designed, 2026-11-06; build steps 1 and 2 built** (D34, D651, D652, D636): `terra_net` passes milestone D and the soak on the in-memory transport, and two men walk together on the real mover, each predicting its own body. Of step 3 the UDP transport, the version check and the refusals are built (`cargo test -p terra_net --features udp`); proving an identity is not. Steps 4 and 5 are not built. How the server of [multiplayer.md](multiplayer.md) (D51) talks to its clients: what is sent, when, and how a client stays smooth. The survey behind it is [research/2026-11-06-netcode.md](../research/2026-11-06-netcode.md). It serves v0 (a host and a few friends, four clients at 100 ms and 1% loss, two realms on one host) and keeps D52's thousand possible: nothing is sent to everyone, and every cost is per area.
 
 ## The model
 
@@ -22,7 +22,7 @@ Not lockstep, though D30 makes every machine compute alike: a drop-in world cann
 | Module | Holds |
 |---|---|
 | `wire` | A bit packer and the `Wire` trait (D636): ranged integers, quantised floats, varints. The reader is total: any bytes give a value or an error, never a panic, and every length is capped |
-| `transport` | The seam (D34): two lanes, `Ordered` (reliable, in order) and `State` (unreliable), as a server's and a client's trait. `loopback`: in memory, with latency, jitter, loss, duplication and reordering drawn from a seed on a clock the test advances, so a run repeats exactly. `udp` (a feature): `renet` with `renet_netcode` |
+| `transport` | The seam (D34): two lanes, `Ordered` (reliable, in order) and `State` (unreliable), as a server's and a client's trait. `loopback`: in memory, with latency, jitter, loss, duplication and reordering drawn from a seed on a clock the test advances, so a run repeats exactly. `udp` (a feature): `renet` with `renet_netcode`. Neither reads a clock: the caller says how much time passed |
 | `ack` | Sequence numbers with an ack and a 32-packet ack field in every `State` packet (Fiedler), ours because the transport's unreliable lane reports none |
 | `clock` | The client's estimate of the server's tick and how far ahead of it to run |
 | `interest` | Which cells a client is sent, on a hashed grid of cubes over the realm, round or under ground alike |
@@ -95,6 +95,6 @@ Each check has a planted fault beside it (D632).
 
 1. `terra_net` plain: `wire`, `transport` with loopback, `ack`, `interest`, `server`, `client`, operations, milestone D's test and the soak.
 2. `clock` and `predict`, and two bodies walking together on the real mover in one process, with the prediction test and the first bytes-a-second reading.
-3. The `udp` transport and connecting: version, identity, refusals.
+3. The `udp` transport and connecting: version, identity, refusals. Built but for identity: the 32 bytes a client gives are passed to the game unproven; the signed challenge is to come, with a signature crate.
 4. The game as a client of its own server (the Bevy side), then a second player in it.
 5. The fight, the pack and creatures across the seam, each with its track.

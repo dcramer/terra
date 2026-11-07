@@ -9,6 +9,15 @@ publish.workspace = true
 [dependencies]
 # The loopback's seeded faults and the grids' quick maps (`terra_gen::hash`).
 terra_gen.workspace = true
+# The UDP carrier (D34): connections, channels and fragments, and the netcode standard over
+# a socket. Plain crates with no engine in them; behind the `udp` feature so a peer in memory
+# builds neither.
+renet = { version = "2.0.1", optional = true }
+renet_netcode = { version = "2.0.1", optional = true }
+
+[features]
+# Carrying over UDP (`transport::udp`).
+udp = ["dep:renet", "dep:renet_netcode"]
 
 [lints]
 workspace = true

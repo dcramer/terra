@@ -4,6 +4,8 @@
 //! Steam's relay are other carriers of the same seam.
 
 pub mod loopback;
+#[cfg(feature = "udp")]
+pub mod udp;
 
 /// How a packet is carried.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,6 +44,8 @@ pub trait ServerTransport {
     fn send(&mut self, to: Peer, lane: Lane, bytes: &[u8]);
     /// Ends a client's connection, after what was sent to it on the ordered lane.
     fn drop_peer(&mut self, peer: Peer);
+    /// Puts what was sent on the wire, where a carrier gathers a tick's sends into packets.
+    fn flush(&mut self) {}
 }
 
 /// A client's end of a transport.
@@ -49,4 +53,6 @@ pub trait ClientTransport {
     fn poll(&mut self, into: &mut Vec<FromServer>);
     fn send(&mut self, lane: Lane, bytes: &[u8]);
     fn close(&mut self);
+    /// As [`ServerTransport::flush`].
+    fn flush(&mut self) {}
 }
