@@ -171,7 +171,6 @@ test("a round shot against a kept still since replaced keeps none of its ties an
     kept: { marsh: kept("wet"), ruin: kept("wet") },
   };
   assert.equal(shotAgainst(h, "grime", "marsh"), "base", "inferred from the last keep before it was shot");
-  assert.deepEqual(staleAgainst(h, "grime"), { ties: ["marsh"], changed: ["ruin"] }, "grime's marsh tied base's still, not wet's");
+  assert.deepEqual(staleAgainst(h, "grime"), { ties: ["marsh"], changed: [] }, "grime's marsh tied base's still, not wet's; ruin's kept moved to wet only as a tie, the same look");
   assert.deepEqual(staleAgainst(h, "late"), { ties: [], changed: ["marsh"] });
-  assert.deepEqual(staleAgainst(h, "wet"), { ties: [], changed: [] }, "the kept round itself is current");
-});
+  assert.deepEqual(staleAgainst(h, "wet"), { ties: [], changed: [] }, "the kept round itself is current");});

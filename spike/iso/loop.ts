@@ -515,14 +515,26 @@ export function shotAgainst(h: Pick<History, "rounds">, round: string, b: string
   return best?.[0];
 }
 
+/** The round whose look a kept round's still shows for a biome: past every round that only
+ * tied the one before it (a KEEP copies its ties' stills, the same look). */
+function lookOf(h: Pick<History, "rounds">, round: string | undefined, b: string): string | undefined {
+  for (let r = round, n = 0; r && n < 100; n++) {
+    if (h.rounds[r]?.biomes[b]?.changed !== false) return r;
+    const prev = shotAgainst(h, r, b);
+    if (!prev) return r;
+    r = prev;
+  }
+  return round;
+}
+
 /** The biomes of `round` measured against a kept still that has since been replaced: a tie
  * there only matched the older still (keeping it would undo the newer win), a change was
  * judged against the wrong one. */
 export function staleAgainst(h: Pick<History, "kept" | "rounds">, round: string): { ties: string[]; changed: string[] } {
   const out = { ties: [] as string[], changed: [] as string[] };
   for (const [b, e] of Object.entries(h.rounds[round]?.biomes ?? {})) {
-    const was = shotAgainst(h, round, b);
-    const now = h.kept[b]?.round;
+    const was = lookOf(h, shotAgainst(h, round, b), b);
+    const now = lookOf(h, h.kept[b]?.round, b);
     if (!was || !now || was === now || now === round) continue;
     (e.changed ? out.changed : out.ties).push(b);
   }
