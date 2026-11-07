@@ -15,6 +15,7 @@
 //! joins need not be a game at all (D73): the tests' is a few lines.
 
 pub mod ground;
+pub mod instance;
 pub mod link;
 pub mod looks;
 pub mod remote;
@@ -240,16 +241,26 @@ impl Host {
 
 pub fn plugin(app: &mut App) {
     remote::plugin(app);
-    let hosted = resource_exists::<Host>;
+    hosting(app);
     let joined = resource_exists::<link::Link>;
     app.add_systems(
         FixedUpdate,
         (
-            hear.in_set(Sim::Act).before(walk).run_if(hosted),
-            tell.in_set(Sim::End).run_if(hosted),
             link::listen.in_set(Sim::Act).before(walk).run_if(joined),
             link::record.in_set(Sim::Act).after(walk).run_if(joined),
             link::show.in_set(Sim::End).run_if(joined),
+            looks::joined
+                .in_set(Sim::End)
+                .after(link::show)
+                .run_if(joined),
+            looks::unjoined.in_set(Sim::End).run_if(not(joined)),
+            worn::joined
+                .in_set(Sim::End)
+                .after(link::show)
+                .run_if(joined),
+            worn::unjoined.in_set(Sim::End).run_if(not(joined)),
+            ground::joined.in_set(Sim::End).run_if(joined),
+            ground::unjoined.in_set(Sim::End).run_if(not(joined)),
         ),
     )
     .add_systems(
@@ -260,38 +271,24 @@ pub fn plugin(app: &mut App) {
         ),
     )
     .add_systems(Last, farewell)
-    .init_resource::<ground::Ground>()
     .init_resource::<worn::Said>()
-    .init_resource::<looks::Said>()
-    .add_systems(
+    .init_resource::<looks::Said>();
+}
+
+/// A world's own server, while it has one ([`Host`]): the half of this module a realm with
+/// no player of its own runs too (`instance`).
+pub fn hosting(app: &mut App) {
+    let hosted = resource_exists::<Host>;
+    app.init_resource::<ground::Ground>().add_systems(
         FixedUpdate,
         (
-            looks::host.in_set(Sim::End).before(tell).run_if(hosted),
-            looks::joined
+            hear.in_set(Sim::Act).before(walk),
+            (looks::host, worn::host, ground::host)
                 .in_set(Sim::End)
-                .after(link::show)
-                .run_if(joined),
-            looks::unjoined.in_set(Sim::End).run_if(not(joined)),
-        ),
-    )
-    .add_systems(
-        FixedUpdate,
-        (
-            worn::host.in_set(Sim::End).before(tell).run_if(hosted),
-            worn::joined
-                .in_set(Sim::End)
-                .after(link::show)
-                .run_if(joined),
-            worn::unjoined.in_set(Sim::End).run_if(not(joined)),
-        ),
-    )
-    .add_systems(
-        FixedUpdate,
-        (
-            ground::host.in_set(Sim::End).before(tell).run_if(hosted),
-            ground::joined.in_set(Sim::End).run_if(joined),
-            ground::unjoined.in_set(Sim::End).run_if(not(joined)),
-        ),
+                .before(tell),
+            tell.in_set(Sim::End),
+        )
+            .run_if(hosted),
     );
 }
 

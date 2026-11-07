@@ -89,6 +89,12 @@ impl<T: ServerTransport> Switch<T> {
         self.of.get(&peer).copied()
     }
 
+    /// Whether anything has arrived for a branch that its server has not yet taken: a
+    /// server not ticking (its realm frozen) is woken by it.
+    pub fn waiting(&self, branch: usize) -> bool {
+        !lock(&self.branches[branch]).arrived.is_empty()
+    }
+
     /// Before the tick: time passes for the carrier, and what arrived is handed to the branch
     /// of the client it came from. A new client is home's.
     pub fn take_in(&mut self, elapsed: Duration) {

@@ -983,3 +983,6 @@ fn a_joining_game_has_no_body_on_the_host_until_its_world_is_made() {
         "and it sees the host"
     );
 }
+
+#[path = "net/instance_tests.rs"]
+mod realms;
