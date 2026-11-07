@@ -1,11 +1,17 @@
 //! The client's clock (D651): which tick it is simulating, kept ahead of the server's by the
-//! round trip and a margin, so the intent for a tick reaches the server just before that tick
-//! is run. Every state packet says how many ticks early the newest intent came
+//! round trip and a margin, so the intent for a tick reaches the server before that tick is
+//! run. Every state packet says how many ticks early the newest intent came
 //! ([`Stamp::margin`]); the client runs a little faster when that is under its target and a
 //! little slower when over, at most [`MOST_NUDGE`] either way, as Overwatch and Rocket League
 //! do. A margin far from the target is not walked to but jumped, the whole way on the first
 //! reading: a welcome that came late (it rides the ordered lane) leaves the clock a third of
 //! a second behind, and creeping there would cost seconds of late intents.
+//!
+//! What is held to the target is the lowest margin of the last second, not the usual one. A
+//! game drawing slowly runs its ticks in bursts, several a frame, and so does a server; the
+//! intent that matters is the last of a burst, which comes latest. Holding the usual margin
+//! (a mean, widened by a measure of jitter) left those late on a loaded machine, each a
+//! correction; holding the lowest covers whatever the bursts are, with nothing to tune.
 
 use crate::proto::Stamp;
 
@@ -13,17 +19,18 @@ use crate::proto::Stamp;
 pub const MOST_NUDGE: f64 = 0.02;
 /// How far ahead of the tick it was welcomed at a client starts: about a 100 ms round trip.
 const FIRST_LEAD: u32 = 8;
-/// The margin aimed at with no jitter, ticks: the next tick's intent and one spare.
-const LEAST_MARGIN: f32 = 2.0;
-/// The most the measured jitter adds to the target, ticks.
-const MOST_JITTER: f32 = 8.0;
-/// A smoothed margin further than this from its target is jumped to, ticks.
-const JUMP_PAST: f32 = 4.0;
-/// How many of the server's ticks after a jump its stamps are ignored: they tell of intents
-/// from before it.
-const HOLD_TICKS: u32 = 32;
-/// The share a new reading moves the smoothed margin and jitter.
-const EASE: f32 = 0.1;
+/// The lowest margin aimed at, ticks: the next tick's intent and one spare.
+const LEAST_MARGIN: i32 = 2;
+/// A lowest margin further than this from its target is jumped to, ticks.
+const JUMP_PAST: i32 = 4;
+/// The longest a jump's hold lasts, in the server's ticks, should the stamp that ends it
+/// never come: four seconds.
+const MOST_HOLD: u32 = 256;
+/// The margins kept to take the lowest of: a second of stamps at 32 a second.
+const KEPT: usize = 32;
+/// How many margins must be kept before being early is believed enough to jump back: half a
+/// second. Being late is believed at once.
+const SURE: usize = 16;
 /// The nudge a tick of error asks for.
 const NUDGE_A_TICK: f64 = 0.01;
 
@@ -32,14 +39,20 @@ const NUDGE_A_TICK: f64 = 0.01;
 pub struct Clock {
     /// The next tick to simulate; none until welcomed.
     next: Option<u32>,
-    margin: f32,
-    jitter: f32,
-    /// The newest stamp's tick taken, and the tick stamps are ignored until.
-    heard: Option<u32>,
-    hold_until: u32,
-    /// No margin has been read since the start or the last jump: the next is taken as it
-    /// is, not eased toward, so a clock far out jumps the whole way at once.
+    /// The last margins read, newest overwriting oldest, and how many are held.
+    margins: [i8; KEPT],
+    held: usize,
+    at: usize,
+    /// No margin has been read since the start or the last jump: the first is believed at
+    /// once, early or late, so a clock far out is put right on its first reading.
     fresh: bool,
+    /// The newest stamp's tick taken.
+    heard: Option<u32>,
+    /// After a jump, stamps are not believed until the server holds an intent of the new
+    /// run (one stamped this or later): until then they tell of the old run, and acting on
+    /// them corrects twice. Whatever the round trip, that is exactly long enough. The tick
+    /// is the end of the hold should that stamp never come.
+    hold: Option<(u32, u32)>,
 }
 
 impl Clock {
@@ -47,17 +60,22 @@ impl Clock {
     pub fn start(&mut self, server_tick: u32) {
         *self = Clock {
             next: Some(server_tick + FIRST_LEAD),
-            margin: LEAST_MARGIN,
-            jitter: 0.0,
-            heard: None,
-            hold_until: 0,
             fresh: true,
+            ..Clock::default()
         };
     }
 
-    /// The margin aimed at: wider on a link whose packets come unevenly.
-    pub fn target(&self) -> f32 {
-        LEAST_MARGIN + (2.0 * self.jitter).min(MOST_JITTER)
+    /// The lowest margin of the last second, once any has been read.
+    pub fn lowest(&self) -> Option<i32> {
+        self.margins[..self.held]
+            .iter()
+            .min()
+            .map(|&low| i32::from(low))
+    }
+
+    /// How far the lowest margin is over its target, ticks.
+    fn over(&self) -> i32 {
+        self.lowest().map_or(0, |low| low - LEAST_MARGIN)
     }
 
     /// Takes a state packet's stamp. Returns whether the clock jumped: the ticks it gives are
@@ -66,38 +84,40 @@ impl Clock {
         let Some(next) = self.next else {
             return false;
         };
-        if self.heard.is_some_and(|newest| stamp.tick <= newest) || stamp.tick < self.hold_until {
+        if self.heard.is_some_and(|newest| stamp.tick <= newest) {
             return false;
         }
         self.heard = Some(stamp.tick);
+        if let Some((need, until)) = self.hold {
+            if stamp.heard.is_none_or(|heard| heard < need) && stamp.tick < until {
+                return false;
+            }
+            self.hold = None;
+        }
         // No intent held yet says nothing of how early they come.
         if stamp.heard.is_none() && stamp.margin == 0 {
             return false;
         }
-        let margin = f32::from(stamp.margin);
-        if self.fresh {
-            self.fresh = false;
-            self.margin = margin;
-        } else {
-            self.jitter += ((margin - self.margin).abs() - self.jitter) * EASE;
-            self.margin += (margin - self.margin) * EASE;
-        }
-        let over = self.margin - self.target();
-        if over.abs() <= JUMP_PAST {
+        self.margins[self.at] = stamp.margin;
+        self.at = (self.at + 1) % KEPT;
+        self.held = (self.held + 1).min(KEPT);
+        let over = self.over();
+        let believed = self.fresh || over < 0 || self.held >= SURE;
+        self.fresh = false;
+        if over.abs() <= JUMP_PAST || !believed {
             return false;
         }
-        self.next = Some(next.saturating_add_signed(-(over as i32)));
-        self.margin = self.target();
-        self.hold_until = stamp.tick + HOLD_TICKS;
-        self.fresh = true;
+        let jumped = next.saturating_add_signed(-over);
+        self.next = Some(jumped);
+        (self.held, self.at, self.fresh) = (0, 0, true);
+        self.hold = Some((next.max(jumped), stamp.tick + MOST_HOLD));
         true
     }
 
-    /// How fast to tick, as a share of the server's rate: under 1 when intents come earlier
-    /// than they need to, over 1 when later.
+    /// How fast to tick, as a share of the server's rate: under 1 when even the latest intents
+    /// come earlier than they need to, over 1 when they come too near their tick.
     pub fn rate(&self) -> f64 {
-        let over = f64::from(self.margin - self.target());
-        1.0 - (over * NUDGE_A_TICK).clamp(-MOST_NUDGE, MOST_NUDGE)
+        1.0 - (f64::from(self.over()) * NUDGE_A_TICK).clamp(-MOST_NUDGE, MOST_NUDGE)
     }
 
     /// The tick to simulate now; the next call gives the one after. None until welcomed.
@@ -112,40 +132,43 @@ impl Clock {
 mod tests {
     use super::*;
 
-    /// A server a round trip away, as the clock sees it: the client ticks at the clock's
-    /// rate, its intents take `up` ticks to arrive, and each stamp tells the margin `down`
-    /// ticks later. Returns the margins the server saw over the last second.
-    fn held(up: u32, down: u32, seconds: u32) -> Vec<i32> {
+    /// A server a round trip away, as the clock sees it: the client's ticks are run at the
+    /// clock's rate but only every `burst` ticks, all at once (a game drawing slowly), its
+    /// intents take `up` ticks to arrive, and each stamp, sent every second tick, tells the
+    /// margin `down` ticks later. Returns, over the last two seconds, each tick's margin when
+    /// the server came to run it: under 0 is an intent that was not there in time.
+    fn held(up: u32, down: u32, burst: u32, seconds: u32) -> Vec<i32> {
         let mut clock = Clock::default();
         clock.start(1000);
         let (mut budget, mut sent, mut stamps, mut margins) =
             (0.0, Vec::new(), Vec::new(), Vec::new());
         for server in 1000..1000 + seconds * 64 {
             budget += clock.rate();
-            while budget >= 1.0 {
-                budget -= 1.0;
-                sent.push((server + up, clock.advance().expect("started")));
+            if server % burst == 0 {
+                while budget >= 1.0 {
+                    budget -= 1.0;
+                    sent.push((server + up, clock.advance().expect("started")));
+                }
             }
-            let newest = sent
-                .iter()
-                .filter(|(arrives, _)| *arrives <= server)
-                .map(|(_, tick)| *tick)
-                .max();
+            let arrived = sent.iter().filter(|(arrives, _)| *arrives <= server);
+            let newest = arrived.map(|(_, tick)| *tick).max();
             let margin = newest.map_or(0, |newest| {
                 (i64::from(newest) - i64::from(server)).clamp(-128, 127) as i8
             });
-            stamps.push((
-                server + down,
-                Stamp {
-                    tick: server,
-                    heard: newest,
-                    margin,
-                },
-            ));
+            if server % 2 == 0 {
+                stamps.push((
+                    server + down,
+                    Stamp {
+                        tick: server,
+                        heard: newest,
+                        margin,
+                    },
+                ));
+            }
             for (_, stamp) in stamps.iter().filter(|(arrives, _)| *arrives == server) {
                 clock.hear(*stamp);
             }
-            if server >= 1000 + (seconds - 1) * 64 {
+            if server >= 1000 + (seconds - 2) * 64 {
                 margins.push(i32::from(margin));
             }
         }
@@ -154,12 +177,31 @@ mod tests {
 
     #[test]
     fn the_margin_is_held_near_two_ticks_on_any_round_trip() {
-        // 16 ms, 100 ms, 300 ms and 600 ms there and back.
+        // 16 ms, 100 ms, 300 ms and 600 ms there and back, a tick at a time.
         for (up, down) in [(1, 0), (3, 3), (10, 9), (19, 19)] {
-            let margins = held(up, down, 20);
+            let margins = held(up, down, 1, 20);
             assert!(
-                margins.iter().all(|margin| (1..=3).contains(margin)),
+                margins.iter().all(|margin| (1..=4).contains(margin)),
                 "{up}+{down} ticks: {margins:?}"
+            );
+        }
+    }
+
+    /// A game drawing at 21, 16 and 11 frames a second runs three, four and six ticks a frame.
+    /// The last intent of each burst is still there in time, and no more margin is kept than
+    /// the burst needs.
+    #[test]
+    fn no_intent_is_late_however_many_ticks_a_frame_carries() {
+        for burst in [3, 4, 6] {
+            let margins = held(3, 3, burst, 30);
+            let (low, high) = (margins.iter().min().unwrap(), margins.iter().max().unwrap());
+            assert!(
+                *low >= 0,
+                "{burst} ticks a frame: an intent {low} ticks late"
+            );
+            assert!(
+                *high <= burst as i32 + 6,
+                "{burst} ticks a frame: {high} ticks early at most"
             );
         }
     }
@@ -185,7 +227,7 @@ mod tests {
         for tick in 40..400 {
             clock.hear(Stamp {
                 tick,
-                heard: Some(tick + 3),
+                heard: Some(tick + 5),
                 margin: 5,
             });
             assert!((clock.rate() - 1.0).abs() <= MOST_NUDGE + 1e-12);

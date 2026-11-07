@@ -7,8 +7,8 @@
 //!   the answer and the ticks since walked again; then this tick's intent sent.
 //! - [`record`], after the walk: what the walk left of the player, kept until answered.
 //! - [`show`], at the tick's end: the others, between their last two words.
-//! - [`pace`], each frame: the fixed tick run a little fast or slow to hold the clock's
-//!   margin.
+//! - [`pace`], each frame: time run a little fast or slow, so ticks come more or less often
+//!   and the clock's margin holds; a tick's length is the server's, always.
 //!
 //! What is replayed is the body and what the walk keeps of the player ([`Walked`]); a fall or
 //! a drowning told during a replay is told again, which the server's word on harm will settle
@@ -17,11 +17,11 @@
 use super::{OWN, SHOWN, Steering};
 use crate::intent::Intent;
 use crate::movement::{Movers, walk};
-use crate::{IsLocalPlayer, Motion, Stamina, Stance, View};
+use crate::{IsLocalPlayer, Motion, Player, Stamina, Stance, View};
 use bevy::prelude::*;
 use std::collections::HashMap;
-use terra_motion::mover::Body;
 use terra_motion::mover::net::{Own, Shown};
+use terra_motion::mover::{Body, Ground};
 use terra_net::client::{Client, Event as Heard, SHOWN_SENDS_BACK};
 use terra_net::clock::Clock;
 use terra_net::identity::Identity;
@@ -41,7 +41,9 @@ struct Walked {
     answer: Option<Own>,
 }
 
-/// Another player, as the server last said: for the figure to stand and face by.
+/// Another player, as the server last said. It is a [`Player`], so it is given a figure as
+/// any player is, moved by its [`Motion`]; it has no [`View`], so the walk, which moves only
+/// what looks somewhere, leaves it where the server put it.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Puppet {
     pub id: EntityId,
@@ -291,7 +293,7 @@ pub fn record(world: &mut World) {
 pub fn show(
     mut link: ResMut<Link>,
     mut commands: Commands,
-    mut puppets: Query<(&mut Transform, &mut Puppet)>,
+    mut puppets: Query<(&mut Transform, &mut Puppet, &mut Motion)>,
 ) {
     let Link {
         client,
@@ -315,12 +317,21 @@ pub fn show(
             .get(&id)
             .and_then(|puppet| puppets.get_mut(*puppet).ok())
         {
-            Some((mut transform, mut puppet)) => {
+            Some((mut transform, mut puppet, mut motion)) => {
                 transform.translation = place;
                 puppet.shown = shown;
+                moving(&mut motion, &shown);
             }
             None => {
-                let puppet = (Puppet { id, shown }, Transform::from_translation(place));
+                let mut motion = Motion::facing(shown.facing);
+                moving(&mut motion, &shown);
+                let stance = Stance::default();
+                // Its figure is its child, drawn only under something visible.
+                let seen = Visibility::default();
+                // And dressed only once it has an outfit: its body's look whole, for now.
+                let worn = crate::character::Outfit(Vec::new());
+                let at = Transform::from_translation(place);
+                let puppet = (Player, Puppet { id, shown }, at, seen, worn, motion, stance);
                 held.insert(id, commands.spawn(puppet).id());
             }
         }
@@ -334,7 +345,20 @@ pub fn show(
     });
 }
 
-/// Each frame: the fixed tick runs at the clock's rate, at most 2% from 64 a second (D651).
-pub fn pace(link: Res<Link>, mut time: ResMut<Time<Fixed>>) {
-    time.set_timestep_seconds(1.0 / (64.0 * link.rate()));
+/// A puppet's motion as the figure reads it, from what the server said of its body.
+fn moving(motion: &mut Motion, shown: &Shown) {
+    let up = shown.feet.as_vec3().normalize_or(Vec3::Y);
+    motion.velocity = shown.velocity.reject_from(up);
+    motion.rising = shown.velocity.dot(up);
+    motion.on_ground = shown.ground == Ground::Grounded;
+    motion.swimming = shown.ground == Ground::Swimming;
+    motion.facing = shown.facing;
+}
+
+/// Each frame: time runs at the clock's rate, at most 2% from the server's (D651), so ticks
+/// come that much more or less often. A tick's own length is never changed: the walk of a
+/// tick must be the server's walk of it, to the bit. (Found in the game: a tick 2% long was
+/// corrected on nearly every answer.)
+pub fn pace(link: Res<Link>, mut time: ResMut<Time<Virtual>>) {
+    time.set_relative_speed_f64(link.rate());
 }

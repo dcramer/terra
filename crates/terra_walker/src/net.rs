@@ -15,6 +15,7 @@
 //! joins need not be a game at all (D73): the tests' is a few lines.
 
 pub mod link;
+pub mod remote;
 
 use crate::intent::Intent;
 use crate::movement::{Movers, walk};
@@ -149,6 +150,7 @@ impl Host {
 }
 
 pub fn plugin(app: &mut App) {
+    remote::plugin(app);
     let hosted = resource_exists::<Host>;
     let joined = resource_exists::<link::Link>;
     app.add_systems(
@@ -185,6 +187,11 @@ pub fn hear(
                     Player,
                     Guest(peer),
                     Transform::from_translation(host.start),
+                    // Its figure is its child, drawn only under something visible.
+                    Visibility::default(),
+                    // And dressed only once it has an outfit: with none of its own it wears its
+                    // body's look whole, until what a player wears crosses too (step 5).
+                    crate::character::Outfit(Vec::new()),
                     Motion::facing(forward),
                     Stance::default(),
                     Stamina::default(),

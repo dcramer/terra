@@ -505,3 +505,31 @@ fn a_guest_joins_a_hosted_world_over_real_sockets() {
     let (mine, _) = bot.mine_and_other();
     assert!(mine.part(OWN).is_some());
 }
+
+/// One nudge from the host, mid-walk, which the joined game cannot foresee (a shove, a late
+/// intent): corrected once, within a round trip, and then the walk is the host's again. A
+/// correction must not leave the body so changed that the next tick is wrong too, and the
+/// next: on a loaded machine that chain made a walk of the game's 160 corrections long.
+#[test]
+fn a_nudge_is_corrected_within_a_round_trip_and_starts_no_chain() {
+    let mut together = Together::new(rough());
+    together.run(0..100);
+    let before = together.client.resource::<link::Link>().corrections();
+    // The guest on the host, pushed a hand's width aside while it walks.
+    let mut guests = together
+        .host
+        .query_filtered::<&mut Transform, With<Guest>>();
+    let mut guest = guests.single_mut(&mut together.host).expect("one guest");
+    let aside = guest.translation.normalize().cross(Vec3::X) * 0.08;
+    guest.translation += aside;
+    let nudged = together.host.resource::<Host>().server().tick();
+    together.run(100..300);
+    let corrections = together.client.resource::<link::Link>().corrections() - before;
+    let wrong = together.mispredicted(nudged);
+    assert!(!wrong.is_empty(), "the nudge was foreseen, which cannot be");
+    assert!(
+        wrong.iter().all(|tick| *tick < nudged + 24),
+        "mispredicted on {wrong:?}, nudged on {nudged}"
+    );
+    assert!(corrections <= 3, "{corrections} corrections for one nudge");
+}

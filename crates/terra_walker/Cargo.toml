@@ -22,8 +22,8 @@ terra_core.workspace = true
 terra_gen.workspace = true
 # The character controller (D53): the world's sources in its shapes (`mover_world`).
 terra_motion.workspace = true
-# The walker layer's side of the server (`net`, docs/netcode.md).
-terra_net.workspace = true
+# The walker layer's side of the server (`net`, docs/netcode.md), hosted and joined over UDP.
+terra_net = { workspace = true, features = ["udp"] }
 terra_world.workspace = true
 
 [dev-dependencies]
@@ -31,8 +31,6 @@ terra_world.workspace = true
 rayon = "1"
 # The controller course's fixtures (D53), which the mover's bench walks (`cargo xtask controller --bench`).
 terra_motion = { workspace = true, features = ["course"] }
-# The walker hosting over real sockets, in a test.
-terra_net = { workspace = true, features = ["udp"] }
 
 [features]
 # `model_files`, for the tests of the crates above that check the data naming a model's
