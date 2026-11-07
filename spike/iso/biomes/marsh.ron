@@ -42,20 +42,32 @@
     // land.rs's maps and the rules: masses with gaps, never an even lawn, sizes several-fold
     // apart; at the water's line a mat of dead rush, sticks and stones half sunk in the mud.
     scatter: [
+        // The matted cover over all the dry land, several layers deep (the old lawn tried
+        // 8 clumps a m², iso-kit j18): last year's dead sedge and reed, gold-brown to straw,
+        // with this year's olive coming through.
+        (plant: (kind: Tuft, tint: [(0.56, 0.42, 0.17), (0.42, 0.32, 0.13), (0.36, 0.4, 0.15),
+            (0.3, 0.42, 0.14)]),
+            density: 5.0, scale: (0.18, 0.45), clump: (3.0, 0.7, 0.4), over: (0.05, 9.0),
+            seed: 6),
         // Sedge tussocks on the hummocks' grass, olive to straw.
-        (plant: (kind: Tuft, tint: [(0.34, 0.5, 0.14), (0.28, 0.48, 0.18), (0.62, 0.47, 0.18)]),
-            density: 3.0, scale: (0.14, 0.55), on: Site("grass"), clump: (5.0, 1.2, 0.6),
+        (plant: (kind: Tuft, tint: [(0.34, 0.5, 0.14), (0.28, 0.48, 0.18), (0.5, 0.4, 0.16),
+            (0.62, 0.47, 0.18)]),
+            density: 7.0, scale: (0.2, 0.5), on: Site("grass"), clump: (5.0, 1.2, 0.4),
             over: (0.05, 9.0), seed: 1),
         // Ferns in the moss's cushions, and a few real ferns among them.
         (plant: (kind: Fern, tint: [(0.18, 0.46, 0.22), (0.3, 0.52, 0.16)]),
-            density: 2.0, scale: (0.2, 0.6), on: Site("moss"), clump: (4.0, 1.0, 0.7),
+            density: 4.5, scale: (0.24, 0.55), on: Site("moss"), clump: (4.0, 1.0, 0.5),
             over: (0.08, 9.0), seed: 2),
-        (models: ["models/nature/forest/fern.glb"], density: 0.12, scale: (0.2, 0.5),
+        (models: ["models/nature/forest/fern.glb"], density: 0.2, scale: (0.2, 0.5),
             on: Site("moss"), clump: (4.0, 1.0, 0.7), tilt: 6.0, over: (0.08, 9.0), seed: 2),
         // Low shrubs over the leaf litter: bog myrtle's green to a bilberry's red-brown.
         (plant: (kind: Leaves, tint: [(0.24, 0.44, 0.16), (0.46, 0.26, 0.14)]),
-            density: 1.8, scale: (0.22, 0.75), on: Site("leaves"), clump: (7.0, 1.5, 0.7),
+            density: 4.5, scale: (0.26, 0.65), on: Site("leaves"), clump: (7.0, 1.5, 0.5),
             over: (0.08, 9.0), seed: 3),
+        // And in dark masses anywhere on the dry land, as the old lawn's quarter of shrubs.
+        (plant: (kind: Leaves, tint: [(0.2, 0.36, 0.13), (0.24, 0.44, 0.16), (0.4, 0.24, 0.12)]),
+            density: 1.6, scale: (0.26, 0.6), clump: (6.0, 1.4, 0.8), over: (0.1, 9.0),
+            seed: 7),
         // The bank's mat: dead rush, straw to wet brown, thick at the water's line, a few
         // marsh marigolds in it.
         (plant: (kind: Tuft, tint: [(0.42, 0.34, 0.16), (0.3, 0.26, 0.12), (0.22, 0.24, 0.1)],
