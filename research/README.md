@@ -12,6 +12,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 
 | Note | Dated |
 |---|---|
+| [Netcode: how shipped server-authoritative games do it, and what Rust and Bevy offer today](2026-11-06-netcode.md) | 2026-11-06 |
 | [What it costs an agent to drive the character pipeline, and how to make it cheap](2026-11-05-agent-pipeline-tokens.md) | 2026-11-05 |
 | [Why the lake's clouds look unrealistic, measured against photographs](2026-11-05-cloud-look.md) | 2026-11-05 |
 | [How shipped isometric ARPGs make their art, and where a Tripo and Bevy pipeline departs](2026-11-05-iso-arpg-art-pipeline.md) | 2026-11-05 |
