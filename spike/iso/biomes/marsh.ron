@@ -91,8 +91,11 @@
     // A thin ground mist (kit/weather.rs, iso-kit j20): low banks thickest over the open
     // water and in the hollows, lit only by the fire, lantern and wisps in it: moonlit
     // (round 261107-0052, mist 0.25) it laid a cold grey veil over the water and reeds, the
-    // sheets' fault (traps.md: j44 and j45 lost as milky haze).
-    weather: (wind: (0.86, 0.5), mist: 0.4, layer: (height: 0.4, drift: 0.9, keylit: false)),
+    // sheets' fault (traps.md: j44 and j45 lost as milky haze). Off since round 261107-0126:
+    // at 0.4 lit by the fire it lost the blind pair twice (the fire a soft bloom halo washing
+    // its stones, where kept 261107-0032's ring stays crisp in a warm pool). Back on only
+    // with the fire's light kept out of it, judged.
+    weather: (wind: (0.86, 0.5), mist: 0.0, layer: (height: 0.4, drift: 0.9, keylit: false)),
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
 )
