@@ -363,8 +363,9 @@ impl Surroundings<'_, '_> {
         self.trunks.near(at, reach, &self.obstacles)
     }
 
+    /// Nothing of the land's lives in a cave (D643): its ground is no place of theirs.
     pub fn fits(&self, niche: &Niche, point: Vec3) -> bool {
-        self.place(point).fits(niche)
+        !self.planet.in_cave(point) && self.place(point).fits(niche)
     }
 
     /// What a point on the ground is like.

@@ -47,13 +47,13 @@ fn a_den_is_found_from_the_seed_open_from_its_mouth_to_a_chamber_a_troll_fits() 
         // Over the floor's middle: open for a troll's height and more, rock under it, and
         // the bare land solid there.
         let up = den.floor.normalize();
-        for high in [1.0, 2.5, 4.5] {
+        for high in [1.5, 2.5, 4.5] {
             assert!(
                 open(den.floor + up * high),
                 "seed {seed}: no room {high} m up"
             );
         }
-        assert!(!open(den.floor - up * 1.5), "seed {seed}: no floor");
+        assert!(!open(den.floor - up * 2.0), "seed {seed}: no floor");
         assert!(land.ground.sample(den.floor + up * 2.5).distance < -COVER_M);
         // A clear floor 12 m across (caves.md): open 6 m out from its middle, a man's height up.
         let out = up.any_orthonormal_vector();

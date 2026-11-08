@@ -10,6 +10,7 @@ use crate::instance::{Building, InWorld, InstanceApp, in_world};
 use crate::sky::Sky;
 use sea::{WaterExtension, sea_waves};
 
+mod caved;
 pub mod entering;
 mod sea;
 mod tweaks;
@@ -229,9 +230,10 @@ impl Planet {
     /// Whether the ground at a point has been dug or filled, rather than lying where it was
     /// generated: nothing that grew there stands on it any more.
     pub fn dug(&self, point: Vec3) -> bool {
-        // Undug, the ground is where it was generated, wherever the field finds it.
+        // Undug, the ground is where it was generated, wherever the field finds it, but
+        // in a cave, whose ground is no more the land's than a pit's is (D643).
         if self.ground.edit_count() == 0 {
-            return false;
+            return self.in_cave(point);
         }
         let up = point.normalize_or(Vec3::Y);
         (self.ground_at(point).length() - self.surface(up).length()).abs() > 0.15

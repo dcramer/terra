@@ -673,8 +673,7 @@ impl Field for GeneratedPlanet {
         } else {
             material::STONE
         };
-        let distance = self.carved(point, distance, memo);
-        Sample { distance, material }
+        self.carved_sample(point, Sample { distance, material }, memo)
     }
 }
 

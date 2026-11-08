@@ -17,9 +17,13 @@ use terra_gen::Noise;
 /// The carve eases into the ground over this, either side of where a cave's wall meets it:
 /// a mouth's lip is rounded, not a knife's edge.
 pub const BLEND_M: f32 = 1.5;
-/// How far a wall is pushed in or out by its roughness, and how far apart its bumps are.
+/// How far a wall is pushed in or out by its roughness, and how far apart its bumps are:
+/// knobs of some decimetres on swells of half a metre and more, so a passage is no tube
+/// (looked at in the game: with the knobs alone it was one).
 const ROUGH_M: f32 = 0.35;
 const ROUGH_ACROSS_M: f32 = 3.0;
+const SWELL_M: f32 = 0.6;
+const SWELL_ACROSS_M: f32 = 8.0;
 /// Seen more coarsely than this, in metres a voxel, the ground has no caves: a passage is
 /// narrower than two such voxels, and a far chunk's caves could only be seen as holes.
 pub const FINEST_SEEN_M: f32 = 2.0;
@@ -112,7 +116,7 @@ impl System {
         Self {
             parts,
             middle,
-            reach_m: reach + ROUGH_M + BLEND_M,
+            reach_m: reach + ROUGH_M + SWELL_M + BLEND_M,
             rough: Noise::new(seed.derive("cave walls")),
         }
     }
@@ -135,7 +139,10 @@ impl System {
             .iter()
             .map(|part| part.distance(point))
             .fold(f32::MAX, f32::min);
-        smooth + ROUGH_M * self.rough.sample((point - self.middle) / ROUGH_ACROSS_M)
+        let from = point - self.middle;
+        smooth
+            + ROUGH_M * self.rough.sample(from / ROUGH_ACROSS_M)
+            + SWELL_M * self.rough.sample(from / SWELL_ACROSS_M + Vec3::splat(17.3))
     }
 }
 
