@@ -1259,3 +1259,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-07**: D640 changed (by the agent): built for the walker's layer, run with no window and measured; the client's half of a hand-on is designed in it and waits for the portal's crossing over the network.
 - **2026-11-07**: D640 changed (by the agent): a client handed from one realm's server to another is built on the wire (an epoch on challenges and state, protocol version 5); the game's side waits for the portal's crossing.
 - **2026-11-07**: D640 changed (by the agent): the game's side of a crossing between a host's realms is built and checked by `tools/sandbox/crossing.ts`; what hands a player on in play (the portal) is not.
+- **2026-11-08**: D627 changed (the developers): only a job has a context bound; any other session is never told to stop for its size, only how to keep turns cheap. "the repo's rule is wrong. Our goal is just token efficiency. Lets fix that".

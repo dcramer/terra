@@ -152,7 +152,21 @@ test("nudges once per threshold crossed, and again when the context grows back a
   assert.match(text, /151k of your 150k bound/);
   assert.match(text, /handoff/);
   assert.ok(!text.includes("\n"), "one line");
-  assert.match(decide(151e3, -1).text, /lead handoff/, "a session that is not a job is told to hand off as a lead");
+  // A session that is no job has no bound (the goal is token efficiency, not a size): it is
+  // never told to stop, only its size and how to keep turns cheap, once at 150k and at each
+  // 100k more.
+  let lead = -1;
+  const said = [100e3, 140e3, 151e3, 200e3, 251e3, 300e3, 351e3].map((context) => {
+    const { keep, text } = decide(context, lead);
+    lead = keep;
+    return text;
+  });
+  assert.deepEqual(said.map((text) => text !== null), [false, false, true, false, true, false, true]);
+  for (const text of said.filter(Boolean)) {
+    assert.ok(!/STOP|\/clear and continue|start no new/i.test(text), `a lead was told to stop: ${text}`);
+    assert.match(text, /go on/);
+    assert.ok(!text.includes("\n"), "one line");
+  }
 });
 
 test("reads a job's bound from its brief, and only from a sentence that sets one", () => {

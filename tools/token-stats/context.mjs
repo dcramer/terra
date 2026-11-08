@@ -24,14 +24,17 @@ const UNSENT = new Set(["prompt_snapshot", "deferred_tools_record", "credential_
 // How long a cache entry lives, by the kind the call wrote.
 const TTL_MS = { "5m": 5 * 60 * 1000, "1h": 60 * 60 * 1000 };
 
-// The nudge holds each agent to its context bound (D627): a job to the bound its brief names
-// ("Bound: stop at 150k context"), any other session to DEFAULT_BOUND. It warns once at
-// WARN_AT of the bound (finish the step, start nothing new), then tells it to stop at the
-// bound and again at each STEP_PAST more. Each turn rereads the whole context, so a turn
-// past the bound costs more than the handoff that would end it.
+// The nudge (D627). A job is held to the bound its brief names ("Bound: stop at 150k
+// context"): it is warned once at WARN_AT of it (finish the step, start nothing new), then
+// told to stop at the bound and again at each STEP_PAST more, since a fresh job from its
+// handoff is cheaper than its turns past the bound. Any other session (the developer's own,
+// a lead) has no bound and is never told to stop: the goal is token efficiency, not a size
+// (the developers, 2026-11-08), so from DEFAULT_BOUND and at each LEAD_STEP more it is told
+// its size once and how to keep each turn cheap, and goes on.
 export const DEFAULT_BOUND = 150_000;
 export const WARN_AT = 0.8;
 export const STEP_PAST = 20_000;
+export const LEAD_STEP = 100_000;
 const NUDGE_STATE = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "terra-token-stats", "nudge");
 
 export function estimate(chars) {
@@ -509,31 +512,36 @@ export function firstPrompt(head) {
 
 // Which nudge a context has reached: -1 below the warning, 0 the warning, 1 the bound, then
 // one more for each STEP_PAST past it.
-export function level(context, bound = DEFAULT_BOUND) {
+export function level(context, bound = DEFAULT_BOUND, { job = true } = {}) {
+  // A session that is no job has no warning before its first word, and fewer after.
+  if (!job) return context < bound ? -1 : 1 + Math.floor((context - bound) / LEAD_STEP);
   if (context < bound * WARN_AT) return -1;
   if (context < bound) return 0;
   return 1 + Math.floor((context - bound) / STEP_PAST);
 }
 
 export function nudgeText(context, bound = DEFAULT_BOUND, { job = false } = {}) {
+  if (!job) {
+    return (
+      `Context ${Math.round(context / 1000)}k (D627): every turn rereads it, so keep each one cheap and go on: read by grep or line range, ` +
+      `long output to a file and its tail, no file dumps; keep the handoff file current at each landed step, so a compaction or /clear loses nothing.`
+    );
+  }
   const at = `Context ${Math.round(context / 1000)}k of your ${Math.round(bound / 1000)}k bound (D627)`;
   if (context < bound) {
-    return job
-      ? `${at}: finish and land the step you are on, start no new one, then write the handoff (with job.mjs's numbers) and report.`
-      : `${at}: hold no file dumps (finder and runner read, you take their reports), start no new line of work, and get the lead handoff ready.`;
+    return `${at}: finish and land the step you are on, start no new one, then write the handoff (with job.mjs's numbers) and report.`;
   }
-  return job
-    ? `STOP: ${at}, past it. Do not read another file or start another step: commit what is checked, write the handoff (what landed, ` +
-        `job.mjs's numbers, what is left in order), report and end now. Unchecked work stays in the worktree, named in the handoff.`
-    : `STOP: ${at}, past it. Start no new job: write the lead handoff (~/.cache/terra-handoff/<topic>-lead.md: what runs, what landed, ` +
-        `what is next), then ask the developer to /clear and continue from it.`;
+  return (
+    `STOP: ${at}, past it. Do not read another file or start another step: commit what is checked, write the handoff (what landed, ` +
+    `job.mjs's numbers, what is left in order), report and end now. Unchecked work stays in the worktree, named in the handoff.`
+  );
 }
 
 // Decides whether to nudge, given the context now and the level last seen; returns the
 // level to keep and the text to send, if any. A crossing nudges once; a context that
 // shrinks (after compaction) is nudged again when it grows back past a threshold.
 export function decide(context, seen, bound = DEFAULT_BOUND, { job = false } = {}) {
-  const now = level(context, bound);
+  const now = level(context, bound, { job });
   return { keep: now, text: now > seen ? nudgeText(context, bound, { job }) : null };
 }
 

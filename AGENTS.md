@@ -44,7 +44,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 
 Tokens are a constraint of the work (D627): every turn rereads the whole context.
 
-- **The bound is the hook's**: it warns at 80% of yours (a job's from its brief, else 150k), then says STOP: land what is checked, write the handoff with `job.mjs`'s numbers, end. A wait past an hour hands off (D397).
+- **Efficiency, not a size**: the hook holds a job to its brief's bound (warns at 80%, then STOP: land what is checked, write the handoff with `job.mjs`'s numbers, end); any other session has no bound: it keeps turns cheap and its handoff current. A wait past an hour hands off (D397).
 - **Read little**: grep or line range; long output to a file, its tail read; finding to `finder`, checks to `runner` (D391); a coordinator holds no file dumps.
 - **A job is a `job` agent** (D538), isolation "worktree", briefed with the task, skill, bound and handoff files; mechanical ones at medium effort.
 - **Docs short**: intent, constraints, reasons; one line a rule with its decision; the docs check holds their sizes.
