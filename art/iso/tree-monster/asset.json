@@ -40,9 +40,9 @@
       "note": "scaled 3.348, turned 0 deg, in place walk run, cut attack, looped run on 0.41-1.04 s (ends 5.6% apart before closing), centred run (body 54% of height off)"
     },
     "check": {
-      "at": "2026-11-06T12:14:16.836Z",
+      "at": "2026-11-08T15:56:19.657Z",
       "credits": 0,
-      "minutes": 0.0019,
+      "minutes": 0.0020166666666666666,
       "passed": 30,
       "of": 30,
       "failed": [],
@@ -54,10 +54,10 @@
         "run": 0.63
       },
       "speeds": {
-        "walk": 1.31,
+        "walk": 1.27,
         "run": 4.91
       },
-      "triangles": 23694,
+      "triangles": 11681,
       "height": 3.201,
       "note": "passed 30 of 30"
     },

@@ -46,9 +46,9 @@
       "note": "scaled 2.994, turned -1 deg, in place walk run, cut attack, looped run on 0.41-1.04 s (ends 5.4% apart before closing), centred run (body 49% of height off)"
     },
     "check": {
-      "at": "2026-11-08T15:39:59.784Z",
+      "at": "2026-11-08T15:56:19.209Z",
       "credits": 0,
-      "minutes": 0.0019833333333333335,
+      "minutes": 0.00185,
       "passed": 30,
       "of": 30,
       "failed": [],

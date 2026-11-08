@@ -86,7 +86,7 @@
     // iso-hero films' foes); the second in the clearing south past the camp's gap (about
     // (11, 23)); the third west of it in the south-west meadow (about (-10, 25)), each 17 to
     // 20 m on from where the last is fought, so it stands until he comes within mobs.rs
-    // `WAKE` and a breather lies between. `walk` is the ledger's speeds.walk.
+    // `WAKE` and a breather lies between. `walk` is the ledger's speeds.walk, held by tools/iso-art/roster.test.ts.
     // `tone` darker than the still's (`bodies`): at those the tree monster stood 0.9 L* and
     // the treant 5.7 L* lighter than a 10 px ring about them; at 0.12 2.5 darker and 2.9
     // lighter (play frame 140, iso-forest-demo j8). In the open meadow 0.12 stood packs 1 and
@@ -112,13 +112,13 @@
     // crown, took that slot in j4: treant-c's sawn-flat top read as a stump from above (route
     // frame 200, blind pair clear). Walk 0.71, its planted foot's speed.
     foes: [
-        (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 1.06, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65),
+        (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 0.96, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65),
         (model: "models/iso/treant-d.glb", at: (-7.0, -3.0), walk: 0.71, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65),
-        (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.31, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.8),
-        (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.31, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.8),
-        (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 1.06, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.65),
-        (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.9, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.65),
-        (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.31, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.8),
+        (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.27, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.8),
+        (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.27, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.8),
+        (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 0.96, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.65),
+        (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.84, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.65),
+        (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.27, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.8),
     ],
     // The staged fight's effects (biomes/effects/, kit/effects.rs). The hit's spark grown to read
     // at the route's 10 m camera (iso-forest-demo j26): as the preset is, a blow's burst was 15

@@ -41,9 +41,9 @@
       "note": "the game's skeleton and clips: idle=Idle_Loop walk=Walk_Loop run=Jog_Fwd_Loop attack=Punch_Cross hit=Hit_Chest death=Death01, 28 others dropped, scaled 1.000"
     },
     "check": {
-      "at": "2026-11-08T07:39:42.327Z",
+      "at": "2026-11-08T15:56:20.434Z",
       "credits": 0,
-      "minutes": 0.0011666666666666668,
+      "minutes": 0.001,
       "passed": 30,
       "of": 30,
       "failed": [],
@@ -56,8 +56,8 @@
         "death": 2.38
       },
       "speeds": {
-        "walk": 1.43,
-        "run": 5.18
+        "walk": 1.34,
+        "run": 4.73
       },
       "triangles": 9872,
       "height": 1.8,
