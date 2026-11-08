@@ -548,6 +548,9 @@ fn hostile(
 const BIRD_IDLES: f32 = 0.1;
 const BIRD_FEEDS: f32 = 0.3;
 const BIRD_FLIGHT_M: (f32, f32) = (12.0, 40.0);
+/// Of a bird's choices past standing and feeding, the share that are to a stone's top, where
+/// one stands near.
+const ONTO_A_STONE: f32 = 0.4;
 
 /// Of a bird's flights with a player about, the share that go past them; and how far off the
 /// player may be for it, metres.
@@ -621,6 +624,18 @@ fn settle(
         way = way.reject_from(toward) * 2.0 - way;
     }
     let here = s.here;
+    // Onto a stone that stands clear of the grass, where one is near: a bird on the ground
+    // of a meadow is under the grass and not seen (D647).
+    if bird
+        && dice.unit() < ONTO_A_STONE
+        && let Some(to) = around.stone_perch(here, way, (3.0, BIRD_FLIGHT_M.1), dice)
+    {
+        return State::Fly {
+            from: here,
+            to,
+            along: 0.0,
+        };
+    }
     match about.moves {
         // Up into a crown now and then, among trees.
         // Past a player who is about but not near: across in front of them and on, to come
@@ -723,8 +738,8 @@ fn up_high(
     })
 }
 
-/// A flier is in a crown once it is so far over the ground.
-pub const ROOSTS_OVER_M: f32 = 1.5;
+/// A flier is perched, in a crown or on a stone, once it is so far over the ground.
+pub const ROOSTS_OVER_M: f32 = 0.5;
 /// One sitting up off the ground lets someone come this share of its flight distance.
 const ROOSTING_LETS: f32 = 0.8;
 

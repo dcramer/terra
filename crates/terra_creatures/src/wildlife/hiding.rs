@@ -38,6 +38,17 @@ pub struct Stone {
     half: Vec3,
 }
 
+impl Thickets {
+    /// The tops of the stones filed within so far of a place: where a bird sits in plain
+    /// sight, clear of the grass.
+    pub fn stone_tops(&self, here: Vec3, reach: f32) -> impl Iterator<Item = Vec3> + '_ {
+        self.stones.near(here, reach).map(|(_, stone)| {
+            let top = stone.middle + Vec3::Y * stone.half.y;
+            stone.to_stone.inverse().transform_point3(top)
+        })
+    }
+}
+
 /// A thicket's leaves reach at most so far from where it is filed.
 const THICKET_REACH_M: f32 = 6.0;
 /// A stone reaches at most so far from its middle; a bigger one stops a walker and is among
