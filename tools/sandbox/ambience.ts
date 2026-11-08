@@ -18,14 +18,14 @@ const SEED = args.includes("--seed") ? args[args.indexOf("--seed") + 1] : "3";
 const ABOUT = 0.3;
 const GONE = 0.05;
 const INSECTS = ["White butterflies", "Brown butterflies", "Bees", "Midges", "Dragonflies", "Fireflies"];
-const BIRDS = ["Birds overhead", "Swallows", "Pipits"];
+const BIRDS = ["Birds overhead"];
 /// The small animals of the first realm (data/creatures.ron), any of which may stand near.
-const SMALL = ["Chaffinch", "House sparrow", "Feral pigeon", "Red squirrel", "Brown hare", "Mallard"];
+const SMALL = ["Chaffinch", "Wood pigeon", "House sparrow", "Feral pigeon", "Red squirrel", "Brown hare", "Mallard"];
 
 type Drift = { kinds: { name: string; seen: number }[] };
 
 /// What drifts, and how many small animals stand near, in a new world on a date at an hour.
-async function about(date: string, hour: number): Promise<{ seen: Map<string, number>; small: string[] }> {
+async function about(date: string, hour: number): Promise<{ seen: Map<string, number>; small: string[]; wild: { birds: number; flying: number } }> {
   try {
     await start(["--experiment", "play", "--fresh", "--save", "shots/ambience.ron", "--radius", "2000", "--seed", SEED, "--date", date, "--time", String(hour), "--offscreen", "--mute"], { realTime: true, release: true });
     await waitUntil("the world to be played", async () => (await call("title.state")) as { screen: string }, (now) => now.screen === "Playing", 600);
@@ -37,7 +37,8 @@ async function about(date: string, hour: number): Promise<{ seen: Map<string, nu
       const found = (await call("sandbox.find", { name })) as unknown[];
       if (found.length > 0) small.push(`${found.length} ${name}`);
     }
-    return { seen: new Map(drift.kinds.map((kind) => [kind.name, kind.seen])), small };
+    const wild = (await call("wildlife.state")) as { birds: number; flying: number };
+    return { seen: new Map(drift.kinds.map((kind) => [kind.name, kind.seen])), small, wild };
   } finally {
     await stop().catch(() => undefined);
   }
@@ -51,6 +52,8 @@ try {
   if (missing.length > 0) throw new Error(`on a July day at one o'clock ${missing.join(" and ")} are not about (${said(day.seen, INSECTS)}): each kind of assets/data/drift.ron is seen where its place, season_c, air_c and hours are`);
   if (!BIRDS.some((name) => (day.seen.get(name) ?? 0) >= ABOUT)) throw new Error(`on a July day no bird is on the wing (${said(day.seen, BIRDS)})`);
   if ((day.seen.get("Fireflies") ?? 0) > GONE) throw new Error(`fireflies are out at one in the afternoon (${day.seen.get("Fireflies")})`);
+  const life = day.wild;
+  if (!(life.birds >= 24) || !(life.flying >= 3)) throw new Error(`on a July day ${life.birds} birds are within 150 m of the start and ${life.flying} of them on the wing, where dozens should be about and some always flying (D647; wildlife.state; data/creatures.ron's small birds, creatures::mind's BIRD_ shares)`);
   if (day.small.length === 0) throw new Error(`on a July day none of ${SMALL.join(", ")} stands near the start: the wildlife is put out in cells as a player nears (data/creatures.ron's lives)`);
 
   const night = await about("7-10", 22);
@@ -62,7 +65,7 @@ try {
   const hardy = INSECTS.filter((name) => (winter.seen.get(name) ?? 0) > GONE);
   if (hardy.length > 0) throw new Error(`on a January day ${hardy.join(" and ")} fly (${said(winter.seen, INSECTS)}): an insect needs its air_c of warmth`);
 
-  console.log(`✓ ambience: on a July day ${said(day.seen, ["White butterflies", "Brown butterflies", "Bees", ...BIRDS])}, with ${day.small.join(", ")} near; that night Fireflies ${night.seen.get("Fireflies")} and the day's gone; on a January day no insect flies`);
+  console.log(`✓ ambience: on a July day ${said(day.seen, ["White butterflies", "Brown butterflies", "Bees", ...BIRDS])}, with ${day.small.join(", ")} near, ${day.wild.birds} birds in all and ${day.wild.flying} on the wing; that night Fireflies ${night.seen.get("Fireflies")} and the day's gone; on a January day no insect flies`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 }

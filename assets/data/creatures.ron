@@ -170,7 +170,7 @@
     ),
     (
         name: "Chaffinch",
-        model: ("models/creatures/Chaffinch.glb", 1.0),
+        model: ("models/creatures/Chaffinch.glb", 1.6),
         clips: (idle: "Idle", walk: "Hop", run: "Hop", eat: "Peck", attack: "Idle", death: "Death", fly: "Fly", paces: (0.23, 0.23)),
         health: 1.0,
         walk_mps: 0.3,
@@ -195,7 +195,7 @@
     ),
     (
         name: "House sparrow",
-        model: ("models/creatures/Sparrow.glb", 1.0),
+        model: ("models/creatures/Sparrow.glb", 1.6),
         clips: (idle: "Idle", walk: "Hop", run: "Hop", eat: "Peck", attack: "Idle", death: "Death", fly: "Fly", paces: (0.227, 0.227)),
         health: 1.0,
         walk_mps: 0.3,

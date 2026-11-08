@@ -21,7 +21,8 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 | Fireflies on a warm night | Shader speck with a light, built | 300 | About seven, before their number was raised |
 | Chaffinches | Model, built; 24 a hectare in woods and open ground, a quarter of them on the wing at a time | 56 within 110 m | **None**: those ahead are 30 to 50 m off, 3 to 5 pixels each at 12 cm; the near ones are in the grass |
 | Sparrows, pigeons, mallards, herons, ptarmigan | Models, built | By their haunts | Not looked at |
-| Swallows, pipits, birds far overhead | Shader cards (D379) | A few flocks | Nearly none: a few pixels each. **In question**: a bird is a model |
+| Wood pigeons | Model (the pigeon's), built; 5 a hectare in woods and open ground | 13 within 150 m | One on the ground by the player in six frames |
+| Birds far overhead | Shader cards (D379), kept as the far form until a model stands in for them | A few flocks | A few, small. The swallows and pipits, cards flying near, are taken out: a bird is a model |
 | Fish | Nothing | None | None |
 
 ## What to build, in order
@@ -33,9 +34,15 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 5. **Their sound**: birdsong by hour and place, insects' hum, a splash: with the ambient beds of [audio.md](audio.md).
 6. **Each realm its own**: the industrial realm's small life is not chosen (D642).
 
+## Taken as working assumptions (the agent's, 2026-11-08; the developers overrule)
+
+- A small bird is drawn 1.6 times life size (finch, sparrow), as a butterfly is drawn at 10 cm: at life size neither is seen past a few metres.
+- Half of a bird's flights go past a player who is about; larger kinds (the wood pigeon) carry the middle distance.
+- The far birds overhead stay cards until a model stands in for them; no card bird flies near.
+- Fish, when made: a small schooling fish, a trout and a pike, for the eye only in v0. Not made: each model is some 50 credits, the developers' to spend.
+
 ## Open, for the developers
 
-- How birds are to be seen: flights drawn across the player's view within 20 m, larger kinds (pigeons, crows, jays), a small bird drawn larger than life, or all three.
+- Whether those assumptions stand.
 - Whether a butterfly, the largest thing drawn by a shader, may stay a card or should be a model too.
 - Which fish, and whether they may be caught: this proposal has them for the eye only.
-- Whether the far cards may stay until their models exist, or go now.
