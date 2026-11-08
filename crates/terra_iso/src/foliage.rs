@@ -25,6 +25,8 @@ pub struct Foliage {
     /// x: how far each texel of the card goes to its own grey before the vertex colour
     /// tints it, 0 (as it is) to 1 (a plant set's `grey`, kit/scatter.rs).
     pub tone: Vec4,
+    /// xyz: the camera; w: play's near fade (m, `Near`), 0 off (the loop's stills and films).
+    pub eye: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
@@ -58,6 +60,40 @@ const HOLE: f32 = 2.8;
 /// One the wood opens about as about the party, not one of it (a scene's fighters).
 #[derive(Component)]
 pub struct Seen;
+
+/// Play's cut (demo/occlude.rs): a cuttable leaf or bark nearer the camera than this (m)
+/// dithers out, so no bough nears the lens; and the hole about the hero opens from a hand's
+/// breadth before him, not a metre. Absent, the stills' and films' cut is as it was.
+#[derive(Resource, Clone, Copy)]
+pub struct Near(pub f32);
+
+/// How much of a cuttable surface at `world` the hole drops (0 kept, 1 gone), the twin of
+/// foliage.wesl's `cut` without its dither: `party` the hole's middles, `axes` the camera's
+/// right, up and forward, `eye` its place and play's near fade (0 off).
+pub fn fade(world: Vec3, party: &[Vec3], axes: [Vec3; 3], eye: Vec4) -> f32 {
+    let smooth = |e0: f32, e1: f32, x: f32| {
+        let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let play = eye.w > 0.0;
+    let (lo, hi) = if play { PLAY_BEFORE } else { (0.4, 1.4) };
+    let mut f: f32 = 0.0;
+    for m in party {
+        let d = world - *m;
+        let s = Vec2::new(d.dot(axes[0]), d.dot(axes[1])).length();
+        let before = -d.dot(axes[2]);
+        f = f.max((1.0 - smooth(HOLE * 0.72, HOLE, s)) * smooth(lo, hi, before));
+    }
+    if play {
+        let near = world.distance(eye.xyz());
+        f = f.max(1.0 - smooth(eye.w * 0.7, eye.w, near));
+    }
+    f
+}
+
+/// Play's ramp of the hole along the view (m before the hero's middle): wholly open from
+/// 0.45, so a trunk at his shoulder is cut, not only one a metre and more before him.
+const PLAY_BEFORE: (f32, f32) = (0.05, 0.45);
 
 pub fn plugin(app: &mut App) {
     embedded_asset!(app, "shaders/foliage.wesl");
@@ -105,10 +141,12 @@ fn breathe(
     >,
     land: Res<crate::terrain::Land>,
     frames: Res<bevy::diagnostic::FrameCount>,
+    near: Option<Res<Near>>,
 ) {
     let Ok(cam) = camera.single() else {
         return;
     };
+    let eye = cam.translation().extend(near.map_or(0.0, |n| n.0));
     // The party, and the camp fire they gather at.
     let mut at = [Vec4::ZERO; 6];
     let fire = crate::scene::FIRE;
@@ -138,6 +176,7 @@ fn breathe(
             f.party = at;
             // The frame, for the hole's dither to turn each frame and TAA to average.
             f.leaf.w = (frames.0 % 64) as f32;
+            f.eye = eye;
         }
     }
 }

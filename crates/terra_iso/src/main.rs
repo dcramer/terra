@@ -8,6 +8,7 @@
 mod camera;
 mod camp;
 mod command;
+mod demo;
 mod foliage;
 mod forest;
 mod hero;
@@ -262,7 +263,7 @@ fn main() {
         app.add_plugins(kit::reflect::plugin);
     }
     if args.play {
-        app.add_plugins(play::plugin);
+        app.add_plugins((play::plugin, demo::plugin));
     }
     if args.layout == Some(Layout::Ruin) {
         app.add_plugins((mipmaps::plugin, rim::plugin, ruin::plugin))

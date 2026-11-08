@@ -37,6 +37,8 @@ struct Foliage {
     // x: how far each texel of the card goes to its own grey before the vertex colour tints
     // it (a plant set's `grey`, 0 leaves the card as it is).
     tone: vec4<f32>,
+    // xyz: the camera; w: play's near fade (m), 0 off (foliage.rs `Near`).
+    eye: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -88,6 +90,11 @@ fn cut(world: vec3<f32>, frag: vec2<f32>) {
         return;
     }
     let r = foliage.leaf.z;
+    // Play (foliage.rs `fade`, its twin, and `PLAY_BEFORE`): open from a hand's breadth
+    // before the hero, and everything near the lens faded.
+    let play = foliage.eye.w > 0.0;
+    let lo = select(0.4, 0.05, play);
+    let hi = select(1.4, 0.45, play);
     var fade = 0.0;
     for (var i = 0u; i < 6u; i++) {
         let m = foliage.party[i];
@@ -97,8 +104,12 @@ fn cut(world: vec3<f32>, frag: vec2<f32>) {
         let d = world - m.xyz;
         let s = length(vec2<f32>(dot(d, foliage.right.xyz), dot(d, foliage.up.xyz)));
         let before = -dot(d, foliage.forward.xyz);
-        let f = (1.0 - smoothstep(r * 0.72, r, s)) * smoothstep(0.4, 1.4, before);
+        let f = (1.0 - smoothstep(r * 0.72, r, s)) * smoothstep(lo, hi, before);
         fade = max(fade, f);
+    }
+    if play {
+        let near = distance(world, foliage.eye.xyz);
+        fade = max(fade, 1.0 - smoothstep(foliage.eye.w * 0.7, foliage.eye.w, near));
     }
     if fade > interleaved_gradient_noise(frag, u32(foliage.leaf.w)) {
         discard;
