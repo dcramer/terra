@@ -8,6 +8,18 @@
         "art/iso/scavenger/concept.png"
       ],
       "note": "look at art/iso/scavenger/concept.png"
+    },
+    "model": {
+      "at": "2026-11-08T07:21:37.794Z",
+      "credits": 55,
+      "minutes": 2.1632166666666666,
+      "project": "319a8800-9363-4e74-a8ff-2d18650ac6d1"
+    },
+    "rig": {
+      "at": "2026-11-08T07:21:58.078Z",
+      "credits": 20,
+      "minutes": 0.33068333333333333,
+      "note": "rigged as biped"
     }
   },
   "name": "scavenger",
@@ -15,5 +27,7 @@
   "theme": "a sun-baked desert junk lot of rusted cars and broken concrete",
   "description": "A gaunt wasteland scavenger in layered sun-bleached cotton rags under a hooded dust cloak of patched sackcloth, brass welding goggles pushed up on the hood, a frayed khaki scarf over the mouth, fingerless leather gloves, a frame backpack strapped tight to the back and stuffed with scrap metal, coiled copper wire and a dented jerrycan, holding a long iron crowbar in the right hand",
   "body": "biped",
-  "height": 1.72
+  "height": 1.72,
+  "project": "319a8800-9363-4e74-a8ff-2d18650ac6d1",
+  "rig": "biped"
 }
