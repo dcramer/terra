@@ -12,7 +12,9 @@
 #   4. check its proportions against a real man's (proportions.py)
 # Writes tools/characters/out/NAME.glb, rig-check-NAME.json, NAME-sheet.png and NAME-game.glb.
 # The conversion reads SMOOTH (weight smoothing passes, default 2), TRIANGLES (a triangle budget,
-# default Tripo's as made) and CREATURE=1 (keep the design's hands and feet, not a person's).
+# default Tripo's as made) and CREATURE=1 (keep the design's hands and feet, not a person's);
+# the export reads TEXTURES (an image budget in pixels, default as made, D188): an iso crowd
+# figure's 1024 is cut here, after the conversion, never by Tripo's export (it breaks the rig).
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 name=$1 height=$2
@@ -47,7 +49,7 @@ fi
 $blender $here/lift.py | grep -E "^LIFT|Error" || true
 $blender $here/rig_check.py "$rig" | grep RIGCHECK || true
 $blender $here/rig_render.py "$rig" "$name-sheet" | grep -E "SHEET|Error" || true
-$blender $here/export_character.py "$rig" "$here/out/$name-game.glb" | grep -E "SOCKETS|RETARGET|EXPORTED|Error" || true
+$blender $here/export_character.py "$rig" "$here/out/$name-game.glb" ${TEXTURES:+--textures=$TEXTURES} | grep -E "SOCKETS|RETARGET|EXPORTED|TEXTURE|Error" || true
 if [ -n "$theirs" ]; then node $here/intact.ts "$here/out/$name-game.glb"; fi
 # Its reach, fingertips and crotch against a real man's (D593).
 $blender $here/proportions.py "$here/out/$name-game.glb" | grep -E "^PROPORTIONS|Error" || true
