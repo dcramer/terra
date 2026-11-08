@@ -26,8 +26,11 @@
 //!   specular by one intensity, so the capture is filtered twice, as is and lowered, and the
 //!   view lights with the first's specular map and the second's diffuse.
 //!
-//! Next (the lane's handoff): several probes placed by the biome file as Bevy `LightProbe`s
-//! with parallax boxes, then screen-space reflections if they work at the ortho camera.
+//! - `bounds` boxes it (uc-reflect j4): a Bevy `LightProbe` at `at`, parallax-corrected to
+//!   its box, lights in place of the view.
+//!
+//! Next (the lane's handoff): several boxed probes placed by the biome file. Not
+//! screen-space reflections: Bevy 0.20's are deferred-only and march a perspective depth.
 
 use super::biome::Biome;
 use super::light::{Light, Sky};
@@ -37,7 +40,7 @@ use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{ClearColorConfig, Exposure, RenderTarget};
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::diagnostic::FrameCount;
-use bevy::light::{EnvironmentMapLight, GeneratedEnvironmentMapLight};
+use bevy::light::{EnvironmentMapLight, GeneratedEnvironmentMapLight, LightProbe};
 use bevy::prelude::*;
 use bevy::render::gpu_readback::{Readback, ReadbackComplete, ReadbackOnce};
 use bevy::render::render_resource::{
@@ -72,7 +75,31 @@ pub struct Reflections {
     /// frame after it came up, twice (uc-reflect j2).
     #[serde(default)]
     pub diffuse: Option<f32>,
+    /// A parallax box (m, its full x, y, z, centred on `at`; uc-reflect j4): the capture
+    /// lights through a Bevy `LightProbe` of that size instead of the view, and each
+    /// reflection ray is traced to the box's walls before the cube is read (Bevy's
+    /// `ParallaxCorrection::Auto`; Unreal's Box Reflection Capture, Lagarde and Zanuttini,
+    /// "Local image-based lighting with parallax-corrected cubemaps", 2012), so a front or
+    /// a lamp mirrors in the paving and the car's paint where it stands, not as if
+    /// infinitely far. Outside the box nothing is lit by it. None: the view's map, unboxed.
+    #[serde(default)]
+    pub bounds: Option<(f32, f32, f32)>,
 }
+
+impl Reflections {
+    /// The probe's transform when it is boxed: at `at`, scaled to the box (Bevy's light
+    /// probe is a unit cube about its origin).
+    pub fn boxed(&self) -> Option<Transform> {
+        self.bounds.map(|(x, y, z)| {
+            Transform::from_translation(Vec3::new(self.at.0, self.at.1, self.at.2))
+                .with_scale(Vec3::new(x, y, z))
+        })
+    }
+}
+
+/// The boxed probe (`Reflections::bounds`), which lights in place of the view.
+#[derive(Component)]
+struct Probe;
 
 /// A copy of a captured cube with every texel's colour times `k`.
 pub fn scaled(cube: &Image, k: f32) -> Image {
@@ -136,6 +163,7 @@ fn join(
     biome: Option<Res<Biome>>,
     halves: Query<(&Half, &EnvironmentMapLight)>,
     main: Query<(Entity, Option<&Exposure>), (With<MainCamera>, Without<EnvironmentMapLight>)>,
+    probe: Query<Entity, (With<Probe>, Without<EnvironmentMapLight>)>,
 ) {
     let Some(r) = biome.as_ref().and_then(|b| b.reflect) else {
         return;
@@ -155,7 +183,15 @@ fn join(
         return;
     };
     let k = exposure.copied().unwrap_or_default().exposure();
-    commands.entity(camera).insert(EnvironmentMapLight {
+    let target = if r.bounds.is_some() {
+        let Ok(p) = probe.single() else {
+            return;
+        };
+        p
+    } else {
+        camera
+    };
+    commands.entity(target).insert(EnvironmentMapLight {
         diffuse_map,
         specular_map,
         intensity: r.gain / k,
@@ -319,6 +355,18 @@ fn read(
     });
     cube.texture_descriptor.usage |= TextureUsages::COPY_SRC | TextureUsages::TEXTURE_BINDING;
     let k = exposure.copied().unwrap_or_default().exposure();
+    // Boxed: a light probe of its own lights in place of the view.
+    let target = match r.boxed() {
+        Some(at) => commands
+            .spawn((
+                Name::new("Reflection probe"),
+                LightProbe::default(),
+                at,
+                Probe,
+            ))
+            .id(),
+        None => camera,
+    };
     match r.diffuse {
         // Two filterings on entities of their own (Bevy's generator makes an
         // `EnvironmentMapLight` on whatever holds the `GeneratedEnvironmentMapLight`, and only a
@@ -339,7 +387,7 @@ fn read(
         }
         _ => {
             commands
-                .entity(camera)
+                .entity(target)
                 .insert(GeneratedEnvironmentMapLight {
                     environment_map: images.add(cube),
                     intensity: r.gain / k,
@@ -415,6 +463,26 @@ mod tests {
         let r: Reflections =
             crate::kit::parse("(at: (0.0, 1.5, 0.0))", "r.ron", "reflect.rs").unwrap();
         assert_eq!((r.gain, r.size, r.sky, r.diffuse), (1.0, 256, None, None));
+        assert_eq!(r.boxed(), None);
+    }
+
+    /// A boxed probe is Bevy's unit-cube light probe scaled to the box about the capture's
+    /// point, so a point on the box's wall is half its size from `at`.
+    #[test]
+    fn a_boxed_probe_spans_its_box_about_the_capture() {
+        let r: Reflections = crate::kit::parse(
+            "(at: (1.0, 1.5, -0.5), bounds: (24.0, 16.0, 14.0))",
+            "r.ron",
+            "reflect.rs",
+        )
+        .unwrap();
+        let t = r.boxed().unwrap();
+        let corner = t.transform_point(Vec3::splat(0.5));
+        assert!(
+            (corner - Vec3::new(13.0, 9.5, 6.5)).length() < 1e-5,
+            "{corner}"
+        );
+        assert_eq!(t.translation, Vec3::new(1.0, 1.5, -0.5));
     }
 
     /// A captured cube, each face one colour.
