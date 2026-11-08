@@ -41,6 +41,11 @@ pub struct Realm {
     pub sand: Option<Rgb>,
     #[serde(default)]
     pub ground_cover: Option<f32>,
+    /// How far round the hue circle its plants' own colours are turned, in radians
+    /// (`Tweaks::foliage_hue`): the leaves and the floor's plants, which the ground's colours
+    /// do not reach.
+    #[serde(default)]
+    pub plants_hue: Option<f32>,
     /// The share of the first realm's trees and undergrowth that grow here, 0 to 1.
     #[serde(default)]
     pub plants: Option<f32>,
@@ -111,6 +116,9 @@ impl Realm {
         if let Some(cover) = self.ground_cover {
             tweaks.ground_cover = cover;
         }
+        if let Some(turn) = self.plants_hue {
+            tweaks.foliage_hue = turn;
+        }
     }
 }
 
@@ -168,6 +176,9 @@ mod tests {
         let realms = Realms::read();
         assert_eq!(realms.beyond("world"), "industrial");
         assert_eq!(realms.beyond("industrial"), "world");
+        // The first realm's plants keep their own colours; the industrial one's are turned.
+        assert_eq!(realms.of("world").unwrap().plants_hue, None);
+        assert!(realms.of("industrial").unwrap().plants_hue.is_some());
         // A kind the data does not have leads to its own kind, and sets nothing.
         assert_eq!(realms.beyond("yard"), "yard");
         assert!(realms.of("yard").is_none());
