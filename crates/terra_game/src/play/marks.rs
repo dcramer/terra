@@ -14,6 +14,8 @@ use serde::Deserialize;
 use std::collections::BTreeSet;
 use terra_walker::IsLocalPlayer;
 
+mod shown;
+
 /// The marks a character bears, by key.
 #[derive(Component, Default, Clone, Debug, PartialEq)]
 pub struct Marks(pub BTreeSet<String>);
@@ -25,6 +27,10 @@ pub struct Kind {
     pub name: String,
     #[serde(default)]
     pub opens_gates: bool,
+    /// Its glyph, shown on the bearer's arm (`shown`): a picture among the assets, white on
+    /// nothing (`tools/characters/marks.ts`); none, and it is not shown.
+    #[serde(default)]
+    pub shown: Option<String>,
 }
 
 /// Every kind of mark.
@@ -49,6 +55,14 @@ impl Kinds {
             .find(|kind| kind.opens_gates && marks.0.contains(&kind.key))
     }
 
+    /// The glyph a bearer shows on their arm: that of the first mark they bear that has one.
+    pub fn shown(&self, marks: &Marks) -> Option<&str> {
+        self.0
+            .iter()
+            .filter(|kind| marks.0.contains(&kind.key))
+            .find_map(|kind| kind.shown.as_deref())
+    }
+
     /// Imprints a mark, by key: one of the kinds there are, or an error naming them.
     pub fn imprint(&self, marks: &mut Marks, key: &str) -> Result<&Kind, String> {
         let Some(kind) = self.get(key) else {
@@ -66,6 +80,7 @@ impl Kinds {
 pub fn plugin(app: &mut App) {
     app.insert_resource(Kinds::read())
         .register_required_components::<Player, Marks>();
+    shown::plugin(app);
     terra_world::remote::method(app, "marks.give", give);
     terra_world::remote::method(app, "marks.state", state);
 }

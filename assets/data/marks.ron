@@ -4,6 +4,8 @@
 //   name         what a player is told it is
 //   opens_gates  a marked player opens a shut gate, which then stays open for everyone in
 //                that world
+//   shown        its glyph on the bearer's forearm, a picture among the assets drawn by
+//                tools/characters/marks.ts; left out, the mark is not shown
 [
-    (key: "troll", name: "the troll's mark", opens_gates: true),
+    (key: "troll", name: "the troll's mark", opens_gates: true, shown: Some("models/character/marks/troll.png")),
 ]
