@@ -183,15 +183,27 @@ fn main() {
         )
         .insert_resource(args.clone())
         .insert_resource(ClearColor(Color::BLACK))
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: window,
-            exit_condition: if args.shot.is_some() {
-                ExitCondition::DontExit
-            } else {
-                ExitCondition::OnPrimaryClosed
-            },
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: window,
+                    exit_condition: if args.shot.is_some() {
+                        ExitCondition::DontExit
+                    } else {
+                        ExitCondition::OnPrimaryClosed
+                    },
+                    ..default()
+                })
+                // A still or film compiles each pipeline in the frame that asks for it, so
+                // what frame N shows never waits on the driver: compiled in the background,
+                // a mesh is skipped until its pipeline is ready, and on a cold shader cache
+                // (the first shot after a build) neon's paving was still black at frame 300
+                // (uc-infra j3: one of three noise shots, the rest of the frame alike).
+                .set(bevy::render::RenderPlugin {
+                    synchronous_pipeline_compilation: args.shot.is_some(),
+                    ..default()
+                }),
+        )
         .add_systems(Last, shoot);
     // A still runs on the film's fixed step too, so the same code gives the same still: in
     // real time the fires' flicker moved a still's p95 by 0.0025 between shots (iso-kit j1),
