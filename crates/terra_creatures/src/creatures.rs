@@ -330,10 +330,9 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             FixedUpdate,
             (
-                // Thought for and walked on the host alone (`net`).
-                (think, walk)
-                    .chain()
-                    .run_if(not(resource_exists::<terra_walker::net::link::Link>)),
+                // A joined game thinks for and walks its own alone, the small birds (D647);
+                // the host's, shown in it, are skipped by each.
+                (think, walk).chain(),
                 butcher,
             )
                 .in_set(Sim::World),
@@ -625,6 +624,10 @@ fn walk(
     memo.keep_within(GROUND_MEMO_MOST);
     let memo = &mut *memo;
     for (mut creature, mut at, detail) in &mut creatures {
+        // The host's, shown here: moved as it is told (`net`).
+        if creature.remote.is_some() {
+            continue;
+        }
         if !detail.moves() {
             continue;
         }

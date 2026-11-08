@@ -15,6 +15,11 @@ const CLEAR_OF_GRASS_M: f32 = 0.6;
 pub struct Perches(pub Vec<(Vec3, Vec3)>);
 
 impl Surroundings<'_, '_> {
+    /// Whether this is a joined game, the host's animals shown in it.
+    pub fn joined(&self) -> bool {
+        self.link.is_some()
+    }
+
     /// A spot on a ridge roughly the way given, between so near and so far across the ground:
     /// the one most that way, somewhere along it.
     pub fn perch(

@@ -14,6 +14,7 @@
 mod asked;
 mod census;
 mod perches;
+pub use census::own_to_each;
 pub use perches::Perches;
 mod groups;
 mod hiding;
@@ -167,9 +168,9 @@ pub fn plugin(app: &mut App) {
                 .chain()
                 .run_if(terra_world::instance::in_world)
                 .run_if(something_grows)
-                .run_if(wild_shown)
-                // A joined game puts out no animals of its own: the host's are shown (`net`).
-                .run_if(not(resource_exists::<terra_walker::net::link::Link>)),
+                // A joined game puts out its own small birds alone (D647: ambient life need
+                // not cross the network); the host's animals are shown (`net`).
+                .run_if(wild_shown),
         );
 }
 
@@ -276,6 +277,8 @@ pub struct Surroundings<'w, 's> {
     /// Where the sun is, for what stands in its light.
     sky: Option<Res<'w, SkyPath>>,
     clock: Res<'w, Clock>,
+    /// Present in a joined game, which puts out only what is its own.
+    link: Option<Res<'w, terra_walker::net::link::Link>>,
     /// The cameras drawing the world now, for what they see.
     eyes: Query<'w, 's, (&'static GlobalTransform, &'static Projection), With<MainCamera>>,
     /// The land's lattice points asked already, kept from run to run of the system asking.
@@ -607,8 +610,7 @@ fn populate(
         .collect();
     let viewers: Vec<Vec3> = moving.iter().map(|(_, at, _)| *at).collect();
     let near = |middle: Vec3, within: f32| viewers.iter().any(|v| v.distance(middle) < within);
-    let wild: Vec<_> = bestiary
-        .all()
+    let wild: Vec<_> = census::kinds_here(&bestiary, around.joined())
         .filter_map(
             |species| match (bestiary.get(species).lives, &bestiary.get(species).niche) {
                 (Lives::About { per_ha, group }, Some(niche)) => around

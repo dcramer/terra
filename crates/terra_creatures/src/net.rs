@@ -193,6 +193,7 @@ pub fn plugin(app: &mut App) {
 fn tell_creatures(
     mut host: ResMut<Host>,
     mut told: ResMut<ToldAs>,
+    bestiary: Res<Bestiary>,
     creatures: Query<(Entity, &Transform, &Creature)>,
 ) {
     if host.is_added() {
@@ -201,6 +202,10 @@ fn tell_creatures(
     told.1 = told.1.wrapping_add(1);
     let tick = told.1;
     for (entity, at, creature) in &creatures {
+        // The small birds are each game's own (D647), not told.
+        if crate::wildlife::own_to_each(creature.species, &bestiary) {
+            continue;
+        }
         let place = at.translation;
         let (act, blow) = (Act::of(creature.state), creature.blow);
         let new = !told.0.contains_key(&entity);
@@ -324,8 +329,9 @@ fn show(
     mut creatures: Query<(Entity, &mut Transform, &mut Creature, Option<&Remote>)>,
 ) {
     let Some(kinds) = kinds else { return };
-    for (entity, _, _, remote) in &creatures {
-        if remote.is_none() {
+    // An animal here that the host did not tell of is taken away, but this game's own.
+    for (entity, _, creature, remote) in &creatures {
+        if remote.is_none() && !crate::wildlife::own_to_each(creature.species, &bestiary) {
             commands.entity(entity).try_despawn();
         }
     }

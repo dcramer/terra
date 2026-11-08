@@ -66,7 +66,8 @@ async function pick(port: number, choice: string, enter = true) {
 }
 
 /// The kinds of animal looked for in a world.
-const KINDS = ["Wild boar", "Red squirrel", "Chaffinch", "Brown hare", "Red fox", "Roe deer", "Spider"];
+// The animals a host tells of; the small birds are each game's own (D647), not among them.
+const KINDS = ["Wild boar", "Red squirrel", "Brown hare", "Red fox", "Roe deer", "Spider"];
 const worlds = mkdtempSync(join(tmpdir(), "terra-join-"));
 // The friend's own folder: who they are is kept there (player.ron), so a game started anew
 // is the same player to the host.
@@ -216,7 +217,7 @@ try {
       await sleep(2);
     }
   }
-  if (!claimed) throw new Error("the host could not set down a claim stone in three tries (the hammer's menu: b, 2, enter, e held): what it was told is in its log");
+  if (!claimed) throw new Error(`the host could not set down a claim stone in three tries (the hammer's menu: b, 2, enter, e held); it was told: ${remote(host, "said", "--all", "--containing", "Notice:").trim().split("\n").slice(-4).join(" / ") || "nothing"}`);
   // What stands in a base stands in both games: the host's claim stone is in the friend's.
   const stones = (port: number) => (JSON.parse(remote(port, "call", "sandbox.find", JSON.stringify({ name: "Claim stone" }))) as { at: Place }[]).map((stone) => stone.at);
   const theirs = stones(host);
@@ -318,6 +319,10 @@ try {
     [seen, worst] = [shown.length, Math.max(...off)];
     return worst < 4;
   }, 60);
+  // The small birds are each game's own (D647): the friend's game has birds about, which
+  // the host did not tell it of.
+  const birds = (port: number) => (JSON.parse(remote(port, "call", "wildlife.state")) as { birds: number }).birds;
+  await until(`the friend's game has ${birds(friend)} birds about it and the host's ${birds(host)}: a joined game puts out its own small birds (wildlife::census::own_to_each), as ambient life does not cross the network`, () => birds(friend) >= 6 && birds(host) >= 6, 60);
   console.log(`✓ creatures are the host's: the friend's game shows ${seen} of the host's animals, each within ${worst.toFixed(1)} m of where the host has it`);
 
   // A creature's blow on a joined player is the host's to deal and the guest's game's to

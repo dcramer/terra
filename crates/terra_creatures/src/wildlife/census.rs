@@ -19,6 +19,19 @@ fn flies(species: Species, bestiary: &Bestiary) -> bool {
     matches!(bestiary.get(species).moves, Moves::Flies(_))
 }
 
+/// Whether a kind is each game's own, not the host's to tell: the small life that is there
+/// for the eye (D647), which is the birds.
+pub fn own_to_each(species: Species, bestiary: &Bestiary) -> bool {
+    flies(species, bestiary)
+}
+
+/// The kinds a game puts out itself: every kind, or in a joined game only its own.
+pub(super) fn kinds_here(bestiary: &Bestiary, joined: bool) -> impl Iterator<Item = Species> + '_ {
+    bestiary
+        .all()
+        .filter(move |species| !joined || own_to_each(*species, bestiary))
+}
+
 /// The wild animals about: the birds, and the rest, each against its own most.
 pub(super) struct About {
     birds: usize,

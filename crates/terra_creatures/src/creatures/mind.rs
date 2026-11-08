@@ -108,6 +108,10 @@ pub fn think(
     );
     flock.age();
     for (mut creature, at, detail) in &mut creatures {
+        // The host's, shown here: thought for there (`net`).
+        if creature.remote.is_some() {
+            continue;
+        }
         // Far from everyone it thinks less often, over the ticks it waited (D145).
         creature.lived += 1;
         let Some(dt) = detail.thinks(creature.lived, creature.turn(), tick) else {
