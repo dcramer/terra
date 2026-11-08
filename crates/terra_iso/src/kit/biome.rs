@@ -640,6 +640,10 @@ pub struct Life {
 pub struct Foe {
     pub model: String,
     pub at: (f32, f32),
+    /// Its walk clip's ground speed (m/s, the ledger's `speeds.walk`): a steered mob plays
+    /// its walk at its speed over this, so its feet do not slide (demo/mobs.rs).
+    #[serde(default = "one")]
+    pub walk: f32,
 }
 
 fn one() -> f32 {

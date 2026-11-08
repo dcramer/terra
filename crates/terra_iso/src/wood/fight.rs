@@ -27,8 +27,12 @@ const CAST: [(&str, &str, f32, bool, Vec2, Vec2); 4] = [
     ),
 ];
 
-pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
+pub fn spawn(mut commands: Commands, asset: Res<AssetServer>, args: Res<crate::Args>) {
     for (name, clip, at, once, place, face) in CAST {
+        // Play fights the biome's roster, walking in (demo/mobs.rs), not the still's cast.
+        if args.play && name != "knight" {
+            continue;
+        }
         let path = format!("models/iso/{name}.glb");
         let d = face - place;
         // The models face +Z.

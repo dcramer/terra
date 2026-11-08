@@ -79,6 +79,13 @@
         ripples: (fine: 0.7, broad: 3.0, steep: 0.05, calm: 0.9),
         streaks: (along: 0.06, across: 0.025, cell: 0.1, glitter: 0.08, gain: 0.0, key: 0.1, dash: 1.0),
     ),
+    // Play's mobs (demo/mobs.rs): the wood's three creatures 7 to 8 m off the hero, out of
+    // the trees on three sides, each walking to him; `walk` is the ledger's speeds.walk.
+    foes: [
+        (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 1.06),
+        (model: "models/iso/treant-b.glb", at: (-7.0, -3.0), walk: 0.9),
+        (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.31),
+    ],
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
 )

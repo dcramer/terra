@@ -3,14 +3,13 @@
 //! (D635). Each part its own module: `occlude` keeps the hero in view, `steer` walks the
 //! roster's foes to him so none is stuck.
 
+pub mod mobs;
 pub mod occlude;
-// Its plain part only so far, played by its test; the bodies take it next (mobs.rs).
-#[allow(dead_code)]
 pub mod steer;
 pub mod tally;
 
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins((occlude::plugin, tally::plugin));
+    app.add_plugins((occlude::plugin, tally::plugin, mobs::plugin));
 }
