@@ -7,7 +7,7 @@
 mod flame;
 pub(crate) mod hit;
 pub mod kit;
-mod mark;
+pub(crate) mod mark;
 pub(crate) mod slash;
 mod spell;
 

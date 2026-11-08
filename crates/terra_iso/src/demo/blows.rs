@@ -1,0 +1,347 @@
+//! The mobs' blows on the hero (iso-forest-demo; the developer's brief: "an interesting
+//! fight"): each swing of a mob's attack (mobs.rs) is told on the ground before it lands, a
+//! red splat under where it will fall glowing up over `TELL` before its hit, as the ARPGs
+//! telegraph a monster's blow (Diablo IV's, PoE 2's ground warnings), and lands once on its
+//! hit, judged by the sword set's own rule (terra_motion::moves' `judge`, the duel's): rolled
+//! through in the roll's tuck, taken on the shield held toward it, else full on him. A blow
+//! that lands or is blocked flinches him and plays the biome's hit effects at him (Cues, as
+//! strike.rs's land does); the flinch is laid after his moves and taken off in `First`, as
+//! strike.rs's show and settle do, so hero/ is untouched.
+
+use super::mobs::{self, Foe, Gait};
+use crate::hero::{Doing, HeroSystems, Kit};
+use crate::kit::effects::{Contact, Cues};
+use crate::play::{Fallen, Hero, in_arc};
+use crate::ruin::effects::hit::{FLINCH, flinch};
+use crate::ruin::effects::mark::{Decal, mark_image};
+use bevy::pbr::decal::{ForwardDecal, ForwardDecalMaterialExt};
+use bevy::prelude::*;
+use terra_motion::contact::guards;
+use terra_motion::moves::{MoveSet, Taken, judge};
+
+/// Where in its attack clip a mob's blow lands, as a share of the clip: a reading (no clip
+/// of the roster names its hit frame yet; a treant's slash comes down a little before half).
+const HIT: f32 = 0.45;
+/// How long before its hit a blow is told on the ground (s).
+const TELL: f32 = 0.5;
+/// The tell: how far ahead of the mob it lies (m), how wide at its full (m), its glow.
+const AHEAD: f32 = 1.5;
+const WIDE: f32 = 2.6;
+const EMBER: LinearRgba = LinearRgba::rgb(4.0, 1.3, 0.25);
+/// A blow on his shield flinches him this share of a full one.
+const ON_GUARD: f32 = 0.4;
+
+pub fn plugin(app: &mut App) {
+    app.init_resource::<Taking>()
+        .add_systems(First, settle)
+        .add_systems(
+            Update,
+            (tells, (land, show).chain())
+                .chain()
+                .after(HeroSystems::Act)
+                .after(mobs::gait),
+        );
+}
+
+/// A mob's tell: its decal and material, and the start of the last swing that landed.
+#[derive(Component)]
+struct Tell {
+    decal: Entity,
+    material: Handle<Decal>,
+    landed: f32,
+}
+
+#[derive(Component)]
+struct TellMark;
+
+/// His flinch: when the last blow on him came, from where, how hard, and the tilt laid.
+#[derive(Resource)]
+struct Taking {
+    at: f32,
+    away: Vec2,
+    strength: f32,
+    tilt: Quat,
+}
+
+impl Default for Taking {
+    fn default() -> Self {
+        Taking {
+            at: -10.0,
+            away: Vec2::Y,
+            strength: 0.0,
+            tilt: Quat::IDENTITY,
+        }
+    }
+}
+
+/// What a blow from `mob` facing `mob_face` does to the hero at `hero` facing `hero_face`,
+/// doing what `doing` says with his guard up `held_s`: none if he is out of its reach and
+/// arc, else the set's judgement (a mob's blow is never heavy).
+pub fn taken(
+    (mob, mob_face): (Vec2, Vec2),
+    (hero, hero_face): (Vec2, Vec2),
+    doing: &Doing,
+    held_s: f32,
+    set: &MoveSet,
+) -> Option<Taken> {
+    if !in_arc(mob, mob_face, hero) {
+        return None;
+    }
+    let from = (mob - hero).normalize_or(Vec2::Y);
+    let facing = guards(
+        Vec3::new(hero_face.x, 0.0, hero_face.y),
+        Vec3::new(from.x, 0.0, from.y),
+    );
+    let guard = doing.blocking(set).then_some(held_s);
+    Some(judge(
+        doing.invulnerable(set),
+        guard,
+        facing,
+        false,
+        set.parry_s,
+    ))
+}
+
+/// Each mob given its tell, hidden, once it stands in play.
+#[allow(clippy::type_complexity)]
+fn tells(
+    mut commands: Commands,
+    mut decals: ResMut<Assets<Decal>>,
+    mut images: ResMut<Assets<Image>>,
+    mobs: Query<Entity, (With<Foe>, With<Gait>, Without<Tell>)>,
+    mut texture: Local<Option<Handle<Image>>>,
+) {
+    for body in &mobs {
+        let texture = texture.get_or_insert_with(|| images.add(mark_image()));
+        let material = decals.add(Decal {
+            base: StandardMaterial {
+                base_color: Color::NONE,
+                base_color_texture: Some(texture.clone()),
+                emissive_texture: Some(texture.clone()),
+                alpha_mode: AlphaMode::Blend,
+                perceptual_roughness: 0.9,
+                ..default()
+            },
+            extension: ForwardDecalMaterialExt {
+                depth_fade_factor: 0.6,
+            },
+        });
+        let decal = commands
+            .spawn((
+                ForwardDecal,
+                TellMark,
+                MeshMaterial3d(material.clone()),
+                Transform::from_scale(Vec3::splat(WIDE)),
+                Visibility::Hidden,
+            ))
+            .id();
+        commands.entity(body).insert(Tell {
+            decal,
+            material,
+            landed: f32::NEG_INFINITY,
+        });
+    }
+}
+
+/// Each swing told on the ground as its hit nears, and landed on its hit, once.
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+fn land(
+    time: Res<Time>,
+    kit: Option<Res<Kit>>,
+    (mut cues, mut taking): (Option<ResMut<Cues>>, ResMut<Taking>),
+    mut mobs: Query<
+        (&Foe, &Gait, &Transform, &mut Tell, Has<Fallen>),
+        (Without<Hero>, Without<TellMark>),
+    >,
+    hero: Query<(&Transform, &Doing), (With<Hero>, Without<Foe>, Without<TellMark>)>,
+    mut marks: Query<
+        (&mut Transform, &mut Visibility),
+        (With<TellMark>, Without<Foe>, Without<Hero>),
+    >,
+    mut decals: ResMut<Assets<Decal>>,
+    mut guard_since: Local<Option<f32>>,
+) {
+    let (Some(kit), Ok((htr, doing))) = (kit, hero.single()) else {
+        return;
+    };
+    let now = time.elapsed_secs();
+    let set = &kit.set;
+    let held = if doing.blocking(set) {
+        now - *guard_since.get_or_insert(now)
+    } else {
+        *guard_since = None;
+        0.0
+    };
+    let him = htr.translation.xz();
+    let his_face = (htr.rotation * Vec3::Z).xz().normalize_or(Vec2::Y);
+    for (foe, gait, tr, mut tell, fallen) in &mut mobs {
+        let at = tr.translation.xz();
+        let face = (tr.rotation * Vec3::Z).xz().normalize_or(Vec2::Y);
+        let swing = gait.swinging(now).filter(|_| !fallen);
+        let hit_at = swing.map(|(start, len)| start + len * HIT);
+        // The tell: up over TELL before the hit, gone at it.
+        let k = hit_at
+            .filter(|h| now < *h && *h - now <= TELL)
+            .map(|h| 1.0 - (h - now) / TELL);
+        if let Ok((mut mtr, mut vis)) = marks.get_mut(tell.decal) {
+            let want = if k.is_some() {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            if *vis != want {
+                *vis = want;
+            }
+            if let Some(k) = k {
+                mtr.translation = (at + face * AHEAD).extend(tr.translation.y).xzy();
+                mtr.scale = Vec3::splat(WIDE * (0.6 + 0.4 * k));
+                if let Some(mut m) = decals.get_mut(&tell.material) {
+                    m.base.base_color = Color::linear_rgba(0.5, 0.08, 0.02, 0.9 * k);
+                    m.base.emissive = EMBER * (k * k);
+                }
+            }
+        }
+        let (Some((start, _)), Some(h)) = (swing, hit_at) else {
+            continue;
+        };
+        if now < h || tell.landed == start {
+            continue;
+        }
+        tell.landed = start;
+        let Some(t) = taken((at, face), (him, his_face), doing, held, set) else {
+            info!("mob {}'s blow on him: out of reach", foe.i);
+            continue;
+        };
+        info!("mob {}'s blow on him: {t:?}", foe.i);
+        let strength = match t {
+            Taken::Hit | Taken::GuardBroken => 1.0,
+            Taken::Blocked | Taken::Parried => ON_GUARD,
+            Taken::Dodged => continue,
+        };
+        let away = (him - at).normalize_or(Vec2::Y);
+        *taking = Taking {
+            at: now,
+            away,
+            strength,
+            tilt: taking.tilt,
+        };
+        if let Some(c) = cues.as_deref_mut() {
+            c.blow = now;
+            c.contact = Some(Contact {
+                point: htr.translation + Vec3::Y * 1.1 - away.extend(0.0).xzy() * 0.35,
+                floor: htr.translation.y,
+                toward: away,
+            });
+        }
+    }
+}
+
+/// His flinch from the last blow, laid on his facing as it is this frame.
+fn show(time: Res<Time>, mut taking: ResMut<Taking>, mut hero: Query<&mut Transform, With<Hero>>) {
+    let Ok(mut tr) = hero.single_mut() else {
+        return;
+    };
+    let f = flinch(time.elapsed_secs() - taking.at) * taking.strength;
+    let axis = Vec3::Y
+        .cross(taking.away.extend(0.0).xzy())
+        .normalize_or(Vec3::X);
+    let tilt = Quat::from_axis_angle(axis, FLINCH * f);
+    tr.rotation = tilt * tr.rotation;
+    taking.tilt = tilt;
+}
+
+/// The last frame's flinch taken off his facing, before anything turns him.
+fn settle(mut taking: ResMut<Taking>, mut hero: Query<&mut Transform, With<Hero>>) {
+    if let Ok(mut tr) = hero.single_mut() {
+        tr.rotation = taking.tilt.inverse() * tr.rotation;
+    }
+    taking.tilt = Quat::IDENTITY;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn set() -> MoveSet {
+        MoveSet::read(include_str!(
+            "../../../../assets/data/moves/sword.shielded.ron"
+        ))
+        .unwrap()
+    }
+
+    /// Him doing `name` at `clip` (a share of its clip), else nothing.
+    fn doing(set: &MoveSet, name: &str, clip: f32) -> Doing {
+        let mut d = Doing::default();
+        let t = set.get(name).unwrap().at_clip(clip);
+        d.runner.current = Some((name.to_string(), t));
+        d
+    }
+
+    /// A mob 1.8 m south of him facing him; him at the origin facing `face`.
+    fn blow(d: &Doing, face: Vec2, held: f32, set: &MoveSet) -> Option<Taken> {
+        let mob = Vec2::new(0.0, -1.8);
+        taken((mob, Vec2::Y), (Vec2::ZERO, face), d, held, set)
+    }
+
+    /// In the roll's tuck a blow passes through him; before or after it, it lands.
+    #[test]
+    fn a_roll_dodges_only_in_its_tuck() {
+        let set = set();
+        let (from, to) = set.get("roll").unwrap().invulnerable.unwrap();
+        let mid = (from + to) / 2.0;
+        let rolling = doing(&set, "roll", mid);
+        assert_eq!(blow(&rolling, Vec2::Y, 0.0, &set), Some(Taken::Dodged));
+        for late in [to + 0.05, 0.99] {
+            let out = doing(&set, "roll", late);
+            assert_eq!(
+                blow(&out, Vec2::Y, 0.0, &set),
+                Some(Taken::Hit),
+                "at {late}"
+            );
+        }
+        assert_eq!(
+            blow(&Doing::default(), Vec2::Y, 0.0, &set),
+            Some(Taken::Hit)
+        );
+    }
+
+    /// His shield held covers a blow from in front, not one from behind; raised just as it
+    /// lands it parries.
+    #[test]
+    fn a_block_covers_the_front_not_the_back() {
+        let set = set();
+        let hold = set.get("block").unwrap().hold.unwrap();
+        let blocking = doing(&set, "block", hold);
+        let toward = Vec2::NEG_Y;
+        assert_eq!(blow(&blocking, toward, 1.0, &set), Some(Taken::Blocked));
+        assert_eq!(blow(&blocking, -toward, 1.0, &set), Some(Taken::Hit));
+        assert_eq!(blow(&blocking, toward, 0.0, &set), Some(Taken::Parried));
+    }
+
+    /// A blow from past its reach, or with the mob turned away, does not reach him.
+    #[test]
+    fn a_blow_reaches_only_in_its_arc() {
+        let set = set();
+        let d = Doing::default();
+        assert_eq!(
+            taken(
+                (Vec2::new(0.0, -4.0), Vec2::Y),
+                (Vec2::ZERO, Vec2::Y),
+                &d,
+                0.0,
+                &set
+            ),
+            None
+        );
+        assert_eq!(
+            taken(
+                (Vec2::new(0.0, -1.8), Vec2::NEG_Y),
+                (Vec2::ZERO, Vec2::Y),
+                &d,
+                0.0,
+                &set
+            ),
+            None
+        );
+    }
+}

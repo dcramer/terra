@@ -49,13 +49,13 @@ pub fn plugin(app: &mut App) {
 /// One of the roster: its place among the horde's mobs and its walk clip's ground speed.
 #[derive(Component)]
 pub struct Foe {
-    i: usize,
+    pub(super) i: usize,
     walk: f32,
 }
 
 /// Its gaits on its own graph (until struck, strike.rs's after), what plays, and its swing.
 #[derive(Component)]
-struct Gait {
+pub(super) struct Gait {
     player: Entity,
     nodes: [AnimationNodeIndex; 3],
     /// Its attack clip's length (s).
@@ -65,6 +65,13 @@ struct Gait {
     struck: bool,
     swing_until: f32,
     next_swing: f32,
+}
+
+impl Gait {
+    /// The swing under way at `now`, if any: when it began and its length (s).
+    pub(super) fn swinging(&self, now: f32) -> Option<(f32, f32)> {
+        (now < self.swing_until).then_some((self.swing_until - self.swing, self.swing))
+    }
 }
 
 /// The mobs' steering, one a foe, and their stalls over the run.
@@ -268,7 +275,7 @@ fn rig(
 /// What a mob plays: its attack once while it swings, its walk at its pace while it moves,
 /// a swing begun when it stands in its slot off its cooldown, else its idle.
 #[allow(clippy::type_complexity)]
-fn gait(
+pub(super) fn gait(
     time: Res<Time>,
     horde: Option<Res<Horde>>,
     hero: Query<&Transform, With<Hero>>,
