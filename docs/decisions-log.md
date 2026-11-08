@@ -1273,3 +1273,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - 2026-11-08: D647 decided (the developers'): v0's worlds have small wildlife about for ambience (insects, small birds and the like), by place, season and hour; each realm its own.
 - 2026-11-08: D647 amended (the developers'): dozens of small life about at once; a bird is a model, only a fly's size a shader's speck; the bar is Crimson Desert's world.
 - 2026-11-08: D647 amended (the developers'): water has its fish; docs/ambient-life.md proposes the ambient life in order.
+- 2026-11-08: D648 decided (the developers'): a creature has no health bar; how hurt it is shows on the creature, later.

@@ -232,6 +232,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D572](decisions/D572.md) | The axe proof's animations: the felling chop and the fighting set both | Design | Developers | Decided | Which animations the one-handed axe gets for D565 step… |
 | [D573](decisions/D573.md) | A blow's aim turns its body into a cut that lands off its ahead | Tech | Agent | Decided | A move may say `aim`, degrees its body faces off the way… |
 | [D646](decisions/D646.md) | The troll's own blows: a stomp and a thrown boulder | Design | — | Open | The troll, v0's boss (D590), fights with a roar… |
+| [D648](decisions/D648.md) | A creature has no health bar; how hurt it is shows on the creature | Design | Developers | Decided | No bar over or beside a creature says how much health it… |
 
 ## People and the tribe
 
