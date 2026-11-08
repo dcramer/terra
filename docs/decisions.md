@@ -108,6 +108,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D641](decisions/D641.md) | A realm's gate is placed from its seed on ground a walk from the start reaches | Tech | Agent | Decided | A world's gate stands where `terra_land::gate::find`… |
 | [D642](decisions/D642.md) | Realm two is industrial and a little futuristic, cyberpunk-like | Design | Developers | Leaning | The second realm, the one beyond the first world's gate… |
 | [D643](decisions/D643.md) | Natural caves are systems placed by rule and carved from the ground's distance field | Tech | Agent | Decided | A natural cave (D591) is a system of chambers and… |
+| [D647](decisions/D647.md) | v0's worlds have small wildlife about for ambience: insects, small birds and the like | Design | Developers | Decided | A world of v0 is not empty at a few metres… |
 
 ## The player and survival
 

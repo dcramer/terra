@@ -95,9 +95,15 @@ async function fight(): Promise<string> {
       break;
     }
     left = it.health ?? left;
-    // At its chest on the den's floor, from the player's own level: the ground over the spot
-    // is the hill above the den.
-    await call("play.aim", { at: it.at, up: 2.5, level: true }).catch(() => undefined);
+    // The view is turned from the camera, which the den's walls push to one side of the
+    // player: aimed at the troll itself, the way ahead (which the keys walk) would point off
+    // it by the camera's offset. Aimed far past it along the line from the player, it points
+    // at it within a few degrees. From the player's own level: the ground over the spot is
+    // the hill above the den.
+    const me = (now as unknown as { at: [number, number] }).at;
+    const [east, south] = [it.at![0] - me[0], it.at![1] - me[1]];
+    const far = 30 / Math.max(0.5, Math.hypot(east, south));
+    await call("play.aim", { at: [me[0] + east * far, me[1] + south * far], up: 2.5, level: true }).catch(() => undefined);
     // "Attack(1.2)": a blow of its, so far through. Guard from its beginning until it has landed.
     const through = /^Attack\(([0-9.]+)/.exec(it.doing ?? "")?.[1];
     const coming = through !== undefined && (it.distance ?? 99) < 7 && LANDS_S.some(([from, to]) => Number(through) >= from && Number(through) < to);

@@ -75,6 +75,14 @@ pub struct DriftKind {
     /// weather does not bring.
     #[serde(default)]
     pub falls: Option<Falls>,
+    /// How many times a second it beats its wings, for a kind that has them and is not a
+    /// flock (a flock's is its motion's own).
+    #[serde(default)]
+    pub flap_hz: f32,
+    /// A light of its own, for a kind seen by it in the dark (a firefly): how bright, and
+    /// how many times a second each one blinks, each at its own beat; 0 is a steady light.
+    #[serde(default)]
+    pub lit: Option<(f32, f32)>,
 }
 
 /// A kind the weather brings: rain or snow, all of its cards seen at so many millimetres an hour
@@ -99,6 +107,8 @@ pub enum Look {
     Leaf,
     /// A bird far off on the wing: a dark shape beating its wings.
     Bird,
+    /// A butterfly or a moth: a body between two pairs of rounded wings that open and close.
+    Butterfly,
 }
 
 /// How one moves.
@@ -163,6 +173,9 @@ pub struct DriftExtension {
     /// the share of its crossings it is about on.
     #[uniform(100)]
     flock: Vec4,
+    /// Its own light: how bright, and how many times a second each blinks.
+    #[uniform(100)]
+    lit: Vec4,
 }
 
 impl MaterialExtension for DriftExtension {
@@ -290,6 +303,26 @@ pub fn plugin(app: &mut App) {
             Update,
             (sow, (follow, sense).chain()).run_if(crate::instance::in_world),
         );
+    crate::remote::method(app, "drift.state", state);
+}
+
+/// `drift.state`: what drifts round the eye now, each kind by name with how much of it is
+/// seen, 0 to 1, so a scripted run reads a place's small life with no picture (D69).
+fn state(
+    In(_): In<Option<serde_json::Value>>,
+    drifts: Res<Drifts>,
+    fields: Query<&Field>,
+) -> bevy::remote::BrpResult {
+    let mut seen: Vec<(&str, f32)> = fields
+        .iter()
+        .filter_map(|field| Some((drifts.kinds.get(field.kind)?.name.as_str(), field.shown)))
+        .collect();
+    seen.sort_by(|a, b| a.0.cmp(b.0));
+    let kinds: Vec<_> = seen
+        .iter()
+        .map(|(name, shown)| serde_json::json!({ "name": name, "seen": (f64::from(*shown) * 100.0).round() / 100.0 }))
+        .collect();
+    Ok(serde_json::json!({ "kinds": kinds }))
 }
 
 /// A field's cards, every corner at the frame's origin: the first texture coordinate the
@@ -383,8 +416,9 @@ fn sow(
                 about,
                 ..
             } => Vec4::new(height_m.0, height_m.1, flap_hz, about),
-            _ => Vec4::ZERO,
+            _ => Vec4::new(0.0, 0.0, kind.flap_hz, 0.0),
         };
+        let (bright, blink_hz) = kind.lit.unwrap_or_default();
         let colour = Color::srgb(kind.colour.0, kind.colour.1, kind.colour.2).to_linear();
         let material = materials.add(DriftMaterial {
             base: StandardMaterial {
@@ -405,6 +439,7 @@ fn sow(
                         Look::Speck => 0.0,
                         Look::Leaf => 1.0,
                         Look::Bird => 2.0,
+                        Look::Butterfly => 3.0,
                     },
                     kind.opacity,
                     // A fall thins by its cards, not by fading them.
@@ -417,6 +452,7 @@ fn sow(
                     },
                 ),
                 flock,
+                lit: Vec4::new(bright, blink_hz, 0.0, 0.0),
             },
         });
         commands.spawn((

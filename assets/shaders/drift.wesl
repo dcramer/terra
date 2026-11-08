@@ -41,11 +41,13 @@ struct Drift {
     wind: vec4<f32>,
     // Its colour, linear, and its glow toward the sun.
     colour: vec4<f32>,
-    // How it is drawn (0 speck, 1 leaf, 2 bird), how opaque.
+    // How it is drawn (0 speck, 1 leaf, 2 bird, 3 butterfly), how opaque.
     look: vec4<f32>,
     // A flock's: how high over the eye it flies, lowest and highest; its wings' beat; the
     // share of its crossings it is about on.
     flock: vec4<f32>,
+    // Its own light: how bright, and how many times a second each one blinks.
+    lit: vec4<f32>,
 }
 
 fn is_leaf() -> bool {
@@ -53,7 +55,11 @@ fn is_leaf() -> bool {
 }
 
 fn is_bird() -> bool {
-    return drift.look.x > 1.5;
+    return drift.look.x > 1.5 && drift.look.x < 2.5;
+}
+
+fn is_butterfly() -> bool {
+    return drift.look.x > 2.5;
 }
 
 // Rain or snow falling (D418), thinned by its cards and drawn as streaks.
@@ -170,6 +176,10 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     var rel = free - 2.0 * half * crossing;
     var edge = max(max(abs(rel.x) / half.x, abs(rel.z) / half.x), abs(rel.y) / half.y);
     var about = 1.0;
+    if is_butterfly() {
+        // Low over the grass, below the eye more than above it.
+        rel.y -= half.y * 0.8;
+    }
     if is_bird() {
         // A flock flies at its height over the eye, and is about on some of its crossings
         // of the box only, so the sky is not always full of the same birds.
@@ -189,7 +199,9 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let distance = length(view.world_position - middle);
     let fall_near = select(vec2<f32>(0.3, 0.8), vec2<f32>(0.9, 1.8), is_snow());
     let near = select(smoothstep(1.5, 4.0, distance), smoothstep(fall_near.x, fall_near.y, distance), is_fall());
-    var fade = (1.0 - smoothstep(0.65, 1.0, edge)) * near * about;
+    // A butterfly is seen from close by, where a speck would be a fleck across the picture.
+    let close = select(near, smoothstep(0.6, 1.5, distance), is_butterfly());
+    var fade = (1.0 - smoothstep(0.65, 1.0, edge)) * close * about;
     // Never smaller than a pixel and a half on screen; one drawn bigger is fainter, so a
     // far mote does not flicker in and out.
     let pixel_m = distance * 2.0 / (view.clip_from_view[1][1] * view.viewport.w);
@@ -229,6 +241,24 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     if is_bird() {
         // Its wings' beat, each bird at its own phase, carried to the fragment.
         flip = sin(globals.time * drift.flock.z * 6.283 + luck * 6.283);
+    }
+    if is_butterfly() {
+        // Its wings open and close, seen as the card narrowing to its body, in bouts with
+        // a glide between as a butterfly flies; and it is turned the way it happens to head.
+        let beat = globals.time * drift.flock.z * 6.283 * (0.8 + 0.4 * luck) + luck * 6.283;
+        let bout = smoothstep(-0.2, 0.3, sin(globals.time * 1.7 + luck * 40.0));
+        flip = mix(0.85, abs(cos(beat)), bout);
+        corner.x *= max(flip, 0.12);
+        let roll = (smooth_noise(vec2<f32>(luck * 17.0, seconds * 0.3)) - 0.5) * 2.4;
+        turned = vec2<f32>(
+            corner.x * cos(roll) - corner.y * sin(roll),
+            corner.x * sin(roll) + corner.y * cos(roll),
+        );
+    }
+    if drift.lit.x > 0.0 && drift.lit.y > 0.0 {
+        // Each blinks at its own beat: lit for under half of it, dark between.
+        let blink = fract(globals.time * drift.lit.y * (0.7 + 0.6 * luck) + luck * 13.0);
+        fade *= smoothstep(0.0, 0.08, blink) * (1.0 - smoothstep(0.35, 0.55, blink));
     }
     if is_leaf() {
         let spin = seconds * drift.motion.w * 6.283 * (0.6 + 0.8 * luck) + luck * 6.283;
@@ -304,6 +334,15 @@ fn coverage(uv: vec2<f32>, flap: f32) -> f32 {
         }
         return max(body, wings);
     }
+    if is_butterfly() {
+        // A thin body, and each side a fore wing and a smaller hind wing, rounded.
+        let body = 1.0 - smoothstep(0.6, 1.0, length(p * vec2<f32>(1.0 / 0.035, 1.0 / 0.3)));
+        let side = vec2<f32>(abs(p.x), p.y);
+        let fore = length((side - vec2<f32>(0.24, 0.12)) * vec2<f32>(1.0 / 0.25, 1.0 / 0.24));
+        let hind = length((side - vec2<f32>(0.19, -0.2)) * vec2<f32>(1.0 / 0.19, 1.0 / 0.2));
+        let wings = 1.0 - smoothstep(0.85, 1.0, min(fore, hind));
+        return max(body, wings);
+    }
     // Pointed at both ends: the half width falls off as the square of the way along.
     let along = p.y * 2.0;
     let width = 0.42 * (1.0 - along * along);
@@ -334,6 +373,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var input = pbr_input_from_standard_material(in, is_front);
     // A leaf's two faces: the underside paler, and a vein down its middle.
     var colour = drift.colour.rgb;
+    if is_butterfly() {
+        // Darker at the body and along the wings' rims, as most are.
+        let q = in.uv - vec2<f32>(0.5);
+        colour *= mix(0.25, 1.0, smoothstep(0.03, 0.12, abs(q.x))) * mix(1.0, 0.55, smoothstep(0.36, 0.48, length(q)));
+    }
     if is_leaf() {
         let vein = 1.0 - 0.25 * (1.0 - smoothstep(0.0, 0.025, abs(in.uv.x - 0.5)));
         colour *= vein * select(1.25, 1.0, in.uv_b.y > 0.0);
@@ -362,6 +406,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             out.color.a,
         );
     }
+    // A light of its own, seen in the dark.
+    out.color = vec4<f32>(out.color.rgb + colour * drift.lit.x * view.exposure, out.color.a);
     out.color = main_pass_post_lighting_processing(input, out.color);
     out.color.a = alpha;
     return out;
