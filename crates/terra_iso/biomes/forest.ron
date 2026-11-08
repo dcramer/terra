@@ -89,16 +89,19 @@
     // `WAKE` and a breather lies between. `walk` is the ledger's speeds.walk.
     // `tone` darker than the still's (`bodies`): at those the tree monster stood 0.9 L* and
     // the treant 5.7 L* lighter than a 10 px ring about them; at 0.12 2.5 darker and 2.9
-    // lighter (play frame 140, iso-forest-demo j8). Albedo is a weak lever: 0.06 moved
+    // lighter (play frame 140, iso-forest-demo j8). In the open meadow 0.12 stood packs 1 and
+    // 2 near black, 12.4 and 8.5 L* under the ring (route frame 560); at 0.2 8.7 and 6.0, in
+    // the 5 to 10 aimed at; pack 0, in the camp's shade, stays 0.12, where 0.2 stood it 1 to
+    // 2.6 lighter (iso-forest-demo j12). Albedo is a weak lever: 0.06 moved
     // neither further; their light is mostly not their albedo's.
     foes: [
         (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 1.06, tone: (value: 0.12)),
         (model: "models/iso/treant-b.glb", at: (-7.0, -3.0), walk: 0.9, tone: (value: 0.12)),
         (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.31, tone: (value: 0.12, rim: 1.0)),
-        (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.31, tone: (value: 0.12, rim: 1.0), pack: 1),
-        (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 1.06, tone: (value: 0.12), pack: 1),
-        (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.9, tone: (value: 0.12), pack: 2),
-        (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.31, tone: (value: 0.12, rim: 1.0), pack: 2),
+        (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.31, tone: (value: 0.2, rim: 1.0), pack: 1),
+        (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 1.06, tone: (value: 0.2), pack: 1),
+        (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.9, tone: (value: 0.2), pack: 2),
+        (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.31, tone: (value: 0.2, rim: 1.0), pack: 2),
     ],
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
