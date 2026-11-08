@@ -6,6 +6,7 @@
 pub mod blows;
 pub mod mobs;
 pub mod occlude;
+pub mod silhouette;
 pub mod steer;
 pub mod tally;
 pub mod tell;
@@ -13,5 +14,11 @@ pub mod tell;
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins((occlude::plugin, tally::plugin, mobs::plugin, blows::plugin));
+    app.add_plugins((
+        occlude::plugin,
+        tally::plugin,
+        mobs::plugin,
+        blows::plugin,
+        silhouette::plugin,
+    ));
 }

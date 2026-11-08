@@ -8,6 +8,7 @@
 //! a surface met before him that the cut does not drop (`foliage::fade`, the shader's twin)
 //! hides him, and is logged as `hero hidden at frame N by <name>`, counted in `Hidden`.
 
+use super::silhouette::{GAP, Silhouette};
 use crate::camera::MainCamera;
 use crate::foliage::{self, FoliageMaterial, Near, Seen};
 use crate::play::Hero;
@@ -32,10 +33,12 @@ pub fn plugin(app: &mut App) {
         .add_systems(PostUpdate, check.after(TransformSystems::Propagate));
 }
 
-/// The frames something hid him in.
+/// The frames something hid him in, and those a body stood before him and his silhouette
+/// was drawn through it.
 #[derive(Resource, Default)]
 pub struct Hidden {
     pub frames: u32,
+    pub through: u32,
 }
 
 /// The wood opens about the hero (foliage.rs's party holes).
@@ -72,19 +75,32 @@ pub struct Hit {
     pub at: Vec3,
     pub distance: f32,
     pub cut: bool,
+    /// A body (a foe's), which his silhouette is drawn through (silhouette.rs).
+    pub body: bool,
 }
 
-/// The points of `points` hidden, each with the surface that hides it (`(point, what, at)`):
-/// `cast` gives what a ray from the eye meets, nearest first; a surface more than a hand's
-/// breadth before a point hides it unless it is cuttable and the cut about `middle` (with
-/// `eye`'s near fade) leaves it at least `OPEN` open.
+/// How deep a point of `body` lies inside his outline (m): his axis is about this far behind
+/// the surface the camera sees of his chest, so a body must stand `GAP` and this before a
+/// point for his silhouette to show there.
+const SKIN: f32 = 0.15;
+
+/// A point of his body a surface stands before: the point, the surface (if known), where it
+/// was met, and whether his silhouette is drawn through it (a body, not the wood).
+pub type Before = (Vec3, Option<Entity>, Vec3, bool);
+
+/// The points of `points` a surface stands before, each with the first that does: `cast`
+/// gives what a ray from the eye meets, nearest first; a surface more than a hand's breadth
+/// before a point stands before it unless it is cuttable and the cut about `middle` (with
+/// `eye`'s near fade) leaves it at least `OPEN` open. A body more than `GAP` and `SKIN` before
+/// it is drawn through when `through` (his silhouette is drawn), and so does not hide him.
 pub fn hidden(
     eye: Vec4,
     axes: [Vec3; 3],
     middle: Vec3,
     points: &[Vec3],
+    through: bool,
     mut cast: impl FnMut(Ray3d) -> Vec<Hit>,
-) -> Vec<(Vec3, Option<Entity>, Vec3)> {
+) -> Vec<Before> {
     let from = eye.xyz();
     points
         .iter()
@@ -94,8 +110,11 @@ pub fn hidden(
             cast(Ray3d::new(from, dir))
                 .into_iter()
                 .take_while(|h| h.distance < reach)
-                .find(|h| !h.cut || foliage::fade(h.at, &[middle], axes, eye) < OPEN)
-                .map(|h| (*p, h.what, h.at))
+                .find(|h| h.body || !h.cut || foliage::fade(h.at, &[middle], axes, eye) < OPEN)
+                .map(|h| {
+                    let drawn = h.body && through && reach + 0.1 - h.distance > GAP + SKIN;
+                    (*p, h.what, h.at, drawn)
+                })
         })
         .collect()
 }
@@ -118,14 +137,17 @@ fn check(
         Res<Assets<FoliageMaterial>>,
         Query<&ChildOf>,
         Query<&Name>,
-        Query<(), Or<(With<Hero>, With<crate::rim::Fighter>)>>,
+        Query<(), With<crate::rim::Fighter>>,
         Query<&Mesh3d>,
     ),
+    (heroes, silhouettes): (Query<(), With<Hero>>, Query<(), With<Silhouette>>),
     (frame, near, mut seen): (Res<bevy::diagnostic::FrameCount>, Res<Near>, ResMut<Hidden>),
 ) {
     let (Ok((_, h)), Ok(cam)) = (hero.single(), camera.single()) else {
         return;
     };
+    // His silhouette is drawn once his meshes have their copies (silhouette.rs).
+    let through = !silhouettes.is_empty();
     let axes = [
         cam.right().as_vec3(),
         cam.up().as_vec3(),
@@ -133,13 +155,12 @@ fn check(
     ];
     let eye = cam.translation().extend(near.0);
     let feet = h.translation();
-    // A body (his, a foe's) is no occluder; only the wood and its props are.
+    // His own body is no occluder; the wood, its props and the foes' bodies are.
+    let up = |e: Entity| std::iter::once(e).chain(parents.iter_ancestors(e));
     let occluder = |e: Entity| {
-        (leaves.contains(e) || shaded.contains(e))
-            && !std::iter::once(e)
-                .chain(parents.iter_ancestors(e))
-                .any(|a| fighters.contains(a))
+        (leaves.contains(e) || shaded.contains(e)) && !up(e).any(|a| heroes.contains(a))
     };
+    let body = |e: Entity| up(e).any(|a| fighters.contains(a));
     let cut = |e: Entity| {
         leaves
             .get(e)
@@ -155,7 +176,8 @@ fn check(
         eye,
         axes,
         feet + Vec3::Y * MIDDLE,
-        &body(feet, axes[0]),
+        &self::body(feet, axes[0]),
+        through,
         |r| {
             ray.cast_ray(r, &settings)
                 .iter()
@@ -164,11 +186,20 @@ fn check(
                     at: hit.point,
                     distance: hit.distance,
                     cut: cut(*e),
+                    body: body(*e),
                 })
                 .collect()
         },
     );
-    let Some((point, what, at)) = points.first() else {
+    let drawn = points.iter().filter(|p| p.3).count();
+    if drawn > 0 {
+        seen.through += 1;
+        info!(
+            "hero drawn through a body at frame {} ({drawn} points; {} frames so far)",
+            frame.0, seen.through
+        );
+    }
+    let Some((point, what, at, _)) = points.iter().find(|p| !p.3) else {
         return;
     };
     seen.frames += 1;
@@ -224,6 +255,16 @@ mod tests {
 
     /// A ball of leaves or bark of radius `r` about `c`, as a ray meets it.
     fn ball(c: Vec3, r: f32, cut: bool) -> impl Fn(Ray3d) -> Vec<Hit> {
+        let wood = sphere(c, r, false);
+        move |ray: Ray3d| {
+            let mut h = wood(ray);
+            h.iter_mut().for_each(|h| h.cut = cut);
+            h
+        }
+    }
+
+    /// A body (a foe's trunk) of radius `r` about `c`.
+    fn sphere(c: Vec3, r: f32, body: bool) -> impl Fn(Ray3d) -> Vec<Hit> {
         move |ray: Ray3d| {
             let o = ray.origin - c;
             let b = o.dot(*ray.direction);
@@ -236,9 +277,39 @@ mod tests {
                 what: None,
                 at: ray.get_point(t),
                 distance: t,
-                cut,
+                cut: false,
+                body,
             }]
         }
+    }
+
+    /// A foe's body between the camera and him (a treant at the parry, frames 1026 to 1036 of
+    /// the route) no longer hides him: his silhouette is drawn through it. Its planted fault,
+    /// no silhouette (`through` false), hides him; and a body pressed within `GAP` of his
+    /// outline hides the point it stands before even with it, as the depth test does.
+    #[test]
+    fn a_body_before_him_is_drawn_through() {
+        let feet = Vec3::new(3.0, 0.2, 5.0);
+        let (eye, axes) = view(feet, NEAR);
+        let middle = feet + Vec3::Y * MIDDLE;
+        let points = body(feet, axes[0]);
+        let chest = feet + Vec3::Y * 1.3;
+        let toward = (eye.xyz() - chest).normalize();
+        // A treant's trunk, 0.8 m thick, its near side 2.2 m before his chest.
+        let treant = sphere(chest + toward * 3.0, 0.8, true);
+        let before = hidden(eye, axes, middle, &points, true, &treant);
+        assert!(!before.is_empty(), "the treant stands before him");
+        assert!(
+            before.iter().all(|p| p.3),
+            "drawn through: {}",
+            before.len()
+        );
+        let fault = hidden(eye, axes, middle, &points, false, &treant);
+        assert!(!fault.is_empty() && fault.iter().all(|p| !p.3));
+        // Its near side 0.3 m before his chest's axis: within GAP and SKIN, not drawn.
+        let pressed = sphere(chest + toward * 0.6, 0.3, true);
+        let close = hidden(eye, axes, middle, &points, true, &pressed);
+        assert!(close.iter().any(|p| !p.3), "pressed to him, it hides him");
     }
 
     /// A bough anywhere on the line from the camera to his chest, from his shoulder to the
@@ -260,7 +331,7 @@ mod tests {
                 if along < r + 0.3 {
                     continue;
                 }
-                let n = hidden(eye, axes, middle, &points, ball(c, r, true)).len();
+                let n = hidden(eye, axes, middle, &points, true, ball(c, r, true)).len();
                 assert_eq!(
                     n, 0,
                     "a bough {along:.2} m before him (r {r}) hides {n} points"
@@ -268,12 +339,12 @@ mod tests {
             }
         }
         let c = chest + (eye.xyz() - chest).normalize() * 1.5;
-        assert!(!hidden(eye, axes, middle, &points, ball(c, 0.6, false)).is_empty());
+        assert!(!hidden(eye, axes, middle, &points, true, ball(c, 0.6, false)).is_empty());
         let (still, _) = view(feet, 0.0);
         // Its near side 0.65 m before his chest: open in play, two-thirds kept by the stills'.
         let c = chest + (eye.xyz() - chest).normalize() * 0.35;
-        assert!(hidden(eye, axes, middle, &points, ball(c, 0.3, true)).is_empty());
-        assert!(!hidden(still, axes, middle, &points, ball(c, 0.3, true)).is_empty());
+        assert!(hidden(eye, axes, middle, &points, true, ball(c, 0.3, true)).is_empty());
+        assert!(!hidden(still, axes, middle, &points, true, ball(c, 0.3, true)).is_empty());
     }
 
     /// Near the lens every cuttable surface fades, wherever it is on the screen: a bough
