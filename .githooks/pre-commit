@@ -4,6 +4,15 @@
 # files .gitattributes puts in Git LFS must be staged as pointers, not whole (D525).
 set -euo pipefail
 node tools/git/lfs.ts --staged
+# The docs check, a second, when a doc is staged (D37: a hook lints, in seconds): a page over
+# its budget or a decision off the index was committed twice in a session whose pushes, where
+# the check otherwise runs, never came.
+if git diff --cached --name-only | grep -qE '\.md$'; then
+  node tools/docs/docs.ts | tail -3 | grep -q '^docs: ok' || {
+    echo "✗ the docs check fails on what is staged: run \`node tools/docs/docs.ts\` and mend what it names (a page over its budget is shortened, never its budget raised), then commit again"
+    exit 1
+  }
+fi
 cargo=cargo
 command -v cargo >/dev/null || cargo="$HOME/.cargo/bin/cargo"
 exec "$cargo" fmt --all --check
