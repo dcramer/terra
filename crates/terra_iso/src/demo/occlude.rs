@@ -11,8 +11,10 @@
 use super::silhouette::{GAP, Silhouette};
 use crate::camera::MainCamera;
 use crate::foliage::{self, FoliageMaterial, Near, Seen};
-use crate::play::Hero;
+use crate::play::footprint::Footprint;
+use crate::play::{Fallen, Hero};
 use crate::rim::RimMaterial;
+use bevy::camera::primitives::Aabb;
 use bevy::picking::mesh_picking::ray_cast::{
     MeshRayCast, MeshRayCastSettings, RayCastBackfaces, RayCastVisibility,
 };
@@ -30,7 +32,49 @@ pub fn plugin(app: &mut App) {
     app.insert_resource(Near(NEAR))
         .init_resource::<Hidden>()
         .add_systems(Update, (seen, backfaces))
-        .add_systems(PostUpdate, check.after(TransformSystems::Propagate));
+        .add_systems(
+            PostUpdate,
+            (check, gate).chain().after(TransformSystems::Propagate),
+        );
+}
+
+/// The run's gate on its last frame (D632): nothing hid him, a body before him included,
+/// since his silhouette is drawn through it; its exit an error on a fail. Proven in game
+/// (iso-forest-demo j13): the route with the silhouette plugin left out fails it, hidden 125
+/// frames (218-242, 644-707, 1003-1030 and more), the 125 the route with it was drawn through.
+fn gate(
+    args: Res<crate::Args>,
+    frame: Res<bevy::diagnostic::FrameCount>,
+    seen: Res<Hidden>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    if !args.last_frame().is_some_and(|l| frame.0 + 1 == l) {
+        return;
+    }
+    match verdict(&seen) {
+        Ok(line) => info!("✓ {line}"),
+        Err(e) => {
+            error!("✗ {e}");
+            exit.write(AppExit::from_code(1));
+        }
+    }
+}
+
+/// The bar a run's frames meet: no frame hid him.
+pub fn verdict(seen: &Hidden) -> Result<String, String> {
+    if seen.frames == 0 {
+        Ok(format!(
+            "the hero: nothing hid him ({} frames drawn through a body)",
+            seen.through
+        ))
+    } else {
+        Err(format!(
+            "the hero: hidden {} frames (each logged 'hero hidden at frame N by ...'): cut the \
+             surface named there in play (foliage.rs's hole) or draw his silhouette through it \
+             (silhouette.rs); do not drop it from the check",
+            seen.frames
+        ))
+    }
 }
 
 /// The frames something hid him in, and those a body stood before him and his silhouette
@@ -119,6 +163,109 @@ pub fn hidden(
         .collect()
 }
 
+/// How far along `ray` it first meets the upright capsule from `a` to `b` of radius `r`, from
+/// outside. Ported from Inigo Quilez's capsule intersector (iquilezles.org/articles/
+/// intersectors, MIT). The foes' bodies are met as capsules on their footprints, not as
+/// meshes: a ray cast on a skinned mesh meets its bind pose, never the body as it stands
+/// posed (iso-forest-demo j12: no body counted at the parry, where a treant stood before him).
+pub fn capsule(ray: Ray3d, a: Vec3, b: Vec3, r: f32) -> Option<f32> {
+    let (ro, rd) = (ray.origin, *ray.direction);
+    let (ba, oa) = (b - a, ro - a);
+    let (baba, bard, baoa) = (ba.dot(ba), ba.dot(rd), ba.dot(oa));
+    let (rdoa, oaoa) = (rd.dot(oa), oa.dot(oa));
+    let k2 = baba - bard * bard;
+    let k1 = baba * rdoa - baoa * bard;
+    let k0 = baba * oaoa - baoa * baoa - r * r * baba;
+    let h = k1 * k1 - k2 * k0;
+    if h < 0.0 {
+        return None;
+    }
+    // Where the ray meets the infinite cylinder, along the axis (a ray along the axis meets
+    // the cap on the origin's side).
+    let y = if k2 > 1e-6 {
+        let t = (-k1 - h.sqrt()) / k2;
+        let y = baoa + t * bard;
+        if y > 0.0 && y < baba {
+            return (t > 0.0).then_some(t);
+        }
+        y
+    } else {
+        baoa
+    };
+    // A cap: the sphere at the end the side met lies past.
+    let oc = if y <= 0.0 { oa } else { ro - b };
+    let (b1, c1) = (rd.dot(oc), oc.dot(oc) - r * r);
+    let h1 = b1 * b1 - c1;
+    let t = -b1 - h1.max(0.0).sqrt();
+    (h1 > 0.0 && t > 0.0).then_some(t)
+}
+
+/// A foe's body as the check meets it: the capsule over its footprint's circles, from the
+/// ground to the top of its bounds (its bind pose's height, near its standing one).
+pub type Upright = (Entity, Vec3, Vec3, f32);
+
+/// The standing foes' capsules: each footprint circle stood up from the body's feet to the
+/// top of its meshes' bounds less a radius, so the cap's top is the bounds' top.
+#[allow(clippy::type_complexity)]
+fn uprights(
+    standing: &Query<
+        (Entity, &Footprint, &GlobalTransform),
+        (With<crate::rim::Fighter>, Without<Hero>, Without<Fallen>),
+    >,
+    kids: &Query<&Children>,
+    bounds: &Query<(&Aabb, &GlobalTransform), With<Mesh3d>>,
+) -> Vec<Upright> {
+    let mut out = Vec::new();
+    for (e, foot, g) in standing {
+        let feet = g.translation();
+        let top = kids
+            .iter_descendants(e)
+            .filter_map(|k| bounds.get(k).ok())
+            .map(|(b, kg)| {
+                let (c, h) = (Vec3::from(b.center), Vec3::from(b.half_extents));
+                (0..8)
+                    .map(|i| {
+                        let s = Vec3::new(
+                            if i & 1 == 0 { -1.0 } else { 1.0 },
+                            if i & 2 == 0 { -1.0 } else { 1.0 },
+                            if i & 4 == 0 { -1.0 } else { 1.0 },
+                        );
+                        kg.transform_point(c + h * s).y
+                    })
+                    .fold(f32::MIN, f32::max)
+            })
+            .fold(f32::MIN, f32::max);
+        if top <= feet.y {
+            continue;
+        }
+        let s = g.scale().x;
+        for &(p, r) in &foot.0 {
+            let r = r * s;
+            let at = g.transform_point(Vec3::new(p.x, 0.0, p.y));
+            let low = at.with_y(feet.y + r);
+            let high = at.with_y((top - r).max(low.y));
+            out.push((e, low, high, r));
+        }
+    }
+    out
+}
+
+/// What a ray meets of the standing foes' capsules, as the check's hits.
+pub fn met(ray: Ray3d, uprights: &[Upright]) -> Vec<Hit> {
+    uprights
+        .iter()
+        .filter_map(|&(e, a, b, r)| {
+            capsule(ray, a, b, r).map(|t| Hit {
+                what: Some(e),
+                at: ray.get_point(t),
+                distance: t,
+                cut: false,
+                body: true,
+            })
+        })
+        .collect()
+}
+
 /// Each frame of play: rays to his body; what hides him logged by name.
 #[allow(clippy::too_many_arguments)]
 fn check(
@@ -142,6 +289,14 @@ fn check(
     ),
     (heroes, silhouettes): (Query<(), With<Hero>>, Query<(), With<Silhouette>>),
     (frame, near, mut seen): (Res<bevy::diagnostic::FrameCount>, Res<Near>, ResMut<Hidden>),
+    (standing, kids, bounds): (
+        Query<
+            (Entity, &Footprint, &GlobalTransform),
+            (With<crate::rim::Fighter>, Without<Hero>, Without<Fallen>),
+        >,
+        Query<&Children>,
+        Query<(&Aabb, &GlobalTransform), With<Mesh3d>>,
+    ),
 ) {
     let (Ok((_, h)), Ok(cam)) = (hero.single(), camera.single()) else {
         return;
@@ -157,10 +312,12 @@ fn check(
     let feet = h.translation();
     // His own body is no occluder; the wood, its props and the foes' bodies are.
     let up = |e: Entity| std::iter::once(e).chain(parents.iter_ancestors(e));
-    let occluder = |e: Entity| {
-        (leaves.contains(e) || shaded.contains(e)) && !up(e).any(|a| heroes.contains(a))
-    };
     let body = |e: Entity| up(e).any(|a| fighters.contains(a));
+    // A foe's meshes are left to its capsule (`capsule`).
+    let occluder = |e: Entity| {
+        (leaves.contains(e) || shaded.contains(e)) && !up(e).any(|a| heroes.contains(a)) && !body(e)
+    };
+    let uprights = uprights(&standing, &kids, &bounds);
     let cut = |e: Entity| {
         leaves
             .get(e)
@@ -179,16 +336,20 @@ fn check(
         &self::body(feet, axes[0]),
         through,
         |r| {
-            ray.cast_ray(r, &settings)
+            let mut hits: Vec<Hit> = ray
+                .cast_ray(r, &settings)
                 .iter()
                 .map(|(e, hit)| Hit {
                     what: Some(*e),
                     at: hit.point,
                     distance: hit.distance,
                     cut: cut(*e),
-                    body: body(*e),
+                    body: false,
                 })
-                .collect()
+                .collect();
+            hits.extend(met(r, &uprights));
+            hits.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+            hits
         },
     );
     let drawn = points.iter().filter(|p| p.3).count();
@@ -211,6 +372,7 @@ fn check(
                 .chain(parents.iter_ancestors(e))
                 .find_map(|a| names.get(a).ok())
                 .map(|n| n.to_string())
+                .or_else(|| fighters.contains(e).then(|| format!("a foe's body {e}")))
                 .or_else(|| {
                     let mesh = meshes.get(e).ok().and_then(|m| m.0.path());
                     let kind = if leaves.contains(e) {
@@ -310,6 +472,59 @@ mod tests {
         let pressed = sphere(chest + toward * 0.6, 0.3, true);
         let close = hidden(eye, axes, middle, &points, true, &pressed);
         assert!(close.iter().any(|p| !p.3), "pressed to him, it hides him");
+    }
+
+    /// A ray meets an upright capsule where its side or cap stands, from outside, and not
+    /// beside it or behind its origin.
+    #[test]
+    fn a_ray_meets_a_capsule_on_its_side_and_caps() {
+        let (a, b, r) = (Vec3::ZERO, Vec3::Y * 2.0, 0.5);
+        let ray = |o: Vec3, d: Vec3| Ray3d::new(o, Dir3::new(d).unwrap());
+        let side = capsule(ray(Vec3::new(-5.0, 1.0, 0.0), Vec3::X), a, b, r).unwrap();
+        assert!((side - 4.5).abs() < 1e-4, "side at {side}");
+        let top = capsule(ray(Vec3::new(0.0, 6.0, 0.0), -Vec3::Y), a, b, r).unwrap();
+        assert!((top - 3.5).abs() < 1e-4, "top cap at {top}");
+        let low = ray(Vec3::new(-5.0, -0.3, 0.0), Vec3::X);
+        let t = capsule(low, a, b, r).unwrap();
+        assert!((low.get_point(t).length() - r).abs() < 1e-4, "foot cap");
+        assert!(capsule(ray(Vec3::new(-5.0, 1.0, 0.6), Vec3::X), a, b, r).is_none());
+        assert!(capsule(ray(Vec3::new(-5.0, 2.6, 0.0), Vec3::X), a, b, r).is_none());
+        assert!(capsule(ray(Vec3::new(5.0, 1.0, 0.0), Vec3::X), a, b, r).is_none());
+    }
+
+    /// A treant standing before him at the camera, as its footprint's capsule, is a body he
+    /// is drawn through (`met`), as the posed mesh the old cast missed never was. Its planted
+    /// fault, no silhouette, hides him; a treant beside the line does neither.
+    #[test]
+    fn a_standing_foe_before_him_is_met_as_its_capsule() {
+        let feet = Vec3::new(3.0, 0.2, 5.0);
+        let (eye, axes) = view(feet, NEAR);
+        let middle = feet + Vec3::Y * MIDDLE;
+        let points = body(feet, axes[0]);
+        let chest = feet + Vec3::Y * 1.3;
+        // A tall treant 0.6 m thick whose axis the line from the eye to his chest crosses
+        // 2 m before him.
+        let on = chest + (eye.xyz() - chest).normalize() * 2.0;
+        let treant = |g: Vec3| {
+            let g = g.with_y(feet.y);
+            vec![(
+                Entity::PLACEHOLDER,
+                g + Vec3::Y * 0.6,
+                g + Vec3::Y * 6.0,
+                0.6,
+            )]
+        };
+        let standing = treant(on);
+        let before = hidden(eye, axes, middle, &points, true, |r| met(r, &standing));
+        assert!(!before.is_empty(), "the treant stands before him");
+        assert!(before.iter().all(|p| p.3), "drawn through");
+        let fault = hidden(eye, axes, middle, &points, false, |r| met(r, &standing));
+        assert!(
+            !fault.is_empty() && fault.iter().all(|p| !p.3),
+            "no silhouette hides him"
+        );
+        let aside = treant(on + axes[0] * 3.0);
+        assert!(hidden(eye, axes, middle, &points, false, |r| met(r, &aside)).is_empty());
     }
 
     /// A bough anywhere on the line from the camera to his chest, from his shoulder to the
