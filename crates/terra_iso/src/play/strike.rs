@@ -33,13 +33,14 @@ pub struct Blow {
     pub t: f32,
 }
 
-/// A body the hero has struck: the blows it took, the last one's time, its rest rotation,
-/// the way it was struck, its own materials and its clips on its own graph.
+/// A body the hero has struck: the blows it took, the last one's time, the flinch's tilt
+/// laid on its facing this frame, the way it was struck, its own materials and its clips on
+/// its own graph.
 #[derive(Component)]
 pub struct Struck {
     pub blows: u32,
     at: f32,
-    base: Quat,
+    tilt: Quat,
     away: Vec3,
     skin: Vec<Handle<StandardMaterial>>,
     player: Entity,
@@ -83,7 +84,8 @@ pub fn bite(hero: Vec2, foe: Vec2, edge: Option<(Vec3, Vec3)>, floor: f32) -> Ve
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, (land, recover, show).chain().after(super::control));
+    app.add_systems(First, settle)
+        .add_systems(Update, (land, recover, show).chain().after(super::control));
 }
 
 fn player_of(
@@ -138,13 +140,13 @@ fn land(
         });
         // The first blow takes the body over; its transitions are inserted with it.
         let mut fresh = None;
+        let first = struck.is_none();
         let s = match struck {
             Some(s) => s.into_inner(),
             None => {
                 let Some(n) = take_over(
                     body,
                     pose,
-                    tr.rotation,
                     (&gltfs, &mut graphs, &mut materials),
                     &children,
                     &skins,
@@ -162,12 +164,13 @@ fn land(
         let Ok((mut p, tx)) = players.get_mut(s.player) else {
             continue;
         };
-        let mut new = AnimationTransitions::new();
+        // The first blow starts the body afresh on its own graph (take_over), whatever played
+        // on the one before: its node indices mean nothing on this one.
         let fell = match tx {
-            Some(mut tx) => start(s, &mut p, &mut tx),
-            None => {
-                p.stop_all();
-                let fell = start(s, &mut p, &mut new);
+            Some(mut tx) if !first => start(s, &mut p, &mut tx),
+            _ => {
+                let mut new = AnimationTransitions::new();
+                let fell = begin(s, &mut p, &mut new);
                 commands.entity(s.player).insert(new);
                 fell
             }
@@ -191,6 +194,17 @@ fn land(
     }
 }
 
+/// A body's first blow on its own graph: its own clip looping, the reaction over it. A body
+/// with no hit clip (the treants, the ogre) flinches over its own clip; stopping it alone
+/// left the body in its bind pose till it died (iso-forest-demo j2).
+fn begin(s: &Struck, p: &mut AnimationPlayer, tx: &mut AnimationTransitions) -> bool {
+    p.stop_all();
+    if let Some(own) = s.own {
+        tx.play(p, own, Duration::ZERO).repeat();
+    }
+    start(s, p, tx)
+}
+
 /// Plays a struck body's reaction to its latest blow; whether it fell.
 fn start(s: &Struck, p: &mut AnimationPlayer, tx: &mut AnimationTransitions) -> bool {
     match react(s.blows, s.hit.is_some(), s.death.is_some()) {
@@ -212,7 +226,6 @@ fn start(s: &Struck, p: &mut AnimationPlayer, tx: &mut AnimationTransitions) -> 
 fn take_over(
     body: Entity,
     pose: &Pose,
-    base: Quat,
     (gltfs, graphs, materials): (
         &Assets<Gltf>,
         &mut Assets<AnimationGraph>,
@@ -259,7 +272,7 @@ fn take_over(
     Some(Struck {
         blows: 0,
         at: -10.0,
-        base,
+        tilt: Quat::IDENTITY,
         away: Vec3::X,
         skin: copies.into_iter().map(|c| c.1).collect(),
         player,
@@ -288,18 +301,22 @@ fn recover(
     }
 }
 
-/// The flash and flinch since each body's last blow.
+/// The flash and flinch since each body's last blow, the flinch's tilt laid on the body's
+/// facing as it is this frame (a mob turns as it walks, demo/mobs.rs), and taken off again
+/// before the next (`settle`). Writing it over the facing at the first blow froze a mob's
+/// turn till it died (iso-forest-demo j2).
 fn show(
     time: Res<Time>,
-    mut bodies: Query<(&Struck, &mut Transform)>,
+    mut bodies: Query<(&mut Struck, &mut Transform)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let now = time.elapsed_secs();
-    for (s, mut tr) in &mut bodies {
+    for (mut s, mut tr) in &mut bodies {
         let a = now - s.at;
         let f = flinch(a);
-        tr.rotation =
-            Quat::from_axis_angle(Vec3::Y.cross(s.away).normalize_or(Vec3::X), FLINCH * f) * s.base;
+        let tilt = Quat::from_axis_angle(Vec3::Y.cross(s.away).normalize_or(Vec3::X), FLINCH * f);
+        tr.rotation = tilt * tr.rotation;
+        s.tilt = tilt;
         let e = flash(a);
         for h in &s.skin {
             if materials.get(h).is_some_and(|m| m.emissive != e)
@@ -308,6 +325,14 @@ fn show(
                 m.emissive = e;
             }
         }
+    }
+}
+
+/// The last frame's flinch taken off each struck body's facing, before anything turns it.
+fn settle(mut bodies: Query<(&mut Struck, &mut Transform)>) {
+    for (mut s, mut tr) in &mut bodies {
+        tr.rotation = s.tilt.inverse() * tr.rotation;
+        s.tilt = Quat::IDENTITY;
     }
 }
 
@@ -324,6 +349,94 @@ mod tests {
         assert_eq!(react(1, false, true), React::Flinch);
         assert_eq!(react(BLOWS, false, true), React::Death);
         assert_eq!(react(BLOWS + 2, true, false), React::Hit);
+    }
+
+    fn struck(own: Option<usize>, hit: Option<usize>, death: Option<usize>) -> Struck {
+        let node = |i: Option<usize>| i.map(AnimationNodeIndex::new);
+        Struck {
+            blows: 1,
+            at: 0.0,
+            tilt: Quat::IDENTITY,
+            away: Vec3::X,
+            skin: Vec::new(),
+            player: Entity::PLACEHOLDER,
+            own: node(own),
+            hit: node(hit),
+            death: node(death),
+        }
+    }
+
+    /// A body with no hit clip (a treant) keeps playing its own clip through its first
+    /// blow's flinch, not its bind pose; one with a hit clip blends into it from its own.
+    /// The planted fault, as before the fix: its player stopped and only the reaction
+    /// started, so a flinch leaves nothing playing.
+    #[test]
+    fn a_first_blow_keeps_a_clip_playing() {
+        let own = AnimationNodeIndex::new(1);
+        let s = struck(Some(1), None, Some(2));
+        let mut p = AnimationPlayer::default();
+        assert!(!begin(&s, &mut p, &mut AnimationTransitions::new()));
+        assert!(p.is_playing_animation(own), "the flinch over its own clip");
+        let mut fault = AnimationPlayer::default();
+        fault.stop_all();
+        start(&s, &mut fault, &mut AnimationTransitions::new());
+        assert_eq!(
+            fault.playing_animations().count(),
+            0,
+            "the fault: bind pose"
+        );
+        let s = struck(Some(1), Some(2), Some(3));
+        let mut p = AnimationPlayer::default();
+        let mut tx = AnimationTransitions::new();
+        begin(&s, &mut p, &mut tx);
+        assert_eq!(tx.get_main_animation(), Some(AnimationNodeIndex::new(2)));
+        assert!(p.is_playing_animation(own), "fading out under the hit");
+    }
+
+    /// The flinch rides on the body's facing as it turns: a mob turning a tenth of a turn a
+    /// frame through its flinch faces each frame's way tilted by the flinch, and a body that
+    /// never turns (the staged cast) keeps its own facing under the one tilt, the tilt never
+    /// compounding. The planted fault (the tilt laid over the facing at the first blow, as
+    /// before) leaves the turning mob facing its first way.
+    #[test]
+    fn the_flinch_rides_on_the_body_s_turn() {
+        fn turn(mut bodies: Query<&mut Transform, With<Struck>>, mut n: Local<f32>) {
+            *n += 1.0;
+            for mut tr in &mut bodies {
+                tr.rotation = Quat::from_rotation_y(0.6 * *n);
+            }
+        }
+        let base = Quat::from_rotation_y(0.4);
+        let run = |turning: bool, frames: u32| {
+            let mut app = App::new();
+            app.init_resource::<Time>()
+                .init_resource::<Assets<StandardMaterial>>()
+                .add_systems(First, settle)
+                .add_systems(Update, show);
+            if turning {
+                app.add_systems(Update, turn.before(show));
+            }
+            // A tenth of a second into its flinch, held there: time does not run here.
+            let mut s = struck(None, None, None);
+            s.at = -0.1;
+            s.away = Vec3::Z;
+            let body = app
+                .world_mut()
+                .spawn((s, Transform::from_rotation(base)))
+                .id();
+            for _ in 0..frames {
+                app.update();
+            }
+            app.world().get::<Transform>(body).unwrap().rotation
+        };
+        let tilt = Quat::from_axis_angle(Vec3::Y.cross(Vec3::Z), FLINCH * flinch(0.1));
+        assert!(tilt.angle_between(Quat::IDENTITY) > 0.05, "a flinch to see");
+        let near = |a: Quat, b: Quat| a.angle_between(b) < 1e-3;
+        let turned = run(true, 3);
+        assert!(near(turned, tilt * Quat::from_rotation_y(1.8)), "{turned}");
+        assert!(!near(turned, tilt * base), "the fault: its turn frozen");
+        let still = run(false, 3);
+        assert!(near(still, tilt * base), "{still}");
     }
 
     /// The bite is on the body's near side, toward the hero, at the height where the blade
