@@ -28,7 +28,16 @@ pub type TellMaterial = ExtendedMaterial<StandardMaterial, OnTop>;
 #[bind_group_data(OnTopKey)]
 pub struct OnTop {
     pub over_bodies: bool,
+    /// How tell.wesl lays it: x 1 the fill, 0 the rim; y the noise's frequency (1/m); z how
+    /// much the noise breaks it (`FILL_LOOK`, `EDGE_LOOK`).
+    #[uniform(100)]
+    pub look: Vec4,
 }
+
+/// The fill's look: glowing in patches about 0.6 m across, broken strongly.
+pub const FILL_LOOK: Vec4 = Vec4::new(1.0, 1.7, 0.8, 0.0);
+/// The rim's: its inner border broken in finer grain.
+pub const EDGE_LOOK: Vec4 = Vec4::new(0.0, 3.0, 1.0, 0.0);
 
 /// What `OnTop`'s pipeline is specialised by.
 #[repr(C)]
@@ -46,6 +55,10 @@ impl From<&OnTop> for OnTopKey {
 }
 
 impl MaterialExtension for OnTop {
+    fn fragment_shader() -> bevy::shader::ShaderRef {
+        "embedded://iso/demo/tell.wesl".into()
+    }
+
     fn specialize(
         _pipeline: &bevy::pbr::MaterialExtensionPipeline,
         descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
@@ -70,7 +83,8 @@ pub const RAISE: f32 = 0.45;
 /// Where the fan starts out from the mob's feet (a share of `REACH`), so its own legs stay
 /// clear of it; the rim's width (a share).
 const INNER: f32 = 0.15;
-const RIM: f32 = 0.06;
+/// Wide enough for tell.wesl's noise to break its inner border and still leave a line.
+const RIM: f32 = 0.14;
 const SEGMENTS: usize = 24;
 /// The fill's and the rim's colours, the biome's (`biome::Tell`, its default with none).
 pub fn colours(biome: Option<&crate::kit::biome::Biome>) -> (LinearRgba, LinearRgba) {
@@ -79,23 +93,29 @@ pub fn colours(biome: Option<&crate::kit::biome::Biome>) -> (LinearRgba, LinearR
 }
 
 pub fn plugin(app: &mut App) {
+    bevy::asset::embedded_asset!(app, "tell.wesl");
     app.add_plugins(MaterialPlugin::<TellMaterial>::default());
 }
 
 /// An annular sector in the ground's plane about the origin, facing +Z, from `inner` to
 /// `outer` metres over `ARC` either side, its vertices' alpha `a_in` at `inner` and `a_out`
-/// at `outer` (vertex colours, which the standard material multiplies its own by).
+/// at `outer` (vertex colours, which the standard material multiplies its own by); its UV
+/// u 0 at `inner` and 1 at `outer`, v 0 to 1 across the arc (tell.wesl's soft sides).
 pub fn sector(inner: f32, outer: f32, a_in: f32, a_out: f32) -> Mesh {
     let half = ARC.to_radians();
     let mut at = Vec::with_capacity(2 * (SEGMENTS + 1));
     let mut colour = Vec::with_capacity(2 * (SEGMENTS + 1));
+    let mut uv = Vec::with_capacity(2 * (SEGMENTS + 1));
     for i in 0..=SEGMENTS {
-        let a = -half + 2.0 * half * i as f32 / SEGMENTS as f32;
+        let v = i as f32 / SEGMENTS as f32;
+        let a = -half + 2.0 * half * v;
         let way = Vec3::new(libm::sinf(a), 0.0, libm::cosf(a));
         at.push((way * inner).to_array());
         at.push((way * outer).to_array());
         colour.push([1.0, 1.0, 1.0, a_in]);
         colour.push([1.0, 1.0, 1.0, a_out]);
+        uv.push([0.0, v]);
+        uv.push([1.0, v]);
     }
     let mut index = Vec::with_capacity(6 * SEGMENTS);
     for i in 0..SEGMENTS as u32 {
@@ -109,7 +129,7 @@ pub fn sector(inner: f32, outer: f32, a_in: f32, a_out: f32) -> Mesh {
     )
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, at)
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; n])
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0, 0.0]; n])
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
     .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colour)
     .with_inserted_indices(Indices::U32(index))
 }
@@ -163,8 +183,36 @@ pub fn met(ray: Ray3d, at: &GlobalTransform, fan: Fan) -> Option<f32> {
     (t > 0.0 && r >= fan.inner && r <= fan.outer && off <= ARC).then_some(t)
 }
 
-/// A tell's material: unlit, unfogged, blended (the fill) or added (the rim).
+/// The tell's own light (every effect has a light, iso-art's rules): a point light over the
+/// fill's middle (in the fill's frame, so it grows out with it) in the rim's hue, its
+/// lumens `LIGHT_LM` times the square of how near the blow is (blows.rs `land`), so the
+/// litter and the bodies on it redden as it nears, as Diablo IV's telegraphs light the floor.
+pub const LIGHT_AT: Vec3 = Vec3::new(0.0, 1.2, 0.6 * REACH);
+/// At 60k lm it washed the hero hot pink at the forest's exposure (j29), at 8k it still
+/// doubled his a* (8.6 to 16, j30); 3k reddens the litter about him and leaves his armour its own.
+pub const LIGHT_LM: f32 = 3_000.0;
+const LIGHT_RANGE: f32 = 4.0;
+
+/// The tell's light, dark until a blow is told (no shadows: it is a glow, not a lamp).
+pub fn light(edge: LinearRgba) -> PointLight {
+    let top = edge.red.max(edge.green).max(edge.blue).max(1e-3);
+    PointLight {
+        color: LinearRgba::rgb(edge.red / top, edge.green / top, edge.blue / top).into(),
+        intensity: 0.0,
+        range: LIGHT_RANGE,
+        shadow_maps_enabled: false,
+        ..default()
+    }
+}
+
+/// A tell's material: unlit, unfogged, the fill (any mode but `Add`: tell.wesl writes it
+/// premultiplied, so give it `Premultiplied`) or the rim (`Add`).
 pub fn material(colour: LinearRgba, alpha: AlphaMode) -> TellMaterial {
+    let look = if alpha == AlphaMode::Add {
+        EDGE_LOOK
+    } else {
+        FILL_LOOK
+    };
     TellMaterial {
         base: StandardMaterial {
             base_color: colour.into(),
@@ -174,7 +222,10 @@ pub fn material(colour: LinearRgba, alpha: AlphaMode) -> TellMaterial {
             cull_mode: None,
             ..default()
         },
-        extension: OnTop { over_bodies: false },
+        extension: OnTop {
+            over_bodies: false,
+            look,
+        },
     }
 }
 
@@ -232,7 +283,9 @@ mod tests {
         for mesh in [fill(), edge()] {
             for p in points(&mesh) {
                 assert!(
-                    in_arc(Vec2::ZERO, face, p * 0.999),
+                    // A little inside in reach and in angle: a corner on the arc's edge
+                    // rounds either side of its cosine (RIM 0.14's inner corners did).
+                    in_arc(Vec2::ZERO, face, p * 0.999 + face * 1e-3),
                     "{p} lies outside the blow"
                 );
             }

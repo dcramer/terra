@@ -50,6 +50,8 @@ pub fn plugin(app: &mut App) {
 struct Tell {
     fill: (Entity, Handle<TellMaterial>, LinearRgba),
     edge: (Entity, Handle<TellMaterial>, LinearRgba),
+    /// Its light (tell.rs `light`), a child of the fill.
+    light: Entity,
     landed: f32,
     leaving: Leaving,
 }
@@ -182,11 +184,19 @@ fn tells(
                 .id();
             (id, material, colour)
         };
-        let fill = part(fill, tell::FILL_FAN, fill_colour, AlphaMode::Blend);
+        let fill = part(fill, tell::FILL_FAN, fill_colour, AlphaMode::Premultiplied);
         let edge = part(edge, tell::EDGE_FAN, edge_colour, AlphaMode::Add);
+        let light = commands
+            .spawn((
+                tell::light(edge_colour),
+                Transform::from_translation(tell::LIGHT_AT),
+                ChildOf(fill.0),
+            ))
+            .id();
         commands.entity(body).insert(Tell {
             fill,
             edge,
+            light,
             landed: f32::NEG_INFINITY,
             leaving: Leaving::default(),
         });
@@ -212,7 +222,7 @@ fn land(
         (&mut Transform, &mut Visibility),
         (With<TellMark>, Without<Foe>, Without<Hero>),
     >,
-    mut materials: ResMut<Assets<TellMaterial>>,
+    (mut materials, mut lights): (ResMut<Assets<TellMaterial>>, Query<&mut PointLight>),
     mut guard_since: Local<Option<f32>>,
     mut told: Query<&mut Told, With<Hero>>,
 ) {
@@ -260,6 +270,7 @@ fn land(
         // The fill grows out from the mob and strengthens to the hit, never past half so the
         // ground and the bodies under it show (at 0.8 it hid the mob, j7's first still); the
         // rim is whole at once (a tenth of the tell in), so the reach reads before the fill.
+        glow(&mut lights, tell.light, k);
         let parts = [
             (&tell.fill, k.map(|k| (0.35 + 0.65 * k, 0.12 + 0.33 * k))),
             (&tell.edge, k.map(|k| (1.0, (k * 10.0).min(1.0) * 0.9))),
@@ -341,6 +352,16 @@ fn land(
         && told.0 != on_him
     {
         told.0 = on_him;
+    }
+}
+
+/// A tell's light: `LIGHT_LM` times the square of how near the blow is (k), dark with none.
+fn glow(lights: &mut Query<&mut PointLight>, light: Entity, k: Option<f32>) {
+    if let Ok(mut l) = lights.get_mut(light) {
+        let lm = k.map_or(0.0, |k| tell::LIGHT_LM * k * k);
+        if l.intensity != lm {
+            l.intensity = lm;
+        }
     }
 }
 
