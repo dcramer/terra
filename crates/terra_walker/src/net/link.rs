@@ -217,11 +217,19 @@ impl Link {
     /// What the server tells of the things of a kind other than players ([`super::Host::put`]):
     /// each one's id and what is shown of it, as its last two words and how far between
     /// them to draw it now, two sends back as players are shown.
-    pub fn shown_of(&self, kind: terra_net::proto::Kind) -> Vec<(EntityId, &[u8], &[u8], f32)> {
+    ///
+    /// `back` is how many ticks behind the server's newest word they are shown: at least
+    /// as long as the layer leaves between tellings, or they are held at each word and
+    /// step, not moved between two.
+    pub fn shown_of(
+        &self,
+        kind: terra_net::proto::Kind,
+        back: u32,
+    ) -> Vec<(EntityId, &[u8], &[u8], f32)> {
         let Some(newest) = self.client.stamp().map(|stamp| stamp.tick) else {
             return Vec::new();
         };
-        let at = f64::from(newest.saturating_sub(SHOWN_SENDS_BACK * SEND_EVERY));
+        let at = f64::from(newest.saturating_sub(back.max(SHOWN_SENDS_BACK * SEND_EVERY)));
         self.client
             .entities()
             .filter(|(_, entity)| entity.kind == kind)

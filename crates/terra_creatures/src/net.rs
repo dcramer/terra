@@ -33,6 +33,13 @@ pub const HURT: u8 = 19;
 /// this: what a script or a changed game asks beyond them is refused (D51).
 const REACH_M: f32 = 12.0;
 const MOST_DAMAGE: f32 = 400.0;
+/// A creature is told of every so many ticks, eight times a second, each in its own turn;
+/// what it is at is told at once when it changes. Told every tick, 77 animals took a
+/// player's bytes from 4.7 kB/s to 20.7 (the soak, `tools/sandbox/net.ts`).
+const TOLD_EVERY: u32 = 8;
+/// And shown so many ticks behind the host's newest word: a telling and a half, so it is
+/// always between two of them.
+const SHOWN_BACK: u32 = TOLD_EVERY + TOLD_EVERY / 2;
 
 /// What is shown of a creature: its kind, what it is at, which blow, where and facing what.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -159,7 +166,7 @@ pub fn asked(creature: u32, damage: f32, part: Part) -> Vec<u8> {
 
 /// On the host: each creature told of, by the id it is told as.
 #[derive(Resource, Default)]
-struct ToldAs(HashMap<Entity, EntityId>);
+struct ToldAs(HashMap<Entity, (EntityId, Act, u8)>, u32);
 
 /// On a joined game: a creature the host shows, by the id the host tells it as.
 #[derive(Component)]
@@ -191,22 +198,32 @@ fn tell_creatures(
     if host.is_added() {
         told.0.clear();
     }
+    told.1 = told.1.wrapping_add(1);
+    let tick = told.1;
     for (entity, at, creature) in &creatures {
         let place = at.translation;
-        let id = *told
+        let (act, blow) = (Act::of(creature.state), creature.blow);
+        let new = !told.0.contains_key(&entity);
+        let (id, was, dealt) = told
             .0
             .entry(entity)
-            .or_insert_with(|| host.put(CREATURE, place));
+            .or_insert_with(|| (host.put(CREATURE, place), act, blow));
+        // In its turn, or at once when what it is at has changed.
+        let turn = tick.wrapping_add(entity.index_u32()) % TOLD_EVERY == 0;
+        if !(new || turn || *was != act || *dealt != blow) {
+            continue;
+        }
+        (*was, *dealt) = (act, blow);
         let shown = Shown {
             species: creature.species.index(),
-            act: Act::of(creature.state),
-            blow: creature.blow,
+            act,
+            blow,
             at: place,
             facing: at.forward().as_vec3(),
         };
-        host.tell_of(id, place, &shown.encoded());
+        host.tell_of(*id, place, &shown.encoded());
     }
-    told.0.retain(|entity, id| {
+    told.0.retain(|entity, (id, ..)| {
         let stays = creatures.contains(*entity);
         if !stays {
             host.gone(*id);
@@ -246,7 +263,7 @@ fn struck_by_guests(
         let Some(entity) = told
             .0
             .iter()
-            .find_map(|(entity, told)| (*told == id).then_some(*entity))
+            .find_map(|(entity, (told, ..))| (*told == id).then_some(*entity))
         else {
             continue;
         };
@@ -312,7 +329,7 @@ fn show(
             commands.entity(entity).try_despawn();
         }
     }
-    let told = link.shown_of(CREATURE);
+    let told = link.shown_of(CREATURE, SHOWN_BACK);
     for (id, from, to, share) in &told {
         let (Some(from), Some(to)) = (Shown::decoded(from), Shown::decoded(to)) else {
             continue;
