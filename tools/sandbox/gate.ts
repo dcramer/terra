@@ -54,8 +54,15 @@ try {
   if ((await title()).seed !== SEED) throw new Error("an unmarked player went through a shut gate");
   const told = (await said(0, "Notice: The gate", 5)).lines.map((line) => line.text).join(" ");
   if (!/gate is shut/i.test(told)) throw new Error(`an unmarked player at the shut gate was told "${told}", not that it is shut`);
-  // Marked, the first step opens it and the next goes through.
-  await call("marks.give", { mark: "troll" });
+  // The mark is earned (D590): at the den's mouth the troll in it is struck down (by the
+  // script, through the rule a swing's blow goes by), and the player by it bears its mark.
+  // Back before the gate, the first step opens it and the next goes through.
+  const { den } = (await call("den.state")) as { den: { mouth: [number, number, number] } | null };
+  if (!den) throw new Error(`seed ${SEED}'s world has no den to earn the mark at (cargo xtask worlds says why)`);
+  await warp([den.mouth[0], den.mouth[2]]);
+  await call("creatures.strike", { name: "Troll", damage: 5000 });
+  await waitUntil("the player to bear the troll's mark after its fall", async () => (await call("marks.state")) as { marks: string[] }, (now) => now.marks.includes("troll"), 10);
+  await warp(before);
   await call("portal.step");
   await waitUntil("the gate to open to the mark", gateNow, (gate) => gate.open, 20);
   // As one who walked the last hundred metres to it: the world beyond is made meanwhile.
@@ -106,7 +113,7 @@ try {
   const borne = (await call("marks.state")) as { marks: string[] };
   if (!still.open || !borne.marks.includes("troll")) throw new Error(`started again and back, the first gate is ${still.open ? "open" : "shut"} and the player bears ${JSON.stringify(borne.marks)}: the save did not keep them`);
   if (apart(home, left) > 1) throw new Error(`back through the gate the player stands ${apart(home, left).toFixed(1)} m from where they left`);
-  console.log(`✓ gate: seed ${SEED}'s gate stands ${away.toFixed(0)} m from the start, shut to an unmarked player and opened by the troll's mark; through it to ${realm.name ?? realm.kind} (seed ${out.to.seed}, ${parts.at(-1)} of its parts standing, ${far.count} round the player 1500 m on and ${returned.count} again on coming back), ${apart(there, me).toFixed(1)} m before its gate, closed and started again there (${apart(again, me).toFixed(1)} m from where it was closed), and back to within ${apart(home, left).toFixed(1)} m of where the player left the first world; the crossing out, its world warmed as the player neared, took ${took.at(-1) ?? "?"} s (a reading)`);
+  console.log(`✓ gate: seed ${SEED}'s gate stands ${away.toFixed(0)} m from the start, shut to an unmarked player and opened by the troll's mark, earned at its den; through it to ${realm.name ?? realm.kind} (seed ${out.to.seed}, ${parts.at(-1)} of its parts standing, ${far.count} round the player 1500 m on and ${returned.count} again on coming back), ${apart(there, me).toFixed(1)} m before its gate, closed and started again there (${apart(again, me).toFixed(1)} m from where it was closed), and back to within ${apart(home, left).toFixed(1)} m of where the player left the first world; the crossing out, its world warmed as the player neared, took ${took.at(-1) ?? "?"} s (a reading)`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 } finally {
