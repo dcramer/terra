@@ -1,0 +1,164 @@
+// The marsh at dusk (iso-art): mud banks and mossy hummocks between open channels of still
+// dark water, reeds in the wind, dead trees in the water, low fog, fireflies and wisps, a
+// camp fire and a lantern for the warm pools; the knight fights on a mud bank.
+// `--biome marsh`, or `--scene marsh`.
+// The schema: crates/terra_iso/src/kit/biome.rs; how to add a biome: the iso-art skill's kit.md.
+(
+    kind: [Dusk, Water],
+    refs: "marsh",
+    // Its reeds (plants.rs), effects and life are still marsh/'s own code; they move here as
+    // the kit's jobs land. Its water and scatter are the kit's; the moon's lane on the water
+    // reads this light's key.
+    layout: Marsh,
+    light: (preset: "marsh-dusk"),
+    // The kit's ground (kit/ground.rs) over marsh/land.rs's maps (terrain.rs `SITES`).
+    ground: (
+        layers: [
+            // Olive going to straw under the matted reed, not a lawn's green (round 261107-0507's
+            // judge: "a flat clean green lawn" at 1.55, 2.1, 1.2; sat 0.447 over the refs' 0.23-0.44).
+            (material: "leafy_grass", mask: Site("grass"), tint: (1.3, 1.36, 0.9)),
+            (material: "forest_leaves_04", mask: Site("leaves"), tint: (1.5, 1.45, 1.35),
+                breakup: (0.21, 0.9, 0.65, 0.35)),
+            (material: "dry_decay_leaves", mask: Site("leaves"), tint: (1.45, 1.4, 1.3),
+                breakup: (0.21, 0.9, 0.35, 0.65)),
+            (material: "moss_004", mask: Site("moss"), tint: (4.2, 4.5, 2.5)),
+            // The black mud at the water's line, in the hollows and down the path: wet, dark
+            // and brown (untinted the scan's pale pebbles read as grey-blue gravel under the
+            // moon, round 261107-0507). Its blue cut to under half its green: under the blue
+            // key (0.2, 0.37, 1) a brown of 0.6, 0.5, 0.38 still lit blue-grey (the path's
+            // crop 85% blue pixels, round 261107-0850).
+            (material: "brown_mud_02", mask: Site("mud"), tint: (0.5, 0.37, 0.15), wets: 1.0),
+            // Peat: the same mud darker and browner in drifts a few metres long, at its own
+            // scale so its stones do not repeat the mud's, so the path's tone is patchy along
+            // it (round 261107-0607's judge: "one even blue-grey gravel sheet"); over the
+            // banks' Mud rule's 1.6 so it shows on the path, which the puddles make a bank.
+            (material: "brown_mud_02", mask: Site("mud"), amount: 2.0, metres: 1.9,
+                tint: (0.34, 0.24, 0.08), wets: 1.0, breakup: (0.35, 1.3, 0.45, 0.6)),
+            (material: "roots", mask: Site("roots"), tint: (1.3, 1.3, 1.3)),
+            // The banks: a ragged band of wet black mud about a metre wide along every water
+            // (the Mud rule, kit/ground.rs: full within 0.6 m, gone by 1.9 m, its edge
+            // wandering a metre), shelving under the face. The land's own mud site is only
+            // what lies under 0.22 m over the water, a hand's width on these banks, so the
+            // turf ran to the water's line (round 261107-0523's judge: "a hard cut from
+            // smooth green turf to black water"). Amount over 1 so it beats the grass's full
+            // mask in the height blend out to about a metre, mixing with it beyond.
+            (material: "brown_mud_02", mask: Mud, amount: 1.6, tint: (0.42, 0.31, 0.13),
+                wets: 0.5),
+        ],
+        // The glade's camp fire's ash, kept as the marsh drew it (by the near channel's
+        // bank, not at the marsh's own fire).
+        scorch: [(0.0, 3.0)],
+    ),
+    // The kit's water (kit/water.rs): black, still water mirroring the trees, the sky and
+    // the lights over it; duckweed in clumps at the margin and lily pads in the shallows.
+    // Peaty: black-brown, opaque within a hand's depth, and still, its ripples a faint
+    // shiver; its sky a dim grey, not blue. Round 261107-0150 (lift 3, sky 0.5, 0.6, 0.8 at
+    // 30 nits, ripples' default steep 0.25 at 1.3 and 5.5 m) read as "a choppy blue lake".
+    water: (
+        kind: Pond,
+        level: 0.0,
+        deep: Srgb(0.03, 0.022, 0.014),
+        absorb: (16.0, 14.0, 13.0),
+        mirror: (lift: 1.6, distort: 0.04, sky: Linear(0.4, 0.42, 0.45), nits: 6.0),
+        ripples: (fine: 0.7, broad: 3.0, steep: 0.06, calm: 0.9),
+        // The moon's lane: on the stilled face the default key 0.4 spread into broad blue
+        // glows (round 261107-0235); a faint one.
+        streaks: (key: 0.1),
+        // The face is drawn over a made-up shelving depth (land.rs `seen_depth`), fading in
+        // over about half a metre of wet mud, and the scum and pads mat that margin. At linear
+        // 0.035, 0.07, 0.018 both were unseen under the moon on the black water (round
+        // 261107-0358-2: "no lily mats or scum"); at duckweed's own green (linear 0.09, 0.15, 0.025, clumps 2 m) it lay as a lime
+        // band along every bank and the pads as lime confetti (round 261107-0412): rotting
+        // olive scum in broken clumps, the pads a dark leaf green.
+        // The olive scum, opaque out to 0.22 m of seen depth, lay as smooth turf along every
+        // bank with the pads on it (round 261107-0523: "dark lily discs lie on dry turf"):
+        // drowned litter, brown as the forest pond's, in smaller broken clumps no farther out
+        // than 0.12 m, so the pads (from 0.06 m, full by 0.14 m) float on the open water.
+        shore: 0.12,
+        scum: (colour: Linear(0.045, 0.036, 0.017), amount: 0.5, reach: 0.12, size: 0.8),
+        pads: (count: 1.4, radius: 0.24, colour: Linear(0.035, 0.06, 0.02)),
+    ),
+    // The ground cover and the debris by the water, the kit's scatter (kit/scatter.rs) over
+    // land.rs's maps and the rules: masses with gaps, never an even lawn, sizes several-fold
+    // apart; at the water's line a mat of dead rush, sticks and stones half sunk in the mud.
+    scatter: [
+        // The matted cover over all the dry land, several layers deep (the old lawn tried
+        // 8 clumps a m², iso-kit j18): last year's dead sedge and reed, gold-brown to straw,
+        // with this year's olive coming through: lodged flat in layers (`Mat`), no leaves
+        // beneath. A Mat's card is the atlas's green rush (cards.png cell 0.75, 0.75, its
+        // blades' mean linear 0.068, 0.106, 0.023), so each tint is the albedo wanted over
+        // that, channel by channel, over 1 where the card lacks it (iso-kit j27): straw at
+        // linear 0.26, 0.175, 0.03, tan 0.18, 0.11, 0.022, olive straw 0.15, 0.125, 0.025
+        // and this year's olive 0.08, 0.09, 0.02, as the refs' matted reed (canoe-in-reeds,
+        // 1 : 0.67 : 0.16). Under 1 everywhere (to round 261107-0032) it only darkened the
+        // green: dark sedge; at 1 : 0.59 : 0.18 (round 261107-0142) rust-purple under the moon.
+        (plant: (kind: Mat, tint: [(3.83, 1.66, 1.29), (2.65, 1.04, 0.95), (2.21, 1.18, 1.08),
+            (1.18, 0.85, 0.86)]),
+            density: 5.0, scale: (0.18, 0.45), clump: (3.0, 0.7, 0.4), over: (0.05, 9.0),
+            seed: 6),
+        // Sedge tussocks on the hummocks' grass, olive to straw, matted (round 261107-0030:
+        // as tufts, each over three broad leaves, they read as a carpet of leaf rosettes).
+        // Linear olive 0.09, 0.1, 0.02 to straw 0.26, 0.175, 0.03 over the rush card, as above.
+        (plant: (kind: Mat, tint: [(1.33, 0.95, 0.86), (2.06, 1.09, 1.03), (2.95, 1.33, 1.21),
+            (3.83, 1.66, 1.29)]),
+            density: 7.0, scale: (0.24, 0.55), on: Site("grass"), clump: (5.0, 1.2, 0.4),
+            over: (0.05, 9.0), seed: 1),
+        // Ferns in the moss's cushions, and a few real ferns among them.
+        (plant: (kind: Fern, tint: [(0.18, 0.46, 0.22), (0.3, 0.52, 0.16)]),
+            density: 4.5, scale: (0.24, 0.55), on: Site("moss"), clump: (4.0, 1.0, 0.5),
+            over: (0.08, 9.0), seed: 2),
+        (models: ["models/nature/forest/fern.glb"], density: 0.2, scale: (0.2, 0.5),
+            on: Site("moss"), clump: (4.0, 1.0, 0.7), tilt: 6.0, over: (0.08, 9.0), seed: 2),
+        // Low shrubs over the leaf litter: bog myrtle's green to a bilberry's red-brown.
+        (plant: (kind: Leaves, tint: [(0.24, 0.44, 0.16), (0.46, 0.26, 0.14)]),
+            density: 2.5, scale: (0.26, 0.65), on: Site("leaves"), clump: (7.0, 1.5, 0.6),
+            over: (0.08, 9.0), seed: 3),
+        // The bank's mat: dead rush, straw to wet brown, thick at the water's line, a few
+        // marsh marigolds in it, lodged over the water's line.
+        // Linear straw 0.2, 0.13, 0.026, brown 0.12, 0.07, 0.017, wet 0.06, 0.04, 0.012.
+        (plant: (kind: Mat, tint: [(2.95, 1.23, 1.12), (1.77, 0.66, 0.73), (0.89, 0.38, 0.52)],
+            flowers: 0.04),
+            density: 9.0, scale: (0.15, 0.45), on: Mud, clump: (3.0, 0.8, 0.5),
+            over: (-0.04, 0.2), seed: 4),
+        // Matted reed trodden into the path's and the flats' mud in broken clumps, so its edges
+        // break up (the judge: "crisp edges"): wet brown to olive straw, as above.
+        (plant: (kind: Mat, tint: [(1.77, 0.66, 0.73), (0.89, 0.38, 0.52), (2.21, 1.18, 1.08)]),
+            density: 2.5, scale: (0.15, 0.4), on: Site("mud"), clump: (2.5, 0.6, 0.6),
+            over: (0.15, 9.0), seed: 7),
+        // Sticks and branches half sunk at the edge, and stones in the mud.
+        (models: ["models/props/Log.glb"], density: 0.25, scale: (0.15, 0.5), on: Mud,
+            clump: (4.0, 1.0, 0.5), tilt: 10.0, sink: 0.03, over: (-0.08, 0.25), seed: 5),
+        (models: ["models/nature/forest/mossy_rock_a_1.glb", "models/nature/forest/mossy_rock_a_3.glb",
+            "models/nature/forest/mossy_rock_b_2.glb", "models/nature/forest/mossy_rock_b_5.glb"],
+            density: 0.3, scale: (0.03, 0.12), on: Mud, clump: (4.0, 1.0, 0.5), sink: 0.01,
+            over: (-0.1, 0.3), seed: 5),
+    ],
+    // A thin ground mist (kit/weather.rs, iso-kit j20): low banks thickest over the open
+    // water and in the hollows, lit only by the fire, lantern and wisps in it: moonlit
+    // (round 261107-0052, mist 0.25) it laid a cold grey veil over the water and reeds, the
+    // sheets' fault (traps.md: j44 and j45 lost as milky haze). Off since round 261107-0126:
+    // at 0.4 lit by the fire it lost the blind pair twice (the fire a soft bloom halo washing
+    // its stones, where kept 261107-0032's ring stays crisp in a warm pool). Back on lit by
+    // the moon alone (`lamps: false`: no lamp carries VolumetricLight, so the fire keeps its
+    // crisp pool), thin and pale, lying low over the water and in the hollows, cleared round
+    // the fire (dress.rs `FIRE`) and thicker away from it, to lift the night's mids (kept
+    // marsh: dark share 0.87, the refs' top 0.82).
+    // At mist 0.35 over the default thick 0.12 (0.042/m at the land) it was unseen (round
+    // 261107-0306): 0.3/m at the land, about 0.8/m over the water. Moonlit at its physical
+    // in-scatter (glow 1, forward 0.3) it only darkened the water's mirror (round
+    // 261107-0307, dark share 0.866 -> 0.876): even scatter (forward 0) and glow 2.5 so it
+    // shows pale over the dark. At glow 2.5 (round 261107-0308) a faint veil, unseen by the
+    // judge (round 261107-0358-2: "no mist or haze anywhere"): glow 6, so it lifts the mids
+    // where it lies thick, over the channels and in the hollows.
+    // None of that was ever drawn: Bevy's volumetric fog marched an orthographic view's rays
+    // sideways from the volume's top face, a metre over the mist (patches/bevy_pbr's
+    // volumetric_fog.wesl, iso-kit j52). Drawn, it is tuned afresh: thin over the land (0.12
+    // a metre), five times that over the open water, in banks 5 m across, at a glow of 2 (6
+    // would be a white sheet), its colour warm so the blue moon lights it a grey.
+    weather: (wind: (0.86, 0.5), mist: 1.0, layer: (height: 0.35, water: 5.0, hollows: 1.5,
+        drift: 0.9, banks: 5.0, thick: 0.12, forward: 0.0, glow: 2.0,
+        colour: Srgb(1.0, 0.88, 0.66), keylit: true, lamps: false,
+        clear: [(-1.8, 1.35, 4.5)])),
+    // The staged fight's effects (biomes/effects/, kit/effects.rs).
+    effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
+)

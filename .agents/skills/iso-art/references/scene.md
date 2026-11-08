@@ -1,6 +1,6 @@
 # Making a good biome scene
 
-A biome is a data file of the iso spike (`spike/iso/`, D133: throwaway, nothing lasting depends on it), `spike/iso/biomes/<name>.ron`, drawn by the shared kit and run by `--biome NAME` (D634, [kit.md](kit.md); `--scene ruin|forest|marsh` reads the same file). What its file cannot say yet is its layout's modules. The ruin at night (`spike/iso/src/ruin/`) is the worked example: copy its split, not its numbers, for a new biome. Build it in steps, a still each, measured and landed on its own: camera and ground; walls and props; light; the fight; effects; ambient; the film.
+A biome is a data file of the iso crate (`crates/terra_iso/`), `crates/terra_iso/biomes/<name>.ron`, drawn by the shared kit and run by `cargo iso --biome NAME` (D634, [kit.md](kit.md); `--scene ruin|forest|marsh` reads the same file). What its file cannot say yet is its layout's modules. The ruin at night (`crates/terra_iso/src/ruin/`) is the worked example: copy its split, not its numbers, for a new biome. Build it in steps, a still each, measured and landed on its own: camera and ground; walls and props; light; the fight; effects; ambient; the film.
 
 ## Modules (one each, numbers to tune at its top)
 
@@ -17,7 +17,7 @@ A biome is a data file of the iso spike (`spike/iso/`, D133: throwaway, nothing 
 
 ## Camera
 
-Perspective, FOV 30 vertical, pitch 55, yaw 20, about 19 m from a focus between the fighters at chest height (`camera.rs`), so a 1.85 m hero is 0.10 to 0.13 of the frame (the refs' 0.07 to 0.20, median 0.12; at 23.5 m the knight read 0.07 and too small). EV100 8, TAA with contrast-adaptive sharpening 0.6 (TAA's blur was the glade's biggest gap), SSAO, TonyMcMapface, bloom. Fixed in the spike: a still is judged from the game's pose. Which camera the game has is D629 (Open).
+Perspective, FOV 30 vertical, pitch 55, yaw 20, about 19 m from a focus between the fighters at chest height (`camera.rs`), so a 1.85 m hero is 0.10 to 0.13 of the frame (the refs' 0.07 to 0.20, median 0.12; at 23.5 m the knight read 0.07 and too small). EV100 8, TAA with contrast-adaptive sharpening 0.6 (TAA's blur was the glade's biggest gap), SSAO, TonyMcMapface, bloom. Fixed in the experiment: a still is judged from the game's pose. Which camera the game has is D629 (Open).
 
 ## Ground and walls from the scanned materials
 
@@ -39,7 +39,7 @@ Measure every still (judging.md) and tune to the refs of the same kind of frame.
 - A brazier's bowl casting shadow blacks out its own pool: make it `NotShadowCaster`. Coals: a bed of lumps heaped to a yellow heart, dull red at the rim, over an additive glow.
 - By day (the forest, `wood/mod.rs`): EV 7.5, sun 4,200 lux, sky fill 300 nits, midtone saturation 1.25 over post 1.3 took forest-r4's dusk (p50 0.044, p95 0.216, sat 0.23) to p50 0.082, p95 0.355, sat 0.32.
 - Stage a day fight in a sun break, as the ARPGs do: cast the trees whose shade falls on it out of the shadow map, trunk and boughs as well as the crown (`wood/clearing.rs`'s `shades_the_fight`: a point h up throws its shade h/tan(elevation) down the sun). With the crowns alone out, the boughs' long shadow still lay over the knight.
-- Rim: a light behind a figure spills everywhere (Bevy lights every mesh in reach) and barely reads from 55 degrees; use a fresnel emissive material (`spike/iso/src/rim.rs`'s pattern).
+- Rim: a light behind a figure spills everywhere (Bevy lights every mesh in reach) and barely reads from 55 degrees; use a fresnel emissive material (`crates/terra_iso/src/rim.rs`'s pattern).
 
 ## The fight
 
@@ -84,7 +84,7 @@ At 55 degrees real water reflects 2% (Fresnel), so it is near black; what reads 
 
 ## Shooting and the film (on the render worker, embargoed machines build nothing)
 
-- Every biome at once, measured against its refs and its kept still, with its judges' briefs: `node spike/iso/loop.ts shoot [--biomes a,b] [--film] [--dirty]` ([kit.md](kit.md)). A still runs on the film's fixed step, so unchanged code gives the same still (to 0.0001 of a measure; in real time the fires moved p95 by 0.0025).
-- One still by hand, from the repository root, `--dirty` for uncommitted code: `cargo xtask remote-render --gpu --dirty --minutes 40 --collect target/job/amb -- sh -c "mkdir -p target/job/amb; cargo test --release --manifest-path spike/iso/Cargo.toml > target/job/amb/test.txt 2>&1; cargo run --release --manifest-path spike/iso/Cargo.toml -- --biome ruin --shot target/job/amb/s.png > target/job/amb/run.txt 2>&1; true"`. Files land in `~/.cache/terra-review/remote/<job>/target/job/`; block with `cargo xtask remote-render --wait <job>`; grep `test result|panicked|ERROR` in its `job.log` and the run file.
+- Every biome at once, measured against its refs and its kept still, with its judges' briefs: `node crates/terra_iso/loop.ts shoot [--biomes a,b] [--film] [--dirty]` ([kit.md](kit.md)). A still runs on the film's fixed step, so unchanged code gives the same still (to 0.0001 of a measure; in real time the fires moved p95 by 0.0025).
+- One still by hand, from the repository root, `--dirty` for uncommitted code: `cargo xtask remote-render --gpu --dirty --minutes 40 --collect target/job/amb -- sh -c "mkdir -p target/job/amb; cargo test --release -p terra_iso > target/job/amb/test.txt 2>&1; cargo iso --biome ruin --shot target/job/amb/s.png > target/job/amb/run.txt 2>&1; true"`. Files land in `~/.cache/terra-review/remote/<job>/target/job/`; block with `cargo xtask remote-render --wait <job>`; grep `test result|panicked|ERROR` in its `job.log` and the run file.
 - Film: `shoot --film` adds each biome's 16 s film (`--frames 300 --film 480 --shot dir/f.jpg`: 480 frames at 1920x1080, a fixed 30 a game second from frame 300) and encodes it for the desk (crf 28, 1600 wide, under 15 MB) into the round and `~/.cache/terra-review/iso-kit/films/NAME.mp4`. About 3 minutes for all four. The round is filed like any; a film-only round needs no verdict.
 - Stills and films go to `~/.cache/terra-review/iso-art/<round>/`, each with its stats line, for the judge and the desk.

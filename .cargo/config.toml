@@ -1,5 +1,8 @@
 [alias]
 xtask = "run --quiet --package xtask --"
+# The 2.5D top-down experiment (crates/terra_iso, D634), released as its shots are:
+# `cargo iso --biome ruin`, `cargo iso --biome forest --play`.
+iso = "run --release --package terra_iso --"
 
 [env]
 # Every binary loads its files from the one assets/ folder at the root (D133). A build run

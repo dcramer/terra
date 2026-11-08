@@ -1,6 +1,6 @@
 # The biome kit and its loop (D634)
 
-A biome is a data file, `spike/iso/biomes/<name>.ron`, never code (D136); the shared kit in `spike/iso/src/kit/` draws it. A biome that needs code shows the kit is missing something: fix the kit, with a test, never the biome. The kit holds no genre's assumptions: a neon street in rain is made like a ruin.
+A biome is a data file, `crates/terra_iso/biomes/<name>.ron`, never code (D136); the shared kit in `crates/terra_iso/src/kit/` draws it. A biome that needs code shows the kit is missing something: fix the kit, with a test, never the biome. The kit holds no genre's assumptions: a neon street in rain is made like a ruin.
 
 ## A biome file's fields (the schema: `src/kit/biome.rs`)
 
@@ -59,12 +59,12 @@ The fields after `light` but `ground`, `scatter` (marsh and street) and the mars
 ## Adding a biome
 
 1. Its references first: `refs/<name>/` with `960/` copies, measured into `refs/stats.json` (`node tools/iso-art/stats.ts`, judging.md).
-2. `spike/iso/biomes/<name>.ron` with `kind`, `refs`, a `layout` and a light preset (a new one in `biomes/light/<preset>.ron` when none fits); `cargo test` in the spike parses it (on the worker).
-3. Shoot it: `node spike/iso/loop.ts shoot --biomes <name> --dirty`; the first round has no kept still, so it is judged alone and kept by `verdict`. By hand: `--biome <name> --shot f.png` (scene.md's recipe).
+2. `crates/terra_iso/biomes/<name>.ron` with `kind`, `refs`, a `layout` and a light preset (a new one in `biomes/light/<preset>.ron` when none fits); `cargo test --release -p terra_iso` parses it (on the worker).
+3. Shoot it: `node crates/terra_iso/loop.ts shoot --biomes <name> --dirty`; the first round has no kept still, so it is judged alone and kept by `verdict`. By hand: `--biome <name> --shot f.png` (scene.md's recipe).
 
-## The loop's command: `node spike/iso/loop.ts` (tests: `node --test spike/iso/loop.test.ts`)
+## The loop's command: `node crates/terra_iso/loop.ts` (tests: `node --test crates/terra_iso/loop.test.ts`)
 
-- `shoot [--biomes a,b] [--film] [--dirty]`: one worker job runs the spike's tests and every biome's still (with `--film`, its 16 s film), on the film's fixed step with pipelines compiled synchronously, so unchanged code gives the same still (four biomes 0.00% px apart over three shots; async pipelines left neon's paving black on a cold shader cache). Anything ranked and cut to a count (lamps, glints) needs a total order, never spawn or entity order. It files them in `~/.cache/terra-review/iso-kit/rounds/<round>/` and prints a line a biome: each measure beside its refs' range (`↓` below, `↑` above) and what moved from its kept still. A biome changed when a measure moved more than 0.0005 or more than 0.025% of pixels by more than two levels; an unchanged one ties with no judge.
+- `shoot [--biomes a,b] [--film] [--dirty]`: one worker job runs terra_iso's tests and every biome's still (with `--film`, its 16 s film), on the film's fixed step with pipelines compiled synchronously, so unchanged code gives the same still (four biomes 0.00% px apart over three shots; async pipelines left neon's paving black on a cold shader cache). Anything ranked and cut to a count (lamps, glints) needs a total order, never spawn or entity order. It files them in `~/.cache/terra-review/iso-kit/rounds/<round>/` and prints a line a biome: each measure beside its refs' range (`↓` below, `↑` above) and what moved from its kept still. A biome changed when a measure moved more than 0.0005 or more than 0.025% of pixels by more than two levels; an unchanged one ties with no judge.
 - For each changed biome it writes two briefs in `rounds/<round>/briefs/`: `<biome>-judge.md`, the adversarial judge (the still at 960 and 1920 and its stats line, `judge.md` part (a)), and `<biome>-pair1.md`, the blind pair (`iso-kit/blind/<round>-<biome>-1/a.png, b.png`, order random, the key only in `history.json`, `judge.md` part (b)). The lead runs each brief as a subagent; the command never judges.
 - `record <round> <biome> pair <A|B|same> <slight|clear|strong>` and `record <round> <biome> score <overall> "<gaps>"` (a second score keeps the first's in its `earlier`). A slight loss on the first pair prepares the second, the order swapped. `--rejudge [n]` puts a blind judge's answer over pair n's earlier one (kept in its `earlier`) and warns when the round's verdict no longer follows.
 - `verdict <round>`: KEEP if no biome lost (a clear or strong loss, or a slight loss on both pairs), and the round's stills become the kept ones (`iso-kit/kept/`); else REVERT naming the losers: undo the change (git revert). It refuses while a pair waits for its answer (`--revert` closes such a round, copying no stills: the change undone, or unable to win), and on a round older than a biome's kept still (keeping it would put the older stills back; restore one on purpose with `rebase`).

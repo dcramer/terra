@@ -1,5 +1,5 @@
 // The asset sheet and the clip sheet (iso-art, judging an asset): every asset the asset view
-// shot (spike/iso's `--asset NAME --shot DIR/NAME.png`, which writes NAME.png, NAME-<clip>-<k>.jpg
+// shot (crates/terra_iso's `cargo iso --asset NAME --shot DIR/NAME.png`, which writes NAME.png, NAME-<clip>-<k>.jpg
 // and NAME.json), so a judge reads them all at once at the game camera.
 //
 // - sheet.png: each asset's still cropped to what is not the view's grey ground, all at one

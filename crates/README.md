@@ -1,6 +1,6 @@
 # Crates
 
-The game's code so far. The split below is the working plan and may change. One rule shapes it: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28). Only the applications, `terra_sandbox` and `terra_game`, the world they stand on, `terra_world` (D198), and the crates cut from the game (D407), `terra_bases`, `terra_walker`, `terra_survival`, `terra_creatures`, `terra_folk` and `terra_building`, may depend on it.
+The game's code so far. The split below is the working plan and may change. One rule shapes it: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28). Only the applications, `terra_sandbox`, `terra_game` and `terra_iso`, the world they stand on, `terra_world` (D198), and the crates cut from the game (D407), `terra_bases`, `terra_walker`, `terra_survival`, `terra_creatures`, `terra_folk` and `terra_building`, may depend on it.
 
 | Crate | What it holds | Bevy? | State |
 |---|---|---|---|
@@ -31,6 +31,7 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_building` | Building play, in Bevy, on `terra_survival` (D407), beside creatures and townsfolk: acting on a base with the hammer, what building costs, the build menu and dial, doors and shutters, what comes down and its dust, the base's fire, a house going up, the kit sheet and villages laid as scenes, and the remote's building methods. Re-exported by the game at its old paths (`build::building`, `build::act`). [README](terra_building/README.md) | Yes | Exists |
 | `terra_game` | The game in Bevy, on `terra_world`: the app over the gameplay crates: the map, the game's sounds and music, saving, the remote probe | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |
 | `terra_sandbox` | A test environment on top of the game: it launches it, and holds testbeds and developer tools such as the workbench and the icon baker | Yes | Exists. [README](terra_sandbox/README.md) |
+| `terra_iso` | The 2.5D top-down experiment (D634), a front end of its own on `terra_core` alone so far: biomes as data on a shared kit, a hero played at an action RPG's camera, `cargo iso` from the root; converging on the game's systems is [docs/iso.md](../docs/iso.md) (D635, Open) | Yes | Exists, moved from `spike/iso` on 2026-11-07. [README](terra_iso/README.md) |
 
 Where each part of the engine stands is in [docs/engine.md](../docs/engine.md#tracks). Crates are created when their track starts, not before.
 

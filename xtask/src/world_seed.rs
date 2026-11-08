@@ -219,6 +219,11 @@ const KEYED_BY_PLACE: &[(&str, &str, &str)] = &[
         "",
         "a tree's twigs keyed by the limb they grow on, whose shape the forest's seed grew",
     ),
+    (
+        "crates/terra_iso/src/party.rs",
+        "idle_phase",
+        "where along its idle an actor starts, from where it stands: a moment's effect, so a still is the same run to run",
+    ),
 ];
 
 /// Whether a file is the crates' own code, not a test's, a bench's, an example's or a program's.

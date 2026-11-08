@@ -694,7 +694,7 @@ Checks, developer tools, languages and the repository.
 | [D627](decisions/D627.md) | Token consumption is a constraint of how we work | Tech | Agent | Decided | Every agent knows its context and spend… |
 | [D628](decisions/D628.md) | The iso experiment's art comes from Tripo's own rig and preset clips, made game-ready in Node by one command a stage | Tech | Agent | Decided | For the 2.5D isometric experiment (tools/iso-art)… |
 | [D632](decisions/D632.md) | A check is a gate only once a planted fault shows it catches it | Tech | Agent | Decided | A check (a scorecard's row, a stage of a check, a… |
-| [D634](decisions/D634.md) | The iso experiment's biomes are data files on one shared kit, judged toward realism by an adversarial loop with a no-loss ratchet | Tech | Agent | Decided | In the isometric experiment (spike/iso, iso-kit)… |
+| [D634](decisions/D634.md) | The iso experiment's biomes are data files on one shared kit, judged toward realism by an adversarial loop with a no-loss ratchet | Tech | Agent | Decided | In the isometric experiment (crates/terra_iso, iso-kit)… |
 
 ## Superseded and rejected
 

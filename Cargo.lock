@@ -6312,6 +6312,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_iso"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "libm",
+ "ron",
+ "serde",
+ "terra_core",
+ "terra_gen",
+]
+
+[[package]]
 name = "terra_items"
 version = "0.1.0"
 dependencies = [

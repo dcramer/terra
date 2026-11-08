@@ -1,0 +1,27 @@
+[package]
+name = "terra_iso"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# The 2.5D top-down experiment (README.md, D634): a front end on Bevy, as terra_sandbox is
+# (D28), run from the root by `cargo iso` (.cargo/config.toml).
+[[bin]]
+name = "iso"
+path = "src/main.rs"
+
+[dependencies]
+# Its own features, not the workspace's: no free camera, dev tools or file watcher in the
+# experiment, as when it was its own workspace.
+bevy = { version = "0.20", features = ["jpeg", "experimental_pbr_pcss"] }
+terra_core.workspace = true
+# The shared hash (an idle's phase from where an actor stands); already built through terra_core.
+terra_gen.workspace = true
+libm.workspace = true
+# The biome kit's files (src/kit/, D634): RON through serde.
+ron.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

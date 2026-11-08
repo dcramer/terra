@@ -4,7 +4,7 @@ Dated 2026-11-05 (spike `spike/iso`, jobs iso-forest j1 to j8). The developer as
 
 ## What was built
 
-A separate Cargo workspace in `spike/iso` that reads the repository's `assets/` and carries the same Bevy patches (`cd spike/iso && cargo run`; its README lists the controls and the scripted still).
+A separate Cargo workspace in `spike/iso` that reads the repository's `assets/` and carries the same Bevy patches (`cd spike/iso && cargo run`; its README lists the controls and the scripted still). Moved on 2026-11-07 to [crates/terra_iso](../crates/terra_iso/README.md), a member of the root workspace run by `cargo iso` from the root; the paths below are as they were.
 
 - **The view**: one orthographic camera, 42° down and turned 28°, never rotated, as the Infinity Engine's painted backgrounds are. The scene is drawn live in 3D instead of painted: PBR, cascaded sun shadows, point-light shadows, SSAO, TAA, bloom, distance haze. Day, dusk and night are on `T`.
 - **The party**: a Tripo knight and three of our male body in its ranger and peasant pieces, on our clips (idle, walk, jog, sit). The controls are BG-style: green rings at the chosen's feet, a drag box, a wedge formation, pause with a red frame, live portraits rendered from each face, and a log of barks. A grid A* with string-pulling runs round trees, rocks and the pond.

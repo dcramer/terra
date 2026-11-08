@@ -36,7 +36,7 @@ We write the terrain, the networking model and the game. We do not write a rende
 
 ## How the code is split
 
-One Cargo workspace. The rule that shapes it: **anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy** (D28). Only the applications, `terra_game` and `terra_sandbox`, may depend on Bevy, and `terra_world`, the world on screen they stand on (D198); `cargo xtask check` enforces it. The crates are listed in [crates/README.md](../crates/README.md).
+One Cargo workspace. The rule that shapes it: **anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy** (D28). Only the applications, `terra_game`, `terra_sandbox` and the iso experiment `terra_iso`, may depend on Bevy, and `terra_world`, the world on screen they stand on (D198); `cargo xtask check` enforces it. The crates are listed in [crates/README.md](../crates/README.md).
 
 Why this split:
 
