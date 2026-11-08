@@ -337,3 +337,33 @@ test("adopt takes a project in at its step, and status shows its stages", () => 
   assert.match(table, /moose\s+creature\s+db7311a1\s+-\s+adopted\s+adopted\s+-/);
   assert.throws(() => main(["adopt", "elk", "db73", "--kind", "creature"], ctx), /needs --height/);
 });
+
+test("convert keeps the game's clips iso plays under its names, drops the rest, and takes a brawler's punch for the attack", () => {
+  const ctx = fakeCtx(0, []);
+  writeAsset(ctx.root, { name: "scav", kind: "npc", theme: "junk lot", description: "a scavenger", body: "biped", height: 1.72, stages: {} });
+  const still = (h: number): [number, string, number[], number[][]][] => [[1, "translation", [0, 1], [[0, h, 0], [0, h, 0]]]];
+  const game = walker([
+    ["Idle_Loop", still(1)], ["Walk_Loop", [footL, footR]], ["Jog_Fwd_Loop", [footL, footR]], ["Sprint_Loop", [footL, footR]],
+    ["Sword_Attack", still(0.9)], ["Punch_Cross", still(0.8)], ["Hit_Chest", still(0.95)], ["Death01", still(0.2)],
+  ]);
+  const file = join(ctx.root, "scav-game.glb");
+  writeFileSync(file, writeGlb(game));
+  const outFile = join(ctx.root, "assets", "models", "iso", "scav.glb");
+  const hipsAt = (g: Glb, clip: string) => sample(clips(g).find((c) => c.name === clip)!.channels[0], 0)[1];
+
+  main(["convert", "scav", file], ctx);
+  const armed = readGlb(readFileSync(outFile));
+  assert.deepEqual(armed.doc.animations.map((a: any) => a.name), ["idle", "walk", "run", "attack", "hit", "death"]);
+  assert.ok(Math.abs(hipsAt(armed, "attack") - 0.9) < 1e-6, "Sword_Attack is the attack by default");
+  assert.ok(armed.doc.accessors.length < game.doc.accessors.length, "the dropped clips' keys are dropped with them");
+  assert.equal(readAsset(ctx.root, "scav").stages.convert?.attack, "Sword_Attack");
+
+  main(["convert", "scav", file, "--unarmed"], ctx);
+  const brawler = readGlb(readFileSync(outFile));
+  assert.ok(Math.abs(hipsAt(brawler, "attack") - 0.8) < 1e-6, "--unarmed plays Punch_Cross");
+  main(["convert", "scav", file], ctx);
+  assert.equal(readAsset(ctx.root, "scav").stages.convert?.attack, "Punch_Cross", "a later run keeps the asset's attack");
+
+  writeFileSync(file, writeGlb(walker([["Idle_Loop", still(1)]])));
+  assert.throws(() => main(["convert", "scav", file], ctx), /no clip Walk_Loop.*finish_character/);
+});

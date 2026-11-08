@@ -76,6 +76,21 @@ const BIPED: ClipSpec[] = [
   { name: "death", preset: "fall", loop: false, seconds: [0.4, 6], ends: "down" },
 ];
 
+/** A biped on the game's skeleton (`convert`) plays the game's own clips (art/animation/clips.txt,
+ * Quaternius's libraries, re-sampled on its skeleton by tools/characters/export_character.py)
+ * under the names iso asks for, not Tripo's presets: the developer, 2026-11-08, "better
+ * animations ... (no auto magic)". Each is in place and loops as made, so no cut is needed. The
+ * attack is the asset's: `Sword_Attack` for anything held, `Punch_Cross` for a brawler's fists. */
+export const GAME_CLIPS: Record<string, string> = {
+  idle: "Idle_Loop",
+  walk: "Walk_Loop",
+  run: "Jog_Fwd_Loop",
+  attack: "Sword_Attack",
+  hit: "Hit_Chest",
+  death: "Death01",
+};
+export const UNARMED_ATTACK = "Punch_Cross";
+
 /** The one preset every other body Tripo rigs has. */
 const MARCH = new Set(["serpentine", "aquatic"]);
 

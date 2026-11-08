@@ -10,8 +10,8 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { stylePrompt } from "../props/props.ts";
 import { check, measure, printResults } from "./check.ts";
-import { readGlb, writeGlb } from "./gltf.ts";
-import { type Body, KINDS, type Kind, SPECS, budget, clipsFor, isoPart } from "./kinds.ts";
+import { compact, readGlb, writeGlb } from "./gltf.ts";
+import { type Body, GAME_CLIPS, KINDS, type Kind, SPECS, UNARMED_ATTACK, budget, clipsFor, isoPart } from "./kinds.ts";
 import { type Asset, type Stage, type StageRecord, allAssets, assetDir, readAsset, readmeCost, statusTable, writeAsset } from "./ledger.ts";
 import { centre, cut, inPlace, loop, place, renameClips } from "./normalize.ts";
 import { DIR, assetSheet, clipSheet } from "./sheet.ts";
@@ -170,6 +170,43 @@ export function exportAsset(ctx: Ctx, name: string): void {
   record(ctx, a, "export", { credits: r.out.credits ?? 0, minutes: r.minutes, files: [relative(ctx.root, out)], scale: Number(placed.scale.toFixed(4)), turn: Math.round(placed.turn), note: did });
 }
 
+/** Takes a biped converted onto the game's skeleton in, in place of `animate` and `export`: `file`
+ * is tools/characters/finish_character.sh's NAME-game.glb, made on the render worker from
+ * art/iso/NAME/rigged.glb (the iso-art skill, asset.md). Keeps the game's clips iso plays, named
+ * as iso asks for them (kinds.ts GAME_CLIPS), drops the rest and what only they read, and puts
+ * the scene under its root node life size, facing +Z, on y=0, as `export` does. */
+export function convert(ctx: Ctx, name: string, file: string | undefined, opts: { unarmed?: boolean }): void {
+  const a = readAsset(ctx.root, name);
+  if (a.body !== "biped") throw new Error(`${name} is not a biped: only a humanoid is converted onto the game's skeleton; a creature keeps Tripo's rig (\`animate\`, \`export\`)`);
+  if (!file || !existsSync(file)) throw new Error(`convert needs FILE, the game's export of ${name}: on the render worker \`cargo xtask remote-render --cpu --collect tools/characters/out/${name}-game.glb -- tools/characters/finish_character.sh ${name} ${a.height ?? "HEIGHT"} art/iso/${name}/rigged.glb\`, then the collected file`);
+  const start = Date.now();
+  const glb = readGlb(readFileSync(file));
+  const attack = opts.unarmed ? UNARMED_ATTACK : ((a.stages.convert?.attack as string | undefined) ?? GAME_CLIPS.attack);
+  const want = Object.entries({ ...GAME_CLIPS, attack });
+  const anims: any[] = glb.doc.animations ?? [];
+  const missing = want.filter(([, g]) => !anims.some((x) => x.name === g)).map(([, g]) => g);
+  if (missing.length) throw new Error(`${relative(ctx.root, file)} has no clip ${missing.join(", ")} (it has ${anims.length}): it is not the game's export, or art/animation/clips.txt lost them; run finish_character.sh again`);
+  glb.doc.animations = want.map(([ours, g]) => ({ ...anims.find((x) => x.name === g), name: ours }));
+  compact(glb);
+  // The game's walk and jog lean their body a few cm ahead of the feet (4-5% of the height on
+  // the scavenger, 2026-11-08): set over the entity's place, as export does Tripo's.
+  centre(glb, clipsFor("biped"));
+  const placed = place(glb, name, a.height, 0);
+  const out = assetFile(ctx.root, name);
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, writeGlb(glb));
+  a.rig = "biped";
+  record(ctx, a, "convert", {
+    credits: 0,
+    minutes: (Date.now() - start) / 60000,
+    files: [relative(ctx.root, out)],
+    clips: want.map(([ours, g]) => `${ours}=${g}`),
+    attack,
+    scale: Number(placed.scale.toFixed(4)),
+    note: `the game's skeleton and clips: ${want.map(([ours, g]) => `${ours}=${g}`).join(" ")}, ${anims.length - want.length} others dropped, scaled ${placed.scale.toFixed(3)}`,
+  });
+}
+
 /** Cuts the exported GLB's mesh to its budget (decimate.ts): by Blender here, or from `file`, a
  * cut tools/blender/decimate.py made elsewhere of this same GLB. Run after every `export`. */
 export function decimateAsset(ctx: Ctx, name: string, file?: string): void {
@@ -264,8 +301,12 @@ const USAGE = `usage: node tools/iso-art/iso-art.ts <stage> NAME …
                          a concept image in the art style with the iso part (free, 100 a month)
   model NAME [--standard] a Tripo model of the concept (55 credits; 25 standard)
   rig NAME               Tripo's auto-rig, humanoid or as its shape reads (20 credits)
-  animate NAME           the kind's preset clips (free)
+  animate NAME           the kind's preset clips (free; a creature's, as a biped is converted)
   export NAME            the GLB with its clips, life size, facing +Z, on y=0, to assets/models/iso/NAME.glb (free)
+  convert NAME FILE [--unarmed]
+                         a biped on the game's skeleton and clips: FILE is finish_character.sh's
+                         NAME-game.glb from the worker; its idle, walk, run, attack (Sword_Attack, or
+                         Punch_Cross --unarmed), hit and death to assets/models/iso/NAME.glb (free)
   decimate NAME [FILE]   the GLB's mesh cut to its budget by Blender (or FILE, tools/blender/decimate.py's
                          cut of it made elsewhere), skeleton and clips kept; after every export (free)
   check NAME [FILE]      what can be checked without a GPU; exits 1 if any check fails
@@ -281,7 +322,7 @@ export function main(argv: string[], ctx: Ctx): number {
   const { values: v, positionals: p } = parseArgs({
     args: argv,
     allowPositionals: true,
-    options: { kind: { type: "string" }, theme: { type: "string" }, body: { type: "string" }, height: { type: "string" }, standard: { type: "boolean" }, dir: { type: "string" }, help: { type: "boolean", short: "h" } },
+    options: { kind: { type: "string" }, theme: { type: "string" }, body: { type: "string" }, height: { type: "string" }, standard: { type: "boolean" }, unarmed: { type: "boolean" }, dir: { type: "string" }, help: { type: "boolean", short: "h" } },
   });
   const [stage, name, third] = p;
   if (!stage || v.help) {
@@ -305,6 +346,7 @@ export function main(argv: string[], ctx: Ctx): number {
     case "rig": rig(ctx, name); return 0;
     case "animate": animate(ctx, name); return 0;
     case "export": exportAsset(ctx, name); return 0;
+    case "convert": convert(ctx, name, third, v); return 0;
     case "decimate": decimateAsset(ctx, name, third); return 0;
     case "check": return checkAsset(ctx, name, third) ? 0 : 1;
     case "adopt":
