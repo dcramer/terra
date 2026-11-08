@@ -22,6 +22,8 @@ fn a_creature_about_its_day_is_unaware_and_one_that_has_noticed_is_not() {
         facing: Vec3::X,
         hurt: false,
         quarry: None,
+        blow: 0,
+        warned: false,
         aloft: 0.0,
         side: Vec3::X,
         bolt: Vec3::ZERO,
@@ -67,6 +69,8 @@ fn spider(world: &mut World, at: Vec3) -> Entity {
                 facing: Vec3::X,
                 hurt: false,
                 quarry: None,
+                blow: 0,
+                warned: false,
                 aloft: 0.0,
                 side: Vec3::X,
                 bolt: Vec3::ZERO,
@@ -882,4 +886,98 @@ fn the_lair_is_not_put_down_in_the_tundras_pool() {
             planet.water_radius_m(ground) - ground.length()
         );
     }
+}
+
+/// The troll's fight (D590), by its data: roused, it roars once, which hurts nobody; then,
+/// its quarry within both blows' reach, it deals its sweep and its smash turn about, each
+/// landing at its own time and not before; led home and roused again, it roars again.
+#[test]
+fn a_troll_roars_once_then_deals_its_blows_turn_about_each_landing_at_its_time() {
+    let mut world = world();
+    let ground = Vec3::Y * 2000.0;
+    let player = test_player(&mut world, ground + Vec3::X * 3.0);
+    let troll = kind(&mut world, "Troll", ground);
+    let (smash, sweep, roar_s) = {
+        let species = world.get::<Creature>(troll).unwrap().species;
+        let about = world.resource::<Bestiary>().get(species);
+        let Temper::Hostile {
+            bite,
+            bite_at_s,
+            attack_s,
+            ..
+        } = about.temper
+        else {
+            panic!("a troll is hostile");
+        };
+        (
+            (bite_at_s, bite, attack_s),
+            about.blows[0].clone(),
+            about.warns.clone().unwrap().1,
+        )
+    };
+    // So many seconds of thinking, a fiftieth at a time, as the game's ticks are: what it is
+    // at after, and what landed meanwhile.
+    let step = |world: &mut World, seconds: f32| {
+        let mut bites = Vec::new();
+        for _ in 0..(seconds / 0.02).round().max(1.0) as usize {
+            world
+                .resource_mut::<Time>()
+                .advance_by(Duration::from_millis(20));
+            world.run_system_once(think).unwrap();
+            bites.extend(
+                world
+                    .resource_mut::<Messages<Bitten>>()
+                    .drain()
+                    .map(|bite| bite.damage),
+            );
+        }
+        let creature = world.get::<Creature>(troll).unwrap();
+        (creature.state, creature.blow, bites)
+    };
+    // Roused: the roar, through which nothing lands, for as long as its data says.
+    let (state, blow, _) = step(&mut world, 0.02);
+    assert!(
+        matches!(state, State::Attack(_)) && blow == WARNING,
+        "{state:?} {blow}"
+    );
+    let mut roared = 0.02;
+    while world.get::<Creature>(troll).unwrap().blow == WARNING {
+        let (_, _, bites) = step(&mut world, 0.02);
+        assert!(bites.is_empty(), "its roar hurt someone: {bites:?}");
+        roared += 0.02;
+        assert!(roared < roar_s + 1.0, "it never stopped roaring");
+    }
+    assert!(
+        (roared - roar_s).abs() < 0.1,
+        "it roared for {roared} s, not {roar_s}"
+    );
+    // Then its blows, turn about: its temper's own (the smash), then the sweep, each landing
+    // once, at its own time and not before (until then is its tell).
+    let mut dealt = Vec::new();
+    for _ in 0..4 {
+        let blow = world.get::<Creature>(troll).unwrap().blow;
+        let (lands_at, damage, lasts) = if blow == 0 {
+            smash
+        } else {
+            (sweep.lands_at_s, sweep.damage, sweep.lasts_s)
+        };
+        let (mut through, mut landed) = (0.02, Vec::new());
+        while through < lasts {
+            let (_, _, bites) = step(&mut world, 0.02);
+            through += 0.02;
+            landed.extend(bites.into_iter().map(|damage| (damage, through)));
+        }
+        assert_eq!(landed.len(), 1, "blow {blow} landed {landed:?}");
+        assert_eq!(landed[0].0, damage, "blow {blow}");
+        assert!(
+            (landed[0].1 - lands_at).abs() < 0.1,
+            "blow {blow} landed at {} s, not {lands_at}",
+            landed[0].1
+        );
+        dealt.push(blow);
+        // Into the next.
+        step(&mut world, 0.04);
+    }
+    assert_eq!(dealt, [0, 1, 0, 1]);
+    assert_eq!(world.get::<Creature>(troll).unwrap().quarry, Some(player));
 }

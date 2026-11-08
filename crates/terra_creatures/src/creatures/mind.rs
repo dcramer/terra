@@ -3,8 +3,8 @@
 //! else what it gets on with (`settle`).
 
 use super::gait::{CROSSES, Pace, bolt, bolts_within};
-use super::{Bitten, CLIMB_REACH_M, Creature, State};
-use crate::species::{Bestiary, Moves, Refuge, SpeciesDef, Temper};
+use super::{Bitten, CLIMB_REACH_M, Creature, State, WARNING};
+use crate::species::{Bestiary, MOST_BLOWS, Moves, Refuge, SpeciesDef, Temper};
 use crate::wildlife::Surroundings;
 use bevy::prelude::*;
 use terra_gen::Rng;
@@ -198,7 +198,7 @@ fn decide(
             flees_s,
             ..
         } => shy(creature, about, s, (flees_within_m, flees_s), around, dice),
-        Temper::Hostile { .. } => hostile(creature, about.temper, s, bitten),
+        Temper::Hostile { .. } => hostile(creature, about, s, bitten),
     };
     roused.unwrap_or_else(|| settle(creature, about, s, around, dice))
 }
@@ -436,7 +436,7 @@ fn look_toward(creature: &mut Creature, s: &Sense) {
 /// none if nobody is near.
 fn hostile(
     creature: &mut Creature,
-    temper: Temper,
+    about: &SpeciesDef,
     s: &Sense,
     bitten: &mut MessageWriter<Bitten>,
 ) -> Option<State> {
@@ -449,39 +449,75 @@ fn hostile(
         notices_m,
         leash_m,
         ..
-    } = temper
+    } = about.temper
     else {
         return None;
     };
+    // Each blow it has: within how far it begins, what it takes, when it lands, on whom
+    // within how far, and how long it lasts; its temper's own first.
+    let blows = || {
+        let others = about.blows.iter().take(MOST_BLOWS).map(|blow| {
+            (
+                blow.within_m,
+                blow.damage,
+                blow.lands_at_s,
+                blow.reach_m,
+                blow.lasts_s,
+            )
+        });
+        std::iter::once((attacks_within_m, bite, bite_at_s, bite_reach_m, attack_s)).chain(others)
+    };
     let from_home = (s.here - creature.home).length();
+    let roused =
+        s.quarry.is_some() && (s.apart < notices_m || creature.hurt) && from_home < leash_m;
     Some(match creature.state {
         State::Attack(through) => {
             let through = through + s.dt;
-            // The bite lands partway through, if its quarry is still there.
-            if through - s.dt < bite_at_s
-                && through >= bite_at_s
-                && s.apart < bite_reach_m
+            // A warning takes nothing; a blow lands partway through, if its quarry is still
+            // there: until then is its tell.
+            let (_, damage, lands_at_s, reach_m, lasts_s) = match (creature.blow, &about.warns) {
+                (WARNING, Some((_, lasts_s))) => (0.0, 0.0, f32::MAX, 0.0, *lasts_s),
+                (blow, _) => blows().nth(blow as usize).or_else(|| blows().next())?,
+            };
+            if through - s.dt < lands_at_s
+                && through >= lands_at_s
+                && s.apart < reach_m
                 && let Some(player) = s.quarry
             {
-                bitten.write(Bitten {
-                    player,
-                    damage: bite,
-                });
+                bitten.write(Bitten { player, damage });
             }
-            if through > attack_s {
+            if through > lasts_s {
                 State::Chase
             } else {
                 State::Attack(through)
             }
         }
-        _ if s.near(attacks_within_m) => State::Attack(0.0),
-        _ if s.quarry.is_some()
-            && (s.apart < notices_m || creature.hurt)
-            && from_home < leash_m =>
-        {
-            State::Chase
+        // Roused, it warns once before anything else: the fight's first tell.
+        _ if roused && !creature.warned && about.warns.is_some() => {
+            (creature.warned, creature.blow) = (true, WARNING);
+            State::Attack(0.0)
         }
-        State::Chase => State::Return,
+        // Of the blows that reach, the one after the last it dealt, turn about.
+        _ if blows().any(|(within_m, ..)| s.near(within_m)) => {
+            let count = blows().count();
+            let last = if creature.blow == WARNING {
+                count - 1
+            } else {
+                creature.blow as usize
+            };
+            let next = (1..=count).map(|step| (last + step) % count).find(|&blow| {
+                blows()
+                    .nth(blow)
+                    .is_some_and(|(within_m, ..)| s.near(within_m))
+            });
+            creature.blow = next.unwrap_or(0) as u8;
+            State::Attack(0.0)
+        }
+        _ if roused => State::Chase,
+        State::Chase => {
+            creature.warned = false;
+            State::Return
+        }
         _ => return None,
     })
 }

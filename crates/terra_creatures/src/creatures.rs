@@ -18,7 +18,7 @@ mod steer;
 mod wake;
 
 pub use crate::species::Species;
-use crate::species::{Bestiary, Lives, Moves, Refuge};
+use crate::species::{Bestiary, Lives, MOST_BLOWS, Moves, Refuge};
 pub use appear::{Shown, leave};
 use bevy::{
     prelude::*,
@@ -116,6 +116,9 @@ pub enum State {
 pub struct Tame;
 
 /// A creature lives on by the clock, so the census counts it apart (`Living`, D469).
+/// [`Creature::blow`] when it is its warning it is at, not a blow.
+pub(crate) const WARNING: u8 = u8::MAX;
+
 #[derive(Component)]
 #[require(Smoothed, Detail, Living)]
 pub struct Creature {
@@ -128,6 +131,11 @@ pub struct Creature {
     pub hurt: bool,
     /// The player it is chasing, biting or running from, if any.
     quarry: Option<Entity>,
+    /// Which blow it is dealing or dealt last: 0 its temper's own, then its kind's others
+    /// in their order, or its warning ([`WARNING`]); and whether it has warned whoever it
+    /// is roused by, which it does once until it has gone home.
+    pub(crate) blow: u8,
+    pub(crate) warned: bool,
     /// How high up a trunk it is, and which way from the trunk it clings.
     aloft: f32,
     side: Vec3,
@@ -238,6 +246,8 @@ impl Creature {
             facing: Vec3::X,
             hurt: false,
             quarry: None,
+            blow: 0,
+            warned: false,
             aloft: 0.0,
             side: Vec3::X,
             bolt: Vec3::ZERO,
@@ -282,6 +292,21 @@ struct Clips {
     attack: AnimationNodeIndex,
     death: AnimationNodeIndex,
     fly: AnimationNodeIndex,
+    /// Its other blows' clips (`SpeciesDef::blows`), and its warning's.
+    blows: [Option<AnimationNodeIndex>; MOST_BLOWS],
+    warn: Option<AnimationNodeIndex>,
+}
+
+impl Clips {
+    /// The clip of the blow a creature is dealing ([`Creature::blow`]).
+    fn blow(&self, blow: u8) -> AnimationNodeIndex {
+        let other = match blow {
+            0 => None,
+            WARNING => self.warn,
+            other => self.blows.get(other as usize - 1).copied().flatten(),
+        };
+        other.unwrap_or(self.attack)
+    }
 }
 
 /// On a creature's animation player: whose it is, and what it plays.
@@ -467,9 +492,10 @@ fn animated(
             error!("{} has no scene.", bestiary.name(*species));
             return None;
         };
-        let about = &bestiary.get(*species).clips;
+        let def = bestiary.get(*species);
+        let about = &def.clips;
         let clip = |name: &str| gltf.named_animations.get(name).cloned();
-        let names = [
+        let mut names = vec![
             &about.idle,
             &about.walk,
             &about.run,
@@ -479,6 +505,10 @@ fn animated(
             about.fly.as_ref().unwrap_or(&about.run),
             about.trot.as_ref().map_or(&about.run, |(trot, _)| trot),
         ];
+        // Then its other blows' clips, three at most, and its warning's.
+        let others = def.blows.len().min(MOST_BLOWS);
+        names.extend(def.blows.iter().take(MOST_BLOWS).map(|blow| &blow.clip));
+        names.extend(def.warns.as_ref().map(|(warn, _)| warn));
         let Some(clips) = names
             .iter()
             .map(|name| clip(name))
@@ -501,6 +531,8 @@ fn animated(
                 death: nodes[5],
                 fly: nodes[6],
                 trot: nodes[7],
+                blows: std::array::from_fn(|at| (at < others).then(|| nodes[8 + at])),
+                warn: def.warns.as_ref().map(|_| nodes[8 + others]),
             },
         ));
     }
@@ -558,6 +590,8 @@ pub fn spawn(
                 facing,
                 hurt: false,
                 quarry: None,
+                blow: 0,
+                warned: false,
                 aloft: 0.0,
                 side: Vec3::X,
                 bolt: Vec3::ZERO,
@@ -854,7 +888,7 @@ fn animate(
             }
             State::Climb { .. } => (clips.run, 1.0),
             State::Fly { .. } => (clips.fly, 1.0),
-            State::Attack(_) => (clips.attack, 1.0),
+            State::Attack(_) => (clips.blow(creature.blow), 1.0),
             State::Dead(_) => (clips.death, 1.0),
         };
         if animates.playing != Some(wanted) {

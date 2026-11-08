@@ -36,6 +36,12 @@
 //            a kind that only calls in alarm
 //   pools    whether it forms where magic pools (D103)
 //   marks    the mark its fall imprints on the players by it (data/marks.ron, D590)
+//   blows    a hostile kind's other blows, three at most, dealt turn about with its
+//            temper's own by whichever reach: each its clip, within how far it begins, its
+//            damage, when in the clip it lands (until then is its tell), on anyone within
+//            reach_m, and how long it lasts
+//   warns    what it does once on first noticing someone, before it comes: a clip and its
+//            seconds
 //   stride   how far a step carries, as so far and so much more for each metre a second
 //   feet     what its steps sound like
 //   voice    what it sounds like when it is alarmed
@@ -117,6 +123,13 @@
         ),
         lives: Den,
         marks: Some("troll"),
+        // Its smash is its temper's own blow: both arms raised over two seconds, the tell,
+        // then brought down. Its sweep reaches wider and lands sooner. It roars once on
+        // noticing anyone.
+        blows: [
+            (clip: "Troll_Sweep", within_m: 4.6, damage: 24.0, lands_at_s: 1.4, reach_m: 5.2, lasts_s: 3.0),
+        ],
+        warns: Some(("Troll_Roar", 3.5)),
         stride: (1.1, 0.2),
         feet: Hoof,
         voice: Snort,

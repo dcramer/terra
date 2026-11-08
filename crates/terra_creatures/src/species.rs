@@ -51,6 +51,14 @@ pub struct SpeciesDef {
     pub calls_s: Option<(f32, f32)>,
     #[serde(default)]
     pub pools: bool,
+    /// The blows a hostile kind deals besides its temper's own, three at most: it deals
+    /// whichever reach its quarry, turn about, so a fight is not one move over and over.
+    #[serde(default)]
+    pub blows: Vec<BlowDef>,
+    /// What it does on first noticing someone, before it comes for them: a clip and how
+    /// long it lasts, in seconds. A tell: the roar that says the fight has begun.
+    #[serde(default)]
+    pub warns: Option<(String, f32)>,
     /// The mark its fall imprints on the players by it, by the mark's key (D590,
     /// `data/marks.ron`): the demo's boss marks those who beat it.
     #[serde(default)]
@@ -208,6 +216,23 @@ pub enum Temper {
         attack_s: f32,
     },
 }
+
+/// A blow a hostile kind deals besides its temper's own: its clip; within how far of its
+/// quarry it begins; what it takes if it lands, when in the clip, and on anyone within how
+/// far then; and how long it lasts. The time before it lands is its tell.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct BlowDef {
+    pub clip: String,
+    pub within_m: f32,
+    pub damage: f32,
+    pub lands_at_s: f32,
+    pub reach_m: f32,
+    pub lasts_s: f32,
+}
+
+/// The most blows a kind has besides its temper's.
+pub const MOST_BLOWS: usize = 3;
 
 /// Where a kind of creature is put in a world, and how many.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
