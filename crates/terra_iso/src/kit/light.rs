@@ -147,12 +147,15 @@ pub struct Sky {
     pub nits: f32,
 }
 
-/// The grade over the tone curve: the whole frame's saturation and the midtones'.
+/// The grade over the tone curve: the whole frame's saturation, the midtones' and the
+/// highlights' (Bevy's sectional grade, before the curve: a highlight is an exposed colour
+/// whose mean channel passes 0.7, so a sunlit break, not the shade).
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
 #[serde(deny_unknown_fields, default)]
 pub struct Grade {
     pub saturation: f32,
     pub mid_saturation: f32,
+    pub high_saturation: f32,
 }
 
 impl Default for Grade {
@@ -160,6 +163,7 @@ impl Default for Grade {
         Grade {
             saturation: 1.0,
             mid_saturation: 1.0,
+            high_saturation: 1.0,
         }
     }
 }
@@ -277,6 +281,10 @@ impl Light {
                     saturation: self.grade.mid_saturation,
                     ..default()
                 },
+                highlights: bevy::render::view::ColorGradingSection {
+                    saturation: self.grade.high_saturation,
+                    ..default()
+                },
                 ..default()
             },
         ));
@@ -339,5 +347,16 @@ mod tests {
             },
             base
         );
+    }
+
+    /// A grade that names no highlights leaves them as the curve has them, so a preset
+    /// written before the field (desert-day's) draws as it did.
+    #[test]
+    fn a_grade_without_highlights_leaves_them() {
+        let g: Grade = ron::from_str("(saturation: 1.1, mid_saturation: 1.2)").unwrap();
+        assert_eq!(g.high_saturation, 1.0);
+        assert_eq!((g.saturation, g.mid_saturation), (1.1, 1.2));
+        let g: Grade = ron::from_str("(high_saturation: 0.5)").unwrap();
+        assert_eq!((g.saturation, g.high_saturation), (1.0, 0.5));
     }
 }

@@ -19,7 +19,11 @@
     key: (
         toward: Angles(elevation: 52.0, azimuth: -40.0),
         colour: Srgb(1.0, 0.96, 0.9),
-        lux: 4200.0,
+        // 4,200 until round 261107-2000 (the haze off) left the top end short of the day
+        // refs': p95 0.238 and bright share 0.015 against 0.254+ and 0.021+, judges' "no
+        // sunlit pools through the canopy". A sun a third brighter (5,600) alone read as hot
+        // chartreuse grass (round 261107-1822): so a little less, the highlights greyed below.
+        lux: 5400.0,
     ),
     sky: (colour: Srgb(0.75, 0.85, 1.0), nits: 300.0),
     ev100: 7.5,
@@ -30,6 +34,9 @@
         saturation: 1.3,
         // 1.15 left saturation 0.254 (the day refs' 0.27 to 0.47).
         mid_saturation: 1.25,
+        // The sun's breaks (exposed past 0.7) toward warm white, as sunlit leaves and grass
+        // read in the photographs, not the lime a saturated green takes when it is lit hot.
+        high_saturation: 0.8,
     ),
     // No haze. The glade's (pale blue Srgba(0.62, 0.7, 0.78, 0.55), linear from 2 m before
     // the camera's 19 m to 70 m past it) is not "the land beyond the fight" at the ARPG
