@@ -50,15 +50,23 @@ fn state(
     In(_): In<Option<serde_json::Value>>,
     planet: Option<Res<Planet>>,
     start: Option<Res<Start>>,
+    eye: Query<&GlobalTransform, With<crate::planet::MainCamera>>,
 ) -> bevy::remote::BrpResult {
     let (Some(planet), Some(start)) = (planet, start) else {
         return Err(crate::remote::refused("No world is made yet."));
     };
+    // How far the camera is from the ground round it, in metres: under nought, it is in
+    // the rock and the picture is of the ground's inside (a camera in a tight place).
+    let eye_clear_m = eye
+        .iter()
+        .next()
+        .map(|eye| planet.distance(eye.translation()));
     let Some(den) = planet.den() else {
-        return Ok(serde_json::json!({ "den": null }));
+        return Ok(serde_json::json!({ "den": null, "eye_clear_m": eye_clear_m }));
     };
     let local = |point: Vec3| start.local(point).to_array();
     Ok(serde_json::json!({
+        "eye_clear_m": eye_clear_m,
         "den": {
             "mouth": local(den.mouth),
             "floor": local(den.floor),

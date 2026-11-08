@@ -52,10 +52,19 @@ try {
   await warp([den.mouth[0], den.mouth[2]], [den.ahead[0], den.ahead[2]]);
   const began = Date.now();
   let at = await player();
+  // The camera on the way in: how near the rock it came, and whether it was ever in it.
+  let eyeNearest = Infinity;
+  const eye = async () => {
+    const clear = ((await call("den.state")) as { eye_clear_m: number | null }).eye_clear_m;
+    if (clear !== null) eyeNearest = Math.min(eyeNearest, clear);
+  };
   // Forward, a second at a time, until the chamber or the clock.
   while ((off(at)[0] > NEAR_M || off(at)[1] > LEVEL_M) && Date.now() - began < MOST_S * 1000) {
     await press("w:60");
-    await waitSeconds(1);
+    for (let look = 0; look < 4; look++) {
+      await waitSeconds(0.25);
+      await eye();
+    }
     at = await player();
     // Met on the way in: struck down before it lands a blow.
     const it = await troll();
@@ -92,8 +101,9 @@ try {
   await waitSeconds(1);
   const borne = await marks();
   if (!borne.includes("troll")) throw new Error(`the troll fell ${fell} and the player bears ${JSON.stringify(borne)}, not its mark: a kind's \`marks\` in data/creatures.ron is imprinted on the players by it when it falls (play::marks::earned, D590)`);
+  if (eyeNearest < 0) throw new Error(`on the way into the den the camera was ${(-eyeNearest).toFixed(2)} m inside the rock: in a passage the camera must keep to the open (terra_walker camera: its boom is shortened by the ground behind the player)`);
   const down = den.mouth[1] - den.floor[1];
-  console.log(`✓ den: seed ${SEED}'s den (way ${den.layout.way}, room ${den.layout.room}, ${den.layout.alcoves} alcoves) opens ${Math.hypot(den.mouth[0], den.mouth[2]).toFixed(0)} m from the start; walking in from its mouth the player came to its chamber's floor, ${down.toFixed(1)} m below the mouth, in ${((Date.now() - began) / 1000).toFixed(0)} s (a reading); the troll kept the den, fell ${fell} to the script's blow, and the player bears its mark`);
+  console.log(`✓ den: seed ${SEED}'s den (way ${den.layout.way}, room ${den.layout.room}, ${den.layout.alcoves} alcoves) opens ${Math.hypot(den.mouth[0], den.mouth[2]).toFixed(0)} m from the start; walking in from its mouth the player came to its chamber's floor, ${down.toFixed(1)} m below the mouth, in ${((Date.now() - began) / 1000).toFixed(0)} s (a reading); the troll kept the den, fell ${fell} to the script's blow, and the player bears its mark; the camera kept ${eyeNearest.toFixed(2)} m and more from the rock`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 } finally {
