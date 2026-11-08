@@ -85,6 +85,7 @@ On the real mover (four men walking, sprinting and jumping for 30 simulated minu
 | `terra_core`, `terra_voxel`, `terra_build` | The ground and bases | Operations, in order, by region. The ground's is built (`terra_walker::net::ground`): the host's operation log is the truth, whatever it gains is ordered, and a joined game's digs are asked of it; `Operation` has its wire form, held to what could be asked. Bases are to come |
 | `terra_items`, `terra_survival` | What is carried, vitals | Operations the server checks; an owner-only part for the pack, a public one for what is worn. What is worn is built (`terra_walker::net::worn`): a player's outfit is a part of its entity, the host's from its gear, a joined player's as its game says (shown, not owned, until the pack is the server's); what is held in hand and a piece's dye do not cross yet |
 | `terra_creatures` | Creatures, simulated only on the server, in cells any player is near | Motion, and the move a creature is in with the tick it began, so each client plays the clip itself |
+| `terra_game` | A gate's state (D590) | An ordered operation once it is open; a joined player's ask carries the marks they bear, taken at their word until characters are the server's (`play::portal::shared`) |
 | `terra_climate`, the sky | Nothing travels but the clock and the seed (D540) | `Welcome`, then a clock correction |
 
 ## Tests, with no window

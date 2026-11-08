@@ -3,7 +3,8 @@
 // copies of the game, each on its title screen, driven by its keys. One makes a world and
 // hosts it; the other, behind whose title screen is another land, joins by typing the
 // host's address, is welcomed, makes the host's land and plays in it, each holding the
-// other, and each looking in the other's game as its player made it. The host then quits to its title screen: the joined game comes back to its own,
+// other, and each looking in the other's game as its player made it; the world's gate is opened
+// by the friend's mark, for both. The host then quits to its title screen: the joined game comes back to its own,
 // told the host left; asking again finds nobody, and it is told that too. Checked with no
 // picture, by what each game says (`title.state`, `net.state`).
 //
@@ -119,6 +120,18 @@ try {
     return seen?.hair === null && seen.beard === "male_beard_full" && seen.eyes === "Blue";
   }, 60);
   console.log("✓ each is the person its player made in the other's game: the host's dreads and deep skin on the friend's puppet, the friend's bare head, beard and blue eyes on the host's guest");
+
+  // The world's gate (D590): shut in both games; the friend, given the mark, holds it to the
+  // gate, the host's gate opens, and it is open in both; nobody crosses a shared world.
+  const gate = (port: number) => JSON.parse(remote(port, "call", "portal.step")) as { open: boolean };
+  if (gate(host).open || gate(friend).open) throw new Error("the world's gate stands open before anyone bears a mark");
+  remote(friend, "call", "marks.give", JSON.stringify({ mark: "troll" }));
+  remote(friend, "call", "portal.step");
+  await until("the host's gate never opened to the mark the friend bears", () => gate(host).open, 60);
+  await until("the friend's game never showed the gate the host opened", () => gate(friend).open, 60);
+  await sleep(3);
+  if (title(host).seed !== land || title(friend).seed !== land) throw new Error(`a player crossed out of a shared world: the host on seed ${title(host).seed}, the friend on ${title(friend).seed}`);
+  console.log("✓ the gate: shut for both, opened on the host by the mark the friend bears, open in both, and nobody crossed the shared world");
 
   // The host quits to its title screen: the friend is brought back to its own, told why.
   remote(host, "call", "title.leave");

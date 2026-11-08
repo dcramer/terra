@@ -32,7 +32,7 @@ pub struct Gate {
 
 /// The portal that is its world's gate, whose state is the world's ([`Gate`]).
 #[derive(Component)]
-struct WorldGate;
+pub(super) struct WorldGate;
 
 pub(super) fn plugin(app: &mut App) {
     app.world_resource::<Gate>()

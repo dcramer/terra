@@ -17,6 +17,7 @@ use terra_world::loading::cross_in_the_dark;
 use terra_world::planet::Planet;
 
 pub mod gates;
+pub mod shared;
 pub mod veil;
 
 /// A way to another world (D470), standing on the ground, the ring's opening facing along
@@ -57,6 +58,7 @@ pub struct StepThrough(pub Entity);
 pub fn plugin(app: &mut App) {
     veil::plugin(app);
     gates::plugin(app);
+    shared::plugin(app);
     app.init_resource::<Returns>()
         .add_message::<StepThrough>()
         .add_systems(
@@ -153,6 +155,10 @@ fn step_through(
     mut returns: ResMut<Returns>,
     arriving: Option<Res<Arriving>>,
     (kinds, mut told): (Res<marks::Kinds>, MessageWriter<Told>),
+    (hosting, mut link): (
+        Option<Res<terra_walker::net::Host>>,
+        Option<ResMut<terra_walker::net::link::Link>>,
+    ),
 ) {
     let Some(mut portal) = through
         .read()
@@ -171,21 +177,37 @@ fn step_through(
     if !portal.open {
         // Shut: opened by one who bears a mark that opens gates, for everyone and for good
         // (D590); to anyone else it stays shut, and says so.
-        match kinds.opens_gates(marks) {
-            Some(mark) => {
+        match (kinds.opens_gates(marks), link.as_mut()) {
+            // In another's world the gate is the host's to open: asked of it (`shared`).
+            (Some(mark), Some(link)) => {
+                link.ask(&shared::ask(marks));
+                told.write(Told::new(
+                    player,
+                    format!("You hold {} to the gate.", mark.name),
+                ));
+            }
+            (Some(mark), None) => {
                 portal.open = true;
                 told.write(Told::new(
                     player,
                     format!("The gate opens to {}.", mark.name),
                 ));
             }
-            None => {
+            (None, _) => {
                 told.write(Told::new(
                     player,
                     "The gate is shut. It answers a mark you do not bear.",
                 ));
             }
         }
+        return;
+    }
+    // A shared world is one world until its realms run as instances (D638, D640).
+    if hosting.is_some() || link.is_some() {
+        told.write(Told::new(
+            player,
+            "The gate is open, but nobody can cross while this world is shared yet.",
+        ));
         return;
     }
     let arrive = crossing(&mut returns, &spec, body, &portal.to);
