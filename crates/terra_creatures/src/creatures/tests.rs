@@ -10,6 +10,8 @@ use terra_walker::walker::Motion;
 use terra_world::spatial::SpatialHash;
 use terra_world::tick::Ticks;
 
+mod level;
+
 #[test]
 fn a_creature_about_its_day_is_unaware_and_one_that_has_noticed_is_not() {
     let mut creature = Creature {

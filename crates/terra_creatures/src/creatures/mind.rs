@@ -34,6 +34,7 @@ pub const LOOKS_S: f32 = 1.2;
 const RECKONS_AHEAD_S: f32 = 8.0;
 
 /// What a creature makes of those about it as it thinks.
+#[derive(Clone, Copy)]
 struct Sense {
     /// The time it thinks over.
     dt: f32,
@@ -42,6 +43,8 @@ struct Sense {
     /// The nearest player it senses, and how far off across the ground (infinite for none).
     quarry: Option<Entity>,
     apart: f32,
+    /// How far above it that player is, in metres; below, less than nothing.
+    rise: f32,
     /// Toward the nearest player, along the ground.
     toward: Option<Vec3>,
     /// Away from the nearest player, and across their way and on ahead of them if they are
@@ -52,10 +55,26 @@ struct Sense {
     passes: f32,
 }
 
+/// A player this far above or below a creature is not on its level: over the roof of its
+/// den, or down a cliff from it. How far across the ground says nothing of them then.
+const OFF_ITS_LEVEL_M: f32 = 6.0;
+
 impl Sense {
     /// Whether a player is within so far of it.
     fn near(&self, within_m: f32) -> bool {
         self.quarry.is_some() && self.apart < within_m
+    }
+
+    /// What it makes of those it could come at or strike: nobody, where the nearest player
+    /// is off its level, as a fighter neither notices nor hits one through the rock.
+    fn on_its_level(&self) -> Sense {
+        let level = self.rise.abs() <= OFF_ITS_LEVEL_M;
+        Sense {
+            quarry: self.quarry.filter(|_| level),
+            apart: if level { self.apart } else { f32::INFINITY },
+            toward: self.toward.filter(|_| level),
+            ..*self
+        }
     }
 }
 
@@ -137,6 +156,7 @@ pub fn think(
             up,
             quarry,
             apart: apart.unwrap_or(f32::INFINITY),
+            rise: player.map_or(0.0, |(_, p, _)| (p.translation - here).dot(up)),
             toward,
             away,
             passes,
@@ -440,6 +460,7 @@ fn hostile(
     s: &Sense,
     bitten: &mut MessageWriter<Bitten>,
 ) -> Option<State> {
+    let s = &s.on_its_level();
     let Temper::Hostile {
         bite,
         bite_at_s,
