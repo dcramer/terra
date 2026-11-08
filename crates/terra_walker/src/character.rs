@@ -538,6 +538,19 @@ fn trim(
             }
         }
     }
+    // The glTF loader's bounds (its default `DynamicSkinnedMeshBounds`, the box frustum
+    // culling tests each frame) name joints by the file's numbering: left so, they track
+    // other joints or none, and a worn piece is culled while it is on screen (the iso hero's
+    // torso and helm vanished through his roll's dive, iso-hero j7). Made again from the
+    // renumbered skin.
+    if mesh.skinned_mesh_bounds().is_some()
+        && let Err(e) = mesh.generate_skinned_mesh_bounds()
+    {
+        warn!(
+            "a worn mesh's bounds could not follow its trimmed skin ({e:?}): it may be culled on screen"
+        );
+        mesh.set_skinned_mesh_bounds(None);
+    }
     let handle = bindposes.add(SkinnedMeshInverseBindposes::from(
         kept.iter().map(|i| all[*i]).collect::<Vec<_>>(),
     ));
@@ -696,9 +709,22 @@ mod tests {
             .with_inserted_attribute(
                 Mesh::ATTRIBUTE_JOINT_WEIGHT_1,
                 vec![[0.1f32, 0.0, 0.0, 0.0]],
-            ),
+            )
+            // As the glTF loader makes them (its default bounds policy).
+            .with_generated_skinned_mesh_bounds()
+            .unwrap(),
         );
         let (kept, handle) = trim(mesh.id(), &posed, 5, &mut meshes, &mut bindposes).unwrap();
+        // The culling bounds name the renumbered joints, as the skin does: joint 1 is now 0.
+        let bounds: Vec<u16> = (meshes.get(&mesh).unwrap().skinned_mesh_bounds())
+            .unwrap()
+            .iter()
+            .map(|(j, _)| j.0)
+            .collect();
+        assert!(
+            bounds.contains(&0) && bounds.iter().all(|j| (*j as usize) < kept.len()),
+            "bounds on joints {bounds:?}, the skin keeps {kept:?}"
+        );
         assert_eq!(kept, vec![1, 3]);
         assert_eq!(
             bindposes.get(&handle).unwrap().to_vec(),
