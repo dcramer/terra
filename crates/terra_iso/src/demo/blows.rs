@@ -146,7 +146,7 @@ fn tells(
 /// Each swing told on the ground as its hit nears, and landed on its hit, once.
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn land(
-    time: Res<Time>,
+    (time, frame): (Res<Time>, Res<bevy::diagnostic::FrameCount>),
     kit: Option<Res<Kit>>,
     (mut cues, mut taking): (Option<ResMut<Cues>>, ResMut<Taking>),
     mut mobs: Query<
@@ -209,10 +209,13 @@ fn land(
         }
         tell.landed = start;
         let Some(t) = taken((at, face), (him, his_face), doing, held, set) else {
-            info!("mob {}'s blow on him: out of reach", foe.i);
+            info!(
+                "frame {}: mob {}'s blow on him: out of reach",
+                frame.0, foe.i
+            );
             continue;
         };
-        info!("mob {}'s blow on him: {t:?}", foe.i);
+        info!("frame {}: mob {}'s blow on him: {t:?}", frame.0, foe.i);
         let strength = match t {
             Taken::Hit | Taken::GuardBroken => 1.0,
             Taken::Blocked | Taken::Parried => ON_GUARD,
