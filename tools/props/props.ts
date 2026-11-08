@@ -89,6 +89,9 @@ export type Prop = {
   // prop keeps its own and needs none, but for a part that glows: its faces nearest Fire,
   // among the roles given, glow in the game, such as a forge's coals.
   roles?: string[];
+  // The linear colour its Light faces shine in the game (a sign's face, a lamp's glass);
+  // white if not given. Needs Light among its roles.
+  light?: [number, number, number];
   // For a role whose colour in the texture is not its own, the sRGB colour that means it
   // there: coals painted dull red, say, mean Fire, which is far brighter in the game.
   match?: Record<string, [number, number, number]>;
@@ -186,6 +189,7 @@ export function refineArgs(prop: Prop, model: string, out: string, sheet: string
     ...(prop.block ? ["--block"] : []),
     ...(prop.grime ? ["--grime"] : []),
     ...(prop.haft ? [`--haft=${prop.haft}`] : []),
+    ...(prop.light ? [`--light=${prop.light.join(",")}`] : []),
     ...(Array.isArray(prop.grade) ? [`--grade=${prop.grade.join(",")}`] : []),
     ...(prop.dims ? [`--dims=${prop.dims.join(",")}`] : []),
     ...(prop.anchor && prop.anchor !== "base" ? [`--anchor=${prop.anchor}`] : []),

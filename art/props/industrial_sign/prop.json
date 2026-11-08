@@ -1,6 +1,44 @@
 {
   "subject": "freestanding industrial sign on two steel I-beam posts, about three and a half metres tall: a rectangular light-box with a cracked translucent face showing three simple geometric glyphs, a metal hood over it, cables trailing down one post into a junction box, rust at the bolts, on two small concrete footings",
   "file": "IndustrialSign",
-  "dims": [2.4, 3.5, 0.6],
-  "budget": 1500
+  "dims": [
+    2.4,
+    3.5,
+    0.6
+  ],
+  "budget": 1500,
+  "roles": [
+    "Light",
+    "Metal",
+    "Rock"
+  ],
+  "match": {
+    "Light": [
+      0.7,
+      0.68,
+      0.6
+    ],
+    "Metal": [
+      0.27,
+      0.29,
+      0.33
+    ],
+    "Rock": [
+      0.41,
+      0.39,
+      0.35
+    ]
+  },
+  "light": [
+    0.12,
+    0.85,
+    0.75
+  ],
+  "sockets": {
+    "light": [
+      0,
+      2.6,
+      0.28
+    ]
+  }
 }

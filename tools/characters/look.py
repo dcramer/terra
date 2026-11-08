@@ -82,6 +82,8 @@ PALETTE = {
     "ClothDark": (0.33, 0.31, 0.30),
     # Glows in the game: coals, a furnace's mouth (props.rs).
     "Fire": (1.00, 0.72, 0.35),
+    # Shines in the game by electricity: a lamp's glass, a sign's face (props.rs).
+    "Light": (0.86, 0.92, 1.00),
 }
 
 # The game's light (experiments/look.rs): a warm sun, shadows lit by a cool sky.

@@ -50,6 +50,11 @@ const CAMPFIRE_FOOT_M: f32 = 0.08;
 /// The heat a fire gives off as radiation, in watts: a campfire's fifteen kilowatts, a
 /// third of it radiated, the rest carried up in its smoke (climate.md).
 pub const FIRE_HEAT_W: f32 = 5_000.0;
+/// An electric light's brightness and reach (`Light::Lamp`): a held torch's 160,000 over
+/// 14 m lights a camp; a sign's pool is smaller and dimmer than a flame's, and a realm stands
+/// many, none with a shadow of its own.
+const LAMP_LUMENS: f32 = 60_000.0;
+const LAMP_RANGE_M: f32 = 10.0;
 /// Anything lower than this is walked over, not round.
 const STEP_OVER_M: f32 = 0.25;
 
@@ -314,6 +319,8 @@ fn colour_of(part: &Part) -> (Color, bool) {
         "Wood" => Color::srgb(0.56, 0.39, 0.25),
         "LightWood" => Color::srgb(0.74, 0.56, 0.37),
         "Fire" => return (Color::srgb(1.0, 0.72, 0.35), true),
+        // An electric light shines through its own texture, so only a textured part is one.
+        "Light" if part.textures.is_some() => return (part.colour, true),
         _ => part.colour,
     };
     (colour, false)
@@ -446,6 +453,22 @@ fn textured_mesh(part: &Part, textures: &Textures) -> Mesh {
 /// How bright a glowing textured part is: its colour texture times this, so painted coals
 /// glow as brightly as the flat glow (`glowing`).
 const GLOW_SCALE: f32 = 8.0;
+/// How bright an electric light's part is (`Light`, tools/props): its colour texture times
+/// the colour its file says it shines times this. A sign's pale face at Fire's 8 was white
+/// with no colour left by day; at this it reads lit by day and is the brightest thing in
+/// view by night (looked at, the industrial realm's sign).
+const LIGHT_SCALE: f32 = 3.0;
+
+/// What a glowing textured part's colour texture is scaled by to glow: an electric light's
+/// by the colour it shines, a fire's part white.
+fn glow_of(part: &Part, textures: &Textures) -> LinearRgba {
+    if part.material.split('.').next() == Some("Light") {
+        let [red, green, blue] = textures.shines;
+        LinearRgba::rgb(red, green, blue) * LIGHT_SCALE
+    } else {
+        LinearRgba::rgb(GLOW_SCALE, GLOW_SCALE, GLOW_SCALE)
+    }
+}
 
 /// A textured part's material: its own textures, loaded from its file through Bevy's glTF
 /// loader by their labels, and its own factors. Loading them that way gives them mipmaps
@@ -457,7 +480,7 @@ const GLOW_SCALE: f32 = 8.0;
 fn textured_material(
     path: &str,
     textures: &Textures,
-    glows: bool,
+    glows: Option<LinearRgba>,
     assets: &AssetServer,
 ) -> StandardMaterial {
     let load = |index: usize| -> Handle<Image> {
@@ -476,13 +499,9 @@ fn textured_material(
         alpha_mode: textures
             .alpha_cutoff
             .map_or(AlphaMode::Opaque, AlphaMode::Mask),
-        emissive: if glows {
-            LinearRgba::rgb(GLOW_SCALE, GLOW_SCALE, GLOW_SCALE)
-        } else {
-            LinearRgba::BLACK
-        },
+        emissive: glows.unwrap_or(LinearRgba::BLACK),
         // A part's own emissive map, dark until a fire tells it how bright (`smoulder`).
-        emissive_texture: if glows {
+        emissive_texture: if glows.is_some() {
             Some(colour)
         } else {
             textures.emissive.map(load)
@@ -526,7 +545,8 @@ fn make(file: &str, shape: Shape, making: &mut Making) -> Model {
             continue;
         };
         let glowing = glows(part);
-        let material = textured_material(&path, textures, glowing, making.assets);
+        let glow = glowing.then(|| glow_of(part, textures));
+        let material = textured_material(&path, textures, glow, making.assets);
         pieces.push(Piece {
             mesh: making.meshes.add(textured_mesh(part, textures)),
             material: making.materials.add(material),
@@ -727,6 +747,24 @@ pub fn place(
     }
     match item.light {
         Light::None => {}
+        Light::Lamp((red, green, blue)) => {
+            let at = model
+                .sockets
+                .iter()
+                .find(|(name, _)| name == "light")
+                .map_or((model.low + model.high) / 2.0, |(_, at)| *at);
+            prop.with_child((
+                PointLight {
+                    color: Color::linear_rgb(red, green, blue),
+                    intensity: LAMP_LUMENS,
+                    range: LAMP_RANGE_M,
+                    radius: 0.3,
+                    shadow_maps_enabled: false,
+                    ..default()
+                },
+                Transform::from_translation(at),
+            ));
+        }
         Light::Fire => {
             prop.with_child((
                 CAMPFIRE,
@@ -876,7 +914,7 @@ mod tests {
             .unwrap()
             .iter()
             .filter_map(|part| part.textures.as_ref())
-            .map(|textures| textured_material(&format!("models/{file}"), textures, false, &server))
+            .map(|textures| textured_material(&format!("models/{file}"), textures, None, &server))
             .collect();
         assert!(!textured.is_empty(), "the campfire has textured parts");
         // Its worn ground cut out by its alpha, as the file's MASK says (D513); the rest opaque.
@@ -919,5 +957,38 @@ mod tests {
             .filter(|each| each.contains::<Mesh3d>())
             .count();
         assert!(drawn > 0, "the campfire loaded with no parts to draw");
+    }
+
+    /// An electric light (D642): the sign's glyphs are its `Light` part, shining the teal its
+    /// file says through its own texture, dimmer than a fire's part; its catalogue row gives
+    /// it a lamp of that colour, hung at its `light` socket.
+    #[test]
+    fn a_sign_shines_the_colour_its_file_says_and_has_a_lamp_where_its_socket_is() {
+        let shape = read_shape("props/IndustrialSign.glb").unwrap();
+        let lights: Vec<_> = shape
+            .parts
+            .iter()
+            .filter(|part| colour_of(part).1)
+            .collect();
+        assert_eq!(lights.len(), 1, "one part of the sign glows");
+        let glow = glow_of(lights[0], lights[0].textures.as_ref().unwrap());
+        assert!(
+            glow.green > 4.0 * glow.red && glow.blue > 4.0 * glow.red,
+            "{glow:?}"
+        );
+        assert!(
+            glow.green < GLOW_SCALE,
+            "an electric light is dimmer than a fire's part"
+        );
+        assert!(
+            shape
+                .sockets
+                .iter()
+                .any(|(name, at)| name == "light" && at.y > 2.0)
+        );
+        let items = crate::inventory::Items::default();
+        let builds = crate::catalogue::Builds::read(&items, &crate::crafting::Stations::read());
+        let sign = builds.item_from("IndustrialSign").unwrap();
+        assert!(matches!(sign.light, Light::Lamp((red, green, _)) if green > 4.0 * red));
     }
 }

@@ -41,6 +41,9 @@ pub struct Textures {
     /// What glows of it, as a burning log's cracks do: drawn only by what is told how bright
     /// its fire burns now (the game's burning props), dark otherwise.
     pub emissive: Option<usize>,
+    /// The colour its material is said to shine, linear (glTF's emissive factor): what an
+    /// electric light's part shines in the game (a prop's `Light`), black for most.
+    pub shines: [f32; 3],
     pub metallic: f32,
     pub roughness: f32,
     /// Drawn from both sides, as a thin cloth or an open shell must be.
@@ -72,6 +75,7 @@ fn textures_of(material: &gltf::Material) -> Option<Textures> {
         emissive: material
             .emissive_texture()
             .and_then(|info| first(info.texture().index(), info.tex_coord())),
+        shines: material.emissive_factor(),
         metallic: pbr.metallic_factor(),
         roughness: pbr.roughness_factor(),
         double_sided: material.double_sided(),

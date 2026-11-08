@@ -349,6 +349,9 @@ pub enum Light {
     #[default]
     None,
     Fire,
+    /// An electric light of this colour, linear: a sign's face, a lamp. It lights what is
+    /// round it from its model's `light` socket (the middle of its box if it has none).
+    Lamp((f32, f32, f32)),
 }
 
 /// A room's footprint in metres, east by south.

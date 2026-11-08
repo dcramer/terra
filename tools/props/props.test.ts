@@ -25,6 +25,12 @@ test("passes refine.py its arguments in order, turned 0 if not given, textured b
   assert.deepEqual(args, ["m.glb", "o.glb", "s.png", "2.6", "2500", "0", "Rock", "Fire", "--textured", "--dims=2.6,2.6,1.5"]);
 });
 
+test("an electric light's colour and a role's own colour in the texture reach refine.py", () => {
+  const sign = `{"subject": "sign", "file": "Sign", "dims": [2.4, 3.5, 0.6], "budget": 1500, "roles": ["Light", "Metal"], "match": {"Light": [0.7, 0.68, 0.6]}, "light": [0.12, 0.85, 0.75]}`;
+  const args = refineArgs(readProp(sign, "sign"), "m.glb", "o.glb", "s.png");
+  assert.ok(args.includes("Light=0.7,0.68,0.6") && args.includes("--light=0.12,0.85,0.75"), args.join(" "));
+});
+
 test("a leaf is made to the contract: hinged at its origin, mirrored if hinged on its right, its sockets written", () => {
   const door = readProp(`{"subject": "door", "file": "Door", "dims": [0.9, 1.9, 0.08], "anchor": "hinge", "hinge": "right", "budget": 9, "sockets": {"hinge": [0, 0, 0], "handle": [0.8, 1, 0.04]}}`, "door");
   const args = refineArgs(door, "m", "o", "s");

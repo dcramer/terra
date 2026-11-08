@@ -56,6 +56,10 @@ block = "--block" in args
 # --grade=R,G,B,SR,SG,SB: the colour texture's mean and spread on the surface, per channel,
 # to match, so the pieces of a kit share one grade (docs/art-style.md).
 grade = next((tuple(map(float, a.split("=")[1].split(","))) for a in args if a.startswith("--grade=")), None)
+# --light=R,G,B: the colour an electric light's faces (the role Light) shine in the game,
+# linear: written as their material's emission, which the game scales and draws through the
+# part's own colour texture (props.rs), so a lamp's glass keeps its cracks and glyphs.
+light = next((tuple(map(float, a.split("=")[1].split(","))) for a in args if a.startswith("--light=")), (1.0, 1.0, 1.0))
 # --grime: aged bone or stone, dirt in its crevices and where it lies on the floor, and stain
 # over the rest (aged.py), as a vertex colour the game multiplies into its texture.
 aged = "--grime" in args
@@ -81,7 +85,7 @@ src, out, sheet, size, budget, turn, *given = [
     a
     for a in args
     if a not in ("--flat", "--along", "--textured", "--block", "--mirror", "--grime")
-    and not a.startswith(("--grade=", "--dims=", "--anchor=", "--socket=", "--haft="))
+    and not a.startswith(("--grade=", "--dims=", "--anchor=", "--socket=", "--haft=", "--light="))
 ]
 size, budget, turn = float(size), int(budget), float(turn)
 # Below this longest side, in metres, a prop is small and its textures 1K (TEXTURE_PX).
@@ -125,11 +129,17 @@ SUN_YAW, SUN_PITCH = 40.0, 45.0
 def texture_of(mat):
     if not mat or not mat.use_nodes:
         return None
-    for node in mat.node_tree.nodes:
-        if node.type == "TEX_IMAGE" and node.image:
-            w, h = node.image.size
-            return np.array(node.image.pixels[:], dtype=np.float32).reshape(h, w, 4)
-    return None
+    # Its colour map: the image its Base Color is drawn from, else its first image. The first
+    # image alone was the roughness or normal map of a model with all its maps, so no face
+    # of one was ever near a role's colour.
+    images = [node for node in mat.node_tree.nodes if node.type == "TEX_IMAGE" and node.image]
+    bsdf = next((node for node in mat.node_tree.nodes if node.type == "BSDF_PRINCIPLED"), None)
+    linked = [link.from_node for link in bsdf.inputs["Base Color"].links] if bsdf else []
+    node = next((node for node in linked if node in images), images[0] if images else None)
+    if node is None:
+        return None
+    w, h = node.image.size
+    return np.array(node.image.pixels[:], dtype=np.float32).reshape(h, w, 4)
 
 
 def select_only(ob):
@@ -374,31 +384,38 @@ def nearest_roles(me):
 
 
 def split_glow(ob):
-    """A textured model's glowing part, such as a forge's coals: the faces whose texture is
-    nearest Fire among its roles take a copy of their material named Fire, which the game
-    draws glowing in its own texture (props.rs). Stray faces are evened out as a painted
-    model's are. Nothing changes for a model with no Fire role."""
-    if "Fire" not in roles:
+    """A textured model's glowing parts: the faces whose texture is nearest Fire among its
+    roles (a forge's coals) take a copy of their material named Fire, which the game draws
+    glowing in its own texture; those nearest Light (a lamp's glass, a sign's face) one named
+    Light, whose emission is the colour it shines (`--light`), drawn through its texture
+    (props.rs). Stray faces are evened out as a painted model's are. Nothing changes for a
+    model with neither role."""
+    glows = [role for role in ("Fire", "Light") if role in roles]
+    if not glows:
         return
     me = ob.data
-    fire = roles.index("Fire")
     picked = nearest_roles(me)
-    glowing = {}
-    for poly, role in zip(me.polygons, picked):
-        if role != fire:
-            continue
-        own = me.materials[poly.material_index]
-        if own.name not in glowing:
-            copy = own.copy()
-            copy.name = "Fire"
-            tree = copy.node_tree
-            bsdf = next(n for n in tree.nodes if n.type == "BSDF_PRINCIPLED")
-            for link in bsdf.inputs["Base Color"].links:
-                tree.links.new(link.from_socket, bsdf.inputs["Emission Color"])
-            bsdf.inputs["Emission Strength"].default_value = 8.0
-            me.materials.append(copy)
-            glowing[own.name] = len(me.materials) - 1
-        poly.material_index = glowing[own.name]
+    for name in glows:
+        role, glowing = roles.index(name), {}
+        for poly, nearest in zip(me.polygons, picked):
+            if nearest != role:
+                continue
+            own = me.materials[poly.material_index]
+            if own.name not in glowing:
+                copy = own.copy()
+                copy.name = name
+                tree = copy.node_tree
+                bsdf = next(n for n in tree.nodes if n.type == "BSDF_PRINCIPLED")
+                if name == "Fire":
+                    for link in bsdf.inputs["Base Color"].links:
+                        tree.links.new(link.from_socket, bsdf.inputs["Emission Color"])
+                    bsdf.inputs["Emission Strength"].default_value = 8.0
+                else:
+                    bsdf.inputs["Emission Color"].default_value = light + (1.0,)
+                    bsdf.inputs["Emission Strength"].default_value = 1.0
+                me.materials.append(copy)
+                glowing[own.name] = len(me.materials) - 1
+            poly.material_index = glowing[own.name]
     despeckle(me)
 
 
