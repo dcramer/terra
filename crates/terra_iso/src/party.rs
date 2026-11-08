@@ -25,6 +25,7 @@ pub fn animate(app: &mut App) {
         .add_systems(
             Update,
             (
+                place_phases,
                 make_clips,
                 start_animators,
                 dress,
@@ -168,6 +169,11 @@ struct Animator {
     player: Entity,
     gait: Gait,
 }
+
+/// Where along its clips an actor is at the game clock's zero: `idle_phase` of where it
+/// spawned, taken once then, never where it stands when its model is in.
+#[derive(Component)]
+struct Phase(f32);
 
 /// A clothing piece waiting to be bound to its body's skeleton.
 #[derive(Component)]
@@ -494,22 +500,39 @@ fn make_clips(
 /// Where along its idle (0 to 2 s) an actor standing at `at` starts: a hash of where it
 /// stands, so the same actor starts at the same place every run (the entity's index, used
 /// before, follows load order and changed the forest's still run to run) and a crowd does
-/// not breathe as one. Nobody walks before their model is in, so `at` is where they spawned.
+/// not breathe as one. `at` is where they spawned (place_phases).
 fn idle_phase(at: Vec3) -> f32 {
     let h = terra_gen::hash::of(&[at.x.to_bits(), at.z.to_bits()]);
     terra_gen::hash::unit(h) * 2.0
 }
 
+/// Where a clip starts when it starts at game time `elapsed`: where it would be had it played
+/// since the clock's zero, so the pose at any frame is the clock's, never the frame the
+/// model's clips came in (async load time, which moved the forest still run to run, iso-loop
+/// j1). Bevy wraps a repeating clip's seek time by its length.
+fn clip_start(phase: f32, elapsed: f32) -> f32 {
+    phase + elapsed
+}
+
+fn place_phases(mut commands: Commands, actors: Query<(Entity, &Transform), Added<Actor>>) {
+    for (entity, at) in &actors {
+        commands
+            .entity(entity)
+            .insert(Phase(idle_phase(at.translation)));
+    }
+}
+
 fn start_animators(
     mut commands: Commands,
+    time: Res<Time>,
     clips: Res<Clips>,
-    actors: Query<(Entity, &Actor, &Transform), Without<Animator>>,
+    actors: Query<(Entity, &Actor, &Phase), Without<Animator>>,
     children: Query<&Children>,
     parents: Query<&ChildOf>,
     pieces: Query<(), With<Clothing>>,
     mut players: Query<&mut AnimationPlayer>,
 ) {
-    for (entity, actor, at) in &actors {
+    for (entity, actor, phase) in &actors {
         let Some(set) = clips.ready.get(actor.model) else {
             continue;
         };
@@ -522,18 +545,17 @@ fn start_animators(
         };
         let mut transitions = AnimationTransitions::new();
         let mut p = players.get_mut(player).unwrap();
-        // Start each somewhere along its idle, so a crowd does not breathe as one.
+        // The clip for what it is doing now, where the game clock has it, so a crowd does
+        // not breathe as one and a still is the same however long the model took to load.
+        let gait = actor.gait();
         transitions
-            .play(&mut p, set.nodes[0], Duration::ZERO)
+            .play(&mut p, set.nodes[gait as usize], Duration::ZERO)
             .repeat()
-            .seek_to(idle_phase(at.translation));
+            .seek_to(clip_start(phase.0, time.elapsed_secs()));
         commands
             .entity(player)
             .insert((AnimationGraphHandle(set.graph.clone()), transitions));
-        commands.entity(entity).insert(Animator {
-            player,
-            gait: Gait::Idle,
-        });
+        commands.entity(entity).insert(Animator { player, gait });
     }
 }
 
@@ -697,11 +719,12 @@ fn stand(land: Res<Land>, mut actors: Query<(&mut Transform, &Actor)>) {
 
 /// Changes each animator's clip when its actor starts or stops walking or running.
 fn gait(
+    time: Res<Time>,
     clips: Res<Clips>,
-    mut actors: Query<(&Actor, &mut Animator)>,
+    mut actors: Query<(&Actor, &Phase, &mut Animator)>,
     mut players: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
-    for (actor, mut animator) in &mut actors {
+    for (actor, phase, mut animator) in &mut actors {
         let gait = actor.gait();
         if gait == animator.gait {
             continue;
@@ -715,7 +738,8 @@ fn gait(
         let node = set.nodes[gait as usize];
         transitions
             .play(&mut player, node, Duration::from_millis(220))
-            .repeat();
+            .repeat()
+            .seek_to(clip_start(phase.0, time.elapsed_secs()));
         animator.gait = gait;
     }
 }
@@ -747,6 +771,49 @@ fn wander(time: Res<Time>, nav: Res<Nav>, mut folk: Query<(&mut Actor, &mut Wand
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Where a repeating clip of `length` s is at frame `n` (1/30 s a frame, as a still's
+    /// ManualDuration) for an actor whose clips came in at frame `load`, started by `start`
+    /// from its phase and the clock then, then advanced a frame at a time as Bevy does.
+    fn clip_time_at(start: fn(f32, f32) -> f32, phase: f32, load: u32, n: u32) -> f32 {
+        let dt = 1.0 / 30.0;
+        let mut t = start(phase, load as f32 * dt);
+        for _ in load..n {
+            t = (t + dt) % 1.7;
+        }
+        t % 1.7
+    }
+
+    /// How far apart two times on the 1.7 s loop are, either way round.
+    fn apart(a: f32, b: f32) -> f32 {
+        let d = (a - b).rem_euclid(1.7);
+        d.min(1.7 - d)
+    }
+
+    /// A still at frame 90 shows each actor where the clock has it, whether its model came in
+    /// at frame 5 or 40 (asset load time varies run to run). The old rule, the clip begun at
+    /// its phase on the frame it loaded, is the planted fault: it moved the forest's deer.
+    #[test]
+    fn a_clip_keeps_the_clock_however_late_its_model_loads() {
+        let phase = idle_phase(Vec3::new(-12.3, 0.4, 8.1));
+        let (early, late) = (
+            clip_time_at(clip_start, phase, 5, 90),
+            clip_time_at(clip_start, phase, 40, 90),
+        );
+        assert!(
+            apart(early, late) < 1e-3,
+            "loaded at frame 5 the clip is at {early} s, at frame 40 {late} s"
+        );
+        let old: fn(f32, f32) -> f32 = |phase, _| phase;
+        let (early, late) = (
+            clip_time_at(old, phase, 5, 90),
+            clip_time_at(old, phase, 40, 90),
+        );
+        assert!(
+            apart(early, late) > 0.5,
+            "the planted fault went unseen: {early} s against {late} s"
+        );
+    }
 
     /// A crowd standing about starts its idles spread over the clip, each where it did last
     /// run: the phase is a function of where it stands alone.
