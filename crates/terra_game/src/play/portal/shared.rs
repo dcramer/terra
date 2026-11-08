@@ -1,7 +1,7 @@
 //! A gate's state across a hosted session (D590: opened, it "stays open for everyone in that
 //! world"; v0-goals: "decided once, for everyone"). The host's gate is the truth: once open,
 //! the host orders it to every game, now and when one comes later, as it orders the ground's
-//! changes (`terra_walker::net::ground`). A joined player at a shut gate asks the host to
+//! changes (`terra_walker::net::ground`), at the gate and where each player stands. A joined player at a shut gate asks the host to
 //! open it, saying the marks they bear; the host opens it if one of them opens gates.
 //!
 //! The host takes a joined game's marks at its word, as it does what a player wears and how
@@ -54,6 +54,7 @@ fn host(
     mut host: ResMut<Host>,
     kinds: Res<Kinds>,
     mut gates: Query<(&mut Portal, &Transform), With<WorldGate>>,
+    players: Query<&Transform, With<crate::play::Player>>,
     mut ordered: Local<bool>,
 ) {
     if host.is_added() {
@@ -76,7 +77,14 @@ fn host(
         }
     }
     if !*ordered && let Some((_, at)) = gates.iter().find(|(gate, _)| gate.open) {
+        // Ordered at the gate, for whoever comes to it later, and where each player stands
+        // now: an operation is told by area, and a gate may stand some hundreds of metres
+        // from players who should know it is open (the two-game check failed on a world
+        // whose gate was out of the joined player's area). Told twice it opens once.
         host.order(at.translation, &[GATE]);
+        for player in &players {
+            host.order(player.translation, &[GATE]);
+        }
         *ordered = true;
     }
 }
