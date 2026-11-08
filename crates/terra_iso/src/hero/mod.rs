@@ -121,25 +121,63 @@ fn dress(
     if pieces.is_empty() {
         warn!("the wardrobe has no {LOOK:?} look on the male body: the hero stands bare");
     }
+    let mut looks = Vec::new();
     for piece in pieces {
         let path = format!("models/character/male/{piece}.gltf");
-        character::wear(
+        looks.push(character::wear(
             &mut commands,
             asset.load(GltfAssetLabel::Scene(0).from_asset(path)),
             body,
-        );
+        ));
     }
     for (socket, item) in [(character::HAND_R, SWORD), (character::HAND_L, SHIELD)] {
         match character::find(body, socket, &children, &names) {
             Some(hand) => {
-                character::hold(
+                looks.push(character::hold(
                     &mut commands,
                     asset.load(GltfAssetLabel::Scene(0).from_asset(item)),
                     hand,
-                );
+                ));
             }
             None => warn!("the hero's body has no {socket}: no {item} in it"),
         }
+    }
+    lit_once_in(&mut commands, body, &looks);
+}
+
+/// How many of the hero's looks (worn pieces, held things) are still loading.
+#[derive(Component)]
+struct Dressing(usize);
+
+/// Once every one of `looks` is in, the hero becomes a fighter (rim.rs `Fighter`), lit and
+/// shaded as the staged cast he replaces: his materials swapped for the rim's, so the oaks'
+/// canopy dims his sky fill and its reflection as it dims the ground's, with the fighters'
+/// band on his outline. As a bare `StandardMaterial` his knight's plate (metal 1 on T_Knight's
+/// ORM) mirrored the open sky's blue under the crowns and read pale cyan plastic (iso-hero
+/// j4's judge). Not before: the rim swaps a fighter's materials once, `FIGHTER_WAIT` frames
+/// after the first is in, and a piece loading later would stay unlit by it.
+fn lit_once_in(commands: &mut Commands, body: Entity, looks: &[Entity]) {
+    if looks.is_empty() {
+        return;
+    }
+    commands.entity(body).insert(Dressing(looks.len()));
+    for &look in looks {
+        commands.entity(look).observe(
+            move |_: On<WorldInstanceReady>,
+                  mut left: Query<&mut Dressing>,
+                  mut commands: Commands| {
+                let Ok(mut left) = left.get_mut(body) else {
+                    return;
+                };
+                left.0 = left.0.saturating_sub(1);
+                if left.0 == 0 {
+                    commands
+                        .entity(body)
+                        .remove::<Dressing>()
+                        .insert(crate::rim::Fighter::default());
+                }
+            },
+        );
     }
 }
 
@@ -163,5 +201,34 @@ mod tests {
         }
         let helmet = items.iter().any(|i| i.ends_with("helmet"));
         assert!(helmet, "no helmet: {items:?}");
+    }
+
+    /// He becomes a fighter (lit as the staged cast) once the last of his looks is in, not
+    /// while one still loads.
+    #[test]
+    fn he_is_lit_as_a_fighter_once_dressed() {
+        use bevy::ecs::system::RunSystemOnce;
+        use bevy::world_serialization::{WorldAsset, WorldSerializationPlugin};
+        let mut app = App::new();
+        app.add_plugins((AssetPlugin::default(), WorldSerializationPlugin));
+        let body = app.world_mut().spawn_empty().id();
+        let looks: Vec<Entity> = (0..2).map(|_| app.world_mut().spawn_empty().id()).collect();
+        let ready = looks.clone();
+        app.world_mut()
+            .run_system_once(move |mut commands: Commands| lit_once_in(&mut commands, body, &ready))
+            .unwrap();
+        let world = |app: &mut App| {
+            let asset = app.world().resource::<AssetServer>();
+            WorldAssetRoot(asset.add(WorldAsset::new(World::new())))
+        };
+        let first = world(&mut app);
+        app.world_mut().entity_mut(looks[0]).insert(first);
+        app.update();
+        assert!(app.world().get::<crate::rim::Fighter>(body).is_none());
+        let second = world(&mut app);
+        app.world_mut().entity_mut(looks[1]).insert(second);
+        app.update();
+        assert!(app.world().get::<crate::rim::Fighter>(body).is_some());
+        assert!(app.world().get::<Dressing>(body).is_none());
     }
 }
