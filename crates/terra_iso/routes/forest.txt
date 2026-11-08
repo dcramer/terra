@@ -3,7 +3,9 @@
 # frames' folder, or `--frames 1230 --film 0 --shot target/job/g/end.jpg` to play it through
 # for its gates alone (demo/tally.rs: every foe falls; demo/occlude.rs: nothing hides him).
 # A route is the flags `cargo iso` takes, whitespace apart, `#` to the line's end a note
-# (main.rs, `--route`). It is open-loop: a change before 770 moves everything after.
+# (main.rs, `--route`). Its walks between packs are `--goto` points (hero/abilities.rs), so a
+# timing change before one moves only the frames he waits there, not where he stands. Its
+# parry and dodge answer the blow's tell (`--on-tell`, hero/react.rs), not a frame.
 --biome forest --play --frames 60 --film 1170 --zoom 10
 # The packs its run must clear, each mob woken and fallen by the last frame, or it fails
 # (demo/tally.rs `cleared`): `expect all` (also when no line says), `expect packs 0 1`, or
@@ -16,19 +18,20 @@ expect all
 --do block@230-255
 --do light@260 --do light@280 --do light@298 --do light@316
 
-# Pack 1, the meadow: back off and west; the block at 585 aimed at mob 4 (a parry at 589:
-# its blow lands within the set's parry_s 0.18 s of the raise; j20, its sized body 2.0 m off).
---press s@350-363 --press a@364-430
+# Pack 1, the meadow: back off and west; the shield raised 0.1 s before the next blow told on
+# him from 560 lands (a parry: within the set's parry_s 0.18 s of the raise; mob 4's, j24).
+--goto -4.9,7.5@350-469
 --do light@470 --do light@488 --do light@506 --do heavy@535
---do block:-4.5,9.4@585-598
+--on-tell block~0.1@560-600
 --do light@600 --do light@620 --do light@638 --do light@656 --do heavy@685
 --do block@720-745 --do light@750
 
-# Down and east to pack 2 (it wakes as he comes).
---press s@770-897 --press d@830-897
+# Down and east to pack 2 (it wakes as he comes), by the corner the keys took (j22).
+--goto -3.7,18.0@770-919 --goto 2.8,22.1@770-919
 --do light@920 --do light@938 --do light@956 --do heavy@985
 
-# Pack 2: a roll east clear of mob 6's blow at 1034 (a dodge), then the rest fall.
---do roll:11.5,19.8@1024
+# Pack 2: a roll away from the first blow told on him from 1000 (a dodge, mob 6's in j24), a
+# third of a second before it lands, then the rest fall.
+--on-tell roll~0.33@1000-1100
 --do light@1050 --do light@1070 --do light@1088 --do light@1106 --do heavy@1135
 --do light@1170 --do light@1188

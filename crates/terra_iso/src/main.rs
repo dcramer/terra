@@ -591,10 +591,14 @@ mod tests {
             "flags after it win"
         );
         assert!(forest.press.contains(&("w".into(), 60, 95)));
-        let roll = forest.abilities.iter().find(|a| a.0 == "roll");
-        assert_eq!(
-            roll.map(|r| (r.1, r.2)),
-            Some((Some(Vec2::new(11.5, 19.8)), 1024))
+        let roll = forest
+            .on_tell
+            .iter()
+            .find(|r| r.ability == hero::Ability::Roll);
+        assert!(
+            roll.is_some_and(|r| r.at.is_none() && r.lead.is_some()),
+            "the route's dodge answers a tell: {:?}",
+            forest.on_tell
         );
         assert!(forest.abilities.len() > 30, "the route's every --do");
         assert_eq!(
