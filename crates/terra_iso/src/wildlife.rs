@@ -22,6 +22,29 @@ pub const SQUIRREL: &str = "models/creatures/Squirrel.glb";
 /// The forest scene's (wood/): the iso pipeline's, a walk its only clip.
 pub const MOOSE: &str = "models/iso/moose.glb";
 
+/// Each beast's coat: the colour its model's is multiplied by, at a dark hide's sheen
+/// (rim::Hide, the fighters' 1% for glTF's 4%). Tripo's and the pack's coats come out
+/// pale; under the oaks a 4% sheen turned a coat the shaded ground's blue-grey whatever
+/// its tint (iso-art j47). The moose a dark brown (in the bank's shade it stood at the
+/// ground's value and hue); the red deer, a pale fawn tinted (0.95, 0.62, 0.45), read
+/// flat salmon, so the same hue at 0.58 of it (at (0.62, 0.36, 0.22) the lit calf went
+/// orange); the boar, a pale coat untinted (near white in the fern), a wild boar's dark
+/// grey-brown: at (0.42, 0.34, 0.27) still a light tan (iso-forest-art j2, route frame
+/// 200). A beast not here keeps its model's own.
+const COATS: [(&str, Vec3); 5] = [
+    (MOOSE, Vec3::new(0.55, 0.38, 0.25)),
+    (STAG, Vec3::new(0.55, 0.36, 0.25)),
+    (HIND, Vec3::new(0.55, 0.36, 0.25)),
+    (CALF, Vec3::new(0.55, 0.36, 0.25)),
+    (BOAR, Vec3::new(0.32, 0.27, 0.22)),
+];
+
+/// The coat a beast's model wears, if the table names one (`COATS`).
+pub fn coat(model: &str) -> Option<(crate::rim::Tint, crate::rim::Hide)> {
+    let (_, tint) = COATS.iter().find(|(m, _)| *m == model)?;
+    Some((crate::rim::Tint(*tint), crate::rim::Hide))
+}
+
 pub fn plugin(app: &mut App) {
     // After Startup, so the nav knows the trees, rocks and water it keeps off.
     app.add_systems(PostStartup, spawn)
@@ -79,13 +102,12 @@ fn spawn(mut commands: Commands, asset: Res<AssetServer>, nav: Res<Nav>, land: R
     };
     let put = |commands: &mut Commands, actor: Actor, at: Vec2, scale: f32, mut mind: Beast| {
         let yaw = mind.rng.f() * std::f32::consts::TAU;
-        // The red deer's Tripo coats came out a pale fawn; a summer red deer is russet.
-        let tint = match actor.model {
-            STAG | HIND | CALF => Vec3::new(0.95, 0.62, 0.45),
-            _ => Vec3::ONE,
-        };
+        let model = actor.model;
         let e = creature(commands, &asset, actor, at, yaw, scale);
-        commands.entity(e).insert((mind, crate::rim::Tint(tint)));
+        commands.entity(e).insert(mind);
+        if let Some(coat) = coat(model) {
+            commands.entity(e).insert(coat);
+        }
     };
     let open = |p: Vec2| nav.nearest_open(p).unwrap_or(p);
 

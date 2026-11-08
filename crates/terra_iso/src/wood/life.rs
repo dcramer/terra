@@ -7,7 +7,7 @@ use crate::forest::Rng;
 use crate::party::{Actor, creature};
 use crate::ruin::effects::kit::{Cam, glow};
 use crate::terrain::shape;
-use crate::wildlife::{BOAR, CHAFFINCH, FOX, MOOSE, SPARROW};
+use crate::wildlife::{BOAR, CHAFFINCH, FOX, MOOSE, SPARROW, coat};
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
@@ -25,9 +25,6 @@ const BEAT: [Vec2; 3] = [
     Vec2::new(9.3, 0.5),
     Vec2::new(10.4, 0.9),
 ];
-/// The moose's hide: a dark brown (Tripo's coat is a pale grey-brown) at a fighter's sheen
-/// (rim::Hide); in the bank's shade it stood at the ground's value and hue.
-const HIDE: Vec3 = Vec3::new(0.55, 0.38, 0.25);
 /// The repository's own beasts on beats of their own (not the Tripo pipeline's): a fox
 /// trotting the grass below the fight, a boar along the wood's edge west of the camp.
 const FOX_BEAT: [Vec2; 3] = [
@@ -73,16 +70,15 @@ fn spawn(
     let mut moose = Actor::new(MOOSE, 1.45, 1.45, 2.2, 0.8);
     moose.path.push_back(BEAT[1]);
     let e = creature(&mut commands, &asset, moose, BEAT[0], 0.0, 1.0);
-    commands.entity(e).insert((
-        Roam {
-            beat: BEAT.to_vec(),
-            next: 1,
-            back: false,
-            fly: false,
-        },
-        crate::rim::Tint(HIDE),
-        crate::rim::Hide,
-    ));
+    commands.entity(e).insert(Roam {
+        beat: BEAT.to_vec(),
+        next: 1,
+        back: false,
+        fly: false,
+    });
+    if let Some(coat) = coat(MOOSE) {
+        commands.entity(e).insert(coat);
+    }
     for (model, beat, walk, height, radius) in [
         (FOX, &FOX_BEAT[..], 0.9, 0.6, 0.25),
         (BOAR, &BOAR_BEAT[..], 0.8, 0.9, 0.45),
@@ -96,6 +92,9 @@ fn spawn(
             back: false,
             fly: false,
         });
+        if let Some(coat) = coat(model) {
+            commands.entity(e).insert(coat);
+        }
     }
     let dir = (CROSS.1 - CROSS.0).normalize();
     let side = dir.perp();
