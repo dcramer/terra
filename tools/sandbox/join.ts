@@ -158,6 +158,26 @@ try {
   }, 60);
   console.log(`✓ creatures are the host's: the friend's game shows ${seen} of the host's animals, each within ${worst.toFixed(1)} m of where the host has it`);
 
+  // A joined player's blow is the host's to land: the friend, put by the host beside one of
+  // its animals (a guest's body is the host's to walk), strikes it, and it falls on the host.
+  type From = { name: string; from_start: Place };
+  const kind = KINDS.find((name) => (JSON.parse(remote(host, "call", "sandbox.find", JSON.stringify({ name }))) as From[]).length > 0)!;
+  const prey = (JSON.parse(remote(host, "call", "sandbox.find", JSON.stringify({ name: kind }))) as From[])[0].from_start;
+  remote(host, "call", "net.place_guests", JSON.stringify({ at: [prey[0] + 2, prey[2]] }));
+  await until(`the friend's game never stood where the host put it, beside the ${kind}`, () => {
+    const mine = net(friend).mine;
+    const there = net(host).guests[0]?.at;
+    return !!mine && !!there && apart(mine, there) < 0.5;
+  }, 30);
+  let fell = false;
+  for (let tries = 0; tries < 6 && !fell; tries++) {
+    remote(friend, "call", "creatures.strike", JSON.stringify({ name: kind, damage: 300 }));
+    await sleep(1);
+    fell = /Killed a /.test(remote(host, "said", "--all", "--containing", "Killed a "));
+  }
+  if (!fell) throw new Error(`the friend, put beside a ${kind} and striking it for 300, never felled it on the host: a joined player's blow is asked of the host, which lands it within reach (terra_creatures::net, STRIKE)`);
+  console.log(`✓ a joined player's blow lands on the host: the friend, put beside a ${kind}, struck it and it fell there`);
+
   // The friend's character is sent to the host to keep (D592), as it is every few seconds.
   remote(friend, "call", "character.keep");
   await sleep(1);

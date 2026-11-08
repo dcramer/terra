@@ -32,6 +32,7 @@ pub fn plugin(app: &mut App) {
     method(app, "net.state", state);
     method(app, "net.say", say);
     method(app, "net.leave", leave);
+    method(app, "net.place_guests", place_guests);
 }
 
 #[derive(Deserialize)]
@@ -61,6 +62,38 @@ pub fn scripted_identity(name: &str) -> Identity {
         chunk.copy_from_slice(&hasher.finish().to_le_bytes());
     }
     Identity::from_secret(secret)
+}
+
+#[derive(Deserialize)]
+struct PlaceAsk {
+    /// Metres east and south of the start, as `warp` takes a place.
+    at: [f32; 2],
+}
+
+/// `net.place_guests {"at": [east, south]}`: on the host, puts every guest's body on the
+/// ground at a place, as `warp` puts this game's own player: a guest's body is the host's to
+/// walk, so a script that wants a guest somewhere asks the host. Says how many it moved.
+fn place_guests(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let PlaceAsk { at } = parse_some(params)?;
+    if world.get_resource::<Host>().is_none() {
+        return Err(refused(
+            "This game hosts no world: host one first (net.host).",
+        ));
+    }
+    let (Some(planet), Some(start)) = (
+        world.get_resource::<Planet>(),
+        world.get_resource::<terra_world::start::Start>(),
+    ) else {
+        return Err(refused("No world is made yet."));
+    };
+    let feet = planet.ground_at(start.at(at[0], at[1]));
+    let mut guests = world.query_filtered::<&mut Transform, With<Guest>>();
+    let mut moved = 0;
+    for mut guest in guests.iter_mut(world) {
+        guest.translation = feet;
+        moved += 1;
+    }
+    Ok(json!({ "moved": moved }))
 }
 
 fn join(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
