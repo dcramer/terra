@@ -38,6 +38,9 @@ use terra_world::tick::Sim;
 /// own player is told it (`mover::net::Own`).
 pub const SHOWN: usize = 0;
 pub const OWN: usize = 1;
+/// The part that says what a player holds in hand, in bytes the layer that knows items
+/// writes and reads (`terra_survival::hands_net`): this layer only carries it.
+pub const HELD: usize = 4;
 /// A tick, for a transport that keeps time: the systems here run once a tick.
 pub(crate) const TICK: std::time::Duration = std::time::Duration::from_micros(15_625);
 /// The kind of a player's entity.
@@ -90,7 +93,14 @@ pub fn parts() -> Vec<PartSpec> {
         audience: Audience::Public,
         weight: 0.2,
     };
-    vec![part(Audience::Public), part(Audience::Owner), worn, looks]
+    // What is in a player's hands, said by the layer that knows items ([`HELD`]).
+    vec![
+        part(Audience::Public),
+        part(Audience::Owner),
+        worn,
+        looks,
+        worn,
+    ]
 }
 
 /// What a player means to do and where they look, on a tick: what a client sends up.
@@ -235,6 +245,13 @@ impl Host {
     pub fn set(&mut self, player: Entity, part: usize, value: &impl Wire) {
         if let Some(&id) = self.ids.get(&player) {
             self.server.set_as(id, part, value);
+        }
+    }
+
+    /// What a player holds in hand, as the layer that knows items says it ([`HELD`]).
+    pub fn set_held(&mut self, player: Entity, held: &[u8]) {
+        if let Some(&id) = self.ids.get(&player) {
+            self.server.set(id, HELD, held);
         }
     }
 

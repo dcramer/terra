@@ -22,6 +22,7 @@ pub mod crafting;
 pub mod death;
 pub mod dig;
 pub mod gains;
+pub mod hands_net;
 pub mod harvest;
 pub mod hazards;
 pub mod held;

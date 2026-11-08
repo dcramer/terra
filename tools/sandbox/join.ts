@@ -159,6 +159,26 @@ try {
   if (title(host).seed !== land || title(friend).seed !== land) throw new Error(`a player crossed out of a shared world: the host on seed ${title(host).seed}, the friend on ${title(friend).seed}`);
   console.log("✓ the gate: shut for both, opened on the host by the mark the friend bears, open in both, and nobody crossed the shared world");
 
+  // What each holds in hand is shown in the other's game (netcode.md, step 5): the friend
+  // takes a torch in hand, and the host's guest holds a torch; the friend's puppet of the
+  // host holds what the host does.
+  type Hands = { mine: { main: string | null } | null; others: { main: string | null }[] };
+  const hands = (port: number) => JSON.parse(remote(port, "call", "hands.state")) as Hands;
+  // Side by side again first: the mark was earned at the den, far from the host's player.
+  const beside = (JSON.parse(remote(host, "call", "play.state")) as { at: [number, number] }).at;
+  remote(host, "call", "net.place_guests", JSON.stringify({ at: [beside[0] + 2, beside[1]] }));
+  await until("put beside the host again, the friend's game never showed the host", () => net(friend).puppets.length === 1, 60);
+  remote(friend, "give", "torch");
+  await sleep(1);
+  const bar = (JSON.parse(remote(friend, "call", "play.state")) as { bar: (string | null)[] }).bar;
+  const slot = bar.findIndex((name) => name === "Torch");
+  if (slot < 0) throw new Error(`given a torch, the friend's bar holds ${JSON.stringify(bar)}`);
+  remote(friend, "press", String(slot + 1));
+  await until(`the friend took a torch in hand and the host's game shows its guest holding ${JSON.stringify(hands(host).others)}: what a joined player holds is asked of the host, a part of its entity (terra_survival::hands_net)`, () => hands(host).others[0]?.main === "Torch", 30);
+  const held = hands(host).mine?.main ?? null;
+  await until(`the host holds ${held} and the friend's game says ${JSON.stringify(hands(friend))} and has ${net(friend).puppets.length} puppets`, () => (hands(friend).others[0]?.main ?? null) === held, 30);
+  console.log(`✓ what each holds is shown in the other's game: the friend's torch on the host's guest, the host's ${held ?? "empty hand"} on the friend's puppet`);
+
   // Creatures are the host's (netcode.md, step 5): the friend's game puts out none of its
   // own and shows the host's, each where the host has it.
   type Animal = { name: string; at: Place };

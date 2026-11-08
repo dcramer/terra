@@ -153,6 +153,7 @@ impl Plugin for GameplayPlugin {
         town_animals::plugin(app);
         map::plugin(app);
         held::plugin(app);
+        terra_survival::hands_net::plugin(app);
         worn::plugin(app);
         save::plugin(app);
         title::plugin(app);

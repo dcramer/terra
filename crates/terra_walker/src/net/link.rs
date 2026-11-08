@@ -212,6 +212,13 @@ impl Link {
             .collect()
     }
 
+    /// What the server says a puppet's player holds in hand ([`super::HELD`]), in bytes the
+    /// layer that knows items reads.
+    pub fn held(&self, puppet: &Puppet) -> Option<&[u8]> {
+        let told = self.client.entity(puppet.id)?.part(super::HELD)?;
+        Some(told.newer.bytes.as_slice())
+    }
+
     /// The entity that is this game's own player, once the server has said.
     pub fn mine(&self) -> Option<EntityId> {
         self.client
