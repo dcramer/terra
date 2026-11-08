@@ -349,6 +349,24 @@ test("drop closes a round no judge answered as DROP, never one a judge answered 
   }
 });
 
+test("a second score keeps the earlier ones, oldest first", () => {
+  const dir = mkdtempSync(join(tmpdir(), "iso-score-"));
+  try {
+    const h: History = { kept: {}, rounds: { r1: { at: "2026-11-07T09:00:00Z", rev: "b", dirty: false, job: "j", biomes: { ruin: { still: "s", stats: {} as never, changed: true, pairs: [] } } } } };
+    writeFileSync(join(dir, "history.json"), JSON.stringify(h));
+    const run = (...args: string[]) => spawnSync(process.execPath, [join(import.meta.dirname, "loop.ts"), "record", "r1", "ruin", "score", ...args], { env: { ...process.env, ISO_KIT_HOME: dir }, encoding: "utf8" });
+    assert.equal(run("11").status, 1, "a score is of 10");
+    assert.equal(run("5", "flat light").status, 0);
+    assert.equal(run("6", "rubble tiles").status, 0);
+    const third = run("5.5", "darks violet");
+    assert.match(third.stdout, /score 5.5 recorded \(was 6, kept in its "earlier"\)/);
+    const s = (JSON.parse(readFileSync(join(dir, "history.json"), "utf8")) as History).rounds.r1.biomes.ruin.score;
+    assert.deepEqual(s, { overall: 5.5, gaps: "darks violet", earlier: [{ overall: 5, gaps: "flat light" }, { overall: 6, gaps: "rubble tiles" }] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a round waiting on a pair is never kept, but --revert closes it with the kept still untouched", () => {
   const dir = mkdtempSync(join(tmpdir(), "iso-pending-"));
   try {

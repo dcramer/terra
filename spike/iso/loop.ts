@@ -99,7 +99,8 @@ export type Entry = {
   share?: number;
   pairs: Pair[];
   judge?: { folder: string; brief: string };
-  score?: { overall: number; gaps: string };
+  /** `earlier`: scores a later judge's replaced, oldest first. */
+  score?: { overall: number; gaps: string; earlier?: { overall: number; gaps: string }[] };
   film?: string;
 };
 export type Round = { at: string; rev: string; dirty: boolean; job: string; biomes: Record<string, Entry>; verdict?: { result: "KEEP" | "REVERT" | "DROP"; losers: string[]; at: string; rebased?: string; dropped?: string } };
@@ -567,8 +568,11 @@ function record(argv: string[], say: (l: string) => void) {
   if (what === "score") {
     const overall = Number(rest[0]);
     if (!(overall >= 0 && overall <= 10)) fail(`a score is a number of 10, not "${rest[0]}": record ${round} ${biome} score 5.5 "<gaps>"`);
-    e!.score = { overall, gaps: rest.slice(1).join(" ") };
-    say(`${biome} ${round}: score ${overall} recorded`);
+    // A second judge's score keeps the first's, oldest first, as a re-judged pair does.
+    const was = e!.score;
+    const earlier = was ? [...(was.earlier ?? []), { overall: was.overall, gaps: was.gaps }] : undefined;
+    e!.score = { overall, gaps: rest.slice(1).join(" "), ...(earlier ? { earlier } : {}) };
+    say(`${biome} ${round}: score ${overall} recorded${was ? ` (was ${was.overall}, kept in its "earlier")` : ""}`);
   } else if (what === "pair") {
     const r = rest.indexOf("--rejudge");
     const which = r >= 0 && /^\d+$/.test(rest[r + 1] ?? "") ? Number(rest[r + 1]) : 1;
