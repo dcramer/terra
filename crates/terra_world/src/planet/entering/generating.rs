@@ -9,6 +9,12 @@
 //! every core (`terra_gen::par::map`). The world is entered once it comes back, in the same frame
 //! (`crate::instance::Generating`). A run with no loading screen, a layer's test, makes it
 //! as the world is entered, as before (`super::land`).
+//!
+//! **Warming** (docs/instances.md, "The crossing and the way back": the world beyond is
+//! known before it is reached): [`Warm`] begins a world's land on its thread ahead of the
+//! crossing, as a player nears the gate to it, and the crossing takes that land up where it
+//! has come to, so what was made while they walked is not waited for under the cover. One
+//! world is kept warm, the last asked for.
 
 use super::{KnownStart, KnownTowns, Land, Stage, made_land};
 use crate::instance::{Crossing, Generating, InstanceApp, Travel, WorldSpec};
@@ -30,6 +36,37 @@ struct Making {
     /// When it began, by the wall clock, and the frames drawn since, for the log.
     began: Instant,
     frames: u32,
+}
+
+/// The world being made ahead of a crossing to it ([`Warm`]), by its key: none, or the last
+/// asked for. The app's, not a world's: it is made while another world is played.
+#[derive(Resource, Default)]
+struct Warming(Option<(crate::instance::InstanceKey, Making)>);
+
+/// Begins making a world's land ahead of a crossing to it, if it is not already being made:
+/// asked as often as wanted, begun once.
+pub struct Warm(pub WorldSpec);
+
+impl Command for Warm {
+    type Out = ();
+
+    fn apply(self, world: &mut World) {
+        // Only where a world's land is made on its thread at all (a loading screen).
+        if !world.contains_resource::<State<Screen>>() {
+            return;
+        }
+        let warm = world.resource::<Warming>();
+        if warm.0.as_ref().is_some_and(|(key, _)| *key == self.0.key) {
+            return;
+        }
+        info!(
+            "Land: warming {} {} ahead of a crossing",
+            self.0.kind, self.0.key.0
+        );
+        let making = start(world, self.0.clone());
+        // Another kept warm before is let go: its thread ends on its own, its land dropped.
+        world.resource_mut::<Warming>().0 = Some((self.0.key, making));
+    }
 }
 
 /// The land made, for [`super::land`] to put in as the world is entered.
@@ -59,18 +96,36 @@ pub(in crate::planet) fn plugin(app: &mut App) {
     app.world_resource::<Making>()
         .world_resource::<Made>()
         .init_resource::<WithTheLand>()
+        .init_resource::<Warming>()
         .add_systems(OnEnter(Travel::Generating), begin)
         .add_systems(Crossing, come_back.before(crate::instance::carry_out))
         .add_systems(Update, said.in_set(Track));
 }
 
 /// Starts making the world's land on its own thread, when a loading screen is there to be
-/// drawn meanwhile.
+/// drawn meanwhile; or takes it up where it has come to, if it was begun ahead ([`Warm`]).
 fn begin(world: &mut World) {
     if !world.contains_resource::<State<Screen>>() {
         return;
     }
     let spec = world.resource::<WorldSpec>().clone();
+    let warmed = world.resource_mut::<Warming>().0.take();
+    let making = match warmed {
+        Some((key, making)) if key == spec.key => {
+            info!(
+                "Land: begun {:.1} s ahead of the crossing",
+                making.began.elapsed().as_secs_f32()
+            );
+            making
+        }
+        _ => start(world, spec),
+    };
+    world.insert_resource(making);
+    world.resource_mut::<Generating>().begin(LAND);
+}
+
+/// A world's land begun on a thread of its own.
+fn start(world: &World, spec: WorldSpec) -> Making {
     let options = world.resource::<Options>().clone();
     let known = world.get_resource::<KnownStart>().copied();
     let known_towns = world.get_resource::<KnownTowns>().cloned();
@@ -105,13 +160,12 @@ fn begin(world: &mut World) {
         .unwrap_or_else(|why| {
             panic!("the land's thread could not be started ({why}); the machine is out of threads or memory")
         });
-    world.insert_resource(Making {
+    Making {
         thread: Some(thread),
         stage,
         began: Instant::now(),
         frames: 0,
-    });
-    world.resource_mut::<Generating>().begin(LAND);
+    }
 }
 
 /// The land, once made, kept for entering; a panic making it (a `--site` the land has no

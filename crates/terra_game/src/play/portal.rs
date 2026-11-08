@@ -68,10 +68,33 @@ pub fn plugin(app: &mut App) {
                 .run_if(in_state(Travel::Playing)),
         )
         .add_systems(Update, hang_veils)
+        .add_systems(Update, warm.run_if(in_state(Travel::Playing)))
         .add_systems(OnEnter(InWorld), arrive.in_set(Building::Stage))
         .add_systems(OnEnter(Travel::Playing), crossed);
     terra_world::remote::method(app, "portal.step", step);
     terra_world::remote::method(app, "portal.open", open);
+    terra_world::remote::method(app, "portal.state", state);
+}
+
+/// `portal.state`: the portal nearest the player, without touching it: how far off it
+/// stands, whether it is open, and where it leads.
+fn state(
+    In(_): In<Option<serde_json::Value>>,
+    portals: Query<(&Portal, &Transform)>,
+    body: Option<Single<&Transform, With<LocalPlayer>>>,
+) -> bevy::remote::BrpResult {
+    let refused = terra_world::remote::refused;
+    let body = body.ok_or_else(|| refused("There is no player near any portal yet."))?;
+    let nearest = portals.iter().min_by(|a, b| {
+        let away = |at: &Transform| at.translation.distance(body.translation);
+        away(a.1).total_cmp(&away(b.1))
+    });
+    let (portal, at) = nearest.ok_or_else(|| refused("No portal stands in this world."))?;
+    Ok(serde_json::json!({
+        "away_m": at.translation.distance(body.translation),
+        "open": portal.open,
+        "to": { "kind": portal.to.kind, "seed": portal.to.seed.to_string() },
+    }))
 }
 
 /// `portal.open`: opens the portal nearest the player, as one who bears the mark does, so a
@@ -244,6 +267,40 @@ fn crossing(
         toward: body.translation + *body.forward() * 10.0,
     });
     None
+}
+
+/// How near an open portal the world beyond begins to be made, in metres: a jog of twenty
+/// seconds, about what a full world's land takes (D501's cover is for what is left).
+const WARM_M: f32 = 100.0;
+
+/// The world beyond an open portal the player nears is begun ahead of the crossing
+/// (`terra_world::planet::entering::generating::Warm`), once for each world neared; not in
+/// a shared world, which nobody crosses yet.
+fn warm(
+    mut commands: Commands,
+    portals: Query<(&Portal, &Transform)>,
+    body: Option<Single<&Transform, With<LocalPlayer>>>,
+    shared: (
+        Option<Res<terra_walker::net::Host>>,
+        Option<Res<terra_walker::net::link::Link>>,
+    ),
+    mut warmed: Local<Option<terra_world::instance::InstanceKey>>,
+) {
+    let Some(body) = body else { return };
+    if shared.0.is_some() || shared.1.is_some() {
+        return;
+    }
+    let near = portals
+        .iter()
+        .find(|(portal, at)| portal.open && at.translation.distance(body.translation) < WARM_M);
+    if let Some((portal, _)) = near
+        && *warmed != Some(portal.to.key)
+    {
+        *warmed = Some(portal.to.key);
+        commands.queue(terra_world::planet::entering::generating::Warm(
+            portal.to.clone(),
+        ));
+    }
 }
 
 /// A portal's veil hangs while it is open, and not while it is shut.

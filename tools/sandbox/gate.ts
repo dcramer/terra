@@ -46,8 +46,10 @@ try {
   const left = await stands("Player");
 
   // Shut to one who bears no mark: they are told so and stay.
-  const tried = (await call("portal.step")) as { open: boolean };
-  if (tried.open) throw new Error("a new world's gate stands open before anyone bears the mark");
+  type Gate = { open: boolean; away_m: number; to: { seed: string } };
+  const gateNow = async () => (await call("portal.state")) as Gate;
+  if ((await gateNow()).open) throw new Error("a new world's gate stands open before anyone bears the mark");
+  await call("portal.step");
   await waitSeconds(2);
   if ((await title()).seed !== SEED) throw new Error("an unmarked player went through a shut gate");
   const told = (await said(0, "Notice: The gate", 5)).lines.map((line) => line.text).join(" ");
@@ -55,10 +57,13 @@ try {
   // Marked, the first step opens it and the next goes through.
   await call("marks.give", { mark: "troll" });
   await call("portal.step");
-  await waitUntil("the gate to open to the mark", () => call("portal.step").then((step) => step as { open: boolean; away_m: number; to: { seed: string } }), (step) => step.open, 20);
+  await waitUntil("the gate to open to the mark", gateNow, (gate) => gate.open, 20);
+  // As one who walked the last hundred metres to it: the world beyond is made meanwhile.
+  await waitSeconds(20);
   const out = (await call("portal.step")) as { away_m: number; to: { seed: string } };
   if (out.to.seed === SEED) throw new Error("the first world's gate leads to its own world");
   await playing((seed) => seed === out.to.seed);
+  const took = (await said(0, "Portal: crossed", 5)).lines.map((line) => / in ([0-9.]+) s/.exec(line.text)?.[1]).filter(Boolean);
   const [there, me] = [await stands("Portal"), await stands("Player")];
   if (apart(there, me) > 4) throw new Error(`in the realm beyond the player stands ${apart(there, me).toFixed(1)} m from its gate, not before it`);
 
@@ -75,11 +80,11 @@ try {
   await playing((seed) => seed === SEED);
   const home = await stands("Player");
   // The first world's gate, opened before the game was closed, is open still, and the mark borne.
-  const still = (await call("portal.step")) as { open: boolean };
+  const still = await gateNow();
   const borne = (await call("marks.state")) as { marks: string[] };
   if (!still.open || !borne.marks.includes("troll")) throw new Error(`started again and back, the first gate is ${still.open ? "open" : "shut"} and the player bears ${JSON.stringify(borne.marks)}: the save did not keep them`);
   if (apart(home, left) > 1) throw new Error(`back through the gate the player stands ${apart(home, left).toFixed(1)} m from where they left`);
-  console.log(`✓ gate: seed ${SEED}'s gate stands ${away.toFixed(0)} m from the start, shut to an unmarked player and opened by the troll's mark; through it to the realm beyond (seed ${out.to.seed}), ${apart(there, me).toFixed(1)} m before its gate, closed and started again there (${apart(again, me).toFixed(1)} m from where it was closed), and back to within ${apart(home, left).toFixed(1)} m of where the player left the first world`);
+  console.log(`✓ gate: seed ${SEED}'s gate stands ${away.toFixed(0)} m from the start, shut to an unmarked player and opened by the troll's mark; through it to the realm beyond (seed ${out.to.seed}), ${apart(there, me).toFixed(1)} m before its gate, closed and started again there (${apart(again, me).toFixed(1)} m from where it was closed), and back to within ${apart(home, left).toFixed(1)} m of where the player left the first world; the crossing out, its world warmed as the player neared, took ${took.at(-1) ?? "?"} s (a reading)`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 } finally {

@@ -123,12 +123,15 @@ try {
 
   // The world's gate (D590): shut in both games; the friend, given the mark, holds it to the
   // gate, the host's gate opens, and it is open in both; nobody crosses a shared world.
-  const gate = (port: number) => JSON.parse(remote(port, "call", "portal.step")) as { open: boolean };
+  const gate = (port: number) => JSON.parse(remote(port, "call", "portal.state")) as { open: boolean };
   if (gate(host).open || gate(friend).open) throw new Error("the world's gate stands open before anyone bears a mark");
   remote(friend, "call", "marks.give", JSON.stringify({ mark: "troll" }));
   remote(friend, "call", "portal.step");
   await until("the host's gate never opened to the mark the friend bears", () => gate(host).open, 60);
   await until("the friend's game never showed the gate the host opened", () => gate(friend).open, 60);
+  // Open, and stepped at by both: nobody crosses a shared world.
+  remote(host, "call", "portal.step");
+  remote(friend, "call", "portal.step");
   await sleep(3);
   if (title(host).seed !== land || title(friend).seed !== land) throw new Error(`a player crossed out of a shared world: the host on seed ${title(host).seed}, the friend on ${title(friend).seed}`);
   console.log("✓ the gate: shut for both, opened on the host by the mark the friend bears, open in both, and nobody crossed the shared world");
