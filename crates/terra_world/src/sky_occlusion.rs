@@ -466,7 +466,7 @@ fn moved(from: &OpenSky, to: &OpenSky) -> bool {
 
 /// The open sky's light toward each side of the world, +X, -X, +Y, -Y, +Z, -Z, from the
 /// painting's frame: what comes from above the horizon, and from the ground.
-fn world_sides(open: &OpenSky) -> [(Vec3, Vec3); 6] {
+pub(crate) fn world_sides(open: &OpenSky) -> [(Vec3, Vec3); 6] {
     let axes = [Vec3::X, -Vec3::X, Vec3::Y, -Vec3::Y, Vec3::Z, -Vec3::Z];
     let into_sky = open.frame.inverse();
     axes.map(|axis| {
@@ -534,7 +534,7 @@ fn texels(seen: &Seen, sides: &[(Vec3, Vec3); 6]) -> Vec<u8> {
 
 /// A colour packed as three nine-bit mantissas sharing a five-bit exponent, as the GPU's
 /// RGB9E5 format holds it (the OpenGL EXT_texture_shared_exponent rules).
-fn rgb9e5(c: Vec3) -> u32 {
+pub(crate) fn rgb9e5(c: Vec3) -> u32 {
     const MAX: f32 = 65408.0;
     let c = c.clamp(Vec3::ZERO, Vec3::splat(MAX));
     let largest = c.max_element();

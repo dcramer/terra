@@ -30,6 +30,7 @@ pub mod daylight;
 pub mod debug;
 pub mod debug_menu;
 pub mod den;
+pub mod den_light;
 pub mod detail;
 pub mod dither;
 pub mod drift;
