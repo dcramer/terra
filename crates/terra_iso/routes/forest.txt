@@ -5,6 +5,10 @@
 # A route is the flags `cargo iso` takes, whitespace apart, `#` to the line's end a note
 # (main.rs, `--route`). It is open-loop: a change before 770 moves everything after.
 --biome forest --play --frames 60 --film 1170 --zoom 10
+# The packs its run must clear, each mob woken and fallen by the last frame, or it fails
+# (demo/tally.rs `cleared`): `expect all` (also when no line says), `expect packs 0 1`, or
+# `expect nothing` for a hero film that fights none.
+expect all
 
 # Pack 0, the camp: walk up, three lights and a heavy, a block, four lights.
 --press w@60-95

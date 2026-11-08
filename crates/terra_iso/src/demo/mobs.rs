@@ -89,7 +89,7 @@ pub struct Horde {
     paths: Option<(usize, Nav)>,
     blows: Vec<u32>,
     /// Each mob's pack (its roster line's `pack`), and whether it has woken.
-    packs: Vec<u32>,
+    pub packs: Vec<u32>,
     pub awake: Vec<bool>,
 }
 

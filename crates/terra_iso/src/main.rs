@@ -75,6 +75,9 @@ pub struct Args {
     /// ground point X,Z. `--route NAME` reads a scripted fight's flags from
     /// `routes/NAME.txt` (`routes`).
     pub abilities: Vec<(String, Option<Vec2>, u32, u32)>,
+    /// The packs a route's run must clear (demo/tally.rs `cleared`): its file's `expect`
+    /// line, else all of them; a run without a route is asked nothing. Not a flag: route data.
+    pub expect: demo::tally::Expect,
 }
 
 impl Args {
@@ -125,9 +128,11 @@ fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
 /// The flags with each `--route NAME` replaced by its file's: `routes/NAME.txt` beside this
 /// crate (a path ending `.txt` is read as it is), the flags `cargo iso` takes, whitespace
 /// apart, `#` to the line's end a note. So a scripted fight is a file in the repository, one
-/// command to play or film, not a copied line (D249); flags after it override its own.
-fn routes(flags: impl Iterator<Item = String>) -> Vec<String> {
+/// command to play or film, not a copied line (D249); flags after it override its own. And
+/// the packs its run must clear: its `expect` line, else all (no route: nothing).
+fn routes(flags: impl Iterator<Item = String>) -> (Vec<String>, demo::tally::Expect) {
     let mut out = Vec::new();
+    let mut expect = demo::tally::Expect::Nothing;
     let mut it = flags;
     while let Some(flag) = it.next() {
         if flag != "--route" {
@@ -150,16 +155,42 @@ fn routes(flags: impl Iterator<Item = String>) -> Vec<String> {
             std::process::exit(2)
         });
         out.extend(route_flags(&text));
+        expect = route_expect(&text).unwrap_or_else(|e| {
+            eprintln!(
+                "--route {name}: {}: {e}. Its `expect` line says which packs its run must \
+                 clear (demo/tally.rs `cleared`): `expect all`, `expect packs 0 1 2` or \
+                 `expect nothing` (a hero film)",
+                path.display()
+            );
+            std::process::exit(2)
+        });
     }
-    out
+    (out, expect)
 }
 
-/// A route file's flags: its words, with `#` notes left out.
-fn route_flags(text: &str) -> impl Iterator<Item = String> + '_ {
+/// A route file's lines, `#` notes left out, as words.
+fn route_lines(text: &str) -> impl Iterator<Item = Vec<&str>> + '_ {
     text.lines()
         .map(|l| l.split_once('#').map_or(l, |(f, _)| f))
-        .flat_map(str::split_whitespace)
+        .map(|l| l.split_whitespace().collect())
+}
+
+/// A route file's flags: its words, its notes and `expect` line left out.
+fn route_flags(text: &str) -> impl Iterator<Item = String> + '_ {
+    route_lines(text)
+        .filter(|w| w.first() != Some(&"expect"))
+        .flatten()
         .map(String::from)
+}
+
+/// A route file's `expect` line (the last, if several), else all its packs.
+fn route_expect(text: &str) -> Result<demo::tally::Expect, String> {
+    route_lines(text)
+        .filter(|w| w.first() == Some(&"expect"))
+        .last()
+        .map_or(Ok(demo::tally::Expect::All), |w| {
+            demo::tally::Expect::read(&w[1..])
+        })
 }
 
 /// The flags as given, and the `--hour` if one was.
@@ -181,9 +212,12 @@ fn parse(flags: impl Iterator<Item = String>) -> (Args, Option<scene::Hour>) {
         press: Vec::new(),
         clicks: Vec::new(),
         abilities: Vec::new(),
+        expect: demo::tally::Expect::Nothing,
     };
     let mut hour = None;
-    let mut it = routes(flags).into_iter();
+    let (flags, expect) = routes(flags);
+    a.expect = expect;
+    let mut it = flags.into_iter();
     while let Some(flag) = it.next() {
         let mut val = || it.next().expect("a value after the flag");
         match flag.as_str() {
@@ -509,5 +543,29 @@ mod tests {
             Some((Some(Vec2::new(11.5, 19.8)), 1024))
         );
         assert!(forest.abilities.len() > 30, "the route's every --do");
+        assert_eq!(
+            forest.expect,
+            demo::tally::Expect::All,
+            "the forest clears every pack"
+        );
+        let (plain, _) = parse("--biome forest --play".split(' ').map(String::from));
+        assert_eq!(
+            plain.expect,
+            demo::tally::Expect::Nothing,
+            "no route, nothing asked"
+        );
+    }
+
+    /// A route's `expect` line is its data, not flags: read as its packs, left out of its flags.
+    #[test]
+    fn a_route_says_the_packs_it_clears() {
+        let text = "--biome forest\nexpect packs 0 1 # the camp and meadow\n--press w@60-95";
+        assert_eq!(route_flags(text).count(), 4);
+        assert_eq!(
+            route_expect(text),
+            Ok(demo::tally::Expect::Packs(vec![0, 1]))
+        );
+        assert_eq!(route_expect("--biome forest"), Ok(demo::tally::Expect::All));
+        assert!(route_expect("expect packs one").is_err());
     }
 }

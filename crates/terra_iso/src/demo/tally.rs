@@ -4,7 +4,7 @@
 //! staged cast reads as foes that never move: what a play run's check asks of the forest's
 //! roster (demo/mobs.rs) is that each walks to him, he reaches them and they fall.
 
-use super::mobs::{Foe, Horde, IDLE, STALLED};
+use super::mobs::{Foe, Horde, IDLE, STALLED, WAKE};
 use crate::Args;
 use crate::play::strike::Struck;
 use crate::play::{Fallen, Hero, REACH};
@@ -89,7 +89,11 @@ fn tally(
     };
     let here = h.translation.xz();
     let (mut struck, mut fallen) = (0, 0);
+    let mut fell = vec![false; horde.as_ref().map_or(0, |h| h.packs.len())];
     for (e, tr, s, f, foe) in &foes {
+        if let Some(fi) = foe.and_then(|foe| fell.get_mut(foe.i)) {
+            *fi = f;
+        }
         let w = walks.entry(e).or_default();
         // A body that is no mob (or has no horde) is awake from the first.
         let awake = match (foe, horde.as_deref()) {
@@ -110,17 +114,21 @@ fn tally(
         // The run's gate, once its mobs are in play (mobs.rs): its exit an error on a fail.
         if last && let Some(h) = horde {
             // Each bar said, so one failing never hides another.
-            let failed: Vec<String> = [verdict(&w, h.stalls.worst), idle(h.idles.worst)]
-                .into_iter()
-                .filter_map(Result::err)
-                .collect();
+            let failed: Vec<String> = [
+                verdict(&w, h.stalls.worst),
+                idle(h.idles.worst),
+                cleared(&args.expect, &h.packs, &h.awake, &fell),
+            ]
+            .into_iter()
+            .filter_map(Result::err)
+            .collect();
             for e in &failed {
                 error!("✗ {e}");
             }
             if failed.is_empty() {
                 info!(
-                    "✓ the mobs: each walked to him, none stalled, none idle out of reach past {IDLE} s (worst {:.1} s)",
-                    h.idles.worst.0
+                    "✓ the mobs: each walked to him, none stalled, none idle out of reach past {IDLE} s (worst {:.1} s); the route's packs cleared ({:?})",
+                    h.idles.worst.0, args.expect
                 );
             } else {
                 exit.write(AppExit::from_code(1));
@@ -154,6 +162,90 @@ pub fn verdict(walks: &[Walk], (stall, who): (f32, usize)) -> Result<(), String>
     Ok(())
 }
 
+/// Which packs a run must clear, each of their mobs woken and fallen by its last frame: what
+/// its route's `expect` line says (main.rs `routes`; a route without one expects them all, a
+/// hero-only film says `expect nothing`); a run without a route is asked nothing.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum Expect {
+    #[default]
+    Nothing,
+    All,
+    Packs(Vec<u32>),
+}
+
+impl Expect {
+    /// A route's `expect` line (its words after `expect`): `all`, `nothing`, or `packs 0 1 2`.
+    pub fn read(words: &[&str]) -> Result<Expect, String> {
+        match words {
+            ["all"] => Ok(Expect::All),
+            ["nothing"] => Ok(Expect::Nothing),
+            ["packs", rest @ ..] if !rest.is_empty() => rest
+                .iter()
+                .map(|w| w.parse().map_err(|_| format!("`{w}` is no pack number")))
+                .collect::<Result<_, _>>()
+                .map(Expect::Packs),
+            _ => Err(format!("`expect {}`", words.join(" "))),
+        }
+    }
+
+    fn asks(&self, pack: u32) -> bool {
+        match self {
+            Expect::Nothing => false,
+            Expect::All => true,
+            Expect::Packs(p) => p.contains(&pack),
+        }
+    }
+}
+
+/// The bar on a route's packs (iso-forest-demo j24, D632): every mob of each pack it expects
+/// woke and fell by the run's end, `packs`, `awake` and `fallen` by mob. The walks' and idle
+/// bars judge awake mobs only, so a route whose hero never reached a pack passed (j22: 3 of 7
+/// woken on e6b6abcae, every gate green).
+pub fn cleared(
+    expect: &Expect,
+    packs: &[u32],
+    awake: &[bool],
+    fallen: &[bool],
+) -> Result<(), String> {
+    let asked = |i: &usize| expect.asks(packs[*i]);
+    let list = |v: Vec<usize>| {
+        v.iter()
+            .map(|i| format!("{i} (pack {})", packs[*i]))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let asleep: Vec<usize> = (0..packs.len())
+        .filter(asked)
+        .filter(|i| !awake[*i])
+        .collect();
+    let standing: Vec<usize> = (0..packs.len())
+        .filter(asked)
+        .filter(|i| awake[*i] && !fallen[*i])
+        .collect();
+    let mut said = Vec::new();
+    if !asleep.is_empty() {
+        said.push(format!(
+            "mobs {} never woke: the hero never came within {WAKE} m of them, so the route's \
+             walk fell short (its `--goto` warnings and the `he is at` lines say where he \
+             stood); a route that is not meant to fight them names its packs in its `expect` \
+             line (routes/forest.txt)",
+            list(asleep)
+        ));
+    }
+    if !standing.is_empty() {
+        said.push(format!(
+            "mobs {} woke but never fell: the route's blows ended before they did (its `--do` \
+             frames against the `foes at frame` lines), or his blows miss them (play/strike.rs)",
+            list(standing)
+        ));
+    }
+    if said.is_empty() {
+        Ok(())
+    } else {
+        Err(said.join("; "))
+    }
+}
+
 /// The bar on a pack standing by (iso-forest-demo j18, D632): no awake mob stood idle out of
 /// its reach past `IDLE` (steer.rs `Idles`: its worst time, which, how far off him).
 pub fn idle((t, who, off): (f32, usize, f32)) -> Result<(), String> {
@@ -170,6 +262,47 @@ pub fn idle((t, who, off): (f32, usize, f32)) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The route's packs bar (j24): the known-bad run of j22 (3 of 7 woken, mob 2 standing)
+    /// fails, naming the sleepers and the one left standing; every mob woken and fallen
+    /// passes; a route expecting only pack 0, or nothing (a hero film), is not asked the rest.
+    #[test]
+    fn the_gate_catches_a_pack_never_fought() {
+        let packs = [0, 0, 0, 1, 1, 2, 2];
+        let awake = [true, true, true, false, false, false, false];
+        let fallen = [true, true, false, false, false, false, false];
+        let e = cleared(&Expect::All, &packs, &awake, &fallen).unwrap_err();
+        assert!(
+            e.contains("mobs 3 (pack 1), 4 (pack 1), 5 (pack 2), 6 (pack 2) never woke"),
+            "{e}"
+        );
+        assert!(e.contains("mobs 2 (pack 0) woke but never fell"), "{e}");
+        assert_eq!(
+            cleared(&Expect::All, &packs, &[true; 7], &[true; 7]),
+            Ok(())
+        );
+        let e = cleared(&Expect::Packs(vec![0]), &packs, &awake, &fallen).unwrap_err();
+        assert!(!e.contains("never woke"), "{e}");
+        let fell0 = [true, true, true, false, false, false, false];
+        assert_eq!(
+            cleared(&Expect::Packs(vec![0]), &packs, &awake, &fell0),
+            Ok(())
+        );
+        assert_eq!(cleared(&Expect::Nothing, &packs, &awake, &fallen), Ok(()));
+    }
+
+    /// A route's `expect` line reads as all, nothing or its packs, and a wrong one is refused.
+    #[test]
+    fn an_expect_line_reads() {
+        assert_eq!(Expect::read(&["all"]), Ok(Expect::All));
+        assert_eq!(Expect::read(&["nothing"]), Ok(Expect::Nothing));
+        assert_eq!(
+            Expect::read(&["packs", "0", "2"]),
+            Ok(Expect::Packs(vec![0, 2]))
+        );
+        assert!(Expect::read(&["packs"]).is_err());
+        assert!(Expect::read(&["packs", "two"]).is_err());
+    }
 
     /// The idle bar passes a mob that stood by a moment and fails one that stood 3 s off.
     #[test]
