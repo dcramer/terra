@@ -25,7 +25,7 @@ export const STEPS: Step[] = [
   { does: "4. They dig, gather, craft, equip, and meet creatures, each seeing the same", checks: ["net"], held: "walking and digging are the same in both games", missing: "crafting, the pack, the fight and creatures do not cross the network (netcode.md step 5)" },
   { does: "5. They beat the boss, are marked, and open the gate", checks: ["gate", "join"], held: "the gate shut until the troll's mark opens it, for good, saved, and open for both players of a shared world", missing: "the boss and its cave: a script gives the mark" },
   { does: "6. They cross, together or apart, and come back", checks: ["gate", "crossing", "portal"], held: "one player crosses to the industrial realm, its light and parts as its data says, and back; a joined game is handed between a headless host's realms; five round trips leave nothing behind, each within 3 s", missing: "crossing in a shared world is refused (D640); the industrial realm has no ground materials, wildlife, monsters or sound of its own (Realm two)" },
-  { does: "7. They quit and return; both realms and characters are as left", checks: ["gate"], held: "a game closed in the realm beyond starts again there, and the first world is as it was left", missing: "a guest's character is not kept by the host (D592)" },
+  { does: "7. They quit and return; both realms and characters are as left", checks: ["gate", "join"], held: "a game closed in the realm beyond starts again there, and the first world is as it was left; a friend whose game is started anew is given the character the host kept", missing: "a guest's character is kept by the host at the guest's word: the pack is not the server's yet (D592, netcode.md step 5)" },
 ];
 
 const running = process.argv.includes("--run");

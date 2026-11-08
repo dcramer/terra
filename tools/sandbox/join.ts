@@ -66,6 +66,9 @@ async function pick(port: number, choice: string, enter = true) {
 }
 
 const worlds = mkdtempSync(join(tmpdir(), "terra-join-"));
+// The friend's own folder: who they are is kept there (player.ron), so a game started anew
+// is the same player to the host.
+const friendWorlds = mkdtempSync(join(tmpdir(), "terra-join-friend-"));
 const ports: number[] = [];
 let failed = "";
 try {
@@ -85,7 +88,7 @@ try {
   console.log(`✓ hosting from the title screen: a world of seed ${land}`);
 
   // The friend: another land behind its title screen, the host's address typed.
-  const friend = start(["--multirun"]);
+  let friend = start(["--multirun", `--worlds=${friendWorlds}`]);
   ports.push(friend);
   await until("the friend's title screen never came up", () => title(friend).screen === "Title");
   const behind = title(friend).seed;
@@ -136,6 +139,10 @@ try {
   if (title(host).seed !== land || title(friend).seed !== land) throw new Error(`a player crossed out of a shared world: the host on seed ${title(host).seed}, the friend on ${title(friend).seed}`);
   console.log("✓ the gate: shut for both, opened on the host by the mark the friend bears, open in both, and nobody crossed the shared world");
 
+  // The friend's character is sent to the host to keep (D592), as it is every few seconds.
+  remote(friend, "call", "character.keep");
+  await sleep(1);
+
   // The host quits to its title screen: the friend is brought back to its own, told why.
   remote(host, "call", "title.leave");
   await until(`the friend never came back to its title screen: ${JSON.stringify(title(friend))}`, () => title(friend).screen === "Title", 300);
@@ -148,6 +155,24 @@ try {
   await pick(friend, "Connect");
   await until(`asking an address nobody hosts at never said so: ${JSON.stringify(title(friend))}`, () => /no answer/i.test(title(friend).notice ?? ""), 90);
   console.log(`✓ nobody hosting: the friend is told "${title(friend).notice}"`);
+
+  // The host keeps its friends' characters with its world (D592): the world hosted again
+  // from its save, and the friend's game closed and started anew, with nothing of its own
+  // but who it is, the friend is given the character it left: it bears the troll's mark.
+  remote(friend, "stop");
+  ports.splice(ports.indexOf(friend), 1);
+  await pick(host, "Host");
+  await pick(host, "HostWorld(0)");
+  await until("the host never hosted its world again", () => title(host).screen === "Playing" && net(host).hosting);
+  friend = start(["--multirun", `--worlds=${friendWorlds}`]);
+  ports.push(friend);
+  await until("the friend's title screen never came up again", () => title(friend).screen === "Title");
+  await pick(friend, "Join");
+  await pick(friend, "Connect");
+  await until(`the friend never played the host's world again: its title screen says ${JSON.stringify(title(friend))}`, () => title(friend).screen === "Playing" && net(friend).joined, 300);
+  const marks = () => (JSON.parse(remote(friend, "call", "marks.state")) as { marks: string[] }).marks;
+  await until(`come back with a game started anew the friend bears ${JSON.stringify(marks())}, not the troll's mark it left with: the host keeps a guest's character with its world's save and gives it back in its greeting (play::save::guest, D592)`, () => marks().includes("troll"), 30);
+  console.log("✓ the host kept the friend's character: its game closed and started anew and the world hosted again from its save, the friend bears the mark it left with");
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 } finally {
@@ -157,6 +182,7 @@ try {
     } catch {}
   }
   rmSync(worlds, { recursive: true, force: true });
+  rmSync(friendWorlds, { recursive: true, force: true });
 }
 if (failed) {
   console.error(`✗ join: ${failed}`);

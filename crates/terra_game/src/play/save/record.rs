@@ -58,6 +58,10 @@ pub(super) struct SaveFile {
     pub returns: Vec<SavedReturn>,
     /// Each world's own record, by its key: every world the player has been in.
     pub instances: BTreeMap<u64, Instance>,
+    /// The characters of those who have joined this world, each by who they are (their
+    /// public key, in hex): kept by the host with its world (D592, `save::guest`).
+    #[serde(default)]
+    pub guests: BTreeMap<String, SavedPlayer>,
 }
 
 /// The save as last read or gathered, every world's record with it, while a save is chosen;
@@ -89,10 +93,10 @@ impl Kept {
                 toward: back.toward.into(),
             })
             .collect();
-        let mut instances = self
+        let (mut instances, guests) = self
             .file
             .take()
-            .map(|file| file.instances)
+            .map(|file| (file.instances, file.guests))
             .unwrap_or_default();
         instances.insert(here.key, instance);
         self.file.insert(SaveFile {
@@ -101,6 +105,7 @@ impl Kept {
             here,
             returns,
             instances,
+            guests,
         })
     }
 

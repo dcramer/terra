@@ -270,9 +270,18 @@ impl Host {
             .map(|(identity, record)| (identity, record.as_slice()))
     }
 
-    /// Takes up the records a save of the world held, as hosting begins.
-    pub fn restore(&mut self, kept: impl IntoIterator<Item = ([u8; 32], Vec<u8>)>) {
-        self.kept.extend(kept);
+    /// Takes up the records a save of the world held, as hosting begins, each with where
+    /// its player stood: one who comes back is put there, as one who left this session is.
+    pub fn restore(&mut self, kept: impl IntoIterator<Item = ([u8; 32], Vec<u8>, Vec3)>) {
+        for (identity, record, stood) in kept {
+            self.kept.insert(identity, record);
+            self.left.entry(identity).or_insert(stood);
+        }
+    }
+
+    /// Who a connection's player is, once it has said hello.
+    pub fn identity(&self, peer: Peer) -> Option<[u8; 32]> {
+        self.identities.get(&peer).copied()
     }
 
     /// Every connection that has said hello here, with a body yet or not.
@@ -346,7 +355,7 @@ pub fn hosting(app: &mut App) {
 
 /// The game is closing: a host's guests are told the host left, and a joined game leaves, so
 /// neither is left waiting on silence.
-fn farewell(
+pub fn farewell(
     mut exits: MessageReader<AppExit>,
     host: Option<ResMut<Host>>,
     link: Option<ResMut<link::Link>>,

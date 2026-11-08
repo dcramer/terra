@@ -38,6 +38,7 @@ use terra_items::{ActionBar, Cell, Equipment, ItemId};
 use terra_world::woods::{FellAgain, FelledWoods};
 
 mod ground;
+pub(super) mod guest;
 mod record;
 use ground::SavedEdit;
 use record::{Kept, SaveFile};
@@ -175,6 +176,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Kept>()
         .init_world_resource::<Entered>()
         .insert_resource(choice)
+        .add_plugins(guest::plugin)
         .add_systems(
             Startup,
             super::worlds::choose.in_set(terra_world::choice::Choosing),
@@ -636,17 +638,8 @@ fn kept_items(items: &Items, grid: &terra_items::Grid) -> Vec<SavedItem> {
         .collect()
 }
 
-fn gather(
-    clock: &Clock,
-    (planet, felled): (&Planet, &FelledWoods),
-    (site, offcuts): (&Site, &Offcuts),
-    claim: &Claim,
-    (items, recipes): (&Items, &Recipes),
-    view: &View,
-    props: &Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
-    people: &Query<(&Person, &Transform), Without<Player>>,
-    (player, gate_open): (&PlayerParts, bool),
-) -> (SavedPlayer, Instance) {
+/// The player as a record: where they stand, how they fare, what they wear, carry and bear.
+fn saved_player(items: &Items, view: &View, player: &PlayerParts) -> SavedPlayer {
     let (at, (vitals, stamina), skills, backpack, gear, bar, marks) = *player;
     let placed: Vec<_> = backpack.0.iter().collect();
     let kept = kept_items(items, &backpack.0);
@@ -656,7 +649,7 @@ fn gather(
             placed.iter().position(|placed| placed.item.id == id)
         })
         .collect();
-    let saved = SavedPlayer {
+    SavedPlayer {
         at: at.translation.into(),
         facing: view.forward.into(),
         health: vitals.health,
@@ -684,7 +677,21 @@ fn gather(
         bar: bar_slots,
         picked: bar.0.picked(),
         marks: marks.0.iter().cloned().collect(),
-    };
+    }
+}
+
+fn gather(
+    clock: &Clock,
+    (planet, felled): (&Planet, &FelledWoods),
+    (site, offcuts): (&Site, &Offcuts),
+    claim: &Claim,
+    (items, recipes): (&Items, &Recipes),
+    view: &View,
+    props: &Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
+    people: &Query<(&Person, &Transform), Without<Player>>,
+    (player, gate_open): (&PlayerParts, bool),
+) -> (SavedPlayer, Instance) {
+    let saved = saved_player(items, view, player);
     let instance = Instance {
         snapshot: Some(
             site.snapshot

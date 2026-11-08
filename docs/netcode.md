@@ -86,6 +86,7 @@ On the real mover (four men walking, sprinting and jumping for 30 simulated minu
 | `terra_items`, `terra_survival` | What is carried, vitals | Operations the server checks; an owner-only part for the pack, a public one for what is worn. What is worn is built (`terra_walker::net::worn`): a player's outfit is a part of its entity, the host's from its gear, a joined player's as its game says (shown, not owned, until the pack is the server's); what is held in hand and a piece's dye do not cross yet |
 | `terra_creatures` | Creatures, simulated only on the server, in cells any player is near | Motion, and the move a creature is in with the tick it began, so each client plays the clip itself |
 | `terra_game` | A gate's state (D590) | An ordered operation once it is open; a joined player's ask carries the marks they bear, taken at their word until characters are the server's (`play::portal::shared`) |
+| `terra_game` | A guest's character (D592) | Its record, asked of the host every few seconds and kept with the world's save by who the player is; given back in the greeting when they come again (`play::save::guest`, `net::Host::keep`). Taken at the guest's word until the pack is the server's |
 | `terra_climate`, the sky | Nothing travels but the clock and the seed (D540) | `Welcome`, then a clock correction |
 
 ## Tests, with no window
