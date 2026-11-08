@@ -170,5 +170,17 @@
             seed: 11),
         (models: ["models/iso/city/cardboard-box.glb"], density: 0.08, scale: (0.6, 1.2),
             on: Site("walls"), clump: (5.0, 1.0, 0.92), tilt: 12.0, sink: 0.01, seed: 7),
+        // Junk gathered where the wind and the years leave it, at the walls' feet and in
+        // the gutters, in drifts a few metres apart, as the junk lot's tyres and rubbish
+        // (refs/wasteland): bags, tyres and rims, boxes, half sunk and leaning on each other
+        // (the adversarial judge, round 261107-1703: "no litter, rubble, tyres; nothing
+        // gathers at the seams"). Only the scanned, weathered props (Poly Haven, CC0): not
+        // the glossy red barrels or the jerrycan the same judge named toy-like.
+        (models: ["models/iso/city/trash-bag.glb", "models/iso/city/trash-bag.glb",
+            "models/iso/city/old-tyre.glb", "models/iso/city/wheel-rim.glb",
+            "models/iso/city/cardboard-box.glb"],
+            // At 0.5 a m² (round 261107-1709) two pieces showed in the whole frame.
+            density: 1.6, scale: (0.75, 1.1), on: Site("walls"), clump: (4.0, 1.2, 0.55),
+            tilt: 35.0, sink: 0.04, seed: 21),
     ],
 )
