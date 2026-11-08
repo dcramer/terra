@@ -31,7 +31,9 @@ use serde::Deserialize;
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Finish {
-    /// Asset paths the models' files start with (`"models/iso/dead-tree-"`).
+    /// Asset paths the models' files start with (`"models/iso/dead-tree-"`), or one
+    /// material of a model by its glTF label (`"models/iso/city/sedan.glb#Material0/"`,
+    /// the slash so `Material1` is not `Material10`).
     pub models: Vec<String>,
     /// The roughness floor, 0 to 1: no texel smoother than it.
     #[serde(default)]
@@ -42,6 +44,13 @@ pub struct Finish {
     /// Bevy's `reflectance` (0.5 is glTF's 4% dielectric specular), or the model's own.
     #[serde(default)]
     pub reflectance: Option<f32>,
+    /// A clear coat over the material, its strength and perceptual roughness (glTF's
+    /// KHR_materials_clearcoat, Bevy's `clearcoat`): a car's lacquer, a dielectric 4%
+    /// mirror over the paint whose own specular is rougher, so the street's signs mirror
+    /// in it sharp and untinted as they do on a real car's roof (uc-reflect j5; Bevy's
+    /// clearcoat example, the Filament clear coat model).
+    #[serde(default)]
+    pub clearcoat: Option<(f32, f32)>,
     /// The base colour's share taken to its own grey (linear luminance), 0 to 1.
     #[serde(default)]
     pub desaturate: f32,
@@ -108,7 +117,9 @@ fn finish(
         let Some(path) = asset.get_path(*id) else {
             continue;
         };
-        let Some(i) = finish_for(&biome.finishes, &path.path().to_string_lossy()) else {
+        // The path with its label (`sedan.glb#Material0/std`), so a finish may name one
+        // material of a model as well as the model.
+        let Some(i) = finish_for(&biome.finishes, &path.to_string()) else {
             continue;
         };
         let Some(m) = materials.get_mut_untracked(*id) else {
@@ -133,6 +144,10 @@ fn apply(
     }
     if let Some(r) = f.reflectance {
         m.reflectance = r;
+    }
+    if let Some((coat, rough)) = f.clearcoat {
+        m.clearcoat = coat;
+        m.clearcoat_perceptual_roughness = rough;
     }
     let lut = Lut::new();
     let mut n = 0;
@@ -384,6 +399,41 @@ mod tests {
         assert_eq!(finish_for(&fs, "models/iso/treant-a.glb"), Some(1));
         assert_eq!(finish_for(&fs, "models\\iso\\ogre.glb"), Some(1));
         assert_eq!(finish_for(&fs, "models/iso/knight.glb"), None);
+        // A material's own path, as the glTF loader labels it, takes its model's finish.
+        assert_eq!(
+            finish_for(&fs, "models/iso/dead-tree-b.glb#Material3/std"),
+            Some(0)
+        );
+    }
+
+    /// A finish naming one material of a model takes that material alone.
+    #[test]
+    fn a_finish_may_name_one_material() {
+        let coat = Finish {
+            models: vec!["models/iso/city/sedan.glb#Material0/".into()],
+            clearcoat: Some((1.0, 0.04)),
+            ..finish()
+        };
+        let fs = [coat];
+        assert_eq!(
+            finish_for(&fs, "models/iso/city/sedan.glb#Material0/std"),
+            Some(0)
+        );
+        assert_eq!(
+            finish_for(&fs, "models/iso/city/sedan.glb#Material10/std"),
+            None
+        );
+        assert_eq!(
+            finish_for(&fs, "models/iso/city/sedan.glb#Material2/std"),
+            None
+        );
+        let mut m = StandardMaterial::default();
+        let mut images = Assets::<Image>::default();
+        apply(&fs[0], &mut m, &mut images, &mut HashSet::default());
+        assert_eq!(
+            (m.clearcoat, m.clearcoat_perceptual_roughness),
+            (1.0, 0.04)
+        );
     }
 
     /// Every finish in every biome names models that are there, so a typo in a path is
@@ -399,7 +449,8 @@ mod tests {
             let biome: crate::kit::biome::Biome = crate::kit::read(&p, "biome.rs").unwrap();
             for f in &biome.finishes {
                 for m in &f.models {
-                    let full = assets.join(m);
+                    // A material's label (`#Material0/`) after the file's name.
+                    let full = assets.join(m.split('#').next().unwrap());
                     let (dir, stem) = (full.parent().unwrap(), full.file_name().unwrap());
                     let found = std::fs::read_dir(dir).is_ok_and(|d| {
                         d.flatten().any(|x| {
