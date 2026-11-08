@@ -227,6 +227,13 @@ const DRAWS: &[Draw] = &[
         ..DRAW
     },
     Draw {
+        material: "VeilMaterial (terra_game play/portal/veil.rs), on a gate's disc: blended, NotShadowCaster",
+        fragment: Some("portal_veil"),
+        alpha: &[Blend],
+        meshes: &[SPHERE],
+        ..DRAW
+    },
+    Draw {
         material: "Glow (fire/glow.rs), on the props' models",
         fragment: Some("fire_glow"),
         alpha: &[Opaque, Mask],

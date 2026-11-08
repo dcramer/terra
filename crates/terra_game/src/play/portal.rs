@@ -393,6 +393,8 @@ pub fn stand(
             ));
             portal.spawn((
                 Veil,
+                // Light, not a thing: it throws no shadow.
+                bevy::light::NotShadowCaster,
                 Mesh3d(disc),
                 MeshMaterial3d(veil),
                 Transform::from_xyz(0.0, MIDDLE_M, 0.0),
