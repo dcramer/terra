@@ -11,7 +11,7 @@ Each of [v0's](v0-goals.md) tracks (D589): what it has, what it needs and when i
 ## Realms (2)
 
 - **Have**: `terra_world::instance` built: states, scoping, leaving, the census, crossing in one frame, and a round-trip test with no GPU. Most modules are built on entering.
-- **Need**: asset sets (D471). The save split into a character's and an instance's (D471; until then what was seen of a world's map is lost on leaving). Warming as you approach. The game standing its gate where the seed places it (`terra_land::gate`, D641; the gate's model and veil are made). The map, the soundscape, a base's fire and the return stack are built.
+- **Need**: asset sets (D471). The save split into a character's and an instance's (D471; until then what was seen of a world's map is lost on leaving). Warming as you approach. Warming: a crossing between full worlds takes 19 to 24 s cold (`node tools/sandbox/gate.ts`). The gate shut until opened, its state saved (v0-goals). The map, the soundscape, a base's fire and the return stack are built.
 - **Done when**: instances.md's test passes: five round trips with the census equal and memory within 2%; the cover under 3 s (D501), aiming under 1 s for a warmed realm. Measured 2026-11-07 (`node tools/sandbox/portal.ts`, which holds the 3 s): crossings 2.2 to 3.0 s, the slowest 2.98 s, the floor's undergrowth (0.5 s, one thread) next; counts equal every trip; memory within 2% in two runs of three (2.07% once).
 
 ## Realm two (2)

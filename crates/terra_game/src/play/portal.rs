@@ -14,6 +14,7 @@ use terra_world::instance::{Building, InWorld, Travel, WorldSpec};
 use terra_world::loading::cross_in_the_dark;
 use terra_world::planet::Planet;
 
+pub mod gates;
 pub mod veil;
 
 /// A way to another world (D470), standing on the ground, the ring's opening facing along
@@ -46,6 +47,7 @@ pub struct StepThrough(pub Entity);
 
 pub fn plugin(app: &mut App) {
     veil::plugin(app);
+    gates::plugin(app);
     app.init_resource::<Returns>()
         .add_message::<StepThrough>()
         .add_systems(
@@ -56,6 +58,29 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(OnEnter(InWorld), arrive.in_set(Building::Stage))
         .add_systems(OnEnter(Travel::Playing), crossed);
+    terra_world::remote::method(app, "portal.step", step);
+}
+
+/// `portal.step`: the player steps through the portal nearest them, as the interact key on
+/// it does, for a scripted run; says how far off it stood and where it leads.
+fn step(
+    In(_): In<Option<serde_json::Value>>,
+    portals: Query<(Entity, &Portal, &Transform)>,
+    body: Option<Single<&Transform, With<LocalPlayer>>>,
+    mut through: MessageWriter<StepThrough>,
+) -> bevy::remote::BrpResult {
+    let refused = terra_world::remote::refused;
+    let body = body.ok_or_else(|| refused("There is no player to step through a portal yet."))?;
+    let nearest = portals.iter().min_by(|a, b| {
+        let away = |at: &Transform| at.translation.distance(body.translation);
+        away(a.2).total_cmp(&away(b.2))
+    });
+    let (portal, leads, at) = nearest.ok_or_else(|| refused("No portal stands in this world."))?;
+    through.write(StepThrough(portal));
+    Ok(serde_json::json!({
+        "away_m": at.translation.distance(body.translation),
+        "to": { "kind": leads.to.kind, "seed": leads.to.seed.to_string() },
+    }))
 }
 
 /// When the portal was stepped through, on the wall clock, until the next world is played:
@@ -138,11 +163,18 @@ fn crossing(
     None
 }
 
-/// On entering the world crossed to, where the crossing says to arrive, before the body
-/// stands (`Building::Arrive`).
+/// On entering the world crossed to, where the crossing says to arrive, or before that
+/// world's gate if it says nowhere, before the body stands (`Building::Arrive`).
 fn arrive(world: &mut World) {
-    if let Some(Arriving(Some(at))) = world.remove_resource::<Arriving>() {
-        world.insert_resource(at);
+    match world.remove_resource::<Arriving>() {
+        Some(Arriving(Some(at))) => world.insert_resource(at),
+        // Crossed on, to a world with a gate of its own: out of that gate.
+        Some(Arriving(None)) => {
+            if let Some(gate) = world.get_resource::<gates::Gate>().copied() {
+                world.insert_resource(gates::arrival(&gate));
+            }
+        }
+        None => {}
     }
 }
 
@@ -153,8 +185,9 @@ const MODEL: &str = "models/props/RealmGate.glb";
 /// is made: where the veil hangs.
 const MIDDLE_M: f32 = 1.75;
 const OPENING_M: f32 = 1.12;
-/// How far round its foot the ground is cleared of what grows: its half width and a pace.
-const CLEAR_M: f32 = 2.6;
+/// How far round its foot the ground is cleared of what grows: a small glade, so its
+/// opening is seen from where one comes to it and no trunk stands in the way through.
+const CLEAR_M: f32 = 5.0;
 
 /// Stands a portal on the ground at `at`, its carved face and its opening toward `facing`,
 /// leading to `to`: the gate's stone ring round a violet veil, the world's (`WorldScoped`),
