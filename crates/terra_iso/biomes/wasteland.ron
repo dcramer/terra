@@ -146,10 +146,13 @@
         // black.
         (models: ["models/iso/city/trash-bag.glb"], rough: 0.6, reflectance: 0.3,
          value: 8.0, tint: (1.15, 1.02, 0.85)),
-        // The barrels and the jerrycan: their red paint faded toward oxide (red over green 9
-        // in the scan, about 3.5 graded), dulled, the chips' bare metal kept.
+        // The barrels and the jerrycan: their red paint gone to iron oxide, an orange-brown
+        // (mean linear 0.12, 0.036, 0.019 from the scan's 0.20, 0.029, 0.022), dry and rough,
+        // the scan's mottle and chips kept. Faded only toward oxide (desaturate 0.45, tint
+        // 1.05, 1.0, 0.9) they stayed crimson, pink in the shade's sky light (judges to
+        // 261107-2004: "pink clean plastic-looking barrels", "barrels saturated plastic red").
         (models: ["models/iso/city/oil-barrel.glb", "models/iso/city/jerrycan.glb"],
-         rough: 0.55, desaturate: 0.45, value: 0.75, tint: (1.05, 1.0, 0.9)),
+         rough: 0.85, reflectance: 0.35, desaturate: 0.7, value: 0.72, tint: (1.6, 0.92, 0.5)),
         // The generator's yellow sun-faded and filmed with dust.
         (models: ["models/iso/city/generator.glb"], rough: 0.5, desaturate: 0.4,
          value: 0.8, tint: (1.05, 1.0, 0.88)),
