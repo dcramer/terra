@@ -12,7 +12,7 @@ use bevy::{
     diagnostic::FrameCount,
     prelude::*,
     render::{
-        Render, RenderApp, RenderStartup, RenderSystems,
+        Render, RenderApp, RenderSystems,
         diagnostic::RecordDiagnostics,
         render_asset::RenderAssets,
         render_resource::{
@@ -80,7 +80,15 @@ impl Plugin for RenderPlugin {
             return;
         };
         render_app
-            .add_systems(RenderStartup, init_pipeline)
+            // Not at startup: its shaders import a module, and queued before that had
+            // loaded the march was refused (a race lost on a busy machine; the gate's check
+            // found it). Made once both, and what they import, are loaded.
+            .add_systems(
+                Render,
+                init_pipeline
+                    .run_if(not(resource_exists::<Pipeline>))
+                    .before(RenderSystems::Prepare),
+            )
             .add_systems(Render, prepare.in_set(RenderSystems::PrepareBindGroups))
             .add_systems(
                 Core3d,
@@ -108,7 +116,17 @@ fn init_pipeline(
     device: Res<RenderDevice>,
     asset_server: Res<AssetServer>,
     pipeline_cache: Res<PipelineCache>,
+    mut shaders: Local<Option<[Handle<Shader>; 2]>>,
 ) {
+    let [march, resolved] =
+        shaders.get_or_insert_with(|| [asset_server.load(SHADER), asset_server.load(RESOLVE)]);
+    if ![&*march, &*resolved]
+        .iter()
+        .all(|shader| asset_server.is_loaded_with_dependencies(shader.id()))
+    {
+        return;
+    }
+    let (march, resolved) = (march.clone(), resolved.clone());
     let float = TextureSampleType::Float { filterable: true };
     let layout = BindGroupLayoutDescriptor::new(
         "cloud_volume",
@@ -132,7 +150,7 @@ fn init_pipeline(
     let id = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
         label: Some("cloud_volume".into()),
         layout: vec![layout.clone()],
-        shader: asset_server.load(SHADER),
+        shader: march,
         entry_point: Some("march".into()),
         ..default()
     });
@@ -155,7 +173,7 @@ fn init_pipeline(
     let resolve = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
         label: Some("cloud_resolve".into()),
         layout: vec![resolve_layout.clone()],
-        shader: asset_server.load(RESOLVE),
+        shader: resolved,
         entry_point: Some("resolve".into()),
         ..default()
     });
