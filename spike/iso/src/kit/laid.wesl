@@ -377,6 +377,13 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // shadow (shape.w, 0: the dark joints alone).
     // Mostly dark loam and grit (pale sand in every joint drew a crisp light grid, judge
     // 261107-0507-ruin), the sand only where it has dried in drifts.
+    // Where a joint has silted up, its soil spills over the flags' worn arrises in a ragged
+    // band up to 7 cm out, packed by the joint and thin at its reach; where feet and rain
+    // swept it, the joint is its own narrow line. So the joints run as earthed seams of
+    // their own widths, moss in them, not clean even lines (the judges' first fault after
+    // 261107-1831: "crisp joints with no moss/soil"). `edge`: metres in from the piece's
+    // nearest joint, 8 with no flags (so no spill).
+    var spill = 0.0;
     if laid.shape.w > 0.0 {
         let fill = smoothstep(0.05, 0.45, joint) * smoothstep(0.2, 0.6, noise(p * 2.3 + 13.0) + 0.3);
         let grains = mix(0.55, 1.45, hash(floor(p * 70.0) + 17.0));
@@ -384,6 +391,15 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let loam = vec3<f32>(0.07, 0.058, 0.045) * grains;
         let dried = smoothstep(0.6, 0.85, noise(p * 0.8 + 21.0)) * 0.6;
         colour = mix(colour, mix(loam, sand, dried), fill * laid.shape.w);
+        let silt = noise(p * 3.7 + 61.0) * 0.6 + noise(p * 11.0 + 67.0) * 0.4;
+        let reach = 0.09 * smoothstep(0.35, 0.75, silt);
+        let away = edge + (noise(p * 41.0 + 71.0) - 0.5) * 0.02;
+        spill = (1.0 - smoothstep(reach * 0.35, reach + px * 0.5, away)) * step(0.004, reach) * (1.0 - gone);
+        let packed = mix(0.55, 0.95, 1.0 - smoothstep(0.0, max(reach, 1e-3), away));
+        // Brown earth, not the joint's black (a dark spill on the grimed arris did not
+        // show at the camera, round 261107-1838).
+        let earth = vec3<f32>(0.12, 0.094, 0.068) * grains * (0.8 + 0.4 * noise(p * 9.0));
+        colour = mix(colour, mix(earth, sand, dried), spill * packed * laid.shape.w);
     }
 
     // Hairline cracks across some units: thin wandering lines in patches.
@@ -541,8 +557,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     mossy = min(mossy + feet * 0.4, 1.0);
     // An earthed joint (shape.w) grows its moss in tufts wherever, not only where mossy.
     let in_joints = max(joint, crack) * smoothstep(0.3, 0.6, mossy + (tuft - 0.5) * 0.7 + laid.shape.w * 0.22);
+    // A silted joint's spill (shape.w) grows it too, in cushions along a third of it, so
+    // moss bulges over the arrises even where the court is not mossy.
+    let silted = spill * smoothstep(0.5, 0.7, tuft + mossy * 0.3);
     let on_flags = smoothstep(0.62, 0.82, mossy * (0.55 + 0.75 * tuft) + (1.0 - ao) * 0.5);
-    let moss = max(in_joints, on_flags) * step(0.5, 8.5 - laid.masks.x);
+    let moss = max(max(in_joints, on_flags), silted) * step(0.5, 8.5 - laid.masks.x);
     let m1 = textureSample(stack, stack_sampler, p / laid.masks.z, MOSS).rgb;
     let m2 = textureSample(stack, stack_sampler, p / (laid.masks.z * 2.3) + 0.37, MOSS).rgb;
     let moss_c = mix(m1, m2, smoothstep(0.3, 0.7, noise(p * 0.13 + 7.0))) * 0.75;
