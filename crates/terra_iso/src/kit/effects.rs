@@ -182,7 +182,11 @@ pub struct Sparks {
 /// The way spark `j` of `s` flies out, before its cone: `out` turned `sides` degrees about
 /// the vertical, the odd ones the other way.
 pub fn spark_out(s: &Sparks, out: Vec3, j: usize) -> Vec3 {
-    let turn = if j % 2 == 0 { s.sides } else { -s.sides };
+    let turn = if j.is_multiple_of(2) {
+        s.sides
+    } else {
+        -s.sides
+    };
     Quat::from_rotation_y(turn.to_radians()) * out.normalize_or(Vec3::Y)
 }
 
