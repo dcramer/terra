@@ -4,7 +4,7 @@
 //! grass and flowers in the open, all swaying in the wind (foliage.rs); the trees before the
 //! party open in a dithered hole about each of them, as modern isometric games do.
 
-use crate::foliage::{self, FoliageMaterial, Mats as FoliageMats};
+use crate::foliage::{self, FoliageMaterial, Hole, Mats as FoliageMats};
 use crate::nav::Nav;
 use crate::scene::{self, FIRE};
 use crate::terrain::{self, CAMP, Land, POND, WATER};
@@ -384,10 +384,17 @@ fn plant(
         diffuse_transmission: 0.2,
         ..default()
     };
-    let leaves = foliage::material(&mut materials, &mut mats, cards.clone(), 0.0, 0.035, true);
-    let blooms = foliage::material(&mut materials, &mut mats, cards, 0.06, 0.0, false);
+    let leaves = foliage::material(
+        &mut materials,
+        &mut mats,
+        cards.clone(),
+        0.0,
+        0.035,
+        Hole::Party,
+    );
+    let blooms = foliage::material(&mut materials, &mut mats, cards, 0.06, 0.0, Hole::None);
     let bark = scene::material(&asset, "oak_bark", Color::srgb(0.62, 0.58, 0.52));
-    let bark = foliage::material(&mut materials, &mut mats, bark, 0.0, 0.0, true);
+    let bark = foliage::material(&mut materials, &mut mats, bark, 0.0, 0.0, Hole::Party);
 
     // The oaks: two modelled trunks, each with its crown.
     let kinds = [
@@ -464,7 +471,7 @@ fn plant(
         reflectance: 0.3,
         ..default()
     };
-    let blades = foliage::material(&mut materials, &mut mats, blades, 0.09, 0.0, false);
+    let blades = foliage::material(&mut materials, &mut mats, blades, 0.09, 0.0, Hole::None);
     let chunk = 8.0;
     let reach = 40.0;
     let mut z = -reach;

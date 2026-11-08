@@ -27,7 +27,46 @@ pub struct Foliage {
     pub tone: Vec4,
     /// xyz: the camera; w: play's near band (m, `Near`), 0 off (the loop's stills and films).
     pub eye: Vec4,
+    /// Ground cover's hole (`Hole::Cover`): xyz the hero's middle, w its radius (`COVER`),
+    /// set from rim.rs `Cut`, so in play only; 0 cuts nothing (a still).
+    pub cover: Vec4,
 }
+
+/// Which hole a foliage material opens (`leaf.y`): none (grass, blooms), the party's
+/// (`HOLE`, the crowns and bark, stills too), or the cover's about the hero in play alone
+/// (`COVER`, the scatter's plant cards, kit/scatter.rs `plants`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hole {
+    None,
+    Party,
+    Cover,
+}
+
+impl Hole {
+    fn code(self) -> f32 {
+        match self {
+            Hole::None => 0.0,
+            Hole::Party => 1.0,
+            Hole::Cover => 2.0,
+        }
+    }
+
+    /// The hole a material's `leaf.y` says it opens.
+    pub fn of(leaf: Vec4) -> Hole {
+        if leaf.y > 1.5 {
+            Hole::Cover
+        } else if leaf.y > 0.5 {
+            Hole::Party
+        } else {
+            Hole::None
+        }
+    }
+}
+
+/// Ground cover's hole about his middle on the screen (m): smaller than the crowns' `HOLE`,
+/// as rim.rs `CUT` is for the cover's models, since a plant card before his legs or chest
+/// is a metre from him at most; whole within 0.72 of it.
+pub const COVER: f32 = 1.2;
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
 pub struct FoliageExt {
@@ -55,7 +94,7 @@ impl MaterialExtension for FoliageExt {
 /// The wind's direction over the clearing (from the west-south-west).
 pub const WIND: Vec2 = Vec2::new(0.86, 0.5);
 /// The hole's radius about each of the party (m, on the screen).
-const HOLE: f32 = 2.8;
+pub const HOLE: f32 = 2.8;
 
 /// One the wood opens about as about the party, not one of it (a scene's fighters).
 #[derive(Component)]
@@ -128,9 +167,9 @@ pub fn box_distance(eye: Vec3, aabb: &bevy::camera::primitives::Aabb, at: &Globa
 
 /// How much of a cuttable surface at `world` the hole drops (0 kept, 1 gone), the twin of
 /// foliage.wesl's `cut` without its dither and its tree's whole fade (`Tree`): `party` the
-/// hole's middles, `axes` the camera's right, up and forward, `eye` its place and whether
-/// it is play (w over 0).
-pub fn fade(world: Vec3, party: &[Vec3], axes: [Vec3; 3], eye: Vec4) -> f32 {
+/// hole's middles, `r` its radius (`HOLE`, `COVER`), `axes` the camera's right, up and
+/// forward, `eye` its place and whether it is play (w over 0).
+pub fn fade(world: Vec3, party: &[Vec3], r: f32, axes: [Vec3; 3], eye: Vec4) -> f32 {
     let smooth = |e0: f32, e1: f32, x: f32| {
         let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
         t * t * (3.0 - 2.0 * t)
@@ -142,7 +181,7 @@ pub fn fade(world: Vec3, party: &[Vec3], axes: [Vec3; 3], eye: Vec4) -> f32 {
         let d = world - *m;
         let s = Vec2::new(d.dot(axes[0]), d.dot(axes[1])).length();
         let before = -d.dot(axes[2]);
-        f = f.max((1.0 - smooth(HOLE * 0.72, HOLE, s)) * smooth(lo, hi, before));
+        f = f.max((1.0 - smooth(r * 0.72, r, s)) * smooth(lo, hi, before));
     }
     f
 }
@@ -195,7 +234,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Mats>()
         .add_systems(
             PostUpdate,
-            (breathe, fade_trees).after(TransformSystems::Propagate),
+            (breathe, fade_trees, cover).after(TransformSystems::Propagate),
         );
 }
 
@@ -203,27 +242,49 @@ pub fn plugin(app: &mut App) {
 pub struct Mats(Vec<Handle<FoliageMaterial>>);
 
 /// A foliage material: `bend` how far a blade's tip goes in the wind (m), `flutter` how far a
-/// leaf card does, `cut` whether it opens about the party.
+/// leaf card does, `hole` the hole it opens.
 pub fn material(
     materials: &mut Assets<FoliageMaterial>,
     mats: &mut Mats,
     base: StandardMaterial,
     bend: f32,
     flutter: f32,
-    cut: bool,
+    hole: Hole,
 ) -> Handle<FoliageMaterial> {
+    let r = if hole == Hole::Cover { COVER } else { HOLE };
     let h = materials.add(ExtendedMaterial {
         base,
         extension: FoliageExt {
             foliage: Foliage {
                 wind: Vec4::new(WIND.x, WIND.y, bend, 0.0),
-                leaf: Vec4::new(flutter, if cut { 1.0 } else { 0.0 }, HOLE, 0.0),
+                leaf: Vec4::new(flutter, hole.code(), r, 0.0),
                 ..default()
             },
         },
     });
     mats.0.push(h.clone());
     h
+}
+
+/// The cover's hole (rim.rs `Cut`, his middle, set in play alone by demo/occlude.rs `aim`)
+/// to every `Hole::Cover` material: the scatter's plant cards before him dither out as the
+/// cover's models do, so a fern card at his chest no longer buries him (iso-forest-demo
+/// j27: 47.6% of a box on him green at frame 490). A still has no `Cut`, so cuts nothing.
+pub fn cover(
+    at: Option<Res<crate::rim::Cut>>,
+    mats: Res<Mats>,
+    mut materials: ResMut<Assets<FoliageMaterial>>,
+) {
+    let open = at.and_then(|c| c.0).map_or(Vec4::ZERO, |m| m.extend(COVER));
+    for h in &mats.0 {
+        let stale = materials.get(h).is_some_and(|m| {
+            let f = &m.extension.foliage;
+            Hole::of(f.leaf) == Hole::Cover && f.cover != open
+        });
+        if stale && let Some(mut m) = materials.get_mut(h) {
+            m.extension.foliage.cover = open;
+        }
+    }
 }
 
 /// The wind's time, the camera's axes and the party's places, to every foliage material.
@@ -275,5 +336,83 @@ fn breathe(
             f.leaf.w = (frames.0 % 64) as f32;
             f.eye = eye;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The cover's hole reaches the plant cards' materials alone (never the crowns', bark's,
+    /// grass's or blooms'), follows the hero, and closes when there is no `Cut` (a still);
+    /// the crowns keep their own party hole and radius throughout.
+    #[test]
+    fn the_cover_hole_opens_the_plant_cards_alone_and_only_in_play() {
+        let mut app = App::new();
+        app.init_resource::<Assets<FoliageMaterial>>()
+            .init_resource::<Mats>()
+            .add_systems(Update, cover);
+        let holes = [Hole::Cover, Hole::Party, Hole::None, Hole::Cover];
+        let made: Vec<_> = holes
+            .iter()
+            .map(|h| {
+                let world = app.world_mut();
+                let mut mats = world.remove_resource::<Mats>().unwrap();
+                let mut materials = world.resource_mut::<Assets<FoliageMaterial>>();
+                let m = material(&mut materials, &mut mats, default(), 0.0, 0.0, *h);
+                world.insert_resource(mats);
+                m
+            })
+            .collect();
+        let read = |app: &App| -> Vec<(Hole, f32, Vec4)> {
+            let materials = app.world().resource::<Assets<FoliageMaterial>>();
+            made.iter()
+                .map(|h| {
+                    let f = materials.get(h).unwrap().extension.foliage;
+                    (Hole::of(f.leaf), f.leaf.z, f.cover)
+                })
+                .collect()
+        };
+        let shut = |app: &App| read(app).iter().all(|r| r.2 == Vec4::ZERO);
+        // A still: no `Cut` at all, then one that cuts nothing.
+        app.update();
+        assert!(shut(&app));
+        app.init_resource::<crate::rim::Cut>();
+        app.update();
+        assert!(shut(&app));
+        for at in [Vec3::new(1.0, 0.9, -2.0), Vec3::new(4.0, 1.2, 3.0)] {
+            app.world_mut().resource_mut::<crate::rim::Cut>().0 = Some(at);
+            app.update();
+            let open = at.extend(COVER);
+            assert_eq!(
+                read(&app),
+                [
+                    (Hole::Cover, COVER, open),
+                    (Hole::Party, HOLE, Vec4::ZERO),
+                    (Hole::None, HOLE, Vec4::ZERO),
+                    (Hole::Cover, COVER, open),
+                ]
+            );
+        }
+        app.world_mut().resource_mut::<crate::rim::Cut>().0 = None;
+        app.update();
+        assert!(shut(&app));
+    }
+
+    /// The check's twin of the shader's hole: a cover card before his chest within `COVER`
+    /// on the screen is dropped; one a crown's reach aside (inside `HOLE`, outside `COVER`)
+    /// is kept by the cover's hole, not the crowns'; one behind him is kept.
+    #[test]
+    fn the_cover_hole_is_smaller_than_the_crowns() {
+        let middle = Vec3::new(0.0, 0.9, 0.0);
+        let axes = [Vec3::X, Vec3::Y, Vec3::NEG_Z];
+        let eye = Vec4::new(0.0, 0.9, 20.0, 10.0);
+        let before = middle + Vec3::Z;
+        let aside = before + Vec3::X * 2.0;
+        let behind = middle - Vec3::Z;
+        assert!(fade(before, &[middle], COVER, axes, eye) > 0.99);
+        assert!(fade(aside, &[middle], COVER, axes, eye) < 0.01);
+        assert!(fade(aside, &[middle], HOLE, axes, eye) > 0.5);
+        assert!(fade(behind, &[middle], COVER, axes, eye) < 0.01);
     }
 }

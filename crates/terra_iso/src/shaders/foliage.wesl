@@ -39,6 +39,9 @@ struct Foliage {
     tone: vec4<f32>,
     // xyz: the camera; w: play's near band (m), 0 off (foliage.rs `Near`): over 0, play.
     eye: vec4<f32>,
+    // Ground cover's hole (leaf.y 2, foliage.rs `cover`): xyz the hero's middle, w its
+    // radius (m), set in play alone; 0 cuts nothing.
+    cover: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -91,6 +94,23 @@ const TAG: f32 = 1000.0;
 
 fn cut(world: vec3<f32>, frag: vec2<f32>, instance: u32) {
     if foliage.leaf.y < 0.5 {
+        return;
+    }
+    // Ground cover (foliage.rs `Hole::Cover`): its own smaller hole about the hero alone,
+    // opening as play's crowns do from a hand's breadth before his middle, as rim.wesl's
+    // `cut` opens the cover's models; nothing in a still (`cover.w` 0).
+    if foliage.leaf.y > 1.5 {
+        let c = foliage.cover;
+        if c.w <= 0.0 {
+            return;
+        }
+        let d = world - c.xyz;
+        let s = length(vec2<f32>(dot(d, foliage.right.xyz), dot(d, foliage.up.xyz)));
+        let before = -dot(d, foliage.forward.xyz);
+        let f = (1.0 - smoothstep(c.w * 0.72, c.w, s)) * smoothstep(0.05, 0.45, before);
+        if f > interleaved_gradient_noise(frag, u32(foliage.leaf.w)) {
+            discard;
+        }
         return;
     }
     let r = foliage.leaf.z;

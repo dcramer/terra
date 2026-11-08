@@ -41,7 +41,8 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             PostUpdate,
             aim.after(TransformSystems::Propagate)
-                .before(crate::rim::cut),
+                .before(crate::rim::cut)
+                .before(foliage::cover),
         )
         .add_systems(
             PostUpdate,
@@ -141,7 +142,8 @@ pub struct Hit {
     pub what: Option<Entity>,
     pub at: Vec3,
     pub distance: f32,
-    pub cut: bool,
+    /// The radius of the hole play's cut opens through it about him (m), 0 for none.
+    pub cut: f32,
     /// A body (a foe's), which his silhouette is drawn through (silhouette.rs).
     pub body: bool,
 }
@@ -178,7 +180,11 @@ pub fn hidden(
             cast(Ray3d::new(from, dir))
                 .into_iter()
                 .take_while(|h| h.distance < reach)
-                .find(|h| h.body || !h.cut || foliage::fade(h.at, &[middle], axes, eye) < OPEN)
+                .find(|h| {
+                    h.body
+                        || h.cut <= 0.0
+                        || foliage::fade(h.at, &[middle], h.cut, axes, eye) < OPEN
+                })
                 .map(|h| {
                     let drawn = h.body
                         && through.is_some_and(|f| h.at.dot(axes[2]) < f)
@@ -189,10 +195,16 @@ pub fn hidden(
         .collect()
 }
 
-/// Whether a foliage material opens about the party (its hole is cut).
-fn cuttable(mats: &Assets<FoliageMaterial>, m: &MeshMaterial3d<FoliageMaterial>) -> bool {
-    mats.get(&m.0)
-        .is_some_and(|m| m.extension.foliage.leaf.y > 0.5)
+/// The radius of the hole a foliage material opens about him (m, foliage.rs `Hole`: the
+/// crowns' `HOLE`, the cover's `COVER`), 0 for none.
+fn cuttable(mats: &Assets<FoliageMaterial>, m: &MeshMaterial3d<FoliageMaterial>) -> f32 {
+    mats.get(&m.0).map_or(0.0, |m| {
+        let leaf = m.extension.foliage.leaf;
+        match foliage::Hole::of(leaf) {
+            foliage::Hole::None => 0.0,
+            _ => leaf.z,
+        }
+    })
 }
 
 /// Whether a mesh's tag says its tree is faded out whole (foliage.rs `Tree`) at least `OPEN`.
@@ -324,7 +336,7 @@ pub fn fans(ray: Ray3d, laid: &[Laid]) -> Vec<Hit> {
                 what: Some(*e),
                 at: ray.get_point(t),
                 distance: if *over { 0.0 } else { t },
-                cut: false,
+                cut: 0.0,
                 body: false,
             })
         })
@@ -340,7 +352,7 @@ pub fn met(ray: Ray3d, uprights: &[Upright]) -> Vec<Hit> {
                 what: Some(e),
                 at: ray.get_point(t),
                 distance: t,
-                cut: false,
+                cut: 0.0,
                 body: true,
             })
         })
@@ -423,7 +435,7 @@ fn check(
     };
     let uprights = uprights(&standing, &kids, &bounds);
     let laid = shown(&tells, &tell_mats);
-    let cut = |e: Entity| leaves.get(e).is_ok_and(|(m, _)| cuttable(&mats, m));
+    let cut = |e: Entity| leaves.get(e).map_or(0.0, |(m, _)| cuttable(&mats, m));
     let settings = MeshRayCastSettings::default()
         .with_visibility(RayCastVisibility::VisibleInView)
         .with_filter(&occluder)
@@ -523,7 +535,8 @@ mod tests {
         let wood = sphere(c, r, false);
         move |ray: Ray3d| {
             let mut h = wood(ray);
-            h.iter_mut().for_each(|h| h.cut = cut);
+            h.iter_mut()
+                .for_each(|h| h.cut = if cut { foliage::HOLE } else { 0.0 });
             h
         }
     }
@@ -542,7 +555,7 @@ mod tests {
                 what: None,
                 at: ray.get_point(t),
                 distance: t,
-                cut: false,
+                cut: 0.0,
                 body,
             }]
         }

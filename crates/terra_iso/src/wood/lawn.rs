@@ -471,8 +471,10 @@ pub fn draw(
             diffuse_transmission: 0.15,
             ..default()
         };
-        let flutter = crate::foliage::material(materials, mats, cards.clone(), 0.0, 0.01, false);
-        let bend = crate::foliage::material(materials, mats, cards, 0.05, 0.0, false);
+        // Cover, so both open before the hero in play (foliage.rs `cover`).
+        let cover = crate::foliage::Hole::Cover;
+        let flutter = crate::foliage::material(materials, mats, cards.clone(), 0.0, 0.01, cover);
+        let bend = crate::foliage::material(materials, mats, cards, 0.05, 0.0, cover);
         for (mesh, material) in [(leaves.mesh(), flutter), (stems.mesh(), bend)] {
             if let Some(mut m) = materials.get_mut(&material) {
                 m.extension.foliage.tone.x = grey;
