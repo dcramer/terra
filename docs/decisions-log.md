@@ -1269,3 +1269,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-08**: D644 added, Decided (by the agent): each layer's words across the network are its own bytes, told apart by a first byte, as parts, orders, happenings and asks; one test lists every byte.
 - **2026-11-08**: D645 added, Open: who may build in a claim in a shared world; the agent recommends everyone in a hosted world, for v0.
 - **2026-11-08**: under D37 (by the agent): the commit hook runs the docs check, a second, when a doc is staged; twice in a session with no pushes a page over its budget was committed.
+- 2026-11-08: D646 opened (Open, the developers'): the troll's own blows, a stomp and a thrown boulder; recommended stomp first, clips generated before any pack is bought; nothing built on it.
