@@ -1,7 +1,7 @@
 //! The mobs' blows on the hero (iso-forest-demo; the developer's brief: "an interesting
-//! fight"): each swing of a mob's attack (mobs.rs) is told on the ground before it lands, a
-//! red splat under where it will fall glowing up over `TELL` before its hit, as the ARPGs
-//! telegraph a monster's blow (Diablo IV's, PoE 2's ground warnings), and lands once on its
+//! fight"): each swing of a mob's attack (mobs.rs) is told on the ground before it lands, the
+//! red fan of what it reaches filling out to its rim over `TELL` before its hit (tell.rs), as
+//! the ARPGs telegraph a monster's blow (Diablo IV's, PoE 2's ground warnings), and lands once on its
 //! hit, judged by the sword set's own rule (terra_motion::moves' `judge`, the duel's): rolled
 //! through in the roll's tuck, taken on the shield held toward it, else full on him. A blow
 //! that lands or is blocked flinches him and plays the biome's hit effects at him (Cues, as
@@ -9,12 +9,11 @@
 //! strike.rs's show and settle do, so hero/ is untouched.
 
 use super::mobs::{self, Foe, Gait};
+use super::tell::{self, TellMaterial};
 use crate::hero::{Doing, HeroSystems, Kit};
 use crate::kit::effects::{Contact, Cues};
 use crate::play::{Fallen, Hero, in_arc};
 use crate::ruin::effects::hit::{FLINCH, flinch};
-use crate::ruin::effects::mark::{Decal, mark_image};
-use bevy::pbr::decal::{ForwardDecal, ForwardDecalMaterialExt};
 use bevy::prelude::*;
 use terra_motion::contact::guards;
 use terra_motion::moves::{MoveSet, Taken, judge};
@@ -24,15 +23,15 @@ use terra_motion::moves::{MoveSet, Taken, judge};
 const HIT: f32 = 0.45;
 /// How long before its hit a blow is told on the ground (s).
 const TELL: f32 = 0.5;
-/// The tell: how far ahead of the mob it lies (m), how wide at its full (m), its glow.
-const AHEAD: f32 = 1.5;
-const WIDE: f32 = 2.6;
-const EMBER: LinearRgba = LinearRgba::rgb(4.0, 1.3, 0.25);
+/// How high over the mob's feet the tell lies (m): it is drawn over everything, so only
+/// enough to keep it off the ground's own plane.
+const LIFT: f32 = 0.03;
 /// A blow on his shield flinches him this share of a full one.
 const ON_GUARD: f32 = 0.4;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Taking>()
+    app.add_plugins(tell::plugin)
+        .init_resource::<Taking>()
         .add_systems(First, settle)
         .add_systems(
             Update,
@@ -43,11 +42,12 @@ pub fn plugin(app: &mut App) {
         );
 }
 
-/// A mob's tell: its decal and material, and the start of the last swing that landed.
+/// A mob's tell: its fill and rim (tell.rs) with their materials, and the start of the last
+/// swing that landed.
 #[derive(Component)]
 struct Tell {
-    decal: Entity,
-    material: Handle<Decal>,
+    fill: (Entity, Handle<TellMaterial>),
+    edge: (Entity, Handle<TellMaterial>),
     landed: f32,
 }
 
@@ -102,42 +102,38 @@ pub fn taken(
     ))
 }
 
-/// Each mob given its tell, hidden, once it stands in play.
+/// Each mob given its tell, hidden, once it stands in play: its fill and its rim, one pool
+/// a mob, spawned once (no entity spawned at run time).
 #[allow(clippy::type_complexity)]
 fn tells(
     mut commands: Commands,
-    mut decals: ResMut<Assets<Decal>>,
-    mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<TellMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
     mobs: Query<Entity, (With<Foe>, With<Gait>, Without<Tell>)>,
-    mut texture: Local<Option<Handle<Image>>>,
+    mut shapes: Local<Option<(Handle<Mesh>, Handle<Mesh>)>>,
 ) {
     for body in &mobs {
-        let texture = texture.get_or_insert_with(|| images.add(mark_image()));
-        let material = decals.add(Decal {
-            base: StandardMaterial {
-                base_color: Color::NONE,
-                base_color_texture: Some(texture.clone()),
-                emissive_texture: Some(texture.clone()),
-                alpha_mode: AlphaMode::Blend,
-                perceptual_roughness: 0.9,
-                ..default()
-            },
-            extension: ForwardDecalMaterialExt {
-                depth_fade_factor: 0.6,
-            },
-        });
-        let decal = commands
-            .spawn((
-                ForwardDecal,
-                TellMark,
-                MeshMaterial3d(material.clone()),
-                Transform::from_scale(Vec3::splat(WIDE)),
-                Visibility::Hidden,
-            ))
-            .id();
+        let (fill, edge) =
+            shapes.get_or_insert_with(|| (meshes.add(tell::fill()), meshes.add(tell::edge())));
+        let mut part = |mesh: &Handle<Mesh>, colour, alpha| {
+            let material = materials.add(tell::material(colour, alpha));
+            let id = commands
+                .spawn((
+                    TellMark,
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(material.clone()),
+                    Transform::default(),
+                    Visibility::Hidden,
+                    bevy::light::NotShadowCaster,
+                ))
+                .id();
+            (id, material)
+        };
+        let fill = part(fill, tell::FILL, AlphaMode::Blend);
+        let edge = part(edge, tell::EDGE, AlphaMode::Add);
         commands.entity(body).insert(Tell {
-            decal,
-            material,
+            fill,
+            edge,
             landed: f32::NEG_INFINITY,
         });
     }
@@ -158,7 +154,7 @@ fn land(
         (&mut Transform, &mut Visibility),
         (With<TellMark>, Without<Foe>, Without<Hero>),
     >,
-    mut decals: ResMut<Assets<Decal>>,
+    mut materials: ResMut<Assets<TellMaterial>>,
     mut guard_since: Local<Option<f32>>,
 ) {
     let (Some(kit), Ok((htr, doing))) = (kit, hero.single()) else {
@@ -183,8 +179,26 @@ fn land(
         let k = hit_at
             .filter(|h| now < *h && *h - now <= TELL)
             .map(|h| 1.0 - (h - now) / TELL);
-        if let Ok((mut mtr, mut vis)) = marks.get_mut(tell.decal) {
-            let want = if k.is_some() {
+        // The fill grows out from the mob and strengthens to the hit, never past half so the
+        // ground and the bodies under it show (at 0.8 it hid the mob, j7's first still); the
+        // rim is whole at once (a tenth of the tell in), so the reach reads before the fill.
+        let parts = [
+            (
+                &tell.fill,
+                tell::FILL,
+                k.map(|k| (0.35 + 0.65 * k, 0.12 + 0.33 * k)),
+            ),
+            (
+                &tell.edge,
+                tell::EDGE,
+                k.map(|k| (1.0, (k * 10.0).min(1.0) * 0.9)),
+            ),
+        ];
+        for ((id, material), colour, shown) in parts {
+            let Ok((mut mtr, mut vis)) = marks.get_mut(*id) else {
+                continue;
+            };
+            let want = if shown.is_some() {
                 Visibility::Inherited
             } else {
                 Visibility::Hidden
@@ -192,13 +206,14 @@ fn land(
             if *vis != want {
                 *vis = want;
             }
-            if let Some(k) = k {
-                mtr.translation = (at + face * AHEAD).extend(tr.translation.y).xzy();
-                mtr.scale = Vec3::splat(WIDE * (0.6 + 0.4 * k));
-                if let Some(mut m) = decals.get_mut(&tell.material) {
-                    m.base.base_color = Color::linear_rgba(0.5, 0.08, 0.02, 0.9 * k);
-                    m.base.emissive = EMBER * (k * k);
-                }
+            let Some((scale, alpha)) = shown else {
+                continue;
+            };
+            *mtr = Transform::from_translation(tr.translation + Vec3::Y * LIFT)
+                .with_rotation(Quat::from_rotation_y(libm::atan2f(face.x, face.y)))
+                .with_scale(Vec3::splat(scale));
+            if let Some(mut m) = materials.get_mut(material) {
+                m.base.base_color = colour.with_alpha(alpha).into();
             }
         }
         let (Some((start, _)), Some(h)) = (swing, hit_at) else {

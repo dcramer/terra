@@ -8,6 +8,7 @@ pub mod mobs;
 pub mod occlude;
 pub mod steer;
 pub mod tally;
+pub mod tell;
 
 use bevy::prelude::*;
 
