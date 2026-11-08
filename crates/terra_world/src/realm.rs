@@ -49,6 +49,11 @@ pub struct Realm {
     /// The share of the first realm's trees and undergrowth that grow here, 0 to 1.
     #[serde(default)]
     pub plants: Option<f32>,
+    /// Its ground's layers: a stack among the materials (`assets/materials/<name>`,
+    /// `tools/textures`), its layers in the first realm's order; the first realm's if not
+    /// given.
+    #[serde(default)]
+    pub ground: Option<String>,
     /// The kinds of creature that live in it, by name (`data/creatures.ron`): every kind
     /// where it says nothing, as the first realm does.
     #[serde(default)]
@@ -195,6 +200,15 @@ mod tests {
         assert!(realms.lives("world", "Troll") && realms.lives("world", "Chaffinch"));
         assert!(realms.lives("industrial", "Red fox") && !realms.lives("industrial", "Troll"));
         assert!(realms.lives("a realm not in the data", "Troll"));
+        // A realm's own ground is a stack among the materials, both its maps there.
+        let ground = realms.of("industrial").unwrap().ground.as_deref().unwrap();
+        for map in ["color.jpg", "normal.jpg"] {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../assets/materials")
+                .join(ground)
+                .join(map);
+            assert!(path.exists(), "{} is missing", path.display());
+        }
         // A kind the data does not have leads to its own kind, and sets nothing.
         assert_eq!(realms.beyond("yard"), "yard");
         assert!(realms.of("yard").is_none());

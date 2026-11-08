@@ -5,6 +5,7 @@
 //   name          what a player is told it is
 //   beyond        the kind of the realm its gate leads to (D641)
 //   plants_hue    how far its plants' own colours are turned round the hue circle, radians
+//   ground        its ground's layers, a stack among the materials; the first realm's if not given
 //   animals       the kinds of creature that live in it, by name; every kind if not given
 //   sun, sky      its light against the first realm's: the sun's colour and the sky's (the
 //                 horizon, the zenith, the shade), multiplied in, linear, red green blue
@@ -31,6 +32,9 @@
         grass_lush: Some((0.33, 0.34, 0.26)),
         sand: Some((0.45, 0.36, 0.3)),
         ground_cover: Some(0.25),
+        // Its ground's own layers: gravel where the first realm has grass, asphalt and
+        // cracked concrete where it has leaf litter (assets/materials/ground_industrial).
+        ground: Some("ground_industrial"),
         // What does grow is parched: its greens turned toward ochre.
         plants_hue: Some(-0.4),
         // Little lives on a worked-out land: scavengers, and nothing in its den yet. A

@@ -726,7 +726,10 @@ impl GroundTextures {
         &self.normal
     }
 
-    fn load(assets: &AssetServer) -> Self {
+    /// The ground's layers of a set (a stack of `tools/textures`, `assets/materials/<set>`):
+    /// the first realm's is `ground`; another realm names its own (`data/realms.ron`), its
+    /// layers in the same order, so the same rules lay them.
+    fn load(assets: &AssetServer, set: &str) -> Self {
         let layers = |linear: bool| {
             move |settings: &mut ImageLoaderSettings| {
                 settings.array_layout = Some(ImageArrayLayout::RowCount {
@@ -743,13 +746,13 @@ impl GroundTextures {
         GroundTextures {
             color: crate::cooked::picture(
                 assets,
-                "materials/ground/color.jpg",
+                &format!("materials/{set}/color.jpg"),
                 cook(terra_core::cooked::Kind::Colour),
                 layers(false),
             ),
             normal: crate::cooked::picture(
                 assets,
-                "materials/ground/normal.jpg",
+                &format!("materials/{set}/normal.jpg"),
                 cook(terra_core::cooked::Kind::Normal),
                 layers(true),
             ),
@@ -925,8 +928,16 @@ fn setup(
     mut water_materials: ResMut<Assets<WaterMaterial>>,
     mut images: ResMut<Assets<Image>>,
     assets: Res<AssetServer>,
+    spec: Option<Res<crate::instance::WorldSpec>>,
 ) {
-    let textures = GroundTextures::load(&assets);
+    // Its realm's own ground, where the realm names one (D642).
+    let realms = crate::realm::Realms::shared();
+    let set = spec
+        .as_ref()
+        .and_then(|spec| realms.of(&spec.kind))
+        .and_then(|realm| realm.ground.as_deref())
+        .unwrap_or("ground");
+    let textures = GroundTextures::load(&assets, set);
     let land = planet
         .round()
         .map_or_else(LandMap::default, |round| LandMap::of(round, &mut images));
