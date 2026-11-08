@@ -171,6 +171,17 @@ try {
   }, 60);
   console.log(`✓ creatures are the host's: the friend's game shows ${seen} of the host's animals, each within ${worst.toFixed(1)} m of where the host has it`);
 
+  // A creature's blow on a joined player is the host's to deal and the guest's game's to
+  // take: the friend, put by the host among its spiders, loses health in its own game.
+  const health = (port: number) => (JSON.parse(remote(port, "call", "play.state")) as { health: number }).health;
+  const spiders = JSON.parse(remote(host, "call", "sandbox.find", JSON.stringify({ name: "Spider" }))) as { from_start: Place }[];
+  if (spiders.length === 0) throw new Error("the host's world has no spiders to be bitten by: data/creatures.ron's Spider lives at a lair, which every played world has");
+  const hale = health(friend);
+  remote(host, "call", "net.place_guests", JSON.stringify({ at: [spiders[0].from_start[0] + 1.5, spiders[0].from_start[2]] }));
+  await until(`the friend, put among the host's spiders, still has ${health(friend)} of ${hale} health: a creature's blow on a guest is ordered where the guest stands and the guest's own game takes it (terra_creatures::net, HURT)`, () => health(friend) < hale, 40);
+  const bitten = hale - health(friend);
+  console.log(`✓ a creature's blow reaches a joined player: among the host's spiders the friend lost ${bitten.toFixed(0)} health in its own game`);
+
   // A joined player's blow is the host's to land: the friend, put by the host beside one of
   // its animals (a guest's body is the host's to walk), strikes it, and it falls on the host.
   type From = { name: string; from_start: Place };
