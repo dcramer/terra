@@ -80,6 +80,8 @@ pub struct HeroIntent {
     pub walk: bool,
     pub sprint: bool,
     pub block: bool,
+    /// The ground point (x, z) the shield is raised toward, if any (else the nearest foe).
+    pub block_at: Option<Vec2>,
     /// A move pressed this frame, and the ground point (x, z) it is aimed at, if any (else he
     /// keeps his facing; a roll goes along `way`).
     pub press: Option<(Ability, Option<Vec2>)>,
@@ -89,7 +91,10 @@ impl HeroIntent {
     /// Asks for `ability` this frame, aimed at `at`: a press, or held.
     pub fn ask(&mut self, ability: Ability, at: Option<Vec2>) {
         match ability {
-            Ability::Block => self.block = true,
+            Ability::Block => {
+                self.block = true;
+                self.block_at = at.or(self.block_at);
+            }
             Ability::Walk => self.walk = true,
             Ability::Sprint => self.sprint = true,
             _ => self.press = Some((ability, at)),
@@ -153,6 +158,7 @@ fn read(
         .any(key),
         sprint: shift,
         block: mouse.pressed(MouseButton::Right),
+        block_at: None,
         press: None,
     };
     let cursor = windows.single().ok().and_then(|w| w.cursor_position());

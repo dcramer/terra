@@ -49,6 +49,7 @@ struct Tell {
     fill: (Entity, Handle<TellMaterial>),
     edge: (Entity, Handle<TellMaterial>),
     landed: f32,
+    leaving: Leaving,
 }
 
 #[derive(Component)]
@@ -74,18 +75,64 @@ impl Default for Taking {
     }
 }
 
+/// Whether he left a swing's arc in a roll's tuck, seen each frame of the swing: a blow he
+/// rolled out of is dodged, not merely out of reach. A roll drives him from its first frame,
+/// so by the hit he is often past the arc, where the tuck's i-frames were never asked
+/// (iso-forest-demo j11's route: rolls at 1031 to 1033 left mob 6's 1034 blow `out of reach`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Leaving {
+    /// The start of the swing seen (s).
+    swing: f32,
+    /// He stood in its arc on the last frame seen.
+    was_in: bool,
+    /// He crossed out of it while invulnerable, and has not come back in.
+    rolled_out: bool,
+}
+
+impl Default for Leaving {
+    fn default() -> Self {
+        Leaving {
+            swing: f32::NEG_INFINITY,
+            was_in: false,
+            rolled_out: false,
+        }
+    }
+}
+
+impl Leaving {
+    /// A frame of the swing begun at `swing`: him `inside` its arc or not, `invulnerable` or
+    /// not. A new swing starts afresh from where he stands.
+    fn see(&mut self, swing: f32, inside: bool, invulnerable: bool) {
+        if self.swing != swing {
+            *self = Leaving {
+                swing,
+                was_in: inside,
+                rolled_out: false,
+            };
+            return;
+        }
+        if self.was_in && !inside {
+            self.rolled_out = invulnerable;
+        } else if inside {
+            self.rolled_out = false;
+        }
+        self.was_in = inside;
+    }
+}
+
 /// What a blow from `mob` facing `mob_face` does to the hero at `hero` facing `hero_face`,
-/// doing what `doing` says with his guard up `held_s`: none if he is out of its reach and
-/// arc, else the set's judgement (a mob's blow is never heavy).
+/// doing what `doing` says with his guard up `held_s`: out of its reach and arc, dodged if he
+/// `rolled_out` of it in a roll's tuck (`Leaving`) and else none; in it, the set's judgement
+/// (a mob's blow is never heavy).
 pub fn taken(
     (mob, mob_face): (Vec2, Vec2),
     (hero, hero_face): (Vec2, Vec2),
     doing: &Doing,
-    held_s: f32,
+    (held_s, rolled_out): (f32, bool),
     set: &MoveSet,
 ) -> Option<Taken> {
     if !in_arc(mob, mob_face, hero) {
-        return None;
+        return rolled_out.then_some(Taken::Dodged);
     }
     let from = (mob - hero).normalize_or(Vec2::Y);
     let facing = guards(
@@ -135,6 +182,7 @@ fn tells(
             fill,
             edge,
             landed: f32::NEG_INFINITY,
+            leaving: Leaving::default(),
         });
     }
 }
@@ -175,6 +223,10 @@ fn land(
         let face = (tr.rotation * Vec3::Z).xz().normalize_or(Vec2::Y);
         let swing = gait.swinging(now).filter(|_| !fallen);
         let hit_at = swing.map(|(start, len)| start + len * HIT);
+        if let Some((start, _)) = swing {
+            let inside = in_arc(at, face, him);
+            tell.leaving.see(start, inside, doing.invulnerable(set));
+        }
         // The tell: up over TELL before the hit, gone at it.
         let k = hit_at
             .filter(|h| now < *h && *h - now <= TELL)
@@ -223,7 +275,8 @@ fn land(
             continue;
         }
         tell.landed = start;
-        let Some(t) = taken((at, face), (him, his_face), doing, held, set) else {
+        let rolled_out = tell.leaving.rolled_out;
+        let Some(t) = taken((at, face), (him, his_face), doing, (held, rolled_out), set) else {
             info!(
                 "frame {}: mob {}'s blow on him: out of reach",
                 frame.0, foe.i
@@ -311,7 +364,61 @@ mod tests {
     /// A mob 1.8 m south of him facing him; him at the origin facing `face`.
     fn blow(d: &Doing, face: Vec2, held: f32, set: &MoveSet) -> Option<Taken> {
         let mob = Vec2::new(0.0, -1.8);
-        taken((mob, Vec2::Y), (Vec2::ZERO, face), d, held, set)
+        taken((mob, Vec2::Y), (Vec2::ZERO, face), d, (held, false), set)
+    }
+
+    /// A roll that carries him out of a swing's arc in its tuck dodges it: the blow lands
+    /// with him past its arc and is Dodged, not out of reach. Out of it on foot, or before the
+    /// tuck began, or back into it, it is not.
+    #[test]
+    fn a_roll_out_of_the_arc_is_a_dodge() {
+        let set = set();
+        let (from, to) = set.get("roll").unwrap().invulnerable.unwrap();
+        let tuck = doing(&set, "roll", (from + to) / 2.0);
+        let early = doing(&set, "roll", from * 0.5);
+        let mob = (Vec2::new(0.0, -1.8), Vec2::Y);
+        let past = (Vec2::new(4.0, 0.0), Vec2::X);
+        assert!(
+            !in_arc(mob.0, mob.1, past.0),
+            "the hit finds him past the arc"
+        );
+        let ends = |frames: &[(bool, &Doing)], at_hit: &Doing| {
+            let mut l = Leaving::default();
+            for (inside, d) in frames {
+                l.see(1.0, *inside, d.invulnerable(&set));
+            }
+            taken(mob, past, at_hit, (0.0, l.rolled_out), &set)
+        };
+        let still = Doing::default();
+        assert_eq!(
+            ends(&[(true, &still), (true, &early), (false, &tuck)], &tuck),
+            Some(Taken::Dodged),
+            "rolled out in the tuck"
+        );
+        assert_eq!(
+            ends(&[(true, &still), (false, &still)], &still),
+            None,
+            "walked out"
+        );
+        assert_eq!(
+            ends(&[(true, &still), (false, &early), (false, &tuck)], &tuck),
+            None,
+            "out before the tuck"
+        );
+        assert_eq!(
+            ends(
+                &[
+                    (true, &still),
+                    (false, &tuck),
+                    (true, &tuck),
+                    (false, &still)
+                ],
+                &still
+            ),
+            None,
+            "back in and out on foot"
+        );
+        assert_eq!(ends(&[(false, &tuck)], &tuck), None, "never in it");
     }
 
     /// In the roll's tuck a blow passes through him; before or after it, it lands.
@@ -359,7 +466,7 @@ mod tests {
                 (Vec2::new(0.0, -4.0), Vec2::Y),
                 (Vec2::ZERO, Vec2::Y),
                 &d,
-                0.0,
+                (0.0, false),
                 &set
             ),
             None
@@ -369,7 +476,7 @@ mod tests {
                 (Vec2::new(0.0, -1.8), Vec2::NEG_Y),
                 (Vec2::ZERO, Vec2::Y),
                 &d,
-                0.0,
+                (0.0, false),
                 &set
             ),
             None

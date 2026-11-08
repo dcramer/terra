@@ -101,10 +101,7 @@ pub fn act(
     // A press, or the block's button going down: asked of the set by its button.
     let block_down = intent.block && !*was_blocking;
     *was_blocking = intent.block;
-    let asked = intent
-        .press
-        .or(block_down.then_some((Ability::Block, None)));
-    if let Some((ability, at)) = asked
+    if let Some((ability, at)) = asked(intent, block_down)
         && let Some(b) = button(ability)
         && let Some(name) = doing.runner.pressed(set, b).map(str::to_string)
     {
@@ -192,8 +189,16 @@ pub fn nearest(here: Vec2, foes: impl Iterator<Item = Vec2>) -> Option<Vec2> {
         .map(|(_, p)| p)
 }
 
-/// The way a move asked faces as it starts: a roll along the way held (else ahead); a move
-/// aimed at a point toward it; a blow or the shield with no aim point toward the nearest foe
+/// The move asked of the set this frame: a press, else the shield as its button goes down,
+/// each with its aim point (a script's `--do block:X,Z`).
+fn asked(intent: &HeroIntent, block_down: bool) -> Option<(Ability, Option<Vec2>)> {
+    intent
+        .press
+        .or(block_down.then_some((Ability::Block, intent.block_at)))
+}
+
+/// The way a move asked faces as it starts: a move aimed at a point toward it (a roll too); a
+/// roll unaimed along the way held (else ahead); a blow or the shield with no aim point toward the nearest foe
 /// in reach, `target` (an action RPG's soft target), so a script's or pad's press neither
 /// swings at the air nor raises the shield to the side the blow does not come from; else ahead.
 fn face_for(
@@ -204,8 +209,8 @@ fn face_for(
     target: Option<Vec2>,
 ) -> Vec2 {
     match (ability, at) {
-        (Ability::Roll, _) => way.normalize_or(ahead),
         (_, Some(p)) => (p - here).normalize_or(ahead),
+        (Ability::Roll, None) => way.normalize_or(ahead),
         (Ability::Light | Ability::Heavy | Ability::Block, None) => {
             target.map_or(ahead, |p| (p - here).normalize_or(ahead))
         }
@@ -268,6 +273,37 @@ mod tests {
         assert_eq!(
             face_for(Ability::Roll, None, Vec2::NEG_X, (here, ahead), foe),
             Vec2::NEG_X
+        );
+    }
+
+    /// A script's aim point is used: `--do roll:X,Z` rolls toward it, not along the way held,
+    /// and `--do block:X,Z` raises the shield toward it, not toward the nearest foe, from the
+    /// frame its button goes down while it is held.
+    #[test]
+    fn a_scripted_aim_point_is_used() {
+        let (here, ahead) = (Vec2::ZERO, Vec2::X);
+        let foe = Some(Vec2::new(0.0, 2.0));
+        let point = Vec2::new(-3.0, 0.0);
+        let mut i = HeroIntent::default();
+        i.ask(Ability::Roll, Some(point));
+        let (a, at) = asked(&i, false).expect("the roll pressed");
+        assert_eq!(
+            face_for(a, at, Vec2::Y, (here, ahead), foe),
+            Vec2::NEG_X,
+            "a roll aimed at (-3, 0) goes toward it"
+        );
+        let mut i = HeroIntent::default();
+        i.ask(Ability::Block, Some(point));
+        assert_eq!(
+            asked(&i, false),
+            None,
+            "held on, the shield is not asked again"
+        );
+        let (a, at) = asked(&i, true).expect("the shield's button goes down");
+        assert_eq!(
+            face_for(a, at, Vec2::ZERO, (here, ahead), foe),
+            Vec2::NEG_X,
+            "a block aimed at (-3, 0) faces it, not the foe at (0, 2)"
         );
     }
 
