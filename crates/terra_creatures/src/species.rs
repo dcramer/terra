@@ -51,6 +51,10 @@ pub struct SpeciesDef {
     pub calls_s: Option<(f32, f32)>,
     #[serde(default)]
     pub pools: bool,
+    /// The mark its fall imprints on the players by it, by the mark's key (D590,
+    /// `data/marks.ron`): the demo's boss marks those who beat it.
+    #[serde(default)]
+    pub marks: Option<String>,
     pub stride: (f32, f32),
     pub feet: Feet,
     pub voice: Voice,
@@ -209,6 +213,8 @@ pub enum Temper {
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum Lives {
     Lair(u32),
+    /// One, in the world's den (D591): on its chamber's floor, where the land holds a den.
+    Den,
     /// About the land wherever its niche is, so many to a hectare of it, in groups of so many:
     /// wildlife found as it is walked into, as games' ambient populations are (`wildlife`).
     About {

@@ -428,6 +428,27 @@ fn prepare(
             }
         }
     }
+    // Those that keep the world's den (D591): one of each, on its chamber's floor.
+    if let Some(den) = planet.den().filter(|_| !options.no_lair) {
+        for species in bestiary.all() {
+            if bestiary.get(species).lives == Lives::Den {
+                let at = start.local(den.floor);
+                info!(
+                    "{} keeps the den {:.0} m east and {:.0} m south of the start.",
+                    bestiary.name(species),
+                    at.x,
+                    at.z
+                );
+                spawn(
+                    &mut commands,
+                    (&kinds, &bestiary),
+                    &planet,
+                    species,
+                    den.floor,
+                );
+            }
+        }
+    }
     commands.insert_resource(Populated);
 }
 

@@ -30,7 +30,7 @@ Natural caves are part of how a world is made (D591), and v0's boss, the troll, 
 1. The carve: parts, distance, the planet's field with caves; tests that the inside is hollow, the rock round it solid, the field still a distance the chunk rule can trust, and what it costs a chunk far from any cave (measured).
 2. The den found from the seed: `terra_land::cave::find`, the world made with it, and the sweep holding one den a seed, its mouth reached by a walk, its chamber fitting the fight, its roof whole.
 3. Seen: walked into in the game, stills from the mouth and the chamber; the sun's shadow and the sky's light underground; the camera in a tight place.
-4. More than the den: systems by the theme's numbers, and what they hold.
+4. More than the den: systems by the theme's numbers, and what they hold. Built of what the den holds: the troll (`data/creatures.ron`, `lives: Den`), whose fall marks the players by it (`play::marks::earned`).
 
 ## Variants (D182)
 

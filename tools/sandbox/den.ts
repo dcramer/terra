@@ -2,8 +2,10 @@
 // A world's den, walked in the real game (D591, D643, docs/caves.md): a new 30 km world of a
 // seed is played; `den.state` says where the den's mouth opens and its chamber's floor is;
 // the player, put at the mouth facing in, walks forward and comes to the chamber's floor,
-// under the land, with no way cut for them. Checked with no picture, by where the game says
-// the player stands. How long the walk took is said: a reading.
+// under the land, with no way cut for them. The troll keeps the den (D590): met on the way,
+// it is struck down by the script (`creatures.strike`, the rule a swing's blow goes by), and
+// the player, unmarked before, bears its mark. Checked with no picture, by what the game
+// says. How long the walk took is said: a reading.
 //
 //   node tools/sandbox/den.ts [--seed 3]
 //
@@ -35,6 +37,13 @@ try {
   // How far the player is from the floor's middle: over the ground, and in height.
   const off = (at: Place) => [Math.hypot(at[0] - den.floor[0], at[2] - den.floor[2]), Math.abs(at[1] - den.floor[1])];
   const NEAR_M = den.room_across_m / 2 - 1;
+  const marks = async () => ((await call("marks.state")) as { marks: string[] }).marks;
+  const troll = async () => ((await call("sandbox.find", { name: "Troll" })) as Found)[0]?.from_start;
+  const home = await troll();
+  if (!home) throw new Error(`no Troll is in seed ${SEED}'s world: data/creatures.ron's Troll lives in the Den, and terra_creatures puts one on its floor`);
+  if (Math.hypot(home[0] - den.floor[0], home[1] - den.floor[1], home[2] - den.floor[2]) > den.room_across_m) throw new Error(`the troll stands at ${home.map((x) => x.toFixed(0)).join(", ")}, not in its den, whose floor is at ${den.floor.map((x) => x.toFixed(0)).join(", ")}`);
+  if ((await marks()).includes("troll")) throw new Error("a new game's player bears the troll's mark before meeting it");
+  let fell = "";
   await warp([den.mouth[0], den.mouth[2]], [den.ahead[0], den.ahead[2]]);
   const began = Date.now();
   let at = await player();
@@ -43,11 +52,22 @@ try {
     await press("w:60");
     await waitSeconds(1);
     at = await player();
+    // Met on the way in: struck down before it lands a blow.
+    const it = await troll();
+    if (!fell && it && Math.hypot(it[0] - at[0], it[1] - at[1], it[2] - at[2]) < 25) {
+      const blow = (await call("creatures.strike", { name: "Troll", damage: 5000 })) as { health: number; away_m: number };
+      if (blow.health > 0) throw new Error(`struck for 5000 the troll has ${blow.health} health left`);
+      fell = `${blow.away_m.toFixed(0)} m off`;
+    }
   }
   const [away, level] = off(at);
   if (away > NEAR_M || level > LEVEL_M) throw new Error(`walking in from the den's mouth for ${MOST_S} s the player stands ${away.toFixed(1)} m from the chamber floor's middle and ${level.toFixed(1)} m off its level (at ${at.map((x) => x.toFixed(1)).join(", ")} east, up, south of the start; the floor is at ${den.floor.map((x) => x.toFixed(1)).join(", ")}): the way in is shut, too steep, or bends where walking straight on does not follow it (terra_land::cave, terra_voxel::caves)`);
+  if (!fell) throw new Error("the player came to the chamber and never came within 25 m of the troll");
+  await waitSeconds(1);
+  const borne = await marks();
+  if (!borne.includes("troll")) throw new Error(`the troll fell ${fell} and the player bears ${JSON.stringify(borne)}, not its mark: a kind's \`marks\` in data/creatures.ron is imprinted on the players by it when it falls (play::marks::earned, D590)`);
   const down = den.mouth[1] - den.floor[1];
-  console.log(`✓ den: seed ${SEED}'s den (way ${den.layout.way}, room ${den.layout.room}, ${den.layout.alcoves} alcoves) opens ${Math.hypot(den.mouth[0], den.mouth[2]).toFixed(0)} m from the start; walking in from its mouth the player came to its chamber's floor, ${down.toFixed(1)} m below the mouth, in ${((Date.now() - began) / 1000).toFixed(0)} s (a reading), ${away.toFixed(1)} m from the floor's middle`);
+  console.log(`✓ den: seed ${SEED}'s den (way ${den.layout.way}, room ${den.layout.room}, ${den.layout.alcoves} alcoves) opens ${Math.hypot(den.mouth[0], den.mouth[2]).toFixed(0)} m from the start; walking in from its mouth the player came to its chamber's floor, ${down.toFixed(1)} m below the mouth, in ${((Date.now() - began) / 1000).toFixed(0)} s (a reading); the troll kept the den, fell ${fell} to the script's blow, and the player bears its mark`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 } finally {

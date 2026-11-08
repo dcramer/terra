@@ -81,6 +81,7 @@ pub fn plugin(app: &mut App) {
     app.insert_resource(Kinds::read())
         .register_required_components::<Player, Marks>();
     shown::plugin(app);
+    app.add_systems(Update, earned.run_if(resource_exists::<Kinds>));
     terra_world::remote::method(app, "marks.give", give);
     terra_world::remote::method(app, "marks.state", state);
 }
@@ -88,6 +89,42 @@ pub fn plugin(app: &mut App) {
 #[derive(Deserialize)]
 struct Give {
     mark: String,
+}
+
+/// Those who stand by when a creature falls whose kind marks its slayers bear its mark
+/// (D590): everyone within this of it, in metres, as a boss's fall counts for the party in
+/// shipped games, not for whoever dealt the last blow.
+const BY_M: f32 = 60.0;
+
+/// A creature fell whose kind imprints a mark (`data/creatures.ron`'s `marks`): the players
+/// by it bear it from now on, and are told.
+fn earned(
+    mut struck: MessageReader<terra_creatures::combat::Struck>,
+    bestiary: Res<terra_creatures::species::Bestiary>,
+    kinds: Res<Kinds>,
+    mut players: Query<(Entity, &Transform, &mut Marks), With<Player>>,
+    mut told: MessageWriter<terra_survival::told::Told>,
+) {
+    for fell in struck.read().filter(|blow| blow.killed) {
+        let Some(key) = bestiary.get(fell.species).marks.as_deref() else {
+            continue;
+        };
+        for (player, at, mut marks) in &mut players {
+            if at.translation.distance(fell.at) > BY_M || marks.0.contains(key) {
+                continue;
+            }
+            match kinds.imprint(&mut marks, key) {
+                Ok(kind) => {
+                    info!("A player bears {} now.", kind.name);
+                    told.write(terra_survival::told::Told::new(
+                        player,
+                        format!("You bear {}", kind.name),
+                    ));
+                }
+                Err(problem) => error!("{problem}"),
+            }
+        }
+    }
 }
 
 /// `marks.give {"mark": "troll"}`: imprints a mark on this machine's player.

@@ -22,8 +22,8 @@
 //                       within bite_reach_m
 //   refuge   where a shy one goes when it flees: Runs away (the default), Climbs the nearest
 //            trunk until nobody is near, or Flies(near, far) off to somewhere it keeps to
-//   lives    where it is put in a world: Lair(so many) at a lair, or Young, only beside a
-//            mother whose young it is, or
+//   lives    where it is put in a world: Lair(so many) at a lair, Den, one on the floor of
+//            the world's den (D591), or Young, only beside a mother whose young it is, or
 //            About(per_ha, group): about the land wherever its niche is, so many to a hectare
 //            of it, in groups of so many (terra_creatures::wildlife)
 //   niche    for one About: the growing season's mean warmth it takes, in °C, and the places
@@ -35,6 +35,7 @@
 //   calls_s  how often it calls of its own accord at rest, (least, most) seconds; none for
 //            a kind that only calls in alarm
 //   pools    whether it forms where magic pools (D103)
+//   marks    the mark its fall imprints on the players by it (data/marks.ron, D590)
 //   stride   how far a step carries, as so far and so much more for each metre a second
 //   feet     what its steps sound like
 //   voice    what it sounds like when it is alarmed
@@ -85,6 +86,47 @@
             (joint: "Thorax", part: Body, radius_m: 0.2),
             (joint: "Abdomen", part: Body, radius_m: 0.28),
             (joint: "Leg", part: Legs, radius_m: 0.05),
+        ],
+    ),
+    // The demo's boss (D590, D591): one, in the world's den. Its fall marks those by it.
+    // A 4 m body on the people's skeleton (tools/characters, bodies.json), its own clips
+    // (art/animation/sets/troll). The numbers are stand-ins, the developers' to tune.
+    (
+        name: "Troll",
+        model: ("models/characters/troll.glb", 1.0),
+        clips: (
+            idle: "Troll_Idle",
+            walk: "Troll_Walk",
+            run: "Troll_Walk",
+            attack: "Troll_Smash",
+            death: "Death01",
+            paces: (1.1, 1.1),
+        ),
+        health: 400.0,
+        walk_mps: 1.1,
+        run_mps: 1.3,
+        body: (radius: 1.2, weight: 12.0),
+        temper: Hostile(
+            notices_m: 16.0,
+            leash_m: 34.0,
+            attacks_within_m: 3.6,
+            bite: 34.0,
+            bite_at_s: 2.2,
+            bite_reach_m: 4.4,
+            attack_s: 4.0,
+        ),
+        lives: Den,
+        marks: Some("troll"),
+        stride: (1.1, 0.2),
+        feet: Hoof,
+        voice: Snort,
+        blood: Red,
+        lies_s: 30.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.45),
+            (joint: "spine", part: Body, radius_m: 0.8),
+            (joint: "thigh", part: Legs, radius_m: 0.4),
+            (joint: "calf", part: Legs, radius_m: 0.3),
         ],
     ),
     (

@@ -7,6 +7,8 @@
 //!
 //!   Left click    swing          Hold right mouse   guard          Ctrl   roll
 
+mod scripted;
+
 use crate::creatures::{self, Bitten, Creature, Species};
 use crate::species::{Bestiary, Part};
 use crate::zones::Zones;
@@ -76,6 +78,7 @@ pub struct Hurt {
 }
 
 pub fn plugin(app: &mut App) {
+    scripted::plugin(app);
     app.add_message::<Struck>()
         .add_message::<Hurt>()
         .add_systems(
