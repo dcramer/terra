@@ -188,10 +188,38 @@ export async function stop() {
       await raw("rpc.discover");
       await sleep(100);
     } catch {
+      sayShaderFaults();
       return;
     }
   }
   throw new Error("the sandbox did not close");
+}
+
+/// The shaders the run could not make, from its log: the engine only warns, and what the
+/// shader draws is then simply not there (a gate's veil missing, with no error), so a
+/// scripted run would pass a still nobody looked at.
+export function shaderFaults(log: string): string[] {
+  const faults: string[] = [];
+  const lines = log.split("\n");
+  for (let at = 0; at < lines.length; at++) {
+    const unresolved = /Shader `([^`]+)` has an unresolved import/.exec(lines[at]);
+    if (unresolved) faults.push(`${unresolved[1]}: ${(lines[at + 1] ?? "").replace(/^error: /, "").trim()}`);
+  }
+  return [...new Set(faults)];
+}
+
+/// Says a closed run's shader faults and fails the script that ran it (D556).
+function sayShaderFaults() {
+  let log = "";
+  try {
+    log = readFileSync(resolve(ROOT, "shots/remote.log"), "utf8");
+  } catch {
+    return;
+  }
+  const faults = shaderFaults(log);
+  if (faults.length === 0) return;
+  for (const fault of faults) console.error(`✗ shader not made, so what it draws was missing from this run: ${fault}. Fix its imports (bevy_pbr's modules are under bevy_pbr::render::) and run again.`);
+  process.exitCode = 1;
 }
 
 // A path the sandbox can write to: as it is for a sandbox on Linux, through WSL's share for

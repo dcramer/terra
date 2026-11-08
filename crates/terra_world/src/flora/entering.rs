@@ -2,12 +2,13 @@
 //! way, the trunks, what the plants were cleared for and the pieces' meshes, planted on
 //! entering it. Their instance buffers go with them.
 
-use super::{Cleared, FloraSystems, Obstacles, Trunks, Undergrown, piece, plant};
+use super::{Cleared, FloraSystems, KeptClear, Obstacles, Trunks, Undergrown, piece, plant};
 use crate::instance::{Building, InWorld, InstanceApp};
 use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
     app.init_world_resource::<Obstacles>()
+        .init_world_resource::<KeptClear>()
         .init_world_resource::<Trunks>()
         .init_world_resource::<piece::Built>()
         .world_resource::<Cleared>()

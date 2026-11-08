@@ -53,7 +53,8 @@ impl Interactable {
             Interactable::Storage => (0.4, 0.6),
             Interactable::Door => (1.1, 0.7),
             Interactable::Shutters => (0.5, 0.6),
-            Interactable::Portal => (1.4, 1.2),
+            // The middle of the gate's opening, and as near as its ring is wide.
+            Interactable::Portal => (1.75, 1.3),
         }
     }
 

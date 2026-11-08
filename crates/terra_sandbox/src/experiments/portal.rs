@@ -136,8 +136,9 @@ fn realm_colours(spec: Res<WorldSpec>, mut tweaks: ResMut<Tweaks>) {
 #[allow(clippy::too_many_arguments)]
 fn stand_portal(
     mut commands: Commands,
+    assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<portal::veil::VeilMaterial>>,
     planet: Res<Planet>,
     spec: Res<WorldSpec>,
     returns: Res<Returns>,
@@ -170,6 +171,7 @@ fn stand_portal(
     );
     portal::stand(
         &mut commands,
+        &assets,
         &mut meshes,
         &mut materials,
         &planet,

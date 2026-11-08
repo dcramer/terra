@@ -273,6 +273,7 @@ fn put_back<W: Ways>(map: &mut Floor<W>, put: &Put) {
 #[derive(SystemParam)]
 struct Laying<'w> {
     planet: Res<'w, Planet>,
+    kept_clear: Option<Res<'w, terra_world::flora::KeptClear>>,
     assets: Res<'w, AssetServer>,
     meshes: ResMut<'w, Assets<Mesh>>,
     plain: ResMut<'w, Assets<StandardMaterial>>,
@@ -295,6 +296,7 @@ impl Laying<'_> {
         Lay {
             commands,
             planet: &self.planet,
+            kept_clear: self.kept_clear.as_deref(),
             start,
             east,
             south,

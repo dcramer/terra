@@ -349,6 +349,8 @@ impl Area {
 pub(super) struct Lay<'a, 'w, 's> {
     pub commands: &'a mut Commands<'w, 's>,
     pub planet: &'a Planet,
+    /// The places kept clear of what grows (a gate's, a village's), where nothing is laid.
+    pub kept_clear: Option<&'a terra_world::flora::KeptClear>,
     pub start: Vec3,
     pub east: Vec3,
     pub south: Vec3,

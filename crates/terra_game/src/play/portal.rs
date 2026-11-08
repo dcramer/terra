@@ -14,6 +14,8 @@ use terra_world::instance::{Building, InWorld, Travel, WorldSpec};
 use terra_world::loading::cross_in_the_dark;
 use terra_world::planet::Planet;
 
+pub mod veil;
+
 /// A way to another world (D470), standing on the ground, the ring's opening facing along
 /// its forward.
 #[derive(Component, Clone, Debug)]
@@ -43,6 +45,7 @@ struct Arriving(Option<ArriveAt>);
 pub struct StepThrough(pub Entity);
 
 pub fn plugin(app: &mut App) {
+    veil::plugin(app);
     app.init_resource::<Returns>()
         .add_message::<StepThrough>()
         .add_systems(
@@ -143,16 +146,24 @@ fn arrive(world: &mut World) {
     }
 }
 
-/// How tall the ring stands, its middle above the ground, and how wide its opening is.
-const MIDDLE_M: f32 = 1.45;
-const OPENING_M: f32 = 1.05;
+/// The gate's model (`art/props/realm_gate`, `builds.ron`'s "Realm gate"): a ring of fitted
+/// stone on two steps, 3.3 m wide and 3.4 m tall, its carved face its front.
+const MODEL: &str = "models/props/RealmGate.glb";
+/// The middle of the ring's opening above the ground, and the opening's radius, as the model
+/// is made: where the veil hangs.
+const MIDDLE_M: f32 = 1.75;
+const OPENING_M: f32 = 1.12;
+/// How far round its foot the ground is cleared of what grows: its half width and a pace.
+const CLEAR_M: f32 = 2.6;
 
-/// Stands a portal on the ground at `at`, its opening facing `facing`, leading to `to`: a
-/// ring of grey stone round a violet veil, the world's (`WorldScoped`), so it goes with it.
+/// Stands a portal on the ground at `at`, its carved face and its opening toward `facing`,
+/// leading to `to`: the gate's stone ring round a violet veil, the world's (`WorldScoped`),
+/// so it goes with it.
 pub fn stand(
     commands: &mut Commands,
+    assets: &AssetServer,
     meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    materials: &mut Assets<veil::VeilMaterial>,
     planet: &Planet,
     (at, facing): (Vec3, Vec3),
     to: WorldSpec,
@@ -162,21 +173,19 @@ pub fn stand(
     let facing = facing
         .reject_from(up)
         .normalize_or(up.any_orthonormal_vector());
-    let stone = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.34, 0.32, 0.3),
-        perceptual_roughness: 0.92,
-        ..default()
+    let veil = veil::material(materials);
+    // What grows where it stands, and a pace round it, is cleared, as a settlement clears
+    // its ground: nothing stands in the opening or grows through the ring.
+    // Kept clear at once, for what is laid after this frame (the forest's floor, trees that
+    // stream in), and asked of what already grows.
+    commands.queue(move |world: &mut World| {
+        if let Some(mut kept) = world.get_resource_mut::<terra_world::flora::KeptClear>() {
+            kept.keep(feet, CLEAR_M);
+        }
     });
-    let veil = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.35, 0.18, 0.6, 0.8),
-        emissive: LinearRgba::rgb(1.2, 0.5, 2.6),
-        alpha_mode: AlphaMode::Blend,
-        double_sided: true,
-        cull_mode: None,
-        ..default()
-    });
-    let ring = meshes.add(Torus::new(OPENING_M, OPENING_M + 0.32));
-    let disc = meshes.add(Circle::new(OPENING_M + 0.02));
+    commands.write_message(terra_world::flora::ClearAround(feet, CLEAR_M));
+    let disc = meshes.add(Circle::new(OPENING_M));
+    let ring = assets.load(GltfAssetLabel::Scene(0).from_asset(MODEL));
     commands
         .spawn((
             Name::new("Portal"),
@@ -186,12 +195,10 @@ pub fn stand(
             Visibility::default(),
         ))
         .with_children(|portal| {
-            // A torus lies flat, round its Y: stood up, round the portal's forward.
             portal.spawn((
-                Mesh3d(ring),
-                MeshMaterial3d(stone),
-                Transform::from_xyz(0.0, MIDDLE_M, 0.0)
-                    .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                WorldAssetRoot(ring),
+                // The models face +Z; things here face -Z.
+                Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
             ));
             portal.spawn((
                 Mesh3d(disc),

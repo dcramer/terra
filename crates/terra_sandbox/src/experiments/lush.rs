@@ -1161,10 +1161,11 @@ fn plant(
     flora: Option<Res<Flora>>,
     sun: Option<Single<Entity, With<DirectionalLight>>>,
     assets: Res<AssetServer>,
-    (mut shapes, mut grown, mut variants): (
+    (mut shapes, mut grown, mut variants, kept_clear): (
         ResMut<Shapes>,
         ResMut<kinds::Grown>,
         ResMut<floor::Variants>,
+        Option<Res<terra_world::flora::KeptClear>>,
     ),
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<Foliage>>,
@@ -1580,6 +1581,7 @@ fn plant(
         &mut floor::Lay {
             commands: &mut commands,
             planet: &planet,
+            kept_clear: kept_clear.as_deref(),
             start,
             east,
             south,

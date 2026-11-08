@@ -43,11 +43,12 @@ fn lay_woods_floor(
     planet: Res<Planet>,
     start: Res<Start>,
     sited: Option<Res<Sited>>,
-    (woods, looks, flora, cards): (
+    (woods, looks, flora, cards, kept_clear): (
         Option<ResMut<WoodsFloor>>,
         Option<Res<FloorLooks>>,
         Option<Res<Flora>>,
         Option<Res<Cards>>,
+        Option<Res<terra_world::flora::KeptClear>>,
     ),
     assets: Res<AssetServer>,
     (mut meshes, mut plain, mut foliage): (
@@ -99,6 +100,7 @@ fn lay_woods_floor(
     let mut lay = Lay {
         commands: &mut commands,
         planet: &planet,
+        kept_clear: kept_clear.as_deref(),
         start: start.translation,
         east,
         south,

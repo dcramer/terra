@@ -15,6 +15,9 @@ use super::footprint::Footprint;
 use super::grown;
 use model::{Drawn, Model};
 
+mod kept;
+pub use kept::KeptClear;
+pub(crate) use kept::clear_grown;
 mod entering;
 mod fell;
 mod model;
@@ -429,8 +432,9 @@ fn clear_of_the_surface(over: f32, size: f32) -> Option<f32> {
     }
 }
 
-/// Asks for the plants within so many metres of a place to be cleared, for a village or
-/// a hollow set down after the plants grew.
+/// Asks for the plants within so many metres of a place to be cleared, for a village, a gate
+/// or a hollow set down among them: those growing there now, and whatever grows there later
+/// ([`KeptClear`]), as a forest's trees stream in round a player after a thing is set down.
 #[derive(Message, Clone, Copy)]
 pub struct ClearAround(pub Vec3, pub f32);
 
@@ -507,7 +511,14 @@ pub fn plugin(app: &mut App) {
         .add_message::<ClearedAway>()
         .add_systems(
             Update,
-            (make_way, clear_new, clear_around, mow_around, follow_digs)
+            (
+                make_way,
+                clear_new,
+                clear_around,
+                clear_grown,
+                mow_around,
+                follow_digs,
+            )
                 .chain()
                 .in_set(FloraSystems::Clear),
         );
@@ -1178,12 +1189,16 @@ fn mow_around(
 /// Clears plants where something has been set down since they grew.
 pub(crate) fn clear_around(
     mut asked: MessageReader<ClearAround>,
+    mut kept: Option<ResMut<KeptClear>>,
     mut obstacles: ResMut<Obstacles>,
     mut growth: Query<(Entity, &Growth, &Transform, &mut Visibility)>,
     mut gone: MessageWriter<ClearedAway>,
 ) {
     terra_gen::stat_scope!("flora");
     for &ClearAround(at, radius) in asked.read() {
+        if let Some(kept) = kept.as_mut() {
+            kept.keep(at, radius);
+        }
         let up = at.normalize();
         for (entity, growth, transform, visibility) in &mut growth {
             if (transform.translation - at).reject_from(up).length() < radius {
@@ -1439,6 +1454,26 @@ mod tests {
         world.init_resource::<Messages<ClearAround>>();
         world.write_message(ClearAround(ground, 5.0));
         world.run_system_cached(clear_around).unwrap();
+        assert!(hidden(&world, near) && !blocked(&world, ground + Vec3::X * 3.0));
+        assert!(!hidden(&world, far) && blocked(&world, ground + Vec3::X * 30.0));
+    }
+
+    /// A place asked to be cleared stays clear: a plant that grows there after (a tree
+    /// streamed in round the player once a gate stands) is cleared as it comes, and one
+    /// beyond it is not. Without the place kept, the late tree stands where it was cleared.
+    #[test]
+    fn a_place_cleared_stays_clear_of_what_grows_there_after() {
+        let mut world = World::new();
+        let ground = Vec3::Y * 2000.0;
+        world.init_resource::<Obstacles>();
+        world.init_resource::<KeptClear>();
+        world.init_resource::<Messages<ClearAround>>();
+        world.init_resource::<Messages<ClearedAway>>();
+        world.write_message(ClearAround(ground, 5.0));
+        world.run_system_cached(clear_around).unwrap();
+        // Grown after the asking.
+        let (near, far) = two_trees(&mut world, ground + Vec3::X * 3.0, ground + Vec3::X * 30.0);
+        world.run_system_cached(clear_grown).unwrap();
         assert!(hidden(&world, near) && !blocked(&world, ground + Vec3::X * 3.0));
         assert!(!hidden(&world, far) && blocked(&world, ground + Vec3::X * 30.0));
     }

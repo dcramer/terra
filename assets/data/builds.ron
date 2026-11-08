@@ -141,6 +141,9 @@
         (name: "Shutters", tab: Openings, kind: Fit(Shutters)),
         // Seen in the world but not yet buildable: a village's well and stall. How they
         // are learned is open (D68, D108).
+        (name: "Realm gate", tab: Hidden, kind: Items([
+            (name: "Realm gate", file: "RealmGate", dims: (3.3, 3.4, 1.0), cost: [("Stone", 40)]),
+        ])),
         (name: "Well", tab: Hidden, kind: Items([
             (name: "Well", file: "Well", dims: (1.7, 2.4, 1.75), cost: [("Stone", 12)]),
         ])),

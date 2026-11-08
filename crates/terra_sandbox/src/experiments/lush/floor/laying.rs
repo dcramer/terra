@@ -98,11 +98,13 @@ impl Lay<'_, '_, '_> {
         self.planet.dug(place.translation)
     }
 
-    /// Whether nothing is laid at a place in an area: on dug ground (`dug`), or where the area
-    /// keeps among trees, under a lake's or a pool's water.
+    /// Whether nothing is laid at a place in an area: on dug ground (`dug`), where the world
+    /// keeps a place clear (a gate's foot), or where the area keeps among trees, under a
+    /// lake's or a pool's water.
     pub(super) fn off(&self, area: &Area, place: &Transform) -> bool {
         let ground = place.translation;
         self.dug(place)
+            || self.kept_clear.is_some_and(|kept| kept.holds(ground))
             || (area.among_trees && ground.length() < self.planet.water_near_m(ground) + 0.05)
     }
 
