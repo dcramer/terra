@@ -81,10 +81,14 @@
     ),
     // Play's mobs (demo/mobs.rs): the wood's three creatures 7 to 8 m off the hero, out of
     // the trees on three sides, each walking to him; `walk` is the ledger's speeds.walk.
+    // `tone` darker than the still's (`bodies`): at those the tree monster stood 0.9 L* and
+    // the treant 5.7 L* lighter than a 10 px ring about them; at 0.12 2.5 darker and 2.9
+    // lighter (play frame 140, iso-forest-demo j8). Albedo is a weak lever: 0.06 moved
+    // neither further; their light is mostly not their albedo's.
     foes: [
-        (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 1.06),
-        (model: "models/iso/treant-b.glb", at: (-7.0, -3.0), walk: 0.9),
-        (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.31),
+        (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 1.06, tone: (value: 0.12)),
+        (model: "models/iso/treant-b.glb", at: (-7.0, -3.0), walk: 0.9, tone: (value: 0.12)),
+        (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.31, tone: (value: 0.12, rim: 1.0)),
     ],
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
