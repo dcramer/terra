@@ -20,6 +20,48 @@
       "credits": 20,
       "minutes": 0.32681666666666664,
       "note": "rigged as biped"
+    },
+    "convert": {
+      "at": "2026-11-08T07:39:40.084Z",
+      "credits": 0,
+      "minutes": 0.0014,
+      "files": [
+        "assets/models/iso/street-fighter.glb"
+      ],
+      "clips": [
+        "idle=Idle_Loop",
+        "walk=Walk_Loop",
+        "run=Jog_Fwd_Loop",
+        "attack=Punch_Cross",
+        "hit=Hit_Chest",
+        "death=Death01"
+      ],
+      "attack": "Punch_Cross",
+      "scale": 1,
+      "note": "the game's skeleton and clips: idle=Idle_Loop walk=Walk_Loop run=Jog_Fwd_Loop attack=Punch_Cross hit=Hit_Chest death=Death01, 28 others dropped, scaled 1.000"
+    },
+    "check": {
+      "at": "2026-11-08T07:39:42.327Z",
+      "credits": 0,
+      "minutes": 0.0011666666666666668,
+      "passed": 30,
+      "of": 30,
+      "failed": [],
+      "clips": {
+        "idle": 6,
+        "walk": 1.13,
+        "run": 0.58,
+        "attack": 1,
+        "hit": 0.33,
+        "death": 2.38
+      },
+      "speeds": {
+        "walk": 1.43,
+        "run": 5.18
+      },
+      "triangles": 9872,
+      "height": 1.8,
+      "note": "passed 30 of 30"
     }
   },
   "name": "street-fighter",
