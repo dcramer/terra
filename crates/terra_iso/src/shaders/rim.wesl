@@ -194,7 +194,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     pbr_input.diffuse_occlusion *= vec3<f32>(open * open);
     pbr_input.specular_occlusion *= open;
     let kept = mix(open, 1.0, lift.x);
-    pbr_input.material.emissive = vec4<f32>(pbr_input.material.emissive.rgb * open + rim.rgb * edge * kept, pbr_input.material.emissive.a);
+    // A fighter's fill light (rim.rs `Fighter::with_fill`), as the ARPGs' character lights
+    // follow a body and light it alone: its albedo lit from the camera's side, strongest
+    // where it faces the view, so the body keeps a modelled form in the canopy's shade
+    // where the sun and the sky's fill do not reach it. Not dimmed by the canopy.
+    let fill = pbr_input.material.base_color.rgb * metal.z * (0.35 + 0.65 * facing);
+    pbr_input.material.emissive = vec4<f32>(pbr_input.material.emissive.rgb * open + rim.rgb * edge * kept + fill, pbr_input.material.emissive.a);
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);

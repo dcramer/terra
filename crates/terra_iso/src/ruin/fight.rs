@@ -27,7 +27,7 @@ fn cast(
         let tone = tone_of(own, biome.as_deref(), &name);
         commands
             .entity(body)
-            .insert(crate::rim::Fighter::valued(tone.value, tone.rim));
+            .insert(crate::rim::Fighter::valued(tone.value, tone.rim).with_fill(tone.fill));
     }
 }
 
@@ -227,12 +227,14 @@ mod tests {
         let dark = Tone {
             value: 0.25,
             rim: 2.0,
+            fill: 0.0,
         };
         biome.bodies.insert("models/iso/a.glb".into(), dark);
         assert_eq!(tone_of(None, Some(&biome), "models/iso/a.glb"), dark);
         let own = Toned(Tone {
             value: 0.6,
             rim: 0.5,
+            fill: 0.4,
         });
         assert_eq!(tone_of(Some(&own), Some(&biome), "models/iso/a.glb"), own.0);
         assert_eq!(

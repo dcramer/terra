@@ -75,6 +75,9 @@ pub struct Tone {
     pub value: f32,
     #[serde(default = "one")]
     pub rim: f32,
+    /// Its own fill light's strength, none by default (rim.rs `Fighter::with_fill`).
+    #[serde(default)]
+    pub fill: f32,
 }
 
 impl Default for Tone {
@@ -82,6 +85,7 @@ impl Default for Tone {
         Tone {
             value: 1.0,
             rim: 1.0,
+            fill: 0.0,
         }
     }
 }

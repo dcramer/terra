@@ -49,7 +49,8 @@ pub struct RimExt {
     pub moss: Vec4,
     /// x: the share of a metal texel's base colour taken to its own grey, by its metal
     /// (`Fighter::steel`); y: the share of the sky's reflection it is denied, its specular
-    /// occlusion (`Fighter::with_sky`); zw unused.
+    /// occlusion (`Fighter::with_sky`); z: its fill's strength (`Fighter::with_fill`); w
+    /// unused.
     #[uniform(108)]
     pub metal: Vec4,
 }
@@ -96,7 +97,7 @@ const MOSS: Vec4 = Vec4::new(2.2, 2.5, 0.95, 0.75);
 /// party's, and `value` darkens its albedo where its coat is the floor's tone; `rim`
 /// scales its band (a leafy crown's every leaf edge takes it, so it frosts). `steel` greys
 /// its metal (`with_steel`), `sky` is the share of the sky's reflection it keeps
-/// (`with_sky`).
+/// (`with_sky`), `fill` the strength of its own fill light (`with_fill`).
 #[derive(Component)]
 pub struct Fighter {
     frames: u32,
@@ -104,6 +105,7 @@ pub struct Fighter {
     rim: f32,
     steel: f32,
     sky: f32,
+    fill: f32,
 }
 
 impl Default for Fighter {
@@ -121,7 +123,19 @@ impl Fighter {
             rim,
             steel: 0.0,
             sky: 1.0,
+            fill: 0.0,
         }
+    }
+
+    /// Its fill light, 0 for none: its albedo lit from the camera's side at `fill` (rim.wesl),
+    /// whatever shade or canopy it stands in. The ARPGs light their figures so (Diablo IV's
+    /// and Path of Exile's character lights: a light that follows the body and lights it
+    /// alone): the forest's foes took most of their light from the rim band, so at a rim of
+    /// 0.35, which cuts its white streaks, they stood near black, 8 to 21 L* under the
+    /// ground about them, and their albedo barely moved them (iso-forest-demo j12, j14).
+    pub fn with_fill(mut self, fill: f32) -> Self {
+        self.fill = fill.max(0.0);
+        self
     }
 
     /// The share, 0 to 1, of its metal's base colour taken to its own grey, by each texel's
@@ -148,9 +162,9 @@ impl Fighter {
         self
     }
 
-    /// Its swapped materials' kind: one material a steel and sky share.
+    /// Its swapped materials' kind: one material a steel and sky share and fill.
     fn kind(&self) -> Kind {
-        Kind::Fighter([self.steel, self.sky].map(f32::to_bits))
+        Kind::Fighter([self.steel, self.sky, self.fill].map(f32::to_bits))
     }
 }
 
@@ -262,8 +276,8 @@ enum Kind {
     Stone(u32),
     Actor,
     Hide,
-    /// A fighter, its steel and sky shares' bits (`Fighter::kind`).
-    Fighter([u32; 2]),
+    /// A fighter, its steel and sky shares' and its fill's bits (`Fighter::kind`).
+    Fighter([u32; 3]),
 }
 
 #[derive(Resource, Default)]
@@ -395,8 +409,8 @@ fn rimmed_as(
     };
     let metal = match kind {
         Kind::Fighter(bits) => {
-            let [steel, sky] = bits.map(f32::from_bits);
-            Vec4::new(steel, 1.0 - sky, 0.0, 0.0)
+            let [steel, sky, fill] = bits.map(f32::from_bits);
+            Vec4::new(steel, 1.0 - sky, fill, 0.0)
         }
         _ => Vec4::ZERO,
     };
@@ -557,6 +571,7 @@ mod tests {
             "a fighter's sky share shares another's material"
         );
         assert_eq!(made(&Fighter::default()), cast);
+        let filled = made(&Fighter::default().with_fill(0.8));
         let metal = |h: &Handle<RimMaterial>| rims.get(h).unwrap().extension.metal;
         assert_eq!((metal(&cast).x, metal(&hero).x), (0.0, 1.0));
         // The sky it is denied: none by default, so the cast and every other body keep the
@@ -567,6 +582,10 @@ mod tests {
             "{:?}",
             metal(&shaded)
         );
+        // A fill is its own material too, its strength in the shader's metal.z; none on
+        // the cast, so every body that does not ask is lit as before.
+        assert_ne!(filled, cast, "a foe's fill shares the cast's material");
+        assert_eq!((metal(&cast).z, metal(&filled).z), (0.0, 0.8));
     }
 
     /// A darkened fighter's hit flash is darkened with it, so it never shows the pale raw
