@@ -243,6 +243,27 @@ impl Lamp {
     }
 }
 
+/// Keeps the `LAMPS` brightest lamps, brightest first, in a total order: equal lamps (a
+/// street's are all one kind) by position x, then z, then y, so the same 16 light the rain
+/// whatever order the query gave them in (it follows spawn order, which varies run to run).
+pub fn brightest(lamps: &mut Vec<Lamp>) {
+    lamps.sort_by(|a, b| {
+        let lum = |l: &Lamp| l.colour.truncate().length();
+        lum(b)
+            .total_cmp(&lum(a))
+            .then_with(|| by_place(a.at.truncate(), b.at.truncate()))
+    });
+    lamps.truncate(LAMPS);
+}
+
+/// A total order of places, x then z then y: the tie-break wherever lights are ranked and
+/// cut to a shader's count, so equal lights rank the same whatever order a query gave them.
+pub fn by_place(a: Vec3, b: Vec3) -> std::cmp::Ordering {
+    a.x.total_cmp(&b.x)
+        .then(a.z.total_cmp(&b.z))
+        .then(a.y.total_cmp(&b.y))
+}
+
 /// The illuminance (lux, linear rgb) the lamps leave on a drop at `p`, as weather.wesl's
 /// `lit` (the two kept the same): inverse square within each lamp's range, Bevy's windowing
 /// at the range's end, a spot's cone smooth from its outer edge to its inner; plus the
@@ -584,13 +605,7 @@ fn light_rain(
                     }),
             )
             .collect();
-        lamps.sort_by(|a, b| {
-            b.colour
-                .truncate()
-                .length()
-                .total_cmp(&a.colour.truncate().length())
-        });
-        lamps.truncate(LAMPS);
+        brightest(&mut lamps);
         rain.look.drops.z = lamps.len() as f32;
         rain.look.lamps = [Lamp::default(); LAMPS];
         rain.look.lamps[..lamps.len()].copy_from_slice(&lamps);
@@ -711,6 +726,40 @@ fn volumetric_lights(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A street of identical lamps keeps the same `LAMPS` in the same order whatever order
+    /// the query gave them in, the brighter lamp first: the rain's light does not change
+    /// between runs with spawn order.
+    #[test]
+    fn brightest_lamps_do_not_follow_query_order() {
+        let street: Vec<Lamp> = (0..24)
+            .map(|i| {
+                Lamp::point(
+                    Vec3::new((i % 6) as f32, 5.0, (i / 6) as f32),
+                    Vec3::ONE,
+                    9e3,
+                    12.0,
+                )
+            })
+            .chain([Lamp::point(Vec3::new(9.0, 5.0, 9.0), Vec3::ONE, 2e4, 12.0)])
+            .collect();
+        let kept = |order: &[usize]| {
+            let mut l: Vec<Lamp> = order.iter().map(|&i| street[i]).collect();
+            brightest(&mut l);
+            l.iter().map(|l| l.at.truncate()).collect::<Vec<_>>()
+        };
+        let forward: Vec<usize> = (0..street.len()).collect();
+        let shuffled: Vec<usize> = (0..street.len())
+            .map(|i| (i * 7 + 3) % street.len())
+            .collect();
+        let a = kept(&forward);
+        let b = kept(&forward.iter().rev().copied().collect::<Vec<_>>());
+        let c = kept(&shuffled);
+        assert_eq!(a.len(), LAMPS);
+        assert_eq!(a[0], Vec3::new(9.0, 5.0, 9.0), "the brighter lamp first");
+        assert_eq!(a, b, "reversed query order kept other lamps");
+        assert_eq!(a, c, "shuffled query order kept other lamps");
+    }
 
     /// A drop in a street lamp's cone is lit; one beside the cone at the same distance, or
     /// past the lamp's range, is near black: rain shows only in the light.

@@ -27,6 +27,7 @@
 
 use super::biome::{Water, WaterKind};
 use super::light::Light;
+use super::weather::by_place;
 use crate::camera::MainCamera;
 use bevy::asset::{RenderAssetUsages, embedded_asset};
 use bevy::camera::visibility::RenderLayers;
@@ -342,7 +343,11 @@ pub fn seen(
 ) -> Vec<(Vec3, f32, LinearRgba, f32)> {
     if lights.len() > LIGHTS {
         let at_eye = |l: &(Vec3, f32, LinearRgba, f32)| l.3 / l.0.distance_squared(eye).max(1.0);
-        lights.sort_by(|a, b| at_eye(b).total_cmp(&at_eye(a)));
+        lights.sort_by(|a, b| {
+            at_eye(b)
+                .total_cmp(&at_eye(a))
+                .then_with(|| by_place(a.0, b.0))
+        });
         lights.truncate(LIGHTS);
     }
     lights
@@ -351,7 +356,7 @@ pub fn seen(
 /// Packs the lights as the shader reads them: the brightest `LIGHTS`, place and range,
 /// then colour times lumens.
 pub fn pack(mut lights: Vec<(Vec3, f32, LinearRgba, f32)>) -> (u32, [Vec4; LIGHTS * 2]) {
-    lights.sort_by(|a, b| b.3.total_cmp(&a.3));
+    lights.sort_by(|a, b| b.3.total_cmp(&a.3).then_with(|| by_place(a.0, b.0)));
     let mut out = [Vec4::ZERO; LIGHTS * 2];
     let n = lights.len().min(LIGHTS);
     for (k, (at, range, c, lumens)) in lights.into_iter().take(n).enumerate() {
@@ -678,6 +683,39 @@ mod tests {
         assert!(
             kept.iter().all(|l| l.0.x < 100.0 + LIGHTS as f32 - 1.0),
             "the farthest light was kept"
+        );
+    }
+
+    /// A street's identical lamps, as many to each side of the eye, are kept and packed the
+    /// same whatever order the query gave them in: the puddle mirrors the same lamps each run.
+    #[test]
+    fn equal_lights_rank_the_same_in_any_order() {
+        let lamp = |k: usize| {
+            let side = if k % 2 == 0 { 1.0 } else { -1.0 };
+            (
+                Vec3::new(side * 6.0, 5.0, (k / 2) as f32 * 4.0),
+                12.0,
+                LinearRgba::WHITE,
+                9e3,
+            )
+        };
+        let street: Vec<_> = (0..LIGHTS * 2 + 3).map(lamp).collect();
+        let reversed: Vec<_> = street.iter().rev().copied().collect();
+        let place =
+            |l: Vec<(Vec3, f32, LinearRgba, f32)>| l.iter().map(|l| l.0).collect::<Vec<_>>();
+        let (a, b) = (
+            seen(street.clone(), Vec3::ZERO),
+            seen(reversed.clone(), Vec3::ZERO),
+        );
+        assert_eq!(
+            place(a),
+            place(b),
+            "seen kept other lamps for another query order"
+        );
+        assert_eq!(
+            pack(street).1,
+            pack(reversed).1,
+            "pack ranked equal lamps by query order"
         );
     }
 
