@@ -509,9 +509,11 @@ fn control(
     tr.rotation = tr.rotation.slerp(facing(dir), k);
 }
 
-/// Where a step `step` from `here` lands: the whole step, else along x or z alone, sliding
-/// along what blocks it (the layout's ground, the nav grid, the props' and creatures'
-/// `circles`, footprint.rs); None where all three are blocked.
+/// Where a step `step` from `here` lands, past what blocks it (the layout's ground, the nav
+/// grid, the props' and creatures' `circles`, footprint.rs): the whole step, else along the
+/// circles he meets, the step's part into each taken out (collide and slide, as Quake's
+/// `PM_ClipVelocity`, so he goes round a body rather than stopping at it), else along x or
+/// z alone (a grid cell's wall); None where all are blocked.
 pub(crate) fn step_to(
     ground: &Ground,
     nav: Option<&crate::nav::Nav>,
@@ -524,8 +526,16 @@ pub(crate) fn step_to(
             && nav.is_none_or(|n| n.open_at(q))
             && !footprint::blocked(circles, here, q)
     };
-    [step, Vec2::new(step.x, 0.0), Vec2::new(0.0, step.y)]
+    // Each circle within a step of touching him, the way into it taken out of the step.
+    let slid = circles.iter().fold(step, |s, &(c, r)| {
+        let n = (here - c).normalize_or_zero();
+        let into = s.dot(n);
+        let near = here.distance(c) < r + footprint::BODY + step.length();
+        if near && into < 0.0 { s - n * into } else { s }
+    });
+    [step, slid, Vec2::new(step.x, 0.0), Vec2::new(0.0, step.y)]
         .into_iter()
+        .filter(|s| *s != Vec2::ZERO)
         .map(|s| here + s)
         .find(|q| open(*q))
 }

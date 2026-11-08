@@ -333,6 +333,58 @@ mod tests {
         assert_eq!(wished(&i), WALK);
     }
 
+    /// A roll aimed past a mob's body, its line inside the two bodies' reach, slides round it
+    /// (play.rs `step_to`): at each step he stays outside its circle and his, and he covers
+    /// most of the ground the same roll covers on open ground, not stopped at its bark
+    /// (iso-forest-demo j20: the forest's foes are solid circles of 0.65 to 0.8 m).
+    #[test]
+    fn a_roll_slides_round_a_body() {
+        let set = terra_motion::moves::MoveSet::read(include_str!(
+            "../../../../assets/data/moves/sword.shielded.ron"
+        ))
+        .unwrap();
+        let roll = set.get("roll").unwrap();
+        let ground = Ground {
+            floor: Box::new(|_| 0.0),
+            open: Box::new(|_| true),
+        };
+        let dt = 1.0 / 60.0;
+        let body = 0.8;
+        let along = |circles: &[(Vec2, f32)], from: Vec2, way: Vec2| {
+            let (mut at, mut t, mut nearest) = (from, 0.0, f32::INFINITY);
+            while t < roll.lasts() {
+                if let Some(to) = step_to(&ground, None, circles, at, way * roll.drive_at(t) * dt) {
+                    at = to;
+                }
+                nearest = nearest.min(at.length());
+                t += dt;
+            }
+            ((at - from).dot(way), nearest)
+        };
+        let open = along(&[], Vec2::ZERO, Vec2::X).0;
+        assert!(open > 2.0, "the roll covers {open:.2} m on open ground");
+        for way in [
+            Vec2::X,
+            Vec2::new(1.0, 1.0),
+            Vec2::new(1.0, -0.3),
+            Vec2::NEG_Y,
+        ] {
+            let way = way.normalize();
+            for off in [-0.8, -0.4, 0.4, 0.8] {
+                let from = -way * 1.6 + way.perp() * off;
+                let (went, nearest) = along(&[(Vec2::ZERO, body)], from, way);
+                assert!(
+                    nearest >= body + footprint::BODY - 1e-3,
+                    "way {way:.2} off {off}: he rolled {nearest:.2} m from its middle, into it"
+                );
+                assert!(
+                    went > open * 0.7,
+                    "way {way:.2} off {off}: stopped at its bark after {went:.2} of {open:.2} m"
+                );
+            }
+        }
+    }
+
     /// The set's buttons ask for the light chain, heavy, block and roll: each ability that is a
     /// move names one the set has, and the light chain goes on through its windows.
     #[test]
