@@ -167,6 +167,7 @@ fn tells(
             let id = commands
                 .spawn((
                     TellMark,
+                    Name::new("a foe's tell"),
                     Mesh3d(mesh.clone()),
                     MeshMaterial3d(material.clone()),
                     Transform::default(),
@@ -190,7 +191,11 @@ fn tells(
 /// Each swing told on the ground as its hit nears, and landed on its hit, once.
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn land(
-    (time, frame): (Res<Time>, Res<bevy::diagnostic::FrameCount>),
+    (time, frame, camera): (
+        Res<Time>,
+        Res<bevy::diagnostic::FrameCount>,
+        Query<&GlobalTransform, With<crate::camera::MainCamera>>,
+    ),
     kit: Option<Res<Kit>>,
     (mut cues, mut taking): (Option<ResMut<Cues>>, ResMut<Taking>),
     mut mobs: Query<
@@ -209,6 +214,10 @@ fn land(
         return;
     };
     let now = time.elapsed_secs();
+    // The tell drawn nearer the camera than the ground it lies on (tell.rs `RAISE`).
+    let raise = camera
+        .single()
+        .map_or(Vec3::ZERO, |c| -c.forward().as_vec3() * tell::RAISE);
     let set = &kit.set;
     let held = if doing.blocking(set) {
         now - *guard_since.get_or_insert(now)
@@ -261,7 +270,7 @@ fn land(
             let Some((scale, alpha)) = shown else {
                 continue;
             };
-            *mtr = Transform::from_translation(tr.translation + Vec3::Y * LIFT)
+            *mtr = Transform::from_translation(tr.translation + Vec3::Y * LIFT + raise)
                 .with_rotation(Quat::from_rotation_y(libm::atan2f(face.x, face.y)))
                 .with_scale(Vec3::splat(scale));
             if let Some(mut m) = materials.get_mut(material) {

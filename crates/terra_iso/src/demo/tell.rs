@@ -4,8 +4,12 @@
 //! grows out from the monster to its bright rim as the blow nears, gone when it lands.
 //! j6's tell was a ForwardDecal splat whose emission (4 nits under the forest's ev100 7.5,
 //! 0.02 on screen) never showed and whose flecks lay under the two bodies and the grass.
-//! This one is unlit (its colour reaches the screen as it is, a bright core over bloom) and
-//! not depth tested (`OnTop`), so neither the ground cover nor a body hides it.
+//! This one is unlit (its colour reaches the screen as it is, a bright core over bloom).
+//! j7 drew it over everything (depth test Always) so the ground cover would not hide it; it
+//! then hid the hero wholly in a wind-up (j13, frame 1030). As Diablo IV draws its cones, it
+//! now lies under the bodies and over the ground: depth tested, and moved `RAISE` toward the
+//! camera (an orthographic camera: the same pixels, nearer), so the grass and the ground
+//! cover below his knee stay under it and a body standing on it stays over it (`OnTop`).
 
 use crate::play::{ARC, REACH};
 use bevy::asset::RenderAssetUsages;
@@ -16,24 +20,51 @@ use bevy::render::render_resource::AsBindGroup;
 
 pub type TellMaterial = ExtendedMaterial<StandardMaterial, OnTop>;
 
-/// A standard material drawn over whatever stands in front of it and writing no depth.
+/// A standard material writing no depth, drawn over whatever stands in front of it when
+/// `over_bodies` (j7's tell, which hid the hero), else depth tested as any surface. A field,
+/// so the occlusion check can read what the pipeline draws (not yet: occlude.rs, j14).
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
-pub struct OnTop {}
+#[bind_group_data(OnTopKey)]
+pub struct OnTop {
+    pub over_bodies: bool,
+}
+
+/// What `OnTop`'s pipeline is specialised by.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct OnTopKey {
+    over_bodies: bool,
+}
+
+impl From<&OnTop> for OnTopKey {
+    fn from(m: &OnTop) -> Self {
+        OnTopKey {
+            over_bodies: m.over_bodies,
+        }
+    }
+}
 
 impl MaterialExtension for OnTop {
     fn specialize(
         _pipeline: &bevy::pbr::MaterialExtensionPipeline,
         descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
         _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
-        _key: bevy::pbr::MaterialExtensionKey<Self>,
+        key: bevy::pbr::MaterialExtensionKey<Self>,
     ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
         if let Some(depth) = descriptor.depth_stencil.as_mut() {
-            depth.depth_compare = Some(bevy::render::render_resource::CompareFunction::Always);
+            if key.bind_group_data.over_bodies {
+                depth.depth_compare = Some(bevy::render::render_resource::CompareFunction::Always);
+            }
             depth.depth_write_enabled = Some(false);
         }
         Ok(())
     }
 }
+
+/// How far toward the camera a tell is drawn from the ground (m): ground cover lower than
+/// about `RAISE` times the sine of the camera's pitch stays under it, and the hero's body
+/// from the knee up (occlude.rs `body`, 0.5 m) stays over it.
+pub const RAISE: f32 = 0.45;
 
 /// Where the fan starts out from the mob's feet (a share of `REACH`), so its own legs stay
 /// clear of it; the rim's width (a share).
@@ -103,7 +134,7 @@ pub fn material(colour: LinearRgba, alpha: AlphaMode) -> TellMaterial {
             cull_mode: None,
             ..default()
         },
-        extension: OnTop {},
+        extension: OnTop { over_bodies: false },
     }
 }
 
