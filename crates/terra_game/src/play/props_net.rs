@@ -4,8 +4,9 @@
 //! standing as hosting begins too, and each one's going; a joined game sets down the ones
 //! it is ordered and asks the host to set down, or take away, its own.
 //!
-//! Not yet: what a prop holds or is doing (a chest's contents, a station's queue, a fire's
-//! burning) is each game's own; a claim stone told to a joined game marks no claim there.
+//! What storage holds crosses as state of its own (`terra_survival::storage_net`). Not yet:
+//! what a prop is doing (a station's queue, a fire's burning) is each game's own; a claim
+//! stone told to a joined game marks no claim there.
 
 use super::catalogue::Builds;
 use super::props::{self, Models, Prop, Theirs};

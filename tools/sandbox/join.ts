@@ -229,6 +229,38 @@ try {
   await until(`the host's base is ${built} and the friend's game has ${base(friend) || "none of it"}: the host orders every act done to the base where it stands, and a joined game makes them (play::base_net); the host said: ${remote(host, "said", "--all", "--containing", "Base:").trim().split("\n").slice(-3).join(" / ")}`, () => base(friend) === built, 30);
   console.log(`✓ the base is the same in both games: the host's room (${built}) stands in the friend's game too, and its claim stone beside it`);
 
+  // What storage holds is the same in both games (netcode.md, step 5): the host sets down a
+  // chest and leaves stone in it, which the friend's game shows in it; the friend leaves wood
+  // in it, and the host's chest holds both.
+  type Stores = { stores: { item: string; holds: Record<string, number> }[] };
+  const chest = (port: number) => {
+    const { stores } = JSON.parse(remote(port, "call", "storage.state", JSON.stringify({ all: true }))) as Stores;
+    return stores.length === 1 ? Object.entries(stores[0].holds).map(([item, count]) => `${count} ${item}`).sort().join(", ") || "nothing" : `${stores.length} storages`;
+  };
+  remote(host, "give", "wood:6");
+  const set = JSON.parse(remote(host, "call", "storage.place", JSON.stringify({ item: "Chest", at: [6.5, 0, 2.5] }))) as { done: boolean; refused?: string };
+  if (!set.done) throw new Error(`the host's chest was refused: ${set.refused}`);
+  await until("the host set down a chest and the friend's game has none (play::props_net)", () => chest(friend) !== "0 storages", 60);
+  const by = (JSON.parse(remote(host, "call", "storage.state", JSON.stringify({ all: true }))) as { stores: { from_start: Place }[] }).stores[0].from_start;
+  remote(host, "call", "play.warp", JSON.stringify({ at: [by[0] + 1.2, by[2]] }));
+  remote(host, "call", "net.place_guests", JSON.stringify({ at: [by[0] - 1.2, by[2]] }));
+  const from = (port: number) => {
+    const at = (JSON.parse(remote(port, "call", "play.state")) as { at: [number, number] }).at;
+    return Math.hypot(at[0] - by[0], at[1] - by[2]);
+  };
+  await until(`both players are put beside the chest, and the host stands ${from(host).toFixed(1)} m from it and the friend ${from(friend).toFixed(1)} m`, () => from(host) < 3 && from(friend) < 3, 30);
+  remote(host, "give", "stone:5");
+  const stoned = JSON.parse(remote(host, "call", "storage.put", JSON.stringify({ item: "stone" }))) as { put: number };
+  if (stoned.put < 5) throw new Error(`the host left ${stoned.put} stone in its chest, not the 5 given`);
+  const hosts = chest(host);
+  await until(`the host's chest holds ${hosts} and the friend's game shows it holding ${chest(friend)}: each storage is a thing the host tells of, and a joined game fills its own to match (terra_survival::storage_net)`, () => chest(friend) === hosts, 30);
+  remote(friend, "give", "wood:3");
+  const added = JSON.parse(remote(friend, "call", "storage.put", JSON.stringify({ item: "wood" }))) as { put: number };
+  if (added.put !== 3) throw new Error(`the friend left ${added.put} wood in the host's chest, not the 3 given: it stands ${JSON.stringify(by)} from the start and the friend was put beside it`);
+  const both = chest(friend);
+  await until(`the friend left wood in the chest, which holds ${both} in its game, and the host's holds ${chest(host)}: a joined game asks the host to hold what its player left (terra_survival::storage_net)`, () => chest(host) === both && both.includes("Wood"), 30);
+  console.log(`✓ a chest holds the same in both games: the host left stone in it and the friend wood, and it holds ${both} in each`);
+
   // Creatures are the host's (netcode.md, step 5): the friend's game puts out none of its
   // own and shows the host's, each where the host has it.
   type Animal = { name: string; at: Place };

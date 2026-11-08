@@ -9,7 +9,7 @@ mod tests {
     /// Every first byte in use, with whose it is. A new word's byte is added here.
     #[test]
     fn no_two_layers_words_begin_with_the_same_byte() {
-        let words: [(u8, &str); 13] = [
+        let words: [(u8, &str); 14] = [
             (terra_walker::net::ground::GROUND, "the ground's operations"),
             (terra_walker::net::worn::WEAR, "what a joined player wears"),
             (terra_walker::net::looks::LOOK, "how a joined player looks"),
@@ -26,6 +26,7 @@ mod tests {
             ),
             (crate::play::base_net::BASE, "the base"),
             (crate::play::props_net::PROP, "a prop"),
+            (terra_survival::storage_net::STORED, "what a storage holds"),
         ];
         for (at, (byte, whose)) in words.iter().enumerate() {
             for (other, theirs) in &words[..at] {

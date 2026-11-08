@@ -15,8 +15,8 @@
 //! - `storage.place`: the hammer's (`tool::place`), setting down an item from the build menu.
 //! - `storage.put {item, count?}`: puts so many of a kind from the player's pack, all of
 //!   them if no count, into the storage nearest them within reach.
-//! - `storage.state`: the storage in the player's claim: what each is, where, and what it
-//!   holds, by kind.
+//! - `storage.state {all?}`: the storage in the player's claim, or all that stands (a guest
+//!   has no claim in its host's world): what each is, where (in the base and from the start), and what it holds, by kind.
 
 use crate::claim::Claim;
 use crate::interact::{Focus, Interactable, REACH_M};
@@ -262,6 +262,10 @@ fn put(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             .kinds()
             .find(|&kind| carried.items().name(kind).eq_ignore_ascii_case(&wanted))
             .ok_or_else(|| refused(format!("there is no kind of item called {item}")))?;
+        let nearest = stores
+            .iter()
+            .map(|(_, at)| at.translation.distance(feet))
+            .min_by(f32::total_cmp);
         let (mut storage, _) = stores
             .iter_mut()
             .filter(|(_, at)| at.translation.distance(feet) < REACH_M + 1.0)
@@ -270,7 +274,15 @@ fn put(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
                     .distance(feet)
                     .total_cmp(&b.1.translation.distance(feet))
             })
-            .ok_or_else(|| refused("there is no storage within reach"))?;
+            .ok_or_else(|| {
+                refused(match nearest {
+                    Some(away) => format!(
+                        "there is no storage within reach ({} m): the nearest stands {away:.1} m from the player; stand by it first",
+                        REACH_M + 1.0
+                    ),
+                    None => "no storage stands in this world: set one down first (storage.place)".to_string(),
+                })
+            })?;
         let ids: Vec<terra_items::ItemId> = carried
             .backpack()
             .iter()
@@ -290,7 +302,8 @@ fn put(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 }
 
 /// The storage in the player's claim, what each is, where in the base, and what it holds.
-fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
+fn state(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let all = params.is_some_and(|params| params["all"] == json!(true));
     let claim = world
         .query_filtered::<&Claim, (With<Player>, With<LocalPlayer>)>()
         .single(world)
@@ -300,9 +313,10 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
     let to_base = frame.compute_affine().inverse();
     let mut stores = world.query::<(&Storage, &Prop, &Transform)>();
     let items = world.resource::<crate::inventory::Items>();
+    let start = world.get_resource::<terra_world::start::Start>();
     let mut found: Vec<Value> = stores
         .iter(world)
-        .filter(|(_, _, at)| claim.covers(at.translation))
+        .filter(|(_, _, at)| all || claim.covers(at.translation))
         .map(|(storage, prop, at)| {
             let holds: serde_json::Map<String, Value> = items
                 .kinds()
@@ -314,9 +328,11 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
             let local = to_base.transform_point3(at.translation);
             // To the centimetre, so a place read again after loading reads the same.
             let cm = |value: f32| (f64::from(value) * 100.0).round() / 100.0;
+            let from_start = start.map(|start| start.local(at.translation).to_array().map(cm));
             json!({
                 "item": prop.item.name,
                 "at": [cm(local.x), cm(local.y), cm(local.z)],
+                "from_start": from_start,
                 "holds": holds,
             })
         })

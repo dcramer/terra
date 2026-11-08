@@ -37,6 +37,7 @@ pub mod registries;
 pub mod skills;
 pub mod station_screen;
 pub mod storage;
+pub mod storage_net;
 pub mod storage_screen;
 pub mod tiles;
 pub mod told;

@@ -157,6 +157,7 @@ impl Plugin for GameplayPlugin {
         map::plugin(app);
         held::plugin(app);
         terra_survival::hands_net::plugin(app);
+        terra_survival::storage_net::plugin(app);
         base_net::plugin(app);
         props_net::plugin(app);
         worn::plugin(app);
