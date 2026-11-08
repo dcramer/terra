@@ -499,15 +499,21 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
                 weathered(p + vec2<f32>(0.0, e), fine) - weathered(p - vec2<f32>(0.0, e), fine),
             ) * 0.025 * worn / (2.0 * e);
             tilt_n += vec3<f32>(-slope.x, 0.0, -slope.y);
+            // The spalls and crusts quiet and fine: a spall's fresh stone only a little paler
+            // (its step is the torches' to show), the crusts lobes of 2 to 8 cm a little off
+            // the stone's own value, dark grey-green and dull ochre. At 1.18 and pale crusts of
+            // 5 to 20 cm mixed 0.6 the court read as camouflage print, "the same orange and
+            // white speckle at one scale" (judges 1624, 1711, 1823); per-flag variety of the
+            // same print made it louder (1823, reverted).
             let spall = spalled(p) * worn;
             let pit = (1.0 - smoothstep(0.2, 0.27, h + spall * 0.35)) * worn;
-            colour *= mix(1.0, 1.18, spall) * mix(1.0, 0.85, 1.0 - smoothstep(0.3, 0.5, h)) * mix(1.0, 0.45, pit);
+            colour *= mix(1.0, 1.06, spall) * mix(1.0, 0.85, 1.0 - smoothstep(0.3, 0.5, h)) * mix(1.0, 0.45, pit);
             let patchy = noise(p * 0.7 + 131.0) * 0.6 + unit_dirt * 0.4;
-            let l = noise(p * 11.0 + 137.0) * 0.55 + noise(p * 29.0 + 139.0) * 0.3 + noise(p * 70.0 + 3.0) * 0.15;
+            let l = noise(p * 23.0 + 137.0) * 0.55 + noise(p * 53.0 + 139.0) * 0.3 + noise(p * 90.0 + 3.0) * 0.15 * fine;
             let crust = smoothstep(0.66, 0.69, l + (patchy - 0.5) * 0.5 + (laid.aged.y - 0.5) * 0.3)
                 * (1.0 - joint);
-            let tone = mix(vec3<f32>(0.3, 0.32, 0.26), vec3<f32>(0.38, 0.29, 0.12), smoothstep(0.4, 0.6, noise(p * 2.1 + 141.0)));
-            colour = mix(colour, tone * (0.8 + 0.4 * noise(p * 40.0 + 7.0)), crust * 0.6);
+            let tone = mix(vec3<f32>(0.17, 0.19, 0.15), vec3<f32>(0.21, 0.17, 0.1), smoothstep(0.4, 0.6, noise(p * 2.1 + 141.0)));
+            colour = mix(colour, tone * (0.8 + 0.4 * noise(p * 40.0 + 7.0)), crust * 0.35);
         }
     }
 
