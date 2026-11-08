@@ -10,7 +10,7 @@ use terra_world::woods::Stump;
 
 /// One change to the ground: a sphere dug out, or filled with a material, or a box dug
 /// out.
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub(super) struct SavedEdit {
     centre: [f32; 3],
     radius: f32,
@@ -22,7 +22,7 @@ pub(super) struct SavedEdit {
     cut: Option<SavedBox>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct SavedBox {
     half: [f32; 3],
     rotation: [f32; 4],
@@ -111,7 +111,7 @@ pub(super) fn fell_again(
 
 /// A stump a tree felled for its logs left, as kept: where its tree's foot stood, how it was
 /// turned, how thick its trunk was and whether it was a conifer's.
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub(super) struct SavedStump {
     at: [f32; 3],
     turn: [f32; 4],

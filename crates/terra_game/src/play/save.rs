@@ -5,7 +5,10 @@
 //! rules, and what was cut or killed grows back, as the world heals outside claims (D94).
 //!
 //! The save is a RON file in its world's folder (`worlds`, D579), written every half minute,
-//! on F5, and when the game closes, and read when the world is chosen. Scripted runs never
+//! on F5, and when the game closes, and read when the world is chosen. It holds the
+//! character's record and one for each world they have been in (`record`, D471): a world
+//! left through a gate is kept as it is left and given back when it is entered again, and a
+//! game closed in another world is started again there. Scripted runs never
 //! touch one unless given `--save <file>` or `--worlds=<dir>`, so a script does the same on
 //! every machine; `--fresh` starts a new world, or that file over.
 
@@ -35,17 +38,19 @@ use terra_items::{ActionBar, Cell, Equipment, ItemId};
 use terra_world::woods::{FellAgain, FelledWoods};
 
 mod ground;
+mod record;
 use ground::SavedEdit;
+use record::{Kept, SaveFile};
+use terra_world::instance::{InstanceApp, WorldSpec};
 
 /// Bumped when the format changes; a save of any other version is refused, not converted
 /// (D353).
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 const EVERY_S: f32 = 30.0;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-struct SaveFile {
-    version: u32,
-    player: SavedPlayer,
+/// A world's own record: what of it is not its rules' (D47).
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+struct Instance {
     /// The base: a snapshot of it and the operations since (construction-001, gap 4).
     #[serde(default)]
     snapshot: Option<Snapshot>,
@@ -77,7 +82,7 @@ struct SaveFile {
     day: Option<i64>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct SavedPlayer {
     at: [f32; 3],
     facing: [f32; 3],
@@ -98,7 +103,7 @@ struct SavedPlayer {
     picked: usize,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct SavedItem {
     kind: String,
     x: u8,
@@ -111,7 +116,7 @@ struct SavedItem {
     wear: u16,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct SavedProp {
     /// The item, by name.
     item: String,
@@ -132,7 +137,7 @@ struct SavedProp {
     stored: Vec<SavedItem>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct SavedPerson {
     name: String,
     /// "bound", "following" or "working".
@@ -140,6 +145,10 @@ struct SavedPerson {
     at: [f32; 3],
     spot: Option<[f32; 3]>,
 }
+
+/// Made afresh in each world entered: a save chosen is read into the world as it is entered.
+#[derive(Resource, Default)]
+struct Entered;
 
 /// Where the save goes, if this run saves at all.
 #[derive(Resource)]
@@ -157,6 +166,8 @@ struct Waiting {
 pub fn plugin(app: &mut App) {
     let choice = terra_world::choice::Choice::from_args(std::env::args());
     app.init_resource::<Waiting>()
+        .init_resource::<Kept>()
+        .init_world_resource::<Entered>()
         .insert_resource(choice)
         .add_systems(
             Startup,
@@ -166,8 +177,13 @@ pub fn plugin(app: &mut App) {
             Update,
             (
                 // Once in the world for each save put in, at start-up or by the title (D623).
-                load.run_if(terra_world::instance::added_in_world::<SavePath>),
-                (restore_people, restore_claim, autosave).run_if(resource_exists::<SavePath>),
+                load.run_if(resource_exists::<SavePath>),
+                (
+                    restore_people,
+                    restore_claim,
+                    (keep, autosave).chain().run_if(due),
+                )
+                    .run_if(resource_exists::<SavePath>),
                 super::worlds::keep_the_start.run_if(resource_exists::<super::worlds::Playing>),
             )
                 .chain()
@@ -176,9 +192,16 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             Last,
-            save_on_exit
+            (keep, save_on_exit)
+                .chain()
+                .run_if(closing)
                 .run_if(resource_exists::<SavePath>)
                 .run_if(terra_world::instance::in_world),
+        )
+        // A world left through a gate is kept as it is left (D471).
+        .add_systems(
+            OnExit(terra_world::instance::Travel::Playing),
+            keep.run_if(resource_exists::<SavePath>),
         );
 }
 
@@ -195,7 +218,13 @@ fn load(
     mut site: ResMut<Site>,
     mut items: ResMut<Items>,
     mut view: Single<&mut View, IsLocalPlayer>,
-    mut waiting: ResMut<Waiting>,
+    (mut waiting, mut kept, entered, spec, mut returns): (
+        ResMut<Waiting>,
+        ResMut<Kept>,
+        Res<Entered>,
+        Res<WorldSpec>,
+        ResMut<super::portal::Returns>,
+    ),
     (mut meshes, mut fell): (ResMut<Assets<Mesh>>, MessageWriter<FellAgain>),
     placed: Query<Entity, (With<Prop>, Without<Theirs>)>,
     player: Single<
@@ -211,169 +240,174 @@ fn load(
     >,
 ) {
     let Some(path) = path else { return };
-    let Ok(text) = std::fs::read_to_string(&path.0) else {
-        info!("No saved game at {}; starting afresh.", path.0.display());
+    // Once for each save chosen, and once for each world entered while one is.
+    if !(path.is_added() || entered.is_added()) {
+        return;
+    }
+    if path.is_added() || kept.file.is_none() {
+        *kept = Kept {
+            file: record::read(&path.0),
+            placed: false,
+        };
+        returns.0 = kept.returns();
+    }
+    let place = !kept.placed;
+    let Some(file) = kept.file.as_ref() else {
+        // No save to put anyone by: the game begins where it stands.
+        kept.placed = true;
         return;
     };
-    // Its version first, so a save of another build is refused as one, not as unreadable.
-    #[derive(Deserialize)]
-    struct Versioned {
-        version: u32,
-    }
-    if let Ok(Versioned { version }) = ron::from_str::<Versioned>(&text)
-        && version != VERSION
-    {
-        warn!(
-            "The saved game at {} was saved by an older build; start a new game.",
-            path.0.display()
+    // Saved in another world than the one the save was begun in: there first, as a crossing.
+    if place && file.here.key != spec.key.0 {
+        info!(
+            "The saved game was left in another world ({} {}): crossing there.",
+            file.here.kind, file.here.key
         );
+        terra_world::loading::cross_in_the_dark(&mut commands, file.here.spec());
         return;
     }
-    let save: SaveFile = match ron::from_str(&text) {
-        Ok(save) => save,
-        Err(problem) => {
-            warn!(
-                "Could not read the saved game at {}: {problem}",
-                path.0.display()
-            );
-            return;
-        }
-    };
+    let instance = file.instances.get(&spec.key.0);
     let (mut transform, (mut vitals, mut stamina), mut skills, mut backpack, mut gear, mut bar) =
         player.into_inner();
 
-    // The time of day and the date, unless a scripted run set them.
-    if let (Some(hour), None) = (save.hour, options.time) {
-        clock.hour = hour;
-    }
-    if let (Some(day), None) = (save.day, options.date) {
-        clock.day = day;
+    if let Some(save) = instance {
+        // The time of day and the date, unless a scripted run set them.
+        if let (Some(hour), None) = (save.hour, options.time) {
+            clock.hour = hour;
+        }
+        if let (Some(day), None) = (save.day, options.date) {
+            clock.day = day;
+        }
+
+        // The ground as it was dug and filled (D21), and the trees felled (D622).
+        ground::replay(&mut planet, &save.ground);
+        ground::fell_again(&save.felled, &mut fell);
+        ground::stumps_again(&mut commands, &save.stumps);
+
+        // The base and what stands in and around it, where it was begun.
+        if let Some((at, turn)) = save.frame {
+            let frame =
+                Transform::from_translation(Vec3::from(at)).with_rotation(Quat::from_array(turn));
+            site.move_to(frame, &mut commands, &planet, &mut meshes);
+        }
+        if let Some(snapshot) = &save.snapshot {
+            site.restore(snapshot, &save.since, &rules.rules);
+        }
+        offcuts.0 = save.offcuts.clone();
+        for entity in &placed {
+            commands.entity(entity).despawn();
+        }
+        for prop in &save.props {
+            let item = builds.item_named(&prop.item);
+            if item.is_none() {
+                warn!(
+                    "The save has a {}, which is not in the catalogue.",
+                    prop.item
+                );
+            }
+            let Some(item) = item else { continue };
+            let Some(entity) = props::place(
+                &mut commands,
+                &models,
+                &site,
+                &planet,
+                &item,
+                Vec3::from(prop.at),
+                prop.lift,
+                prop.turn,
+                prop.indoors,
+            ) else {
+                continue;
+            };
+            // Storage takes back what it held.
+            if let Some((w, h)) = item.holds {
+                let mut grid = terra_items::Grid::new(w, h);
+                restore_items(&mut items, &mut grid, &prop.stored);
+                commands.entity(entity).insert(Storage(grid));
+            }
+            if let Some(station) = item.station {
+                // A station takes up its queue where it left off.
+                let named = |names: &[String]| -> Vec<usize> {
+                    names
+                        .iter()
+                        .filter_map(|name| recipes.named(station, name, &items))
+                        .collect()
+                };
+                commands.entity(entity).insert(Works::resumed(
+                    named(&prop.queue),
+                    prop.progress,
+                    named(&prop.done),
+                ));
+            }
+        }
+
+        // The claim grows back to its size once its stone is in place, and people take up
+        // what they were doing once they arrive.
+        waiting.claim_step = Some(save.claim_step);
+        waiting.people = save.people.clone();
     }
 
-    // The ground as it was dug and filled (D21), and the trees felled (D622).
-    ground::replay(&mut planet, &save.ground);
-    ground::fell_again(&save.felled, &mut fell);
-    ground::stumps_again(&mut commands, &save.stumps);
+    if place {
+        // The body, its skills, and where it stands.
+        let player = &file.player;
+        let at = Vec3::from(player.at);
+        let facing = Vec3::from(player.facing);
+        *transform = Transform::from_translation(at).looking_to(facing, at.normalize());
+        view.forward = facing;
+        vitals.health = player.health;
+        stamina.left = player.stamina;
+        vitals.fed = player.fed;
+        *skills = Skills::default();
+        for (name, progress) in &player.skills {
+            if let Some(skill) = Skill::ALL.into_iter().find(|skill| skill.name() == name) {
+                skills.restore(skill, *progress);
+            }
+        }
 
-    // The base and what stands in and around it, where it was begun.
-    if let Some((at, turn)) = save.frame {
-        let frame =
-            Transform::from_translation(Vec3::from(at)).with_rotation(Quat::from_array(turn));
-        site.move_to(frame, &mut commands, &planet, &mut meshes);
-    }
-    if let Some(snapshot) = &save.snapshot {
-        site.restore(snapshot, &save.since, &rules.rules);
-    }
-    offcuts.0 = save.offcuts.clone();
-    for entity in &placed {
-        commands.entity(entity).despawn();
-    }
-    for prop in &save.props {
-        let item = builds.item_named(&prop.item);
-        if item.is_none() {
-            warn!(
-                "The save has a {}, which is not in the catalogue.",
-                prop.item
+        // What is worn first, since the pack decides the backpack's size; then what is in it.
+        let mut grid = inventory::bare_backpack();
+        let mut equipment = Equipment::new(&SLOTS.map(|(slot, _)| slot));
+        for name in player.worn.iter().flatten() {
+            if let Some(item) = items.make_named(name)
+                && grid.insert(&items.catalogue, item, None).is_ok()
+            {
+                let _ = inventory::wear(&items, &mut grid, &mut equipment, item.id);
+            }
+        }
+        for (&(slot, _), &held) in SLOTS.iter().zip(&player.worn_held) {
+            if held > 0 {
+                let _ = equipment.set_held(slot, held);
+            }
+        }
+        for (&(slot, _), &wear) in SLOTS.iter().zip(&player.worn_wear) {
+            if wear > 0 {
+                let _ = equipment.set_wear(slot, wear);
+            }
+        }
+        let ids = restore_items(&mut items, &mut grid, &player.backpack);
+        let mut action_bar = ActionBar::new(player.bar.len().max(inventory::BAR_SLOTS));
+        for (slot, index) in player.bar.iter().enumerate() {
+            action_bar.set(
+                slot,
+                index.and_then(|index| ids.get(index).copied().flatten()),
             );
         }
-        let Some(item) = item else { continue };
-        let Some(entity) = props::place(
-            &mut commands,
-            &models,
-            &site,
-            &planet,
-            &item,
-            Vec3::from(prop.at),
-            prop.lift,
-            prop.turn,
-            prop.indoors,
-        ) else {
-            continue;
-        };
-        // Storage takes back what it held.
-        if let Some((w, h)) = item.holds {
-            let mut grid = terra_items::Grid::new(w, h);
-            restore_items(&mut items, &mut grid, &prop.stored);
-            commands.entity(entity).insert(Storage(grid));
-        }
-        if let Some(station) = item.station {
-            // A station takes up its queue where it left off.
-            let named = |names: &[String]| -> Vec<usize> {
-                names
-                    .iter()
-                    .filter_map(|name| recipes.named(station, name, &items))
-                    .collect()
-            };
-            commands.entity(entity).insert(Works::resumed(
-                named(&prop.queue),
-                prop.progress,
-                named(&prop.done),
-            ));
-        }
-    }
-
-    // The body, its skills, and where it stands.
-    let player = &save.player;
-    let at = Vec3::from(player.at);
-    let facing = Vec3::from(player.facing);
-    *transform = Transform::from_translation(at).looking_to(facing, at.normalize());
-    view.forward = facing;
-    vitals.health = player.health;
-    stamina.left = player.stamina;
-    vitals.fed = player.fed;
-    *skills = Skills::default();
-    for (name, progress) in &player.skills {
-        if let Some(skill) = Skill::ALL.into_iter().find(|skill| skill.name() == name) {
-            skills.restore(skill, *progress);
-        }
-    }
-
-    // What is worn first, since the pack decides the backpack's size; then what is in it.
-    let mut grid = inventory::bare_backpack();
-    let mut equipment = Equipment::new(&SLOTS.map(|(slot, _)| slot));
-    for name in player.worn.iter().flatten() {
-        if let Some(item) = items.make_named(name)
-            && grid.insert(&items.catalogue, item, None).is_ok()
-        {
-            let _ = inventory::wear(&items, &mut grid, &mut equipment, item.id);
-        }
-    }
-    for (&(slot, _), &held) in SLOTS.iter().zip(&player.worn_held) {
-        if held > 0 {
-            let _ = equipment.set_held(slot, held);
-        }
-    }
-    for (&(slot, _), &wear) in SLOTS.iter().zip(&player.worn_wear) {
-        if wear > 0 {
-            let _ = equipment.set_wear(slot, wear);
-        }
-    }
-    let ids = restore_items(&mut items, &mut grid, &player.backpack);
-    let mut action_bar = ActionBar::new(player.bar.len().max(inventory::BAR_SLOTS));
-    for (slot, index) in player.bar.iter().enumerate() {
-        action_bar.set(
-            slot,
-            index.and_then(|index| ids.get(index).copied().flatten()),
+        action_bar.pick(player.picked);
+        // For testing, --give adds to what was saved, so scripted runs can follow on.
+        inventory::give_for_testing(
+            &mut items,
+            &mut grid,
+            &mut equipment,
+            &mut action_bar,
+            &options.gives,
         );
-    }
-    action_bar.pick(player.picked);
-    // For testing, --give adds to what was saved, so scripted runs can follow on.
-    inventory::give_for_testing(
-        &mut items,
-        &mut grid,
-        &mut equipment,
-        &mut action_bar,
-        &options.gives,
-    );
-    backpack.0 = grid;
-    gear.0 = equipment;
-    bar.0 = action_bar;
+        backpack.0 = grid;
+        gear.0 = equipment;
+        bar.0 = action_bar;
 
-    // The claim grows back to its size once its stone is in place, and people take up
-    // what they were doing once they arrive.
-    waiting.claim_step = Some(save.claim_step);
-    waiting.people = save.people;
-    info!("Loaded the saved game from {}.", path.0.display());
+        info!("Loaded the saved game from {}.", path.0.display());
+    }
+    kept.placed = true;
 }
 
 fn restore_claim(
@@ -422,13 +456,27 @@ fn restore_people(
     waiting.people = still;
 }
 
-/// Writes the game down every half minute and on F5.
+/// Whether a save is due: every half minute, and on F5, which is said once written.
+fn due(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut since: Local<f32>) -> bool {
+    *since += time.delta_secs();
+    if *since < EVERY_S && !keys.just_pressed(KeyCode::F5) {
+        return false;
+    }
+    *since = 0.0;
+    true
+}
+
+/// Whether the game is closing, or its world is being left for the title screen.
+fn closing(mut exits: MessageReader<AppExit>, leaving: Option<Res<super::title::Leaving>>) -> bool {
+    exits.read().next().is_some() || leaving.is_some()
+}
+
+/// Takes the player and the world they are in into the kept save (`record::Kept`), that
+/// world's record replaced: before each writing, and as a world is left through a gate, so
+/// it is as it was left when it is entered again.
 #[allow(clippy::too_many_arguments)]
-fn autosave(
+fn keep(
     clock: Res<Clock>,
-    time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
-    path: Res<SavePath>,
     (planet, felled): (Res<Planet>, FelledWoods),
     (site, offcuts): (Res<Site>, Res<Offcuts>),
     claim: Single<&Claim, IsLocalPlayer>,
@@ -438,16 +486,9 @@ fn autosave(
     props: Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
     player: Single<PlayerParts, IsLocalPlayer>,
-    mut since: Local<f32>,
-    mut notice: ResMut<Notice>,
+    (mut kept, spec, returns): (ResMut<Kept>, Res<WorldSpec>, Res<super::portal::Returns>),
 ) {
-    *since += time.delta_secs();
-    let asked = keys.just_pressed(KeyCode::F5);
-    if *since < EVERY_S && !asked {
-        return;
-    }
-    *since = 0.0;
-    let save = gather(
+    let gathered = gather(
         &clock,
         (&planet, &felled),
         (&site, &offcuts),
@@ -458,41 +499,28 @@ fn autosave(
         &people,
         &player.into_inner(),
     );
-    if write(&path.0, &save) && asked {
+    kept.keep(&spec, &returns, gathered);
+}
+
+/// Writes the kept save down: every half minute and on F5 (`due`).
+fn autosave(
+    path: Res<SavePath>,
+    kept: Res<Kept>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut notice: ResMut<Notice>,
+) {
+    // Asked for, it is said once written.
+    if kept.file.as_ref().is_some_and(|file| write(&path.0, file)) && keys.just_pressed(KeyCode::F5)
+    {
         notice.say("Saved");
     }
 }
 
-/// Writes the game down as it closes, or as its world is left for the title screen.
-#[allow(clippy::too_many_arguments)]
-pub(super) fn save_on_exit(
-    clock: Res<Clock>,
-    mut exits: MessageReader<AppExit>,
-    leaving: Option<Res<super::title::Leaving>>,
-    path: Res<SavePath>,
-    (planet, felled): (Res<Planet>, FelledWoods),
-    (site, offcuts): (Res<Site>, Res<Offcuts>),
-    claim: Single<&Claim, IsLocalPlayer>,
-    items: Res<Items>,
-    recipes: Res<Recipes>,
-    view: Single<&View, IsLocalPlayer>,
-    props: Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
-    people: Query<(&Person, &Transform), Without<Player>>,
-    player: Single<PlayerParts, IsLocalPlayer>,
-) {
-    if exits.read().next().is_some() || leaving.is_some() {
-        let save = gather(
-            &clock,
-            (&planet, &felled),
-            (&site, &offcuts),
-            &claim,
-            (&items, &recipes),
-            &view,
-            &props,
-            &people,
-            &player.into_inner(),
-        );
-        write(&path.0, &save);
+/// Writes the kept save down as the game closes, or as its world is left for the title
+/// screen (`closing`).
+pub(super) fn save_on_exit(path: Res<SavePath>, kept: Res<Kept>) {
+    if let Some(file) = &kept.file {
+        write(&path.0, file);
     }
 }
 
@@ -563,7 +591,7 @@ fn gather(
     props: &Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
     people: &Query<(&Person, &Transform), Without<Player>>,
     player: &PlayerParts,
-) -> SaveFile {
+) -> (SavedPlayer, Instance) {
     let (at, (vitals, stamina), skills, backpack, gear, bar) = *player;
     let placed: Vec<_> = backpack.0.iter().collect();
     let kept = kept_items(items, &backpack.0);
@@ -573,36 +601,35 @@ fn gather(
             placed.iter().position(|placed| placed.item.id == id)
         })
         .collect();
-    SaveFile {
-        version: VERSION,
-        player: SavedPlayer {
-            at: at.translation.into(),
-            facing: view.forward.into(),
-            health: vitals.health,
-            stamina: stamina.left,
-            fed: vitals.fed,
-            skills: skills
-                .known()
-                .into_iter()
-                .map(|(skill, progress)| (skill.name().to_string(), progress))
-                .collect(),
-            worn: gear
-                .0
-                .iter()
-                .map(|(_, item)| item.map(|item| items.name(item.kind).to_string()))
-                .collect(),
-            worn_held: SLOTS
-                .iter()
-                .map(|(slot, _)| gear.0.stack(*slot).map_or(0, |stack| stack.held))
-                .collect(),
-            worn_wear: SLOTS
-                .iter()
-                .map(|(slot, _)| gear.0.worn(*slot).map_or(0, |item| item.wear))
-                .collect(),
-            backpack: kept,
-            bar: bar_slots,
-            picked: bar.0.picked(),
-        },
+    let saved = SavedPlayer {
+        at: at.translation.into(),
+        facing: view.forward.into(),
+        health: vitals.health,
+        stamina: stamina.left,
+        fed: vitals.fed,
+        skills: skills
+            .known()
+            .into_iter()
+            .map(|(skill, progress)| (skill.name().to_string(), progress))
+            .collect(),
+        worn: gear
+            .0
+            .iter()
+            .map(|(_, item)| item.map(|item| items.name(item.kind).to_string()))
+            .collect(),
+        worn_held: SLOTS
+            .iter()
+            .map(|(slot, _)| gear.0.stack(*slot).map_or(0, |stack| stack.held))
+            .collect(),
+        worn_wear: SLOTS
+            .iter()
+            .map(|(slot, _)| gear.0.worn(*slot).map_or(0, |item| item.wear))
+            .collect(),
+        backpack: kept,
+        bar: bar_slots,
+        picked: bar.0.picked(),
+    };
+    let instance = Instance {
         snapshot: Some(
             site.snapshot
                 .clone()
@@ -661,7 +688,8 @@ fn gather(
                 })
             })
             .collect(),
-    }
+    };
+    (saved, instance)
 }
 
 fn write(path: &PathBuf, save: &SaveFile) -> bool {
@@ -687,525 +715,4 @@ fn write(path: &PathBuf, save: &SaveFile) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::build::DrivenByPlayer;
-    use crate::play::{Flora, LocalPlayer, registries};
-    use crate::start::Start;
-    use bevy::ecs::system::RunSystemOnce;
-    use terra_build::BuildOp;
-    use terra_core::{MaterialId, Operation, PlanetSpec, Seed};
-
-    /// What saving and loading need, set up as the game sets them up, with no one in it yet.
-    fn game() -> App {
-        let mut app = App::new();
-        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
-            .init_asset::<Mesh>()
-            .init_asset::<StandardMaterial>()
-            .init_asset::<Image>();
-        terra_world::instance::in_a_world(&mut app);
-        let planet = Planet::new(PlanetSpec {
-            seed: Seed(1),
-            radius_m: 2000.0,
-        });
-        app.insert_resource(Options::from_args(std::iter::empty()).unwrap())
-            .insert_resource(Start(Transform::from_translation(planet.start())))
-            .insert_resource(planet)
-            .insert_resource(DrivenByPlayer)
-            .insert_resource(Flora::read())
-            .init_resource::<Clock>()
-            .init_resource::<Waiting>()
-            .add_message::<FellAgain>();
-        registries::plugin(&mut app);
-        crate::build::building::plugin(&mut app);
-        props::plugin(&mut app);
-        terra_world::instance::start_by_hand(app.world_mut());
-        app
-    }
-
-    /// This machine's player as they arrive: what they start with, and no claim yet.
-    fn arrive(world: &mut World) -> Entity {
-        let at = world.resource::<Planet>().start();
-        let kit = inventory::starting_kit(&mut world.resource_mut::<Items>());
-        world
-            .spawn((
-                Player,
-                LocalPlayer,
-                Transform::from_translation(at),
-                View {
-                    forward: Vec3::X,
-                    pitch: 0.0,
-                },
-                Vitals::default(),
-                Skills::default(),
-                kit,
-                Claim::default(),
-            ))
-            .id()
-    }
-
-    /// A while of play: walked off and turned, hurt and tired, skilled, wearing a
-    /// container half full and something worn down, a tool used and a spare container
-    /// carried with a few in it, the bar rearranged, a base begun
-    /// and built, a station at work, the claim grown, the ground dug and filled, someone
-    /// at work and someone following, and the evening come.
-    fn play_a_while(world: &mut World, player: Entity) {
-        let start = world.resource::<Planet>().start();
-        let up = start.normalize();
-        let east = up.any_orthonormal_vector();
-        let north = up.cross(east);
-
-        world.resource_mut::<Clock>().hour = 21.5;
-        world.resource_mut::<Clock>().day = 41;
-        let mut planet = world.resource_mut::<Planet>();
-        planet.apply(&Operation::Dig {
-            centre: start + east * 4.0,
-            radius: 0.7,
-        });
-        planet.apply(&Operation::Fill {
-            centre: start + east * 6.0,
-            radius: 0.5,
-            material: MaterialId(2),
-        });
-        planet.apply(&Operation::DigBox {
-            centre: start + north * 5.0,
-            half: Vec3::new(1.0, 1.5, 2.0),
-            rotation: Quat::from_rotation_arc(Vec3::Y, up),
-        });
-
-        // The body, where it is and what it knows.
-        let mut entity = world.entity_mut(player);
-        *entity.get_mut::<Transform>().unwrap() =
-            Transform::from_translation(start + east * 3.0 + north * 2.0);
-        entity.get_mut::<View>().unwrap().forward = (east + north).normalize();
-        let mut vitals = entity.get_mut::<Vitals>().unwrap();
-        vitals.health = 61.5;
-        vitals.fed = 40.0;
-        entity.get_mut::<Stamina>().unwrap().left = 12.25;
-        let mut skills = entity.get_mut::<Skills>().unwrap();
-        for _ in 0..9 {
-            skills.did(Skill::Chopping, 1.0);
-        }
-        skills.did(Skill::Mining, 1.0);
-
-        // A worn container, such as a quiver, put on and half filled, and something worn
-        // that wears, worn down.
-        world.resource_scope(|world, mut items: Mut<Items>| {
-            let (container, (holds, most)) = items
-                .kinds()
-                .find_map(|kind| Some((kind, items.worn(kind)?.holds.clone()?)))
-                .expect("something worn holds things");
-            let wearing = items
-                .kinds()
-                .find(|&kind| items.worn(kind).is_some() && items.def(kind).lasts.is_some())
-                .expect("something worn wears");
-            let holds = items.kind(&holds);
-            let mut entity = world.entity_mut(player);
-            let (mut backpack, mut gear, mut bar) = (
-                entity.get::<Backpack>().unwrap().0.clone(),
-                entity.get::<Gear>().unwrap().0.clone(),
-                entity.get::<Bar>().unwrap().0.clone(),
-            );
-            for kind in [container, wearing] {
-                let made = items.make(kind);
-                backpack.insert(&items.catalogue, made, None).unwrap();
-                inventory::wear(&items, &mut backpack, &mut gear, made.id).unwrap();
-            }
-            let (slot, _) = gear
-                .iter()
-                .find(|(_, worn)| worn.is_some_and(|worn| worn.kind == wearing))
-                .unwrap();
-            gear.wear(&items.catalogue, slot, 3).unwrap();
-            assert_eq!(gear.stow(holds, most / 2), most / 2);
-            // A spare one, carried in the backpack with a few in it.
-            let spare = items.make(container);
-            backpack.insert(&items.catalogue, spare, None).unwrap();
-            assert_eq!(backpack.stow(holds, 2), 2);
-            // A tool worn down, the first slot of the bar emptied, and the last picked.
-            let tool = bar.get(1).unwrap();
-            backpack.wear(&items.catalogue, tool, 7).unwrap();
-            bar.set(0, None);
-            bar.pick(bar.len() - 1);
-            entity.insert((Backpack(backpack), Gear(gear), Bar(bar)));
-        });
-
-        // The base, begun away from where it was first laid, with a room in it.
-        let frame = Transform::from_translation(start + north * 12.0)
-            .with_rotation(Quat::from_rotation_arc(Vec3::Y, up));
-        world
-            .run_system_once(
-                move |mut commands: Commands,
-                      mut site: ResMut<Site>,
-                      look: Res<crate::build::BuildLook>,
-                      planet: Res<Planet>,
-                      mut meshes: ResMut<Assets<Mesh>>| {
-                    site.move_to(frame, &mut commands, &planet, &mut meshes);
-                    let room = BuildOp::AddRoom {
-                        min: [0, 0, 0],
-                        max: [2, 0, 2],
-                        kind: look.laying,
-                    };
-                    assert!(site.apply(room, &mut commands, &planet, &mut meshes));
-                },
-            )
-            .unwrap();
-
-        // A station outside it, with things queued, one under way and one made.
-        world
-            .run_system_once(
-                |mut commands: Commands,
-                 builds: Res<Builds>,
-                 recipes: Res<Recipes>,
-                 models: Res<Models>,
-                 site: Res<Site>,
-                 planet: Res<Planet>| {
-                    let item = builds
-                        .items()
-                        .find(|item| item.station.is_some())
-                        .expect("something placed is a station");
-                    let makes: Vec<usize> = recipes.at(item.station.unwrap()).collect();
-                    assert!(!makes.is_empty(), "{} makes nothing", item.name);
-                    let at = Vec3::new(-3.0, 0.0, 1.5);
-                    let station = props::place(
-                        &mut commands,
-                        &models,
-                        &site,
-                        &planet,
-                        item,
-                        at,
-                        0.25,
-                        30.0,
-                        false,
-                    )
-                    .expect("the station's model is there");
-                    let queue = vec![makes[makes.len() - 1], makes[0]];
-                    commands
-                        .entity(station)
-                        .insert(Works::resumed(queue, 1.5, vec![makes[0]]));
-                },
-            )
-            .unwrap();
-
-        // A chest beside it, with a few things stored in it.
-        world
-            .run_system_once(
-                |mut commands: Commands,
-                 builds: Res<Builds>,
-                 mut items: ResMut<Items>,
-                 models: Res<Models>,
-                 site: Res<Site>,
-                 planet: Res<Planet>| {
-                    let item = builds
-                        .items()
-                        .find(|item| item.holds.is_some())
-                        .expect("something placed is storage");
-                    let (w, h) = item.holds.unwrap();
-                    let chest = props::place(
-                        &mut commands,
-                        &models,
-                        &site,
-                        &planet,
-                        item,
-                        Vec3::new(3.0, 0.0, -2.0),
-                        0.0,
-                        90.0,
-                        false,
-                    )
-                    .expect("the chest's model is there");
-                    let mut grid = terra_items::Grid::new(w, h);
-                    for (name, cell) in [("Wood", (2, 1)), ("Wood", (0, 0)), ("Stone", (5, 3))] {
-                        let made = items.make_named(name).unwrap();
-                        let cell = Cell {
-                            x: cell.0,
-                            y: cell.1,
-                        };
-                        grid.insert(&items.catalogue, made, Some(cell)).unwrap();
-                    }
-                    commands.entity(chest).insert(Storage(grid));
-                },
-            )
-            .unwrap();
-
-        // The claim, its stone set and grown to its largest.
-        world.resource_scope(|world, builds: Mut<Builds>| {
-            let mut claim = world.get_mut::<Claim>(player).unwrap();
-            claim.stone = Some((Entity::PLACEHOLDER, frame.translation));
-            claim.set_step(builds.claim.across_m.len() - 1, &builds.claim);
-            assert!(claim.step() > 0, "a claim that cannot grow tells nothing");
-        });
-
-        // People: one at work, one following, and one still bound, who is not kept.
-        world.spawn((
-            Person::new("Bren", Doing::Working(start + east * 9.0), None),
-            Transform::from_translation(start + east * 8.0),
-        ));
-        world.spawn((
-            Person::new("Tam", Doing::Following(player), None),
-            Transform::from_translation(start + north * 4.0),
-        ));
-        world.spawn((
-            Person::new("Ash", Doing::Bound, None),
-            Transform::from_translation(start + north * 30.0),
-        ));
-    }
-
-    /// Everyone the save keeps, as they might be before it is loaded: elsewhere, and
-    /// still bound.
-    fn waiting_to_be_found(world: &mut World) {
-        let start = world.resource::<Planet>().start();
-        for name in ["Bren", "Tam"] {
-            world.spawn((
-                Person::new(name, Doing::Bound, None),
-                Transform::from_translation(start + Vec3::X * 50.0),
-            ));
-        }
-    }
-
-    /// Everything a save should keep, read from a world's own components and
-    /// resources, never through the save.
-    #[derive(Debug, PartialEq)]
-    struct Kept {
-        at: Vec3,
-        facing: Vec3,
-        body: [f32; 3],
-        skills: Skills,
-        /// Each slot's kind, its wear, and how many it holds.
-        worn: Vec<Option<(String, u16, Option<u32>)>>,
-        /// Each item carried: its kind, where, its wear, and how many it holds.
-        carried: Vec<(String, (u8, u8), u16, Option<u32>)>,
-        /// What each slot of the bar points at, by where it is carried.
-        bar: Vec<Option<(u8, u8)>>,
-        picked: usize,
-        base: Snapshot,
-        frame: Transform,
-        /// Each station or thing placed, with its queue, progress and what it has made.
-        props: Vec<(
-            String,
-            Vec3,
-            f32,
-            f32,
-            bool,
-            Option<(Vec<usize>, f32, Vec<usize>)>,
-        )>,
-        /// What each piece of storage holds: each item's kind and where.
-        stored: Vec<Vec<(String, (u8, u8))>>,
-        claim: usize,
-        hour: f32,
-        day: i64,
-        ground: Vec<Operation>,
-        people: Vec<(&'static str, String, Vec3)>,
-    }
-
-    fn kept(world: &mut World) -> Kept {
-        let mut players = world.query_filtered::<Entity, IsLocalPlayer>();
-        let player = players.single(world).unwrap();
-        let entity = world.entity(player);
-        let items = world.resource::<Items>();
-        let backpack = &entity.get::<Backpack>().unwrap().0;
-        let gear = &entity.get::<Gear>().unwrap().0;
-        let bar = &entity.get::<Bar>().unwrap().0;
-        let (vitals, stamina) = (entity.get::<Vitals>().unwrap(), entity.get::<Stamina>());
-        let site = world.resource::<Site>();
-        let mut kept = Kept {
-            at: entity.get::<Transform>().unwrap().translation,
-            facing: entity.get::<View>().unwrap().forward,
-            body: [vitals.health, stamina.unwrap().left, vitals.fed],
-            skills: entity.get::<Skills>().unwrap().clone(),
-            worn: gear
-                .iter()
-                .map(|(slot, worn)| {
-                    let held = gear.stack(slot).map(|stack| stack.held);
-                    worn.map(|worn| (items.name(worn.kind).to_string(), worn.wear, held))
-                })
-                .collect(),
-            carried: backpack
-                .iter()
-                .map(|placed| {
-                    (
-                        items.name(placed.item.kind).to_string(),
-                        (placed.at.x, placed.at.y),
-                        placed.item.wear,
-                        placed.stack.map(|stack| stack.held),
-                    )
-                })
-                .collect(),
-            bar: (0..bar.len())
-                .map(|slot| {
-                    let placed = backpack.get(bar.get(slot)?)?;
-                    Some((placed.at.x, placed.at.y))
-                })
-                .collect(),
-            picked: bar.picked(),
-            base: site.base.snapshot(),
-            frame: site.frame,
-            props: Vec::new(),
-            stored: Vec::new(),
-            claim: entity.get::<Claim>().unwrap().step(),
-            hour: world.resource::<Clock>().hour,
-            day: world.resource::<Clock>().day,
-            ground: world.resource::<Planet>().operations(),
-            people: Vec::new(),
-        };
-        let mut props = world.query::<(&Prop, Option<&Works>)>();
-        kept.props = props
-            .iter(world)
-            .map(|(prop, works)| {
-                (
-                    prop.item.name.clone(),
-                    prop.at,
-                    prop.lift,
-                    prop.turn,
-                    prop.indoors,
-                    works.map(|works| {
-                        let queue = works.queue.iter().copied().collect();
-                        (queue, works.progress, works.done.clone())
-                    }),
-                )
-            })
-            .collect();
-        kept.props.sort_by(|a, b| a.0.cmp(&b.0));
-        let mut stores = world.query::<&Storage>();
-        let items = world.resource::<Items>();
-        kept.stored = stores
-            .iter(world)
-            .map(|storage| {
-                let mut held: Vec<(String, (u8, u8))> = storage
-                    .0
-                    .iter()
-                    .map(|placed| {
-                        let kind = items.name(placed.item.kind).to_string();
-                        (kind, (placed.at.x, placed.at.y))
-                    })
-                    .collect();
-                held.sort();
-                held
-            })
-            .collect();
-        kept.stored.sort();
-        let mut people = world.query::<(&Person, &Transform)>();
-        kept.people = people
-            .iter(world)
-            .map(|(person, at)| {
-                let doing = match person.doing() {
-                    Doing::Following(whom) if whom == player => "following the player".into(),
-                    Doing::Working(spot) => format!("working at {spot}"),
-                    ref other => format!("{other:?}"),
-                };
-                (person.name, doing, at.translation)
-            })
-            .collect();
-        kept.people.sort_by(|a, b| a.0.cmp(b.0));
-        kept
-    }
-
-    /// Saves a world the way the game does, to a file of its own.
-    fn save(world: &mut World, name: &str) -> PathBuf {
-        let save = world
-            .run_system_once(
-                |clock: Res<Clock>,
-                 (planet, felled): (Res<Planet>, FelledWoods),
-                 site: Res<Site>,
-                 offcuts: Res<Offcuts>,
-                 claim: Single<&Claim, IsLocalPlayer>,
-                 items: Res<Items>,
-                 recipes: Res<Recipes>,
-                 view: Single<&View, IsLocalPlayer>,
-                 props: Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
-                 people: Query<(&Person, &Transform), Without<Player>>,
-                 player: Single<PlayerParts, IsLocalPlayer>| {
-                    gather(
-                        &clock,
-                        (&planet, &felled),
-                        (&site, &offcuts),
-                        &claim,
-                        (&items, &recipes),
-                        &view,
-                        &props,
-                        &people,
-                        &player.into_inner(),
-                    )
-                },
-            )
-            .unwrap();
-        let path = std::env::temp_dir().join(format!(
-            "terra-{name}-{}-{:?}.ron",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        assert!(write(&path, &save));
-        path
-    }
-
-    /// Loads a save the way the game does as it starts, and lets the claim and people
-    /// take up where they were once their stone and they are there.
-    fn load_from(world: &mut World, path: &std::path::Path) {
-        world.insert_resource(SavePath(path.to_path_buf()));
-        world.run_system_once(load).unwrap();
-        world.run_system_once(restore_claim).unwrap();
-        world.run_system_once(restore_people).unwrap();
-    }
-
-    #[test]
-    fn a_world_saved_and_loaded_into_another_is_the_same_world() {
-        let mut played = game();
-        let world = played.world_mut();
-        let player = arrive(world);
-        play_a_while(world, player);
-        let before = kept(world);
-        // What the world was given to keep is there to keep.
-        assert!(before.worn.iter().flatten().any(|(_, wear, _)| *wear > 0));
-        assert!(
-            before
-                .worn
-                .iter()
-                .flatten()
-                .any(|(_, _, held)| *held > Some(0))
-        );
-        assert!(before.carried.iter().any(|(_, _, wear, _)| *wear > 0));
-        assert!(before.carried.iter().any(|(_, _, _, held)| *held > Some(0)));
-        assert_eq!(before.bar[0], None);
-        assert!(before.props.iter().any(|(.., works)| works.is_some()));
-        assert!(before.stored.iter().any(|held| held.len() == 3));
-        assert_eq!(before.ground.len(), 3);
-        assert_eq!(before.people.len(), 3);
-        let path = save(world, "round-trip");
-
-        let mut fresh = game();
-        let world = fresh.world_mut();
-        let player = arrive(world);
-        waiting_to_be_found(world);
-        load_from(world, &path);
-        // The claim waits for its stone before it grows back.
-        assert_eq!(world.get::<Claim>(player).unwrap().step(), 0);
-        let stone = before.frame.translation;
-        world.get_mut::<Claim>(player).unwrap().stone = Some((Entity::PLACEHOLDER, stone));
-        world.run_system_once(restore_claim).unwrap();
-        let _ = std::fs::remove_file(&path);
-
-        // Whoever was still bound is not kept: they are found again where they are.
-        let mut before = before;
-        before.people.retain(|(name, ..)| *name != "Ash");
-        assert_eq!(kept(world), before);
-    }
-
-    #[test]
-    fn a_save_from_another_version_is_left_alone() {
-        let mut played = game();
-        let world = played.world_mut();
-        let player = arrive(world);
-        play_a_while(world, player);
-        let path = save(world, "other-version");
-        let text = std::fs::read_to_string(&path).unwrap();
-        let mut save: SaveFile = ron::from_str(&text).unwrap();
-        save.version = VERSION + 1;
-        assert!(write(&path, &save));
-
-        let mut fresh = game();
-        let world = fresh.world_mut();
-        arrive(world);
-        let before = kept(world);
-        load_from(world, &path);
-        let _ = std::fs::remove_file(&path);
-        assert_eq!(kept(world), before);
-    }
-}
+mod tests;
