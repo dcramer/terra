@@ -79,8 +79,14 @@
         ripples: (fine: 0.7, broad: 3.0, steep: 0.05, calm: 0.9),
         streaks: (along: 0.06, across: 0.025, cell: 0.1, glitter: 0.08, gain: 0.0, key: 0.1, dash: 1.0),
     ),
-    // Play's mobs (demo/mobs.rs): the wood's three creatures 7 to 8 m off the hero, out of
-    // the trees on three sides, each walking to him; `walk` is the ledger's speeds.walk.
+    // Play's mobs (demo/mobs.rs): the wood's creatures in three packs along a route south
+    // from the hero's start and then west (`at` is off it; the start is (4, 5.5)), each pack
+    // on open ground of the nav grid and footprints (iso-forest-demo j10's map): the first
+    // about the camp, 7 to 8 m off him on three sides, out of the trees, waking at once (the
+    // iso-hero films' foes); the second in the clearing south past the camp's gap (about
+    // (11, 23)); the third west of it in the south-west meadow (about (-10, 25)), each 17 to
+    // 20 m on from where the last is fought, so it stands until he comes within mobs.rs
+    // `WAKE` and a breather lies between. `walk` is the ledger's speeds.walk.
     // `tone` darker than the still's (`bodies`): at those the tree monster stood 0.9 L* and
     // the treant 5.7 L* lighter than a 10 px ring about them; at 0.12 2.5 darker and 2.9
     // lighter (play frame 140, iso-forest-demo j8). Albedo is a weak lever: 0.06 moved
@@ -89,6 +95,10 @@
         (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 1.06, tone: (value: 0.12)),
         (model: "models/iso/treant-b.glb", at: (-7.0, -3.0), walk: 0.9, tone: (value: 0.12)),
         (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.31, tone: (value: 0.12, rim: 1.0)),
+        (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.31, tone: (value: 0.12, rim: 1.0), pack: 1),
+        (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 1.06, tone: (value: 0.12), pack: 1),
+        (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.9, tone: (value: 0.12), pack: 2),
+        (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.31, tone: (value: 0.12, rim: 1.0), pack: 2),
     ],
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
