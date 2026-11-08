@@ -47,6 +47,10 @@ pub struct RimExt {
     /// A stone's moss: rgb the scan's tint (as the ground's moss layer's), a its cover.
     #[uniform(107)]
     pub moss: Vec4,
+    /// x: the share of a metal texel's base colour taken to its own grey, by its metal
+    /// (`Fighter::steel`); yzw unused.
+    #[uniform(108)]
+    pub metal: Vec4,
 }
 
 /// The canopy map's width in metres, about the world's middle.
@@ -89,12 +93,14 @@ const MOSS: Vec4 = Vec4::new(2.2, 2.5, 0.95, 0.75);
 /// flashes; the flash is then copied onto the swapped ones (`mirror`), so the fighter
 /// both rims and flashes. Its rim is the fighters' own (`fighter_rim`), stronger than the
 /// party's, and `value` darkens its albedo where its coat is the floor's tone; `rim`
-/// scales its band (a leafy crown's every leaf edge takes it, so it frosts).
+/// scales its band (a leafy crown's every leaf edge takes it, so it frosts). `steel` greys
+/// its metal (`with_steel`).
 #[derive(Component)]
 pub struct Fighter {
     frames: u32,
     value: f32,
     rim: f32,
+    steel: f32,
 }
 
 impl Default for Fighter {
@@ -110,7 +116,21 @@ impl Fighter {
             frames: 0,
             value,
             rim,
+            steel: 0.0,
         }
+    }
+
+    /// The share, 0 to 1, of its metal's base colour taken to its own grey, by each texel's
+    /// metal (rim.wesl), the dielectric texels of the same texture left as they are. A
+    /// metal's base colour is the colour of everything it reflects (glTF's metal-roughness
+    /// model), and iron's is near grey (F0 about 0.56, 0.57, 0.58 linear, Real-Time
+    /// Rendering's table of metals); a pack's plate painted green-grey
+    /// turns every reflection of the sky mint. Graded in the shader, not the texels, since
+    /// a pack's textures are external and shared by every piece (kit/finish.rs grades a
+    /// glTF's embedded images only).
+    pub fn with_steel(mut self, share: f32) -> Self {
+        self.steel = share.clamp(0.0, 1.0);
+        self
     }
 }
 
@@ -222,7 +242,8 @@ enum Kind {
     Stone(u32),
     Actor,
     Hide,
-    Fighter,
+    /// A fighter, its steel share's bits (`Fighter::steel`).
+    Fighter(u32),
 }
 
 #[derive(Resource, Default)]
@@ -260,7 +281,7 @@ fn lift(kind: Kind) -> Vec4 {
         // the outer tenth of its radius, 2 to 3 px at 70 px a figure (iso-art j30; at 73
         // degrees Tripo's coarse normals barely reached it and it did not read).
         // w: the body's share of it (`Fighter::rim`).
-        Kind::Fighter => Vec4::new(0.8, 0.12, 0.4, 1.0),
+        Kind::Fighter(_) => Vec4::new(0.8, 0.12, 0.4, 1.0),
         _ => Vec4::ZERO,
     }
 }
@@ -345,12 +366,16 @@ fn rimmed_as(
     let c = base.base_color.to_linear();
     base.base_color =
         LinearRgba::new(c.red * tint.x, c.green * tint.y, c.blue * tint.z, c.alpha).into();
-    if matches!(kind, Kind::Fighter | Kind::Hide) {
+    if matches!(kind, Kind::Fighter(_) | Kind::Hide) {
         base.reflectance = FIGHTER_REFLECTANCE;
     }
     let (stone, moss) = match kind {
         Kind::Stone(floor) => (stone(f32::from_bits(floor)), MOSS),
         _ => (Vec4::ZERO, Vec4::ZERO),
+    };
+    let metal = match kind {
+        Kind::Fighter(steel) => Vec4::new(f32::from_bits(steel), 0.0, 0.0, 0.0),
+        _ => Vec4::ZERO,
     };
     let h = rims.add(ExtendedMaterial {
         base,
@@ -361,6 +386,7 @@ fn rimmed_as(
             scans: scans.0.clone(),
             stone,
             moss,
+            metal,
         },
     });
     swapped.0.insert(key, h.clone());
@@ -403,7 +429,7 @@ fn fighters(
                 (&tex.0, &tex.1),
                 mat,
                 Vec3::splat(f.value),
-                (Kind::Fighter, rim),
+                (Kind::Fighter(f.steel.to_bits()), rim),
             ) else {
                 continue;
             };
@@ -464,7 +490,7 @@ fn tint(hour: Option<Res<Hour>>, swapped: Res<Swapped>, mut rims: ResMut<Assets<
         let rim = match kind {
             Kind::Shade | Kind::Stone(_) => continue,
             Kind::Actor | Kind::Hide => rim_for(*hour),
-            Kind::Fighter => fighter_rim(Some(*hour)),
+            Kind::Fighter(_) => fighter_rim(Some(*hour)),
         };
         if let Some(mut m) = rims.get_mut(h) {
             m.extension.rim = rim;
@@ -475,6 +501,37 @@ fn tint(hour: Option<Res<Hour>>, swapped: Res<Swapped>, mut rims: ResMut<Assets<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fighter's steel share greys its own swapped materials only: another fighter
+    /// wearing the same material (the staged cast in the stills) keeps its metal's colour.
+    #[test]
+    fn steel_greys_only_the_fighter_that_asks() {
+        let mut standard = Assets::<StandardMaterial>::default();
+        let mut rims = Assets::<RimMaterial>::default();
+        let mut swapped = Swapped::default();
+        let tex = (Canopy(Handle::default()), Scans(Handle::default()));
+        let plate = MeshMaterial3d(standard.add(StandardMaterial::default()));
+        let mut made = |f: &Fighter| {
+            let kind = (Kind::Fighter(f.steel.to_bits()), LinearRgba::NONE);
+            let to = (&tex.0, &tex.1);
+            rimmed_as(
+                &mut swapped,
+                &standard,
+                &mut rims,
+                to,
+                &plate,
+                Vec3::ONE,
+                kind,
+            )
+            .unwrap()
+        };
+        let cast = made(&Fighter::default());
+        let hero = made(&Fighter::default().with_steel(1.0));
+        assert_ne!(cast, hero, "the hero's steel shares the cast's material");
+        assert_eq!(made(&Fighter::default()), cast);
+        let metal = |h: &Handle<RimMaterial>| rims.get(h).unwrap().extension.metal.x;
+        assert_eq!((metal(&cast), metal(&hero)), (0.0, 1.0));
+    }
 
     /// A darkened fighter's hit flash is darkened with it, so it never shows the pale raw
     /// coat the value hides; the swapped material follows the flash as it changes.

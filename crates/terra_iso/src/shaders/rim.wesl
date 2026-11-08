@@ -26,6 +26,8 @@ var scans_sampler: sampler;
 var<uniform> stone: vec4<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(107)
 var<uniform> moss: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(108)
+var<uniform> metal: vec4<f32>;
 
 // How much of a fighter's band this fragment keeps: whole where it is the body's outline,
 // none inside it. The mesh normal alone cannot tell: every leaf of a crown and every fold
@@ -137,6 +139,11 @@ fn dress(base: vec3<f32>, world: vec3<f32>, n: vec3<f32>, relief: vec3<f32>) -> 
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     pbr_input.material.base_color = alpha_discard(pbr_input.material.flags, pbr_input.material.alpha_cutoff, pbr_input.material.base_color);
+    // A fighter's metal greyed by its steel share (rim.rs `Fighter::with_steel`), by each
+    // texel's metal, so the cloth and leather of the same texture keep their colour.
+    let base = pbr_input.material.base_color.rgb;
+    let grey = vec3<f32>(dot(base, vec3<f32>(0.2126, 0.7152, 0.0722)));
+    pbr_input.material.base_color = vec4<f32>(mix(base, grey, metal.x * pbr_input.material.metallic), pbr_input.material.base_color.a);
     // The fresnel of the mesh's own normal, not the normal map's: the map's fur and folds
     // graze the view all over a hunched body seen from above, frosting it whole instead of
     // edging it (iso-art j28).

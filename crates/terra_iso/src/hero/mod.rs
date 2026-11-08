@@ -42,6 +42,12 @@ const BODY: &str = "models/character/male.glb";
 /// buzzed head read as a white bald blob from above, and the plate's armet is refused over
 /// the surcoat (the wardrobe's pairings).
 const LOOK: &str = "knight_cloth";
+/// His metal's share taken to grey (rim.rs `Fighter::with_steel`): T_Knight_BaseColor's
+/// plate is painted green-grey (#7A8B84, #909A91; its metal texels' mean chroma 6.7 at hue
+/// 150, where iron's is about 1), and as a metal's base colour it tinted every reflection:
+/// his plate's brightest tenth read chroma 10.9 at hue 133, mint, beside the staged Tripo
+/// knight's 2.2 (forest --play, iso-hero j5).
+const STEEL: f32 = 1.0;
 const SWORD: &str = "models/held/arming_sword.glb";
 const SHIELD: &str = "models/held/heater_shield.glb";
 
@@ -174,7 +180,7 @@ fn lit_once_in(commands: &mut Commands, body: Entity, looks: &[Entity]) {
                     commands
                         .entity(body)
                         .remove::<Dressing>()
-                        .insert(crate::rim::Fighter::default());
+                        .insert(crate::rim::Fighter::default().with_steel(STEEL));
                 }
             },
         );
