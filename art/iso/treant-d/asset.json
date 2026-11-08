@@ -35,39 +35,37 @@
       "note": "idle walk run attack death"
     },
     "export": {
-      "at": "2026-11-08T15:45:57.855Z",
+      "at": "2026-11-08T15:55:11.196Z",
       "credits": 0,
-      "minutes": 0.9097666666666666,
+      "minutes": 0.0156,
       "files": [
         "assets/models/iso/treant-d.glb"
       ],
       "scale": 2.8611,
       "turn": -1,
-      "note": "scaled 2.861, turned -1 deg, in place walk run, cut attack, looped run on 0.52-1.10 s (ends 7.3% apart before closing), centred run (body 38% of height off)"
+      "note": "scaled 2.861, turned -1 deg, in place walk run, cut attack, looped idle on 0.52-15.32 s (ends 0.9% apart before closing), looped run on 0.41-1.05 s (ends 7.4% apart before closing), centred run (body 38% of height off)"
     },
     "check": {
-      "at": "2026-11-08T15:45:58.078Z",
+      "at": "2026-11-08T15:55:11.425Z",
       "credits": 0,
-      "minutes": 0.0018666666666666666,
-      "passed": 29,
+      "minutes": 0.0019333333333333333,
+      "passed": 30,
       "of": 30,
-      "failed": [
-        "idle seam"
-      ],
+      "failed": [],
       "clips": {
         "walk": 2.33,
         "death": 3,
         "attack": 2,
-        "idle": 15.33,
-        "run": 0.58
+        "idle": 14.81,
+        "run": 0.64
       },
       "speeds": {
         "walk": 0.71,
-        "run": 2.86
+        "run": 2.74
       },
       "triangles": 9652,
       "height": 2.8,
-      "note": "passed 29 of 30"
+      "note": "passed 30 of 30"
     }
   },
   "name": "treant-d",

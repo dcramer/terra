@@ -10,7 +10,9 @@ import { type Kind, SPECS, budget, clipsFor } from "./kinds.ts";
 export type Result = { check: string; ok: boolean; value: string; want: string; why: string };
 
 /** Frames a clip is sampled at, a second. */
-const FPS = 30;
+export const FPS = 30;
+/** The most a loop's seam may turn, against the largest turn inside the clip (`seamTurn`). */
+export const SEAM_TURN = 1.5;
 
 type Skeleton = { joints: number[]; body: number; chain: number[]; feet: number[]; restHeight: number };
 
@@ -169,7 +171,7 @@ export function check(m: Measures, kind: Kind, rigType: string | undefined, heig
     add(`${c.name} length`, got.seconds >= c.seconds[0] && got.seconds <= c.seconds[1], `${f(got.seconds)} s`, `${c.seconds[0]}-${c.seconds[1]} s`, "a clip far off this is the wrong preset or a broken export");
     if (!mo) continue;
     if (c.loop) add(`${c.name} loops`, mo.gap < 0.05, `${f(mo.gap * 100, 1)}% of height`, "under 5%", "its last frame meets its first, or the body jumps each time round");
-    if (c.loop) add(`${c.name} seam`, mo.seamStep < 3 && mo.seamTurn < 1.5, `step ${f(mo.seamStep, 1)}x median, turn ${f(mo.seamTurn, 1)}x the clip's most`, "step under 3x, turn under 1.5x", "played round, the seam must move like any frame: a big step is a snap (a last key at rest), a big turn a velocity that does not meet (normalize.ts loop); re-export, or pick another window");
+    if (c.loop) add(`${c.name} seam`, mo.seamStep < 3 && mo.seamTurn < SEAM_TURN, `step ${f(mo.seamStep, 1)}x median, turn ${f(mo.seamTurn, 1)}x the clip's most`, `step under 3x, turn under ${SEAM_TURN}x`, "played round, the seam must move like any frame: a big step is a snap (a last key at rest), a big turn a velocity that does not meet (normalize.ts loop); re-export, or pick another window");
     if (c.moves) add(`${c.name} centred`, mo.offCentre < 0.03, `body ${f(mo.offCentre * 100, 1)}% of height off`, "under 3%", "the body plays over the entity's place, or the gait runs ahead of its shadow and leaps there from the walk (normalize.ts centre); re-export");
     if (c.moves) {
       add(`${c.name} in place`, mo.travel < 0.1, `${f(mo.travel)} m`, "under 0.10 m", "the game moves the body at the clip's speed; root motion would carry it twice");

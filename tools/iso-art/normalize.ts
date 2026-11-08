@@ -6,7 +6,7 @@
 
 import { type Glb, type Mat4, apply, bounds, clips, origin, points, pose, readChannel, sample, writeChannel } from "./gltf.ts";
 import type { ClipSpec } from "./kinds.ts";
-import { skeleton } from "./check.ts";
+import { FPS as CHECK_FPS, SEAM_TURN, skeleton } from "./check.ts";
 
 /** Renames Tripo's clips (`preset:biped:slash`, `slash`, `Slash_…`) to ours; returns what is
  * missing. */
@@ -95,15 +95,19 @@ const WHOLE = 0.01;
 /** A window whose ends are further apart than this is no cycle: closing it would bend the
  * motion visibly, so the clip is left as it is for `check` to fail. */
 const NO_CYCLE = 0.1;
+/** The most a cut window's seam may turn against its inside: under `check`'s SEAM_TURN (which a
+ * whole clip is held to), as the check samples other frames than the search and closing the
+ * ends bends them a little; no rougher than the motion itself. */
+const LOOP_TURN = 1;
 
 export type Looped = { name: string; from: number; to: number; gap: number };
 
 /** Makes each looping clip a loop, as Unity's importer does with its loop-match light and Loop
  * Pose: Tripo's `run` is 1.25 s of nearly two strides whose ends are 15 to 23% of the height
  * apart (knight, ogre, tree monster, 2026-11-05), while one stride inside it, 0.41 to 1.04 s,
- * meets within 4 to 6%, the fingers the furthest. A clip whose ends meet within `WHOLE` stays
- * whole; any other is cut to the window, at least the spec's shortest length, whose ends match
- * best, the pose compared as each joint's place against the body over the ground, so in-place
+ * meets within 4 to 6%, the fingers the furthest. A clip whose ends meet within `WHOLE`, its
+ * velocity too (the seam turning under SEAM_TURN), stays whole; any other is cut to the window,
+ * at least the spec's shortest length, whose ends match best in pose and velocity, the pose compared as each joint's place against the body over the ground, so in-place
  * drift does not count. Then what is left between the ends is spread over the clip, each
  * channel bent toward its first key by its share of the time (translations and scales by
  * difference, rotations by the quaternion between), so the last frame is the first. */
@@ -121,16 +125,43 @@ export function loop(glb: Glb, specs: ClipSpec[]): Looped[] {
       return sk.joints.map((j) => origin(w[j]).map((v, k) => (k === 1 ? v : v - b[k])));
     };
     const apart = (p: number[][], q: number[][]) => Math.max(...p.map((x, k) => Math.hypot(...x.map((v, c) => v - q[k][c])))) / sk.restHeight;
-    let best = { from: 0, to: clip.duration, gap: apart(at(0), at(clip.duration)) };
-    if (best.gap > WHOLE) {
-      const n = Math.floor(clip.duration * LOOP_FPS) + 1;
-      const frames = Array.from({ length: n }, (_, f) => at(f / LOOP_FPS));
+    // The velocity too, as `check` reads it at its frame rate: the change of step across the seam
+    // (into the first frame against out of the last) over the largest change inside. A 15 s idle
+    // whose ends meet in pose can still leave one way and come back another (treant-d,
+    // 2026-11-08: 2.1x), a bounce at every loop.
+    const k = Math.max(1, Math.round(LOOP_FPS / CHECK_FPS));
+    const second = (a: number[][], b: number[][], c: number[][], d: number[][]) => Math.max(...a.map((x, q) => Math.hypot(...x.map((v, e) => v - b[q][e] - c[q][e] + d[q][e])))) / sk.restHeight;
+    const n = Math.floor(clip.duration * LOOP_FPS) + 1;
+    const frames = Array.from({ length: n }, (_, f) => at(f / LOOP_FPS));
+    // turns[t]: the change of step at t + k, the frames k apart.
+    const turns = frames.slice(0, Math.max(0, n - 2 * k)).map((_, t) => second(frames[t], frames[t + k], frames[t + k], frames[t + 2 * k]));
+    const inside = (i: number, j: number) => Math.max(1e-6, ...turns.slice(i, Math.max(i + 1, j - 2 * k + 1)));
+    const end = at(clip.duration);
+    const wholeTurn = n > 2 * k ? second(frames[k], frames[0], end, at(clip.duration - k / LOOP_FPS)) / inside(0, n - 1) : 0;
+    let best = { from: 0, to: clip.duration, gap: apart(frames[0], end) };
+    if (best.gap > WHOLE || wholeTurn >= SEAM_TURN) {
       const [shortest, longest] = spec.seconds.map((s) => Math.round(s * LOOP_FPS));
-      for (let i = 0; i < n; i++)
-        for (let j = i + shortest; j < n && j - i <= longest; j++) {
+      // The window whose seam is least rough, pose and turn each a share of its bound (WHOLE,
+      // LOOP_TURN), among those that turn under the bound; if none does, the closest in pose, for
+      // `check` to fail.
+      let smooth: (typeof best & { cost: number }) | undefined;
+      let closest = best;
+      for (let i = 0; i + 2 * k < n; i++) {
+        let most = 1e-6;
+        for (let j = i + 2 * k; j < n && j - i <= longest; j++) {
+          most = Math.max(most, turns[j - 2 * k]);
+          if (j - i < shortest) continue;
           const gap = apart(frames[i], frames[j]);
-          if (gap < best.gap) best = { from: i / LOOP_FPS, to: j / LOOP_FPS, gap };
+          const w = { from: i / LOOP_FPS, to: j / LOOP_FPS, gap };
+          if (gap < closest.gap) closest = w;
+          const turn = second(frames[i + k], frames[i], frames[j], frames[j - k]) / most;
+          if (turn >= LOOP_TURN) continue;
+          const cost = gap / WHOLE + turn / LOOP_TURN;
+          if (!smooth || cost < smooth.cost) smooth = { ...w, cost };
         }
+      }
+      if (smooth) best = { from: smooth.from, to: smooth.to, gap: smooth.gap };
+      else best = closest;
       if (best.gap > NO_CYCLE) continue;
       cutTo(glb, anim, best.from, best.to);
     }

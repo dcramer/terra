@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { check, measure, skeleton } from "./check.ts";
+import { SEAM_TURN, check, measure, skeleton } from "./check.ts";
 import { splice } from "./decimate.ts";
 import { type Glb, accessor, addTyped, clips, invert, pixelSize, points, pose, readGlb, sample, writeGlb } from "./gltf.ts";
 import { type Ctx, ROOT, TRIPO_LIMITS, conceptPrompt, main, parseOutput, runTripoWithin } from "./iso-art.ts";
@@ -221,6 +221,24 @@ test("export cuts a run to the stride whose ends meet and closes it, and keeps a
   // A clip with no cycle in it, the head rising 1 m a second, is left for `check` to fail.
   const rising = walker([["run", [[4, "translation", [0, 1], [[0, 0.8, 0], [0, 1.8, 0]]]]]]);
   assert.deepEqual(loop(rising, clipsFor("biped")), []);
+});
+
+test("export cuts an idle whose ends meet in pose but not in velocity to one that does", () => {
+  // The head bobs 5 cm once a second for 2.5 s: its last pose is its first, but it leaves going
+  // up and comes back going up the other way round (sin(5 pi) = 0, cos(5 pi) = -1), a bounce at
+  // every loop that the pose alone does not see (treant-d's idle, 2026-11-08). Any whole number
+  // of seconds inside it loops in both.
+  const t = Array.from({ length: 151 }, (_, i) => i / 60);
+  const bob = t.map((s) => [0, 0.8 + 0.05 * Math.sin(2 * Math.PI * s), 0]);
+  const glb = walker([["idle", [[4, "translation", t, bob]]]]);
+  const before = measure(glb).clips.idle.motion!;
+  assert.ok(before.gap < 0.001, `the ends meet in pose: ${before.gap}`);
+  assert.ok(before.seamTurn > SEAM_TURN, `the velocity does not: ${before.seamTurn}`);
+  const [looped] = loop(glb, clipsFor("biped"));
+  const seconds = looped.to - looped.from;
+  assert.ok(Math.abs(seconds - Math.round(seconds)) < 0.02 && seconds > 0.9, `whole seconds: ${looped.from}-${looped.to}`);
+  const after = measure(readGlb(writeGlb(glb))).clips.idle.motion!;
+  assert.ok(after.seamTurn < SEAM_TURN && after.gap < 0.001, `the seam turns ${after.seamTurn}x, gap ${after.gap}`);
 });
 
 test("export puts a run cut from mid-clip back over the origin", () => {
