@@ -65,6 +65,8 @@ async function pick(port: number, choice: string, enter = true) {
   await sleep(0.3);
 }
 
+/// The kinds of animal looked for in a world.
+const KINDS = ["Wild boar", "Red squirrel", "Chaffinch", "Brown hare", "Red fox", "Roe deer", "Spider"];
 const worlds = mkdtempSync(join(tmpdir(), "terra-join-"));
 // The friend's own folder: who they are is kept there (player.ron), so a game started anew
 // is the same player to the host.
@@ -142,6 +144,11 @@ try {
   remote(host, "call", "creatures.strike", JSON.stringify({ name: "Troll", damage: 5000 }));
   await until(`the troll fell with the friend at its den's mouth and the friend bears ${JSON.stringify(bears(friend))}, not its mark: the host orders a mark earned where the creature fell, and a joined game near imprints it (play::marks, MARKED)`, () => bears(friend).includes("troll"), 20);
   if (bears(host).includes("troll")) throw new Error("the host's player, hundreds of metres from the den, bears the troll's mark too");
+  // A reading: the animals the host has put out within 80 m of the friend, far from the host's own player.
+  const guestAt = net(host).guests[0].at;
+  const hostAt = net(host).mine!;
+  const byFriend = KINDS.flatMap((name) => JSON.parse(remote(host, "call", "sandbox.find", JSON.stringify({ name }))) as { at: Place }[]).filter((one) => apart(one.at, guestAt) < 80).length;
+  console.log(`  (a reading: ${apart(guestAt, hostAt).toFixed(0)} m from the host's player, the host has ${byFriend} animals within 80 m of the friend)`);
   remote(friend, "call", "portal.step");
   await until("the host's gate never opened to the mark the friend bears", () => gate(host).open, 60);
   await until("the friend's game never showed the gate the host opened", () => gate(friend).open, 60);
@@ -155,7 +162,6 @@ try {
   // Creatures are the host's (netcode.md, step 5): the friend's game puts out none of its
   // own and shows the host's, each where the host has it.
   type Animal = { name: string; at: Place };
-  const KINDS = ["Wild boar", "Red squirrel", "Chaffinch", "Brown hare", "Red fox", "Roe deer", "Spider"];
   const animals = (port: number) => KINDS.flatMap((name) => (JSON.parse(remote(port, "call", "sandbox.find", JSON.stringify({ name }))) as Animal[]).map((found) => ({ name, at: found.at })));
   await until("the host's world never had an animal of the kinds looked for near its players", () => animals(host).length > 0, 60);
   let seen = 0;
