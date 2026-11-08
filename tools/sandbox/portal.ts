@@ -20,6 +20,7 @@
 // A release build unless --debug. Node 22.18 or later; no dependencies.
 
 import { call, describe, said, start, stop, press, waitSeconds, waitUntil } from "./client.ts";
+import * as machine from "./load.ts";
 import * as snaps from "./snap.ts";
 
 const args = process.argv.slice(2);
@@ -83,7 +84,11 @@ async function cross(): Promise<{ census: Census; took: string }> {
 const within = (a: number | null | undefined, b: number | null | undefined) => a != null && b != null && Math.abs(b - a) <= MEMORY_SLACK * a;
 const memory = (c: Census) => `gpu ${c.gpu?.allocated_mib ?? "?"} MiB allocated, ${c.gpu?.reserved_mib ?? "?"} reserved; resident ${c.resident_mib ?? "?"} MiB`;
 
+// A crossing's seconds are the machine's as much as the game's: wait for it to be quiet, and
+// say if it was not (D185).
+const { load: loadBefore } = await machine.waitForQuiet();
 await start(["--offscreen", "--mute", "--experiment", "portal"], { release: !args.includes("--debug"), systems: args.includes("--systems") });
+const watching = machine.watch();
 let failed = false;
 try {
   await waitSeconds(SETTLE_S);
@@ -137,9 +142,12 @@ try {
   const after = await snaps.take("after");
   const diff = snaps.diff({ ...before, census: undefined }, { ...after, census: undefined }, { most: 30 });
   console.log(`forest's state, before the first trip to after the last: ${diff.join("\n  ")}`);
+  const during = await watching.stop();
   if (slow.length > 0) {
     failed = true;
-    console.log(`FAIL: the cover lasted over ${COVER_S} s (D501): ${slow.join("; ")}. Which systems hold the long frames: add --systems.`);
+    const busy = !machine.quiet(loadBefore) || machine.busyDuring(during);
+    const others = `${loadBefore ? `${machine.describe(loadBefore)} before` : "load unknown before"}${during ? `, other programs took ${during.mean.toFixed(0)}% of the processor through the run (most ${during.most.toFixed(0)}%)` : ""}`;
+    console.log(`FAIL: the cover lasted over ${COVER_S} s (D501): ${slow.join("; ")}. ${busy ? `The machine was busy (${others}): these seconds are not the game's alone; run it again when nothing else builds or renders before changing the game.` : `The machine was quiet (${others}). Which systems hold the long frames: add --systems.`}`);
   }
   if (args.includes("--systems")) {
     // Each long frame of a crossing, by what held it.
