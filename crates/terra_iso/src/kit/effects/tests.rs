@@ -109,6 +109,7 @@ fn a_biomes_light_scales_its_lamps() {
         preset: "hit-spark".into(),
         at: None,
         light: 0.25,
+        scale: 1.0,
     }];
     let dim = Effects::load(Some(&b)).unwrap();
     let full = Preset::load("hit-spark").unwrap();
@@ -122,6 +123,45 @@ fn a_biomes_light_scales_its_lamps() {
     assert_eq!(s(d), s(f), "the sparks unchanged");
     let e: crate::kit::biome::Effect = ron::from_str("(preset: \"slash\")").unwrap();
     assert_eq!(e.light, 1.0);
+}
+
+/// A biome's `scale` grows the effect in space and keeps its timing: each spark, thrown
+/// as the preset throws it, is where the preset's would be times the scale at every age
+/// (its path, not only its quad), the flash's quad and its lights' reach scale, and its life
+/// and lumens are the preset's. Left out, the preset's own size.
+#[test]
+fn a_biomes_scale_grows_the_effect_and_keeps_its_timing() {
+    let mut b = Biome::load("forest").unwrap();
+    b.effects = vec![crate::kit::biome::Effect {
+        preset: "hit-spark".into(),
+        at: None,
+        light: 1.0,
+        scale: 2.5,
+    }];
+    let big = Effects::load(Some(&b)).unwrap().0[0].1.clone();
+    let base = Preset::load("hit-spark").unwrap();
+    let (k, k0) = (big.sparks.unwrap(), base.sparks.unwrap());
+    for a in [0.05, 0.2, 0.4] {
+        let way = Vec3::new(0.6, 0.8, 0.0);
+        let (p, _) = spark_at(Vec3::ZERO, way * k.speed.1, k.gravity, a);
+        let (p0, _) = spark_at(Vec3::ZERO, way * k0.speed.1, k0.gravity, a);
+        assert!(
+            (p - p0 * 2.5).length() < 1e-4,
+            "at {a} s: {p} vs {p0} x 2.5"
+        );
+    }
+    assert!((k.width - k0.width * 2.5).abs() < 1e-6);
+    let (f, f0) = (big.flash.unwrap(), base.flash.unwrap());
+    assert!((f.size - f0.size * 2.5).abs() < 1e-6 && f.core_size == f0.core_size);
+    for (l, l0) in big.lamps.iter().zip(&base.lamps) {
+        assert!((l.range - l0.range * 2.5).abs() < 1e-4 && l.lm == l0.lm);
+    }
+    assert_eq!(
+        (big.life, k.life, k.shutter),
+        (base.life, k0.life, k0.shutter)
+    );
+    let e: crate::kit::biome::Effect = ron::from_str("(preset: \"slash\")").unwrap();
+    assert_eq!(e.scale, 1.0);
 }
 
 /// A name with no file fails naming the folder and the presets there are.

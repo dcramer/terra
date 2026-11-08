@@ -671,7 +671,9 @@ pub struct Weather {
 
 /// An effect preset by name (iso-kit j6 names them), where it plays if not the fight's, and
 /// how bright its lights are against the preset's (a preset tuned in the ruin's day floods
-/// a night street's walls).
+/// a night street's walls), and its size against the preset's (`Preset::scaled`: a preset
+/// sized for a staged still close in reads as a few pixels at the fight's camera, where the
+/// ARPGs' hit sparks are large and bright; iso-forest-demo j26).
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Effect {
@@ -680,6 +682,8 @@ pub struct Effect {
     pub at: Option<(f32, f32)>,
     #[serde(default = "one")]
     pub light: f32,
+    #[serde(default = "one")]
+    pub scale: f32,
 }
 
 /// A kind of life (iso-kit j7 names them: insects, birds, beasts, drones) and how many.

@@ -231,6 +231,34 @@ impl Preset {
         }
         super::read(&path, "effects.rs")
     }
+    /// The effect `s` times its size in space, its timing kept: the flash's quad, the
+    /// sparks' speeds, gravity, thickness and source (so each streak's path, and the length
+    /// its shutter shows, scale by `s`), the puffs' sizes, rise, spread and softness, and its
+    /// lights' height, offset and reach; a trail follows the blade and is left alone. A
+    /// biome's `scale` (biome.rs `Effect`).
+    pub fn scaled(mut self, s: f32) -> Preset {
+        if let Some(f) = &mut self.flash {
+            f.size *= s;
+        }
+        if let Some(k) = &mut self.sparks {
+            k.speed = (k.speed.0 * s, k.speed.1 * s);
+            k.gravity *= s;
+            k.width *= s;
+            k.area *= s;
+        }
+        if let Some(p) = &mut self.puffs {
+            p.size = (p.size.0 * s, p.size.1 * s);
+            p.rise *= s;
+            p.spread *= s;
+            p.soft *= s;
+        }
+        for l in &mut self.lamps {
+            l.up *= s;
+            l.toward *= s;
+            l.range *= s;
+        }
+        self
+    }
     /// The quads and lights it holds.
     pub fn budget(&self) -> Budget {
         Budget {
@@ -271,17 +299,20 @@ impl Effects {
     /// The biome's list (the staged fight's where there is none), each preset read, and
     /// the budget held.
     pub fn load(biome: Option<&Biome>) -> Result<Effects, String> {
-        let list: Vec<(String, Option<Vec2>, f32)> = match biome {
+        let list: Vec<(String, Option<Vec2>, f32, f32)> = match biome {
             Some(b) => b
                 .effects
                 .iter()
-                .map(|e| (e.preset.clone(), e.at.map(Vec2::from), e.light))
+                .map(|e| (e.preset.clone(), e.at.map(Vec2::from), e.light, e.scale))
                 .collect(),
-            None => FIGHT.iter().map(|n| (n.to_string(), None, 1.0)).collect(),
+            None => FIGHT
+                .iter()
+                .map(|n| (n.to_string(), None, 1.0, 1.0))
+                .collect(),
         };
         let mut out = Vec::new();
-        for (name, at, light) in list {
-            let mut p = Preset::load(&name)?;
+        for (name, at, light, scale) in list {
+            let mut p = Preset::load(&name)?.scaled(scale);
             // The biome's brightness for its lights (biome.rs `Effect::light`).
             for l in &mut p.lamps {
                 l.lm *= light;
