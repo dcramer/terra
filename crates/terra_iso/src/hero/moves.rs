@@ -26,8 +26,10 @@ pub struct Doing {
     pub speed: f32,
     pub heading: Vec2,
     face: Vec2,
-    /// The way a pressed move waiting on the current one's window will face.
-    queued: Option<Vec2>,
+    /// The foe a blow under way closes on (`lunge`), the nearest in reach as it was pressed.
+    target: Option<Entity>,
+    /// The way a pressed move waiting on the current one's window will face, and its foe.
+    queued: Option<(Vec2, Option<Entity>)>,
     halt: f32,
     pub started: u32,
 }
@@ -127,12 +129,13 @@ pub fn act(
         && let Some(b) = button(ability)
         && let Some(name) = doing.runner.pressed(set, b).map(str::to_string)
     {
-        let target = nearest(here, foes.iter().map(|(_, t)| t.translation.xz()));
-        let face = face_for(ability, at, intent.way, (here, ahead), target);
+        let target = nearest(here, foes.iter().map(|(e, t)| (e, t.translation.xz())));
+        let face = face_for(ability, at, intent.way, (here, ahead), target.map(|t| t.1));
+        let foe = target.map(|t| t.0);
         if doing.runner.ask(set, &name) {
-            begin(&mut doing, &mut tr, face);
+            begin(&mut doing, &mut tr, (face, foe));
         } else {
-            doing.queued = Some(face);
+            doing.queued = Some((face, foe));
         }
     }
     // The block held at its hold while its button stays down; the hit-stop holds the move.
@@ -153,7 +156,7 @@ pub fn act(
         own = 0.0;
     }
     if let Ran::Started(_) = doing.runner.tick(set, own) {
-        let face = doing.queued.take().unwrap_or(ahead);
+        let face = doing.queued.take().unwrap_or((ahead, None));
         begin(&mut doing, &mut tr, face);
     }
     // His blow, once, as its clip's active window opens: what stands in its arc falls back.
@@ -179,11 +182,20 @@ pub fn act(
             doing.halt = m.hit_stop;
         }
     }
-    // The motion: the move's drive along its facing, else his own pace along his heading.
+    // The motion: the move's drive along its facing (a blow's only to its foe, `lunge`), else
+    // his own pace along his heading.
     let v = match doing.runner.now(set) {
         Some(m) => {
             doing.speed = 0.0;
-            doing.face * m.drive_at(doing.runner.t()) * if own > 0.0 { 1.0 } else { 0.0 }
+            let drive = m.drive_at(doing.runner.t()) * if own > 0.0 { 1.0 } else { 0.0 };
+            if m.active.is_some() && dt > 0.0 {
+                let to = doing.target.and_then(|e| foes.get(e).ok());
+                let to = to.map(|(_, t)| t.translation.xz());
+                let landed = doing.runner.landed;
+                doing.face * lunge(here, doing.face, to, landed, drive * dt) / dt
+            } else {
+                doing.face * drive
+            }
         }
         None => {
             if intent.way != Vec2::ZERO {
@@ -207,12 +219,31 @@ pub fn act(
     }
 }
 
-/// The nearest of `foes` within a blow's reach of `here`, if any.
-pub fn nearest(here: Vec2, foes: impl Iterator<Item = Vec2>) -> Option<Vec2> {
-    foes.map(|p| (p.distance(here), p))
+/// The nearest of `foes` (each a key and its place) within a blow's reach of `here`, if any.
+pub fn nearest<K>(here: Vec2, foes: impl Iterator<Item = (K, Vec2)>) -> Option<(K, Vec2)> {
+    foes.map(|(k, p)| (p.distance(here), (k, p)))
         .filter(|(d, _)| *d <= crate::play::REACH)
         .min_by(|a, b| a.0.total_cmp(&b.0))
-        .map(|(_, p)| p)
+        .map(|(_, f)| f)
+}
+
+/// How near a blow's lunge closes on its foe (m, centre to centre): a pack's body (0.65 to
+/// 0.8 m, forest.ron) and his (0.3) apart by about a blade's length, inside the ring a pack
+/// stands on to swing (demo/steer.rs `Mob::stand`, about 2 m).
+pub const STRIKE: f32 = 1.6;
+/// What of a blow's drive he takes with no foe in reach: a step into the swing, not a lunge.
+pub const ALONE: f32 = 0.15;
+
+/// How far a blow's `step` of drive (m) carries him along `face` from `here`: toward its foe at
+/// `to` until `STRIKE` of it along his way and no further, as ARPG melee lunges close to striking
+/// distance (Diablo's, Lost Ark's); `ALONE` of it with none; nothing once it has `landed`, so a
+/// foe knocked back (play/knock.rs) is not followed.
+pub fn lunge(here: Vec2, face: Vec2, to: Option<Vec2>, landed: bool, step: f32) -> f32 {
+    match to {
+        _ if landed => 0.0,
+        Some(p) => step.min(((p - here).dot(face) - STRIKE).max(0.0)),
+        None => step * ALONE,
+    }
 }
 
 /// The move asked of the set this frame: a press, else the shield as its button goes down,
@@ -245,8 +276,9 @@ fn face_for(
 }
 
 /// A move starts: he turns to face its way at once.
-fn begin(doing: &mut Doing, tr: &mut Transform, face: Vec2) {
+fn begin(doing: &mut Doing, tr: &mut Transform, (face, target): (Vec2, Option<Entity>)) {
     doing.face = face;
+    doing.target = target;
     doing.heading = face;
     doing.started += 1;
     doing.halt = 0.0;
@@ -268,9 +300,62 @@ mod tests {
             Vec2::new(1.0, -0.5),
             Vec2::new(9.0, 9.0),
         ];
-        assert_eq!(nearest(here, foes.into_iter()), Some(Vec2::new(1.0, -0.5)));
-        assert_eq!(nearest(here, [Vec2::new(4.5, 1.0)].into_iter()), None);
-        assert_eq!(nearest(here, std::iter::empty()), None);
+        let near = nearest(here, foes.into_iter().enumerate());
+        assert_eq!(near, Some((1, Vec2::new(1.0, -0.5))));
+        assert_eq!(nearest(here, [((), Vec2::new(4.5, 1.0))].into_iter()), None);
+        assert_eq!(nearest(here, std::iter::empty::<((), Vec2)>()), None);
+    }
+
+    /// Every blow's lunge closes on its foe until `STRIKE` of it and no further, nor after it
+    /// once the blow lands and knocks it back (1 m over 0.3 s, play/knock.rs's heavy); with its
+    /// foe already in striking distance he stands; with none in reach he takes a step, not a
+    /// lunge. On the drive alone (j33's) each blow fails, driving on in striking distance and
+    /// at the air; without the `landed` stop the heavy follows its knocked foe.
+    #[test]
+    fn a_blow_lunges_to_striking_distance_and_no_further() {
+        let set = terra_motion::moves::MoveSet::read(include_str!(
+            "../../../../assets/data/moves/sword.shielded.ron"
+        ))
+        .unwrap();
+        let dt = 1.0 / 60.0;
+        // He and his foe `start` m ahead over the move, knocked `knock` m from the blow on:
+        // where he ends, how near it he came, and the move's whole drive.
+        let travel = |name: &str, start: Option<f32>, knock: f32| {
+            let m = set.get(name).unwrap();
+            let hits = m.at_clip(m.active.unwrap().0);
+            let (mut at, mut t, mut closest, mut full) = (Vec2::ZERO, 0.0, f32::INFINITY, 0.0);
+            while t < m.lasts() {
+                let slid = knock * ((t - hits) / 0.3).clamp(0.0, 1.0);
+                let foe = start.map(|d| Vec2::X * (d + slid));
+                let step = m.drive_at(t) * dt;
+                full += step;
+                at += Vec2::X * lunge(at, Vec2::X, foe, t >= hits, step);
+                if let Some(f) = foe {
+                    closest = closest.min(f.x - at.x);
+                }
+                t += dt;
+            }
+            (at.x, closest, full)
+        };
+        for name in ["slash", "backhand", "finisher", "heavy"] {
+            let (went, closest, full) = travel(name, Some(2.4), 0.0);
+            assert!(
+                went <= 2.4 - STRIKE + 1e-3 && closest >= STRIKE - 1e-3 && went > 0.1,
+                "{name}: from 2.4 m he went {went:.2} of its {full:.2} m, closest {closest:.2}"
+            );
+            let (knocked, ..) = travel(name, Some(2.4), 1.0);
+            assert!(
+                (knocked - went).abs() < 1e-4,
+                "{name}: he followed a foe knocked back, {knocked:.2} m against {went:.2}"
+            );
+            let (went, ..) = travel(name, Some(STRIKE - 0.1), 0.0);
+            assert!(went < 1e-3, "{name}: in striking reach he went {went:.2} m");
+            let (went, _, full) = travel(name, None, 0.0);
+            assert!(
+                went > 0.0 && went <= 0.35 && went < full * 0.2,
+                "{name}: at the air he went {went:.2} of its {full:.2} m"
+            );
+        }
     }
 
     /// An unaimed shield turns to the nearest foe in reach as a blow does; a roll keeps to the
