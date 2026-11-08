@@ -17,6 +17,9 @@ use crate::proto::Stamp;
 
 /// The most a client's tick rate is changed to hold its margin: 2%.
 pub const MOST_NUDGE: f64 = 0.02;
+/// The margin a stamp carries when the client's intents are stamped further ahead than the
+/// server takes any: no count of ticks, but word that the clock is to begin again.
+pub const AHEAD: i8 = i8::MAX;
 /// How far ahead of the tick it was welcomed at a client starts: about a 100 ms round trip.
 const FIRST_LEAD: u32 = 8;
 /// The lowest margin aimed at, ticks: the next tick's intent, one spare, and two more: a client
@@ -100,6 +103,14 @@ impl Clock {
             return false;
         }
         self.heard = Some(stamp.tick);
+        // The server says this clock has run off ahead of it, further than it takes
+        // intents from (`AHEAD`): begun again from the server's own tick, as at a welcome.
+        if stamp.margin == AHEAD {
+            self.next = Some(stamp.tick + FIRST_LEAD);
+            (self.held, self.at, self.fresh, self.late) = (0, 0, true, 0);
+            self.hold = None;
+            return true;
+        }
         if let Some((need, until)) = self.hold {
             if stamp.heard.is_none_or(|heard| heard < need) && stamp.tick < until {
                 return false;
@@ -247,6 +258,44 @@ mod tests {
             tick < server + 19
         });
         assert_eq!(late.count(), 640);
+    }
+
+    /// A server on a loaded machine ticks slower than its client: the client's clock runs off
+    /// ahead, past where the server takes intents from, and the server says so (`AHEAD`).
+    /// The clock begins again from the server's tick; told its intents were merely late, as
+    /// it once was, it would have jumped further ahead each time.
+    #[test]
+    fn a_clock_run_off_ahead_begins_again_from_the_servers_tick() {
+        let mut clock = Clock::default();
+        clock.start(1000);
+        // The client runs 3,000 ticks while the server runs 500.
+        for _ in 0..3000 {
+            clock.advance();
+        }
+        let ahead = Stamp {
+            tick: 1500,
+            heard: None,
+            margin: AHEAD,
+        };
+        assert!(clock.hear(ahead), "the clock did not jump");
+        assert_eq!(clock.advance(), Some(1500 + FIRST_LEAD));
+        // And a late reading alone, the old word for the same state, moves it forward.
+        let mut old = Clock::default();
+        old.start(1000);
+        for _ in 0..3000 {
+            old.advance();
+        }
+        for tick in 1500..1500 + 2 * LATE_RUN {
+            old.hear(Stamp {
+                tick,
+                heard: Some(1200),
+                margin: -128,
+            });
+        }
+        assert!(
+            old.advance() > Some(4000),
+            "a late word no longer moves a clock forward"
+        );
     }
 
     #[test]

@@ -174,6 +174,19 @@ impl Link {
     }
 
     /// How many of the server's answers differed from what was predicted.
+    /// The tick of the server's newest answer for this game's own body that it took, and
+    /// the tick that answer says it is for: the one standing still while the other runs on
+    /// says the server has stopped taking this game's intents.
+    pub fn answered(&self) -> (u32, Option<u32>) {
+        let newest = self
+            .client
+            .entities()
+            .find(|(_, entity)| entity.mine)
+            .and_then(|(_, entity)| entity.part(OWN))
+            .map(|samples| samples.newer.tick);
+        (self.answered, newest)
+    }
+
     /// How many of the server's answers were for a tick this game kept no walk of.
     pub fn missed(&self) -> u64 {
         self.history.missed
@@ -400,6 +413,7 @@ impl Link {
             set_to(world, player, &own);
             return;
         }
+        let missed = self.history.missed;
         let replayed = self.history.reconcile(
             tick,
             &own,
@@ -420,6 +434,13 @@ impl Link {
         );
         if let Some(walked) = replayed {
             put(world, player, &walked);
+        } else if self.history.missed > missed {
+            // An answer for a tick this game kept no walk of (its clock jumped, or it stood
+            // loading): nothing to check it against, so it is taken as it stands. Dropped,
+            // as it was, a body the host then left still was never put right: the host says
+            // a body again only when it changes (the two-player walk's guest, a hop behind
+            // its host for good).
+            set_to(world, player, &own);
         }
     }
 }

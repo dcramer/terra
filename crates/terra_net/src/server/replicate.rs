@@ -67,7 +67,13 @@ const MOST_AHEAD: u32 = 256;
 fn intents(session: &mut Session, from: &mut Reader, tick: u32) -> Result<(), Malformed> {
     let newest = u32::read(from)?;
     let count = from.ranged(MOST_INTENTS as u32)?;
-    if count == 0 || newest > tick.saturating_add(MOST_AHEAD) || newest < count - 1 {
+    // Stamped further ahead than any are taken: its clock has run off ahead of ours (a
+    // server on a loaded machine ticks slower than a client does). Said in its stamp, so its
+    // clock comes back: left unsaid, the intents it then lacks read to it as late, and its
+    // clock jumped further ahead each time (the two-player walk's guest, 2,558 ticks ahead
+    // and never heard again).
+    session.ahead = count > 0 && newest > tick.saturating_add(MOST_AHEAD);
+    if count == 0 || session.ahead || newest < count - 1 {
         // Nothing to say, or stamped where no honest clock is: ignored.
         return Ok(());
     }
@@ -315,9 +321,11 @@ pub(super) fn send(
     Stamp {
         tick,
         heard: session.heard,
-        margin: session.heard.map_or(0, |heard| {
-            (i64::from(heard) - i64::from(tick)).clamp(-128, 127) as i8
-        }),
+        margin: match session.heard {
+            _ if session.ahead => i8::MAX,
+            Some(heard) => (i64::from(heard) - i64::from(tick)).clamp(-128, 126) as i8,
+            None => 0,
+        },
     }
     .write(&mut to);
     let mut sent = Vec::new();

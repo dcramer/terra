@@ -193,6 +193,9 @@ struct Session {
     intents: VecDeque<(u32, Vec<u8>)>,
     last: Option<Vec<u8>>,
     heard: Option<u32>,
+    /// Its newest intents were stamped further ahead than any are taken (`MOST_AHEAD`): its
+    /// clock has run off ahead of this server's, and its stamp says so until one is taken.
+    ahead: bool,
     events: VecDeque<Outgoing>,
     next_event: u32,
     /// How long its acknowledgements take to come back, ticks, smoothed.
@@ -219,6 +222,7 @@ impl Session {
             intents: VecDeque::new(),
             last: None,
             heard: None,
+            ahead: false,
             events: VecDeque::new(),
             next_event: 0,
             round_trip: None,

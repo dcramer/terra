@@ -10,11 +10,11 @@
 //
 //   node tools/sandbox/land.ts [--seed 3]
 //
-// Not yet a gate (D632): since each hop waits for the friend and the clock runs at twelve,
-// one run of seven failed, the friend's game not standing where its host had put it after a
-// hop, the host still holding it; not understood. A failure says where each game has the
-// friend, how often its walk was corrected, and how many of the host's answers were for
-// ticks it kept no walk of (`net.state`'s `missed`): read those first.
+// Its failures were two faults of the netcode, each seen in it before it was mended (D632): a
+// joined game whose clock had run off ahead of a slow host was never heard again, and an
+// answer for a tick it kept no walk of was dropped, leaving it a hop behind for good. A
+// failure says where each game has the friend, its corrections, the answers it could not
+// place and its ticks beside the host's (`net.state`): read those first.
 //
 // Node 22.18 or later; no dependencies. About five minutes.
 
@@ -148,7 +148,9 @@ try {
       clocks = `the host's clock says day ${here.clock!.day} ${here.clock!.hour.toFixed(2)} h and the friend's day ${there.clock!.day} ${there.clock!.hour.toFixed(2)} h`;
       return off.length === 0 && here.clock!.day === there.clock!.day && Math.abs(here.clock!.hour - there.clock!.hour) < 0.25;
     },
-    40,
+    // The weather is eased toward what the clock and the seed say: after a clock run fast
+    // in jumps a joined game's takes a minute or two to come to its host's.
+    150,
   );
   if (net(host).guests.length !== 1) throw new Error(`by the end the host has ${net(host).guests.length} guests: the friend's game was dropped on the way (what the host said of it follows)`);
   console.log(`✓ the weather changed for both: ${changed.join("; ")} (after against before), the joined game's the same as the host's after`);
@@ -159,7 +161,7 @@ try {
   if (failed) {
     try {
       const [theirs, mine] = [JSON.parse(remote(ports[0], "call", "net.state")), JSON.parse(remote(ports[1], "call", "net.state"))];
-      console.error(`the host has its guest at ${JSON.stringify(theirs.guests?.[0]?.at)}; the friend's game has itself at ${JSON.stringify(mine.mine)}, corrected ${mine.corrections} times, ${mine.missed} answers for ticks it kept no walk of, tick ${mine.tick}`);
+      console.error(`the host has its guest at ${JSON.stringify(theirs.guests?.[0]?.at)}; the friend's game has itself at ${JSON.stringify(mine.mine)}, corrected ${mine.corrections} times, ${mine.missed} answers for ticks it kept no walk of, tick ${mine.tick}, the newest answer it took and the newest it has ${JSON.stringify(mine.answered)}; the host's tick ${theirs.tick}`);
       console.error(remote(ports[0], "said", "--all", "--containing", "the world.").trim().split("\n").slice(-4).join("\n"));
     } catch {}
   }
