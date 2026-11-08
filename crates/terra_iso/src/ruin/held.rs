@@ -48,7 +48,16 @@ fn hold(
     mut commands: Commands,
     asset: Res<AssetServer>,
     stage: Res<Stage>,
-    bodies: Query<(Entity, &Transform), (With<WorldAssetRoot>, Without<ChildOf>)>,
+    // Not the game's body (hero/mod.rs `swap`): it holds the game's own sword in its own
+    // socket, and its skeleton names a `hand_r` too.
+    bodies: Query<
+        (Entity, &Transform),
+        (
+            With<WorldAssetRoot>,
+            Without<ChildOf>,
+            Without<terra_walker::character::Body>,
+        ),
+    >,
     children: Query<&Children>,
     names: Query<&Name>,
     held: Query<(), With<Held>>,
@@ -113,5 +122,39 @@ mod tests {
         assert!(flat.z > 0.99, "the blade's flat faces the palm: {flat}");
         let tip = into_hand(Vec3::Y * 0.95).distance(into_hand(Vec3::ZERO)) * scale;
         assert!((tip - 0.95).abs() < 1e-3, "{tip} m long in the world");
+    }
+
+    /// Where the knight stands: a Tripo body gets the sword in its `hand_r`; the game's body
+    /// (the hero once `swap` has run), which holds the game's own sword, gets no second one.
+    #[test]
+    fn only_a_tripo_body_takes_the_sword() {
+        for (game, swords) in [(false, 1), (true, 0)] {
+            let mut app = App::new();
+            app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+                .init_asset::<bevy::world_serialization::WorldAsset>()
+                .init_resource::<Stage>()
+                .add_systems(Update, hold);
+            let at = app.world().resource::<Stage>().knight;
+            let body = app
+                .world_mut()
+                .spawn((
+                    WorldAssetRoot(Handle::default()),
+                    Transform::from_xyz(at.x, 0.0, at.y),
+                ))
+                .id();
+            if game {
+                app.world_mut()
+                    .entity_mut(body)
+                    .insert(terra_walker::character::Body);
+            }
+            app.world_mut().spawn((Name::new(HAND), ChildOf(body)));
+            app.update();
+            let held = app
+                .world_mut()
+                .query_filtered::<(), With<Held>>()
+                .iter(app.world())
+                .count();
+            assert_eq!(held, swords, "game body {game}: {held} swords hung");
+        }
     }
 }
