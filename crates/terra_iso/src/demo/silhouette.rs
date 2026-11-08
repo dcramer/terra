@@ -26,6 +26,9 @@ use bevy::shader::ShaderRef;
 /// How far before his surface (m) a body must stand to draw him through it: past his shield
 /// held before his chest (about 0.25 m), short of a body that stands before him.
 pub const GAP: f32 = 0.35;
+/// How far his surface stands before the nearest of his joints (m): a limb's or the torso's
+/// half thickness and his armour. His front (`Front`) is that nearest joint less this.
+pub const FLESH: f32 = 0.2;
 /// The fill and the edge as they reach the screen (unlit, before AgX): a cool pale blue
 /// against the wood's greens and the foes' bark, the edge bright enough to read as his outline.
 const FILL: LinearRgba = LinearRgba::new(0.30, 0.52, 0.85, 0.45);
@@ -34,7 +37,43 @@ const EDGE: LinearRgba = LinearRgba::new(0.75, 0.92, 1.3, 0.9);
 pub fn plugin(app: &mut App) {
     embedded_asset!(app, "silhouette.wesl");
     app.add_plugins(MaterialPlugin::<Through>::default())
-        .add_systems(Update, copy);
+        .init_resource::<Front>()
+        .add_systems(Update, copy)
+        .add_systems(PostUpdate, front.after(TransformSystems::Propagate));
+}
+
+/// His front this frame: the view depth (along the camera's forward, m) before which a surface
+/// must stand to draw him through it, the nearest of his joints less `FLESH`; `None` before
+/// his meshes have their copies. Mid-roll his limbs stand a metre before his back, more than
+/// `GAP`: without it they drew him through himself (iso-forest-demo j17, the dodge at 1034, a
+/// pale blob). The occlusion gate reads it too (occlude.rs `hidden`).
+#[derive(Resource, Default, Clone, Copy)]
+pub struct Front(pub Option<f32>);
+
+/// The nearest of his joints to the camera, as `Front` and as a point on that plane in the
+/// material (`Through::front`), so the shader's depth never lies behind his own front.
+pub fn front(
+    skins: Query<&SkinnedMesh, With<Silhouette>>,
+    joints: Query<&GlobalTransform>,
+    camera: Query<&GlobalTransform, With<crate::camera::MainCamera>>,
+    mut out: ResMut<Front>,
+    mut materials: ResMut<Assets<Through>>,
+) {
+    let Ok(cam) = camera.single() else {
+        return;
+    };
+    let forward = cam.forward().as_vec3();
+    let nearest = skins
+        .iter()
+        .flat_map(|s| s.joints.iter())
+        .filter_map(|j| joints.get(*j).ok())
+        .map(|g| g.translation())
+        .min_by(|a, b| a.dot(forward).total_cmp(&b.dot(forward)));
+    out.0 = nearest.map(|p| p.dot(forward) - FLESH);
+    let point = nearest.map_or(Vec4::ZERO, |p| (p - forward * FLESH).extend(1.0));
+    for (_, m) in materials.iter_mut() {
+        m.front = point;
+    }
 }
 
 /// A copy of one of his meshes that draws him through what stands before him.
@@ -51,6 +90,9 @@ pub struct Through {
     /// w the gap (`GAP`).
     #[uniform(102)]
     look: Vec4,
+    /// xyz a point on his front's plane (`Front`), w 1 once known.
+    #[uniform(103)]
+    front: Vec4,
 }
 
 impl Default for Through {
@@ -59,6 +101,7 @@ impl Default for Through {
             fill: FILL,
             edge: EDGE,
             look: Vec4::new(0.0, 0.0, 0.0, GAP),
+            front: Vec4::ZERO,
         }
     }
 }

@@ -10,7 +10,7 @@
 //! foe's body is met as a capsule (`capsule`), a foe's tell as its flat fan (tell.rs `met`),
 //! drawn over bodies standing before all.
 
-use super::silhouette::{GAP, Silhouette};
+use super::silhouette::{Front, GAP, Silhouette};
 use super::tell::{self, Fan, TellMaterial};
 use crate::camera::MainCamera;
 use crate::foliage::{self, FoliageMaterial, Near, Seen};
@@ -34,10 +34,14 @@ pub const MIDDLE: f32 = 0.9;
 pub fn plugin(app: &mut App) {
     app.insert_resource(Near(NEAR))
         .init_resource::<Hidden>()
+        .init_resource::<Front>()
         .add_systems(Update, (seen, backfaces))
         .add_systems(
             PostUpdate,
-            (check, gate).chain().after(TransformSystems::Propagate),
+            (check, gate)
+                .chain()
+                .after(TransformSystems::Propagate)
+                .after(super::silhouette::front),
         );
 }
 
@@ -140,13 +144,14 @@ pub type Before = (Vec3, Option<Entity>, Vec3, bool);
 /// gives what a ray from the eye meets, nearest first; a surface more than a hand's breadth
 /// before a point stands before it unless it is cuttable and the cut about `middle` (with
 /// `eye`'s near fade) leaves it at least `OPEN` open. A body more than `GAP` and `SKIN` before
-/// it is drawn through when `through` (his silhouette is drawn), and so does not hide him.
+/// it is drawn through when `through` (his silhouette is drawn) and it stands before that
+/// view depth (along `axes[2]`, his front, silhouette.rs `Front`), and so does not hide him.
 pub fn hidden(
     eye: Vec4,
     axes: [Vec3; 3],
     middle: Vec3,
     points: &[Vec3],
-    through: bool,
+    through: Option<f32>,
     mut cast: impl FnMut(Ray3d) -> Vec<Hit>,
 ) -> Vec<Before> {
     let from = eye.xyz();
@@ -160,7 +165,9 @@ pub fn hidden(
                 .take_while(|h| h.distance < reach)
                 .find(|h| h.body || !h.cut || foliage::fade(h.at, &[middle], axes, eye) < OPEN)
                 .map(|h| {
-                    let drawn = h.body && through && reach + 0.1 - h.distance > GAP + SKIN;
+                    let drawn = h.body
+                        && through.is_some_and(|f| h.at.dot(axes[2]) < f)
+                        && reach + 0.1 - h.distance > GAP + SKIN;
                     (*p, h.what, h.at, drawn)
                 })
         })
@@ -335,7 +342,11 @@ fn check(
         Query<(), With<crate::rim::Fighter>>,
         Query<&Mesh3d>,
     ),
-    (heroes, silhouettes): (Query<(), With<Hero>>, Query<(), With<Silhouette>>),
+    (heroes, silhouettes, front): (
+        Query<(), With<Hero>>,
+        Query<(), With<Silhouette>>,
+        Res<Front>,
+    ),
     (frame, near, mut seen): (Res<bevy::diagnostic::FrameCount>, Res<Near>, ResMut<Hidden>),
     (standing, kids, bounds): (
         Query<
@@ -359,8 +370,9 @@ fn check(
     let (Ok((_, h)), Ok(cam)) = (hero.single(), camera.single()) else {
         return;
     };
-    // His silhouette is drawn once his meshes have their copies (silhouette.rs).
-    let through = !silhouettes.is_empty();
+    // His silhouette is drawn once his meshes have their copies, before his front
+    // (silhouette.rs).
+    let through = front.0.filter(|_| !silhouettes.is_empty());
     let axes = [
         cam.right().as_vec3(),
         cam.up().as_vec3(),
@@ -465,6 +477,9 @@ mod tests {
     use super::*;
     use crate::ruin::camera::offset;
 
+    /// His silhouette drawn, his front no limit.
+    const ANY: Option<f32> = Some(f32::INFINITY);
+
     /// The play camera's eye and axes over a hero standing at `feet`.
     fn view(feet: Vec3, near: f32) -> (Vec4, [Vec3; 3]) {
         let eye = feet + Vec3::Y * 1.2 + offset();
@@ -519,19 +534,27 @@ mod tests {
         let toward = (eye.xyz() - chest).normalize();
         // A treant's trunk, 0.8 m thick, its near side 2.2 m before his chest.
         let treant = sphere(chest + toward * 3.0, 0.8, true);
-        let before = hidden(eye, axes, middle, &points, true, &treant);
+        let before = hidden(eye, axes, middle, &points, ANY, &treant);
         assert!(!before.is_empty(), "the treant stands before him");
         assert!(
             before.iter().all(|p| p.3),
             "drawn through: {}",
             before.len()
         );
-        let fault = hidden(eye, axes, middle, &points, false, &treant);
+        let fault = hidden(eye, axes, middle, &points, None, &treant);
         assert!(!fault.is_empty() && fault.iter().all(|p| !p.3));
         // Its near side 0.3 m before his chest's axis: within GAP and SKIN, not drawn.
         let pressed = sphere(chest + toward * 0.6, 0.3, true);
-        let close = hidden(eye, axes, middle, &points, true, &pressed);
+        let close = hidden(eye, axes, middle, &points, ANY, &pressed);
         assert!(close.iter().any(|p| !p.3), "pressed to him, it hides him");
+        // His front (silhouette.rs `Front`) 1.5 m before his chest, a limb flung out: the
+        // treant (2.2 to 3.8 m out) still stands before it and is drawn through; with his front
+        // 4 m out, past the treant, it is not, as the shader's depth is held there too.
+        let depth = chest.dot(axes[2]);
+        let out = hidden(eye, axes, middle, &points, Some(depth - 1.5), &treant);
+        assert!(!out.is_empty() && out.iter().all(|p| p.3));
+        let past = hidden(eye, axes, middle, &points, Some(depth - 4.0), &treant);
+        assert!(!past.is_empty() && past.iter().all(|p| !p.3));
     }
 
     /// A ray meets an upright capsule where its side or cap stands, from outside, and not
@@ -575,16 +598,16 @@ mod tests {
             )]
         };
         let standing = treant(on);
-        let before = hidden(eye, axes, middle, &points, true, |r| met(r, &standing));
+        let before = hidden(eye, axes, middle, &points, ANY, |r| met(r, &standing));
         assert!(!before.is_empty(), "the treant stands before him");
         assert!(before.iter().all(|p| p.3), "drawn through");
-        let fault = hidden(eye, axes, middle, &points, false, |r| met(r, &standing));
+        let fault = hidden(eye, axes, middle, &points, None, |r| met(r, &standing));
         assert!(
             !fault.is_empty() && fault.iter().all(|p| !p.3),
             "no silhouette hides him"
         );
         let aside = treant(on + axes[0] * 3.0);
-        assert!(hidden(eye, axes, middle, &points, false, |r| met(r, &aside)).is_empty());
+        assert!(hidden(eye, axes, middle, &points, None, |r| met(r, &aside)).is_empty());
     }
 
     /// A bough anywhere on the line from the camera to his chest, from his shoulder to the
@@ -606,7 +629,7 @@ mod tests {
                 if along < r + 0.3 {
                     continue;
                 }
-                let n = hidden(eye, axes, middle, &points, true, ball(c, r, true)).len();
+                let n = hidden(eye, axes, middle, &points, ANY, ball(c, r, true)).len();
                 assert_eq!(
                     n, 0,
                     "a bough {along:.2} m before him (r {r}) hides {n} points"
@@ -614,12 +637,12 @@ mod tests {
             }
         }
         let c = chest + (eye.xyz() - chest).normalize() * 1.5;
-        assert!(!hidden(eye, axes, middle, &points, true, ball(c, 0.6, false)).is_empty());
+        assert!(!hidden(eye, axes, middle, &points, ANY, ball(c, 0.6, false)).is_empty());
         let (still, _) = view(feet, 0.0);
         // Its near side 0.65 m before his chest: open in play, two-thirds kept by the stills'.
         let c = chest + (eye.xyz() - chest).normalize() * 0.35;
-        assert!(hidden(eye, axes, middle, &points, true, ball(c, 0.3, true)).is_empty());
-        assert!(!hidden(still, axes, middle, &points, true, ball(c, 0.3, true)).is_empty());
+        assert!(hidden(eye, axes, middle, &points, ANY, ball(c, 0.3, true)).is_empty());
+        assert!(!hidden(still, axes, middle, &points, ANY, ball(c, 0.3, true)).is_empty());
     }
 
     /// A foe's tell he stands in, laid as play lays it (blows.rs `land`: `RAISE` toward the
@@ -641,7 +664,7 @@ mod tests {
                 .with_rotation(Quat::from_rotation_y(libm::atan2f(face.x, face.z))),
         );
         let laid = |over: bool| vec![(Entity::PLACEHOLDER, at, FILL_FAN, over)];
-        let under = hidden(eye, axes, middle, &points, true, |r| fans(r, &laid(false)));
+        let under = hidden(eye, axes, middle, &points, ANY, |r| fans(r, &laid(false)));
         assert!(under.is_empty(), "{} points under the tell", under.len());
         // It lies under him: the ray to his feet meets it.
         let to_feet = Ray3d::new(eye.xyz(), Dir3::new(feet - eye.xyz()).unwrap());
@@ -649,7 +672,7 @@ mod tests {
             !fans(to_feet, &laid(false)).is_empty(),
             "the tell is not under him"
         );
-        let fault = hidden(eye, axes, middle, &points, true, |r| fans(r, &laid(true)));
+        let fault = hidden(eye, axes, middle, &points, ANY, |r| fans(r, &laid(true)));
         assert!(
             fault.iter().any(|p| (p.0.y - feet.y - 0.5).abs() < 1e-4),
             "drawn over bodies, it hides his knee ({} points hidden)",

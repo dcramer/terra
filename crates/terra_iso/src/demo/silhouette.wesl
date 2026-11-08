@@ -18,6 +18,11 @@ var<uniform> edge: vec4<f32>;
 // xyz unused; w the gap (m) a surface must stand before him to draw him through it.
 @group(constants::MATERIAL_BIND_GROUP) @binding(102)
 var<uniform> look: vec4<f32>;
+// xyz a point on his front's plane (silhouette.rs `Front`, his nearest joint less a limb's
+// thickness), w 1 once known: no fragment lies behind it, so his limbs never draw him through
+// himself (mid-roll they stand a metre before his back).
+@group(constants::MATERIAL_BIND_GROUP) @binding(103)
+var<uniform> front: vec4<f32>;
 
 struct Out {
     @location(0) color: vec4<f32>,
@@ -33,6 +38,11 @@ fn fragment(in: VertexOutput) -> Out {
     let f = pow(1.0 - clamp(abs(dot(n, to_eye)), 0.0, 1.0), 2.0);
     var out: Out;
     out.color = mix(fill, edge, f);
-    out.depth = position_world_to_ndc(p + to_eye * look.w).z;
+    // Reverse Z: the nearer of the two is the larger.
+    var depth = position_world_to_ndc(p + to_eye * look.w).z;
+    if front.w > 0.5 {
+        depth = max(depth, position_world_to_ndc(front.xyz).z);
+    }
+    out.depth = depth;
     return out;
 }
