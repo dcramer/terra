@@ -4,7 +4,7 @@ Status: **design, 2026-11-07, Open (D635)**, for the developers to read before a
 
 ## Intent
 
-The iso experiment (`spike/iso`, moving to `crates/terra_iso`) is the developer's "high quality, realistic topdown game", "realistic meaning leaning into realism" (D634). In a few weeks it found an art pipeline (D628) and a biome kit judged toward realism (D634). It shares almost nothing with the game: Bevy, the `patches/`, the assets and `terra_core::cooked`'s mips. Its hero is a point moved each frame, its fight is a cone and a count of blows, and its ground is a closure. The developer: "make sure that they are majorly using the same systems, same networking, same ecs etc, ik lots of things will be different like models etc."
+The iso experiment (`crates/terra_iso`, once `spike/iso`) is the developer's "high quality, realistic topdown game", "realistic meaning leaning into realism" (D634). In a few weeks it found an art pipeline (D628) and a biome kit judged toward realism (D634). It shares almost nothing with the game: Bevy, the `patches/`, the assets and `terra_core::cooked`'s mips. Its hero is a point moved each frame, its fight is a cone and a count of blows, and its ground is a closure. The developer: "make sure that they are majorly using the same systems, same networking, same ecs etc, ik lots of things will be different like models etc."
 
 This doc says what iso shares with the game and what stays its own, the order the shared parts are taken in, and what iso's kit gives back.
 
@@ -55,7 +55,7 @@ Why A: the developer asked for one ECS, one set of systems and one network. A se
 
 Each step is small and lands on its own with its check, movement first (developers: "same systems").
 
-0. **Into the workspace.** `spike/iso` becomes `crates/terra_iso`, a front end allowed Bevy as `terra_sandbox` is (D28, amended in the same commit), run by `cargo iso`, with the `f32` trigonometry moved to `libm` and `kit/effects.rs` split. `loop.ts`, `noise.json`, and the biomes move with it, and the iso-art skill, `tools/iso-art/sheet.ts` and D634 are pointed at the new path. *Check:* D634's loop shows every still unchanged, within its noise.
+0. **Into the workspace** (done 2026-11-08). `spike/iso` becomes `crates/terra_iso`, a front end allowed Bevy as `terra_sandbox` is (D28, amended in the same commit), run by `cargo iso`, with the `f32` trigonometry moved to `libm` and `kit/effects.rs` split. `loop.ts`, `noise.json`, and the biomes move with it, and the iso-art skill, `tools/iso-art/sheet.ts` and D634 are pointed at the new path. *Check:* D634's loop shows every still unchanged, within its noise.
 1. **Input to intent, on the tick.** `play::control` splits in two. A reader in `RunFixedMainLoop`, before the fixed loop, writes `Intent`, as `intent::read` does. `Intent` carries no direction: it holds the actions held and pressed and an aim ray, and the walk turns Forward, Back, Left and Right into a wish along `View.forward`. So WASD becomes those actions, and the click becomes a press with the ray from the cursor. The walk runs in `FixedUpdate` under `Sim::Act`, and what is shown is interpolated (`tick::Smoothed`). *Check:* a test that one held key gives the same path at 30 and at 144 frames a second; `--press` counts in ticks.
 2. **The mover.** The hero becomes a `terra_motion::mover::Bodies` body, with an iso `Query`:
    - an exact-distance ground: a plane, or a layout's height field whose distance bound is honest;
