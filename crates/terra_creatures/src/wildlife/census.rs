@@ -11,6 +11,8 @@ use bevy::prelude::*;
 /// speck nobody takes for an animal. What stands between is not asked: grass and leaves hide
 /// some of those counted.
 const SEEN_PIXELS: f32 = 6.0;
+/// A bird's wings, spread, are so many times its body across.
+const WINGS: f32 = 4.0;
 
 /// Whether a kind flies: a bird, counted apart.
 fn flies(species: Species, bestiary: &Bestiary) -> bool {
@@ -96,8 +98,17 @@ pub(super) fn state(
         *kinds.entry(bestiary.name(creature.species)).or_default() += 1;
         all += 1;
         let about = bestiary.get(creature.species);
-        let seen = pixels(at.translation, about.body.radius * 2.0 * at.scale.y)
-            .is_some_and(|tall| tall >= SEEN_PIXELS);
+        // On the wing it is seen by its wings, some four times its body across.
+        let spread = if matches!(creature.state, creatures::State::Fly { .. }) {
+            WINGS
+        } else {
+            1.0
+        };
+        let seen = pixels(
+            at.translation,
+            about.body.radius * 2.0 * at.scale.y * spread,
+        )
+        .is_some_and(|tall| tall >= SEEN_PIXELS);
         if seen {
             shown += 1;
             if flies(creature.species, &bestiary) {
