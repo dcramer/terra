@@ -201,8 +201,9 @@ pub enum Line {
 /// from facing the road, scaled `scale`; a rigged one (a person on the pavement) held in its
 /// `pose`, a clip of its GLB by name and the time in it (the ruin's `Pose`), and edged by
 /// `rim` times the fighters' cold rim band (rim.rs; none at 0), so a dark figure reads off
-/// the dark wet street as the ARPGs lift theirs. A `stroll`ing one walks on down the
-/// pavement the way it faces through a film (ruin/walk.rs), its pose its walk; a still holds it.
+/// the dark wet street as the ARPGs lift theirs. Its `walk` is a film's (ruin/walk.rs); a
+/// still holds it where it stands. One only in a `film` stands in no still and in no play
+/// (play stages its own foes, play.rs): the street's fight, which a still has none of.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Prop {
@@ -221,11 +222,29 @@ pub struct Prop {
     #[serde(default)]
     pub rim: f32,
     #[serde(default)]
-    pub stroll: bool,
+    pub walk: Option<Walk>,
+    #[serde(default)]
+    pub film: bool,
     /// Metres up from its line's floor: a wall-hung thing (an air conditioner under a
     /// window, a payphone, a lamp over a door), with no contact shadow under it.
     #[serde(default)]
     pub up: f32,
+}
+
+/// A rigged prop's walk through a film, `from` and `to` (x, z) metres from where it stands:
+/// a stroll from one to the other at the walk's pace, turned its way, its pose its walk (the
+/// street's people, kept in the frame for the film's 16 s: walking on from where they
+/// stand, they left it by 5 s, the desk's film of round 261107-1627); or, to `fight`, in
+/// from `from` to its place, turned to where it faces, then its pose (the hero, as the
+/// ruin's walks in).
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Walk {
+    pub from: (f32, f32),
+    #[serde(default)]
+    pub to: (f32, f32),
+    #[serde(default)]
+    pub fight: bool,
 }
 
 fn deep() -> f32 {

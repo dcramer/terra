@@ -215,6 +215,9 @@ pub(super) fn spawn(
     lamps(&mut commands, &mut meshes, &mut materials, &st);
     signs(&mut commands, &asset, &mut meshes, &mut materials, &st);
     for p in &st.props {
+        if p.film && (args.film == 0 || args.play) {
+            continue;
+        }
         for x in &p.at {
             let at = st.spot(p.side, p.line, *x, p.out) + Vec3::Y * p.up;
             let yaw = p.side.facing() + p.turn.to_radians();
@@ -232,9 +235,11 @@ pub(super) fn spawn(
                     .insert(crate::kit::contact::Feet { floor: at.y });
             }
             if p.rim > 0.0 {
+                // Darker than the ground about it as the ruin's fighters (an ogre at half).
+                let (albedo, _) = crate::ruin::fight::value(&p.model);
                 commands
                     .entity(body)
-                    .insert(crate::rim::Fighter::valued(1.0, p.rim));
+                    .insert(crate::rim::Fighter::valued(albedo, p.rim));
             }
             if let Some((clip, time)) = &p.pose {
                 // The pose names its clip for the life of the app: a few names, once, at
@@ -246,14 +251,13 @@ pub(super) fn spawn(
                     once: false,
                 });
             }
-            if p.stroll {
-                // Along the street (x) the way it faces, past the film's end.
-                let way = Vec2::X * yaw.sin().signum();
+            if let Some(w) = &p.walk {
+                let off = |(x, z): (f32, f32)| at.xz() + Vec2::new(x, z);
                 commands.entity(body).insert(crate::ruin::walk::WalkIn {
-                    from: at.xz(),
-                    to: at.xz() + way * 30.0,
+                    from: off(w.from),
+                    to: if w.fight { at.xz() } else { off(w.to) },
                     floor: crate::ruin::walk::Floor::Flat(at.y),
-                    fight: false,
+                    fight: w.fight,
                 });
             }
         }

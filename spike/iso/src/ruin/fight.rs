@@ -47,7 +47,7 @@ fn cast(
 /// take them to 5 to 10 L* darker; with the fighters' duller specular (rim.rs `FIGHTER_
 /// REFLECTANCE`). The tree monster's crown is all leaf edges, each of which takes the
 /// band, so it frosts: a share of it. The rest as they come.
-fn value(path: &str) -> (f32, f32) {
+pub(crate) fn value(path: &str) -> (f32, f32) {
     if path.contains("ogre") {
         (0.5, 1.0)
     } else if path.contains("treant-a") {
