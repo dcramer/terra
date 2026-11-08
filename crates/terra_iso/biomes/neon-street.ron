@@ -272,7 +272,9 @@
             // on this line), one each way, so neither leaves it in the 16 s (walking on from
             // where they stand, both had by 5 s, round 261107-1627's film); the one going west
             // nearer the kerb, so they pass 0.8 m apart, starting short of the pole at x 8.
-            (model: "models/iso/knight.glb", side: North, line: Wall, at: [6.8], out: 1.4,
+            // The one in the sodium pool is the street's own cast (iso-cast j4): the street
+            // fighter, 1.80 m, on the game's walk; the other is still the knight.
+            (model: "models/iso/street-fighter.glb", side: North, line: Wall, at: [6.8], out: 1.4,
              turn: 75.0, pose: ("walk", 0.4), rim: 0.35,
              walk: Some((from: (-15.0, 0.0), to: (2.6, 0.0)))),
             (model: "models/iso/knight.glb", side: North, line: Wall, at: [-2.4], out: 1.5,
