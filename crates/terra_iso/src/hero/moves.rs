@@ -32,9 +32,6 @@ pub struct Doing {
     pub started: u32,
 }
 
-// The ability API's reads for the fight and its effects (iso-forest-demo's foes' blows on
-// him, the block's spark), which nothing in this module calls yet.
-#[allow(dead_code)]
 impl Doing {
     /// Whether blows pass through him now (a roll's tuck).
     pub fn invulnerable(&self, kit_set: &terra_motion::moves::MoveSet) -> bool {
@@ -114,6 +111,12 @@ pub fn act(
         let face = match (ability, at) {
             (Ability::Roll, _) => intent.way.normalize_or(ahead),
             (_, Some(p)) => (p - here).normalize_or(ahead),
+            // A blow with no aim point turns to the nearest foe in reach (an action RPG's
+            // soft target), so a script's or pad's press does not swing at the air.
+            (Ability::Light | Ability::Heavy, None) => {
+                nearest(here, foes.iter().map(|(_, t)| t.translation.xz()))
+                    .map_or(ahead, |p| (p - here).normalize_or(ahead))
+            }
             _ => ahead,
         };
         if doing.runner.ask(set, &name) {
@@ -190,6 +193,14 @@ pub fn act(
     }
 }
 
+/// The nearest of `foes` within a blow's reach of `here`, if any.
+pub fn nearest(here: Vec2, foes: impl Iterator<Item = Vec2>) -> Option<Vec2> {
+    foes.map(|p| (p.distance(here), p))
+        .filter(|(d, _)| *d <= crate::play::REACH)
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, p)| p)
+}
+
 /// A move starts: he turns to face its way at once.
 fn begin(doing: &mut Doing, tr: &mut Transform, face: Vec2) {
     doing.face = face;
@@ -205,6 +216,20 @@ mod tests {
 
     /// He gains speed at the accel and sheds it faster, never past what is wished; standing
     /// is wished with no way, a walk, jog or sprint by what is held.
+    /// An unaimed blow's target: the nearest foe within reach, none past it.
+    #[test]
+    fn an_unaimed_blow_turns_to_the_nearest_foe_in_reach() {
+        let here = Vec2::new(1.0, 1.0);
+        let foes = [
+            Vec2::new(3.5, 1.0),
+            Vec2::new(1.0, -0.5),
+            Vec2::new(9.0, 9.0),
+        ];
+        assert_eq!(nearest(here, foes.into_iter()), Some(Vec2::new(1.0, -0.5)));
+        assert_eq!(nearest(here, [Vec2::new(4.5, 1.0)].into_iter()), None);
+        assert_eq!(nearest(here, std::iter::empty()), None);
+    }
+
     #[test]
     fn speed_eases_toward_the_wish() {
         assert!((ease(0.0, JOG, 0.1) - 0.9).abs() < 1e-5);

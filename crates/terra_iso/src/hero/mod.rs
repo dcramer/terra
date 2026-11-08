@@ -55,11 +55,11 @@ const SHIELD: &str = "models/held/heater_shield.glb";
 #[derive(Component)]
 pub struct GameBody;
 
-/// His clips' file and his move set.
+/// His clips' file and his move set (read by the foes' blows on him, demo/blows.rs).
 #[derive(Resource)]
-struct Kit {
+pub struct Kit {
     gltf: Handle<Gltf>,
-    set: terra_motion::moves::MoveSet,
+    pub set: terra_motion::moves::MoveSet,
 }
 
 pub fn plugin(app: &mut App) {
