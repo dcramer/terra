@@ -533,7 +533,10 @@ impl Drawn {
 /// laying more of it later (`floor_stream`).
 pub(super) fn lay<W: Ways>(lay: &mut Lay, map: &mut Floor<W>, area: &Area) -> Kit {
     let mut dice = lay.seed.derive("floor").rng();
-    let kit = Kit::make(lay);
+    let kit = {
+        let _part = info_span!("floor", name = "its kit").entered();
+        Kit::make(lay)
+    };
     let mut put = Put::default();
     lay_with(lay, &kit, map, area, &mut dice, &mut put);
     let (laid, nearest) = (put.wood, put.nearest);

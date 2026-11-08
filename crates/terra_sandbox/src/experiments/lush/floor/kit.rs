@@ -144,9 +144,14 @@ pub(in crate::experiments::lush) fn lay_with<W: Ways>(
     dice: &mut Rng,
     put: &mut Put,
 ) {
+    // Each timed apart (the recorder names a `terra` span), each inside the one before.
+    let _part = info_span!("floor", name = "rocks").entered();
     rocks(lay, kit, map, area, dice, put);
+    let _part = info_span!("floor", name = "logs").entered();
     logs(lay, kit, map, area, dice, put);
+    let _part = info_span!("floor", name = "stumps").entered();
     stumps(lay, kit, map, area, dice, put);
+    let _part = info_span!("floor", name = "undergrowth").entered();
     undergrowth(lay, kit, map, area, dice, put);
 }
 
