@@ -110,11 +110,14 @@ export const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms))
 /// the same copy. `foreground` lets a person use the window too; otherwise the run stays
 /// out of their way (`--background`).
 /// `release` runs an optimised build, to time things as a player would meet them.
-export type Start = { windows?: boolean; realTime?: boolean; foreground?: boolean; copy?: string; release?: boolean };
+/// `systems` (a release build only) builds with the recorder's per-system spans (`hitch-log`)
+/// and asks for its report, which lets them through the log's filter: a long frame's warning
+/// then names its systems and not only its schedules.
+export type Start = { windows?: boolean; realTime?: boolean; foreground?: boolean; copy?: string; release?: boolean; systems?: boolean };
 
 /// Starts a sandbox listening, in the background, on a port nothing else answers on and with
 /// a token to know it by, and waits until it answers. Its log goes to shots/remote.log.
-export async function start(sandboxArgs: string[], { windows, realTime, foreground, copy, release }: Start = {}) {
+export async function start(sandboxArgs: string[], { windows, realTime, foreground, copy, release, systems }: Start = {}) {
   for (let tries = 0; tries < 20; tries++) {
     // A random port away from the usual one other runs use, below the dynamic range, where
     // Windows reserves blocks of ports for Hyper-V and WSL and a run would start without a
@@ -131,10 +134,10 @@ export async function start(sandboxArgs: string[], { windows, realTime, foregrou
   token = Math.random().toString(36).slice(2);
   mkdirSync(dirname(PORT_FILE), { recursive: true });
   writeFileSync(PORT_FILE, `${port} ${token}`);
-  const args = ["--remote-port", String(port), "--remote-token", token, ...(realTime ? [] : ["--steady"]), ...(foreground ? [] : ["--background"]), ...sandboxArgs];
+  const args = ["--remote-port", String(port), "--remote-token", token, ...(realTime ? [] : ["--steady"]), ...(foreground ? [] : ["--background"]), ...(systems ? ["--profile-report=shots/systems-report.txt"] : []), ...sandboxArgs];
   writeMark(0);
   // A dev build keeps the line behind every change, for `why` (D548); `win` adds it itself.
-  const profile = release ? ["--release"] : ["--features", "track_location"];
+  const profile = release ? ["--release", ...(systems ? ["--features", "hitch-log"] : [])] : ["--features", "track_location"];
   const command = windows
     ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", ...(release ? ["--release"] : []), "--copy", own(copy ?? `remote-${port}`), "--", ...args]]
     : ["cargo", ["run", "-q", ...profile, "-p", "terra_sandbox", "--", ...args]];

@@ -10,7 +10,10 @@
 // the forest's state before the first trip and after the last differs only in the player's
 // place. Says each crossing's time, as the game measured it (step through to play).
 //
-//   node tools/sandbox/portal.ts [--trips 5] [--settle 5] [--debug]
+//   node tools/sandbox/portal.ts [--trips 5] [--settle 5] [--debug] [--systems]
+//
+// --systems builds with per-system timing and, at the end, says which systems held each
+// crossing's long frames (the freeze warnings of shots/remote.log, shortened).
 //
 // A release build unless --debug. Node 22.18 or later; no dependencies.
 
@@ -72,7 +75,7 @@ async function cross(): Promise<{ census: Census; took: string }> {
 const within = (a: number | null | undefined, b: number | null | undefined) => a != null && b != null && Math.abs(b - a) <= MEMORY_SLACK * a;
 const memory = (c: Census) => `gpu ${c.gpu?.allocated_mib ?? "?"} MiB allocated, ${c.gpu?.reserved_mib ?? "?"} reserved; resident ${c.resident_mib ?? "?"} MiB`;
 
-await start(["--offscreen", "--mute", "--experiment", "portal"], { release: !args.includes("--debug") });
+await start(["--offscreen", "--mute", "--experiment", "portal"], { release: !args.includes("--debug"), systems: args.includes("--systems") });
 let failed = false;
 try {
   await waitSeconds(SETTLE_S);
@@ -117,6 +120,11 @@ try {
   const after = await snaps.take("after");
   const diff = snaps.diff({ ...before, census: undefined }, { ...after, census: undefined }, { most: 30 });
   console.log(`forest's state, before the first trip to after the last: ${diff.join("\n  ")}`);
+  if (args.includes("--systems")) {
+    // Each long frame of a crossing, by what held it.
+    const { lines } = await said(0, "freeze: frame", 60).catch(() => ({ lines: [] }));
+    for (const l of lines) console.log(`  ${describe(l).replace(/^.*freeze: /, "").slice(0, 700)}`);
+  }
 } catch (error) {
   failed = true;
   console.log(`FAIL: ${error instanceof Error ? error.message : error}`);

@@ -262,6 +262,8 @@ The log is for what is worth reading: the engine's routine messages are filtered
 
 <a id="crash-capsule"></a>**When a run panics** it leaves a crash capsule (D399, `crates/terra_world/src/crash.rs`), and its last line printed is `CRASH capsule: <path>`. Read that `summary.txt` first, not the backtrace: in at most 40 lines it has the panic and where, only the backtrace's frames in our crates, the last lines the run said with their frames, the frame, seed, save and command line, and an `again:` command that runs it again (from a copy of the save as last written, unless the run started `--fresh`). The whole backtrace, every line the run kept and the save are beside it in `shots/crash-<time>/`.
 
+**Which systems a crossing's long frames spend** (D71): `node tools/sandbox/portal.ts --trips 1 --systems` builds with per-system timing and says each long frame's five longest systems.
+
 **Every failing system in one run** (D71): a system whose parameter is not there (a world's resource read while a world is made, D469) panics the game, one a run. `TERRA_SYSTEM_ERRORS=list` says each failing system once and goes on; then `grep -o 'SYSTEM ERROR.*' shots/remote.log | sort -u`. For finding them, never for play.
 
 ## Building's debug views
