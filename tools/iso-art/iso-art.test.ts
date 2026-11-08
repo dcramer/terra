@@ -3,7 +3,7 @@
 // tall), measured, checked, turned and scaled; the ledger, the costs, the prompt and refusals.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -99,6 +99,36 @@ test("a walk's speed and heading come from its planted foot", () => {
   assert.ok(Math.abs(m.height - 1.8) < 1e-6);
   assert.ok(Math.abs(m.ground) < 1e-6);
   assert.equal(m.triangles, 2);
+});
+
+// A walk that drags its toes, as treant-c's root feet do: each foot planted three quarters of
+// the cycle (sliding back 0.6 m at 0.8 m/s), then swung forward at 2.4 m/s passing 3 cm under
+// the planted one, so the lowest foot is always the swinging one.
+const DRAG_L: [number, string, number[], number[][]] = [2, "translation", [0, 0.75, 0.875, 1], [[0.1, -1, 0.3], [0.1, -1, -0.3], [0.1, -1.03, 0], [0.1, -1, 0.3]]];
+const DRAG_R: [number, string, number[], number[][]] = [3, "translation", [0, 0.25, 0.375, 0.5, 1], [[-0.1, -1, -0.1], [-0.1, -1, -0.3], [-0.1, -1.03, 0], [-0.1, -1, 0.3], [-0.1, -1, -0.1]]];
+
+test("a walk whose swinging toe drags under the planted foot still goes forward, at the planted foot's speed", () => {
+  const walk = measure(walker([IDLE, ["walk", [DRAG_L, DRAG_R]]])).clips.walk.motion!;
+  assert.ok(Math.abs(walk.heading) < 2, `forward, not backwards: ${walk.heading}`);
+  assert.ok(Math.abs(walk.speed - 0.8) < 0.05, `speed ${walk.speed}`);
+});
+
+test("export refuses a run going the other way from the walk, and names both", () => {
+  const ctx = fakeCtx(100, []);
+  const back = (k: [number, string, number[], number[][]]) => [k[0], k[1], k[2], k[3].map(([x, y, z]) => [x, y, -z])];
+  const file = join(ctx.root, "tripo.glb");
+  const raw = (run: any[]) => {
+    const g = walker([IDLE, WALK, ["preset:biped:run", run], ["preset:biped:slash", IDLE[1]], FALL]);
+    writeFileSync(file, writeGlb(g));
+  };
+  ctx.tripo = (args) => ({ out: { credits: 0, files: args[0] === "export" ? [file] : [] }, minutes: 0 });
+  writeAsset(ctx.root, { name: "stump", kind: "creature", theme: "forest", description: "a stump", body: "biped", height: 2, project: "p1", rig: "biped", stages: {} });
+  raw([back(footL), back(footR)]);
+  assert.throws(() => main(["export", "stump"], ctx), /stump's clips go different ways \(walk 0 deg, run 180 deg/);
+  assert.ok(!existsSync(join(ctx.root, "assets", "models", "iso", "stump.glb")), "nothing shipped");
+  raw([footL, footR]);
+  main(["export", "stump"], ctx);
+  assert.ok(existsSync(join(ctx.root, "assets", "models", "iso", "stump.glb")), "a run the walk's way ships");
 });
 
 test("a model turned a quarter is seen walking toward +X, and export's root node turns it back and makes it life size", () => {

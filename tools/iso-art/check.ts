@@ -78,8 +78,12 @@ export function motion(glb: Glb, clip: Clip, sk: Skeleton): Motion {
   const floor = Math.min(...sk.feet.map((j) => pos(0, j)[1]));
   const steps: [number, number][] = [];
   for (let f = 0; f + 1 < frames; f++) {
-    const foot = sk.feet.reduce((a, b) => (pos(f, a)[1] <= pos(f, b)[1] ? a : b));
-    if (pos(f, foot)[1] > ground + 0.05 * sk.restHeight) continue;
+    // The planted foot is the slowest of those on the ground, not the lowest: a creature that
+    // drags its toes (treant-c's root feet, 2026-11-08) swings a ball lower than the planted one,
+    // and the lowest read its walk as going backwards.
+    const near = sk.feet.filter((j) => pos(f, j)[1] <= ground + 0.05 * sk.restHeight);
+    if (!near.length) continue;
+    const foot = near.reduce((a, b) => (flat(pos(f + 1, a), pos(f, a)) <= flat(pos(f + 1, b), pos(f, b)) ? a : b));
     const dt = at(f + 1) - at(f);
     const body = [pos(f + 1, sk.body), pos(f, sk.body)];
     const ft = [pos(f + 1, foot), pos(f, foot)];
@@ -130,6 +134,24 @@ export function measure(glb: Glb): Measures {
   };
   for (const c of all) out.clips[c.name] = { seconds: c.duration, motion: sk ? motion(glb, c, sk) : undefined };
   return out;
+}
+
+/** Most the moving clips' headings may differ before `export` refuses: twice `check`'s facing
+ * bound, so one turn cannot bring both within it. */
+export const HEADINGS_APART = 50;
+
+/** Why the moving clips go different ways, or undefined when they agree: `export` turns the
+ * model by the walk alone, so a run (or walk) measured the other way would be shipped backwards
+ * and found only by `check` (treant-c, 2026-11-08: walk 0, run -170). */
+export function headingsDisagree(name: string, m: Measures): string | undefined {
+  const moving = Object.entries(m.clips).filter(([, c]) => c.motion && c.motion.speed > 0.2);
+  const walk = moving.find(([k]) => k === "walk");
+  if (!walk) return undefined;
+  const apart = (a: number, b: number) => Math.abs((((a - b) % 360) + 540) % 360 - 180);
+  const off = moving.filter(([k, c]) => k !== "walk" && apart(c.motion!.heading, walk[1].motion!.heading) > HEADINGS_APART);
+  if (!off.length) return undefined;
+  const say = (k: string, c: { motion?: Motion }) => `${k} ${c.motion!.heading.toFixed(0)} deg`;
+  return `${name}'s clips go different ways (${[walk, ...off].map(([k, c]) => say(k, c)).join(", ")}; more than ${HEADINGS_APART} deg apart), and export turns the model by the walk alone, so it would ship the others backwards (check.ts motion, the planted foot's heading). Look at each clip in the asset view (\`--asset ${name}\`): if one preset is truly reversed, animate that one again; if the feet are mis-read, fix check.ts motion with a test. Do not turn the model by hand to pass \`check\`.`;
 }
 
 /** Every check for an asset of this kind, rigged as `rigType`, made to `height` metres. */
