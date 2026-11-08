@@ -20,6 +20,48 @@
       "credits": 20,
       "minutes": 0.33068333333333333,
       "note": "rigged as biped"
+    },
+    "convert": {
+      "at": "2026-11-08T07:29:58.456Z",
+      "credits": 0,
+      "minutes": 0.0015333333333333334,
+      "files": [
+        "assets/models/iso/scavenger.glb"
+      ],
+      "clips": [
+        "idle=Idle_Loop",
+        "walk=Walk_Loop",
+        "run=Jog_Fwd_Loop",
+        "attack=Sword_Attack",
+        "hit=Hit_Chest",
+        "death=Death01"
+      ],
+      "attack": "Sword_Attack",
+      "scale": 1,
+      "note": "the game's skeleton and clips: idle=Idle_Loop walk=Walk_Loop run=Jog_Fwd_Loop attack=Sword_Attack hit=Hit_Chest death=Death01, 28 others dropped, scaled 1.000"
+    },
+    "check": {
+      "at": "2026-11-08T07:29:58.629Z",
+      "credits": 0,
+      "minutes": 0.0010666666666666667,
+      "passed": 30,
+      "of": 30,
+      "failed": [],
+      "clips": {
+        "idle": 6,
+        "walk": 1.13,
+        "run": 0.58,
+        "attack": 1.5,
+        "hit": 0.33,
+        "death": 2.38
+      },
+      "speeds": {
+        "walk": 1.29,
+        "run": 4.56
+      },
+      "triangles": 9917,
+      "height": 1.72,
+      "note": "passed 30 of 30"
     }
   },
   "name": "scavenger",
