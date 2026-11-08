@@ -11,7 +11,7 @@
 //! Before its first blow a mob plays its own graph of idle, walk and attack; after it,
 //! strike.rs owns the graph and plays each by name (`Struck::gait`).
 
-use super::steer::{self, Field, Mob, Rules, Stalls};
+use super::steer::{self, Field, Idles, Mob, Rules, STILL, Stalls};
 use crate::Args;
 use crate::kit::biome::{Biome, Layout};
 use crate::nav::Nav;
@@ -27,17 +27,17 @@ use std::time::Duration;
 const STAGGER: f32 = 0.6;
 /// Its walk clip's speed is its ground speed over the clip's, kept within these.
 const PACE: (f32, f32) = (0.5, 2.5);
-/// Under this speed (m/s) it stands, and turns to face the hero rather than its way.
-const STILL: f32 = 0.2;
-/// It swings once it stands within this of the hero (m): its slot and a little.
-const SWING: f32 = steer::RING + 0.6;
+/// It swings once it stands within its reach of him (steer.rs `Mob::reach`); under
+/// `steer::STILL` it stands, and turns to face him rather than its way.
 /// Between one mob's swings (s), and each next mob's a little longer, so they take turns.
 const COOLDOWN: (f32, f32) = (1.5, 0.4);
 /// How fast it turns to its way (1/s, of what is left).
 const TURN: f32 = 8.0;
 const BLEND: Duration = Duration::from_millis(200);
-/// A stall is warned of once it passes this (s), and again each time it grows by `GROWS`.
+/// A stall is warned of once it passes this (s), and again each time it grows by `GROWS`;
+/// an awake mob standing idle out of its reach (steer.rs `Idles`) past `IDLE` fails the run.
 pub const STALLED: f32 = 1.0;
+pub const IDLE: f32 = 1.5;
 const GROWS: f32 = 0.5;
 /// A pack wakes once the hero comes this near one of it (m): about the camera's half height
 /// on the ground, so it is in frame as it starts toward him.
@@ -82,7 +82,9 @@ impl Gait {
 pub struct Horde {
     pub mobs: Vec<Mob>,
     pub stalls: Stalls,
+    pub idles: Idles,
     warned: f32,
+    idle_warned: f32,
     /// The nav grid with the footprints blocked, and how many circles it was built with.
     paths: Option<(usize, Nav)>,
     blows: Vec<u32>,
@@ -226,6 +228,17 @@ fn steer(
         horde.warned = worst;
         warn!("mob {who} stalled {worst:.1} s");
     }
+    horde.idles.watch(&horde.mobs, &active, him, now);
+    let (worst, who, off) = horde.idles.worst;
+    if worst > STALLED.max(horde.idle_warned + GROWS) {
+        horde.idle_warned = worst;
+        let m = &horde.mobs[who];
+        warn!(
+            "mob {who} idle {worst:.1} s {off:.1} m off him (reach {:.1}), slot {:?}",
+            m.reach(),
+            m.slot
+        );
+    }
     let turn = 1.0 - libm::expf(-TURN * dt);
     for (foe, mut tr, _, fallen, _) in &mut bodies {
         if fallen {
@@ -327,7 +340,9 @@ pub(super) fn gait(
             "attack"
         } else if speed > STILL {
             "walk"
-        } else if m.at.distance(him) <= SWING && m.wants(him, now).is_none() && now >= g.next_swing
+        } else if m.at.distance(him) <= m.reach()
+            && m.wants(him, now).is_none()
+            && now >= g.next_swing
         {
             g.swing_until = now + g.swing;
             g.next_swing = g.swing_until + COOLDOWN.0 + COOLDOWN.1 * foe.i as f32;

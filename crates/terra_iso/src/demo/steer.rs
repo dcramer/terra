@@ -23,6 +23,10 @@ pub const RADIUS: f32 = 0.45;
 /// the waiting ring's.
 pub const RING: f32 = 1.8;
 pub const WAIT: f32 = 3.8;
+/// It swings once it stands within this beyond its ring (m): its slot and a little.
+pub const SWING: f32 = 0.6;
+/// Under this speed (m/s) a body stands.
+pub const STILL: f32 = 0.2;
 const INNER: usize = 6;
 const OUTER: usize = 10;
 /// Near enough its slot to stand (m).
@@ -100,6 +104,18 @@ impl Mob {
     pub fn wants(&self, hero: Vec2, now: f32) -> Option<Vec2> {
         let goal = slot_at(hero, self.slot?);
         (now >= self.hold && self.at.distance(goal) > ARRIVE).then_some(goal)
+    }
+
+    /// How near the hero it swings from (m): its ring and `SWING`.
+    pub fn reach(&self) -> f32 {
+        RING + SWING
+    }
+
+    /// Whether it stands idle out of its reach at `now`: not held (a stagger, its own swing),
+    /// not moving, too far from him to swing. What an ARPG's pack never does (it closes in or
+    /// circles); `Idles` times it.
+    pub fn idle(&self, hero: Vec2, now: f32) -> bool {
+        now >= self.hold && self.vel.length() < STILL && self.at.distance(hero) > self.reach()
     }
 }
 
@@ -382,6 +398,32 @@ impl Stalls {
     }
 }
 
+/// The longest time any active mob stood idle out of its reach (`Mob::idle`, s), which, and
+/// how far from him it stood then (m), over a run: a pack standing by while one fights.
+#[derive(Default)]
+pub struct Idles {
+    since: Vec<Option<f32>>,
+    pub worst: (f32, usize, f32),
+}
+
+impl Idles {
+    pub fn watch(&mut self, mobs: &[Mob], active: &[bool], hero: Vec2, now: f32) {
+        self.since.resize(mobs.len(), None);
+        for (i, m) in mobs.iter().enumerate() {
+            let idle = active[i] && m.idle(hero, now);
+            let s = &mut self.since[i];
+            match *s {
+                Some(t) if idle => {
+                    if now - t > self.worst.0 {
+                        self.worst = (now - t, i, m.at.distance(hero));
+                    }
+                }
+                _ => *s = idle.then_some(now),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -595,5 +637,34 @@ mod tests {
             "it stands at {}",
             mobs[0].at
         );
+    }
+
+    /// A mob given no slot it can reach stands idle out of reach and `Idles` times it; one
+    /// in its slot does not count.
+    #[test]
+    fn idles_time_a_mob_standing_by() {
+        let mut idles = Idles::default();
+        let mut far = Mob::new(Vec2::new(5.0, 0.0));
+        far.slot = None;
+        let near = Mob::new(Vec2::new(RING, 0.0));
+        for n in 0..90 {
+            idles.watch(
+                &[far.clone(), near.clone()],
+                &[true, true],
+                Vec2::ZERO,
+                n as f32 * DT,
+            );
+        }
+        let (t, who, off) = idles.worst;
+        assert_eq!(who, 0);
+        assert!(
+            (t - 89.0 * DT).abs() < 1e-3 && (off - 5.0).abs() < 1e-3,
+            "{t} {off}"
+        );
+        far.vel = Vec2::X;
+        let mut walking = Idles::default();
+        walking.watch(&[far.clone()], &[true], Vec2::ZERO, 0.0);
+        walking.watch(&[far], &[true], Vec2::ZERO, 1.0);
+        assert_eq!(walking.worst.0, 0.0);
     }
 }

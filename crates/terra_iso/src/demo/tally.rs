@@ -4,7 +4,7 @@
 //! staged cast reads as foes that never move: what a play run's check asks of the forest's
 //! roster (demo/mobs.rs) is that each walks to him, he reaches them and they fall.
 
-use super::mobs::{Foe, Horde, STALLED};
+use super::mobs::{Foe, Horde, IDLE, STALLED};
 use crate::Args;
 use crate::play::strike::Struck;
 use crate::play::{Fallen, Hero, REACH};
@@ -109,12 +109,21 @@ fn tally(
         info!("{}", line(frame.0, &w, struck, fallen, here));
         // The run's gate, once its mobs are in play (mobs.rs): its exit an error on a fail.
         if last && let Some(h) = horde {
-            match verdict(&w, h.stalls.worst) {
-                Ok(()) => info!("✓ the mobs: each walked to him, none stalled"),
-                Err(e) => {
-                    error!("✗ {e}");
-                    exit.write(AppExit::from_code(1));
-                }
+            // Each bar said, so one failing never hides another.
+            let failed: Vec<String> = [verdict(&w, h.stalls.worst), idle(h.idles.worst)]
+                .into_iter()
+                .filter_map(Result::err)
+                .collect();
+            for e in &failed {
+                error!("✗ {e}");
+            }
+            if failed.is_empty() {
+                info!(
+                    "✓ the mobs: each walked to him, none stalled, none idle out of reach past {IDLE} s (worst {:.1} s)",
+                    h.idles.worst.0
+                );
+            } else {
+                exit.write(AppExit::from_code(1));
             }
         }
     }
@@ -145,9 +154,30 @@ pub fn verdict(walks: &[Walk], (stall, who): (f32, usize)) -> Result<(), String>
     Ok(())
 }
 
+/// The bar on a pack standing by (iso-forest-demo j18, D632): no awake mob stood idle out of
+/// its reach past `IDLE` (steer.rs `Idles`: its worst time, which, how far off him).
+pub fn idle((t, who, off): (f32, usize, f32)) -> Result<(), String> {
+    if t > IDLE {
+        return Err(format!(
+            "mob {who} stood idle {t:.1} s {off:.1} m off him, out of its reach (over {IDLE} s): \
+             its pack stands by while another fights; give it a slot it can reach (demo/steer.rs \
+             `assign`), its `mob {who} idle` lines say when"
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The idle bar passes a mob that stood by a moment and fails one that stood 3 s off.
+    #[test]
+    fn the_gate_catches_a_mob_standing_by() {
+        assert_eq!(idle((0.8, 5, 3.9)), Ok(()));
+        let e = idle((3.0, 6, 3.9)).unwrap_err();
+        assert!(e.contains("mob 6 stood idle 3.0 s 3.9 m off him"), "{e}");
+    }
 
     /// A foe's walk is the ground it covered along its way (out and back counts twice), and
     /// it has reached him once it stood within his reach, though it left again.
