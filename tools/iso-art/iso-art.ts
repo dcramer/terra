@@ -16,6 +16,7 @@ import { type Asset, type Stage, type StageRecord, allAssets, assetDir, readAsse
 import { centre, cut, inPlace, loop, place, renameClips } from "./normalize.ts";
 import { DIR, assetSheet, clipSheet } from "./sheet.ts";
 import { blenderCut, splice } from "./decimate.ts";
+import { baseColour, trim } from "./trim.ts";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TRIPO = join(ROOT, "tools", "tripo", "tripo.ts");
@@ -231,6 +232,22 @@ export function decimateAsset(ctx: Ctx, name: string, file?: string): void {
   record(ctx, a, "decimate", { credits: 0, minutes: (Date.now() - start) / 60000, triangles: s.after, note: `${s.before} to ${s.after} triangles (budget ${most}), Blender's collapse on the mesh alone, skeleton and clips kept; bounds within ${(s.drift * 100).toFixed(2)}%` });
 }
 
+/** Drops a tree creature's leaf triangles but a `keep` share of its tufts (trim.ts), so its
+ * trunk and limbs show from the ARPG camera. Run after `decimate` (export and decimate write the
+ * mesh anew). */
+export function trimAsset(ctx: Ctx, name: string, keep: number): void {
+  const a = readAsset(ctx.root, name);
+  const path = assetFile(ctx.root, name);
+  if (!existsSync(path)) throw new Error(`${relative(ctx.root, path)} is missing: run \`export ${name}\` first`);
+  if (!(keep >= 0 && keep <= 1)) throw new Error(`--keep is the share of leaf tufts kept, 0 to 1 (0.25 keeps a quarter)`);
+  if (a.stages.trim && (a.stages.trim.at ?? "") > (a.stages.decimate?.at ?? a.stages.export?.at ?? "")) throw new Error(`${name} was trimmed already since its last export or decimate (${a.stages.trim.note}): run \`export ${name}\` and \`decimate ${name}\` first, so the trim is of the whole crown`);
+  const start = Date.now();
+  const glb = readGlb(readFileSync(path));
+  const s = trim(glb, baseColour(glb), keep);
+  writeFileSync(path, writeGlb(glb));
+  record(ctx, a, "trim", { credits: 0, minutes: (Date.now() - start) / 60000, triangles: s.after, note: `${s.leaf} of ${s.before} triangles leaf in ${s.tufts} tufts; ${s.kept} tufts kept (--keep ${keep}), ${s.before} to ${s.after} triangles` });
+}
+
 export function checkAsset(ctx: Ctx, name: string, file?: string): boolean {
   const a = readAsset(ctx.root, name);
   const path = file ?? assetFile(ctx.root, name);
@@ -309,6 +326,8 @@ const USAGE = `usage: node tools/iso-art/iso-art.ts <stage> NAME …
                          Punch_Cross --unarmed), hit and death to assets/models/iso/NAME.glb (free)
   decimate NAME [FILE]   the GLB's mesh cut to its budget by Blender (or FILE, tools/blender/decimate.py's
                          cut of it made elsewhere), skeleton and clips kept; after every export (free)
+  trim NAME [--keep F]   a tree creature's leaf triangles dropped but a share F of their tufts
+                         (default 0), so its trunk and limbs read from above; after decimate (free)
   check NAME [FILE]      what can be checked without a GPU; exits 1 if any check fails
   adopt NAME PROJECT --kind K [--height M] [--theme T] ["DESCRIPTION"]
                          takes an existing Tripo project in at the step it has reached
@@ -322,7 +341,7 @@ export function main(argv: string[], ctx: Ctx): number {
   const { values: v, positionals: p } = parseArgs({
     args: argv,
     allowPositionals: true,
-    options: { kind: { type: "string" }, theme: { type: "string" }, body: { type: "string" }, height: { type: "string" }, standard: { type: "boolean" }, unarmed: { type: "boolean" }, dir: { type: "string" }, help: { type: "boolean", short: "h" } },
+    options: { kind: { type: "string" }, theme: { type: "string" }, body: { type: "string" }, height: { type: "string" }, standard: { type: "boolean" }, unarmed: { type: "boolean" }, keep: { type: "string" }, dir: { type: "string" }, help: { type: "boolean", short: "h" } },
   });
   const [stage, name, third] = p;
   if (!stage || v.help) {
@@ -348,6 +367,7 @@ export function main(argv: string[], ctx: Ctx): number {
     case "export": exportAsset(ctx, name); return 0;
     case "convert": convert(ctx, name, third, v); return 0;
     case "decimate": decimateAsset(ctx, name, third); return 0;
+    case "trim": trimAsset(ctx, name, Number(v.keep ?? 0)); return 0;
     case "check": return checkAsset(ctx, name, third) ? 0 : 1;
     case "adopt":
       if (!third) throw new Error(`adopt needs the Tripo PROJECT (its id, a prefix \`node tools/tripo/tripo.ts list\` shows, or its Studio URL)`);

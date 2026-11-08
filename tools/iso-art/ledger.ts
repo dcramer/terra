@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import type { Body, Kind } from "./kinds.ts";
 
-export const STAGES = ["concept", "model", "rig", "animate", "export", "convert", "decimate", "check"] as const;
+export const STAGES = ["concept", "model", "rig", "animate", "export", "convert", "decimate", "trim", "check"] as const;
 export type Stage = (typeof STAGES)[number];
 
 export type StageRecord = {
