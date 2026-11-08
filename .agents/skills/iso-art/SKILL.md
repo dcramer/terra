@@ -50,6 +50,7 @@ The isometric experiment's art pipeline, as it proved out from 2026-11-05 (exper
 - **Every effect has a light**, a bright core over bloom, and fades. A fixed pool of entities, nothing spawned at run time.
 - **Living nature shows in the film**: wind, cloth, motes, creatures moving. A biome is done with a still and a 12 to 20 s film on the desk.
 - **No local builds where embargoed** (`TERRA_NO_LOCAL_BUILDS=1`): build, test and shoot in one `cargo xtask remote-render` job; node, the docs check and Tripo are fine anywhere.
+- **Reuse, then Tripo; nothing bought** (the developers, 2026-11-08: "i am not paying for assets right now. we will use tripo generally. we can reuse existing assets as much as we can"). Look in `assets/` and `art/` first; else make it with Tripo. A licensed or non-redistributable file goes in the private repository `dcramer/terra-private` (D599's licences; `~/src/terra-private` or `$TERRA_PRIVATE`), never this public one. The neon street's and wasteland's people are iso's own cast, made with Tripo ("Own cast, Tripo"; [docs/iso.md](../../../docs/iso.md)).
 - **Credits are the team's**: a spend is named in the brief or the handoff; adopt an existing project first; never spend past the balance to try another model.
 - **Look little**: about 120k tokens is three shots and a judge; one look an effect, not a tweak.
 

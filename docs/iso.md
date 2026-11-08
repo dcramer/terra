@@ -1,6 +1,6 @@
 # Iso: the top-down game on the game's own systems
 
-Status: **design, 2026-11-07, Open (D635)**, for the developers to read before any of it is built (D49). The question is on the review desk (q-iso-one-game). The camera is D629's question, the characters' budgets D630's; the art pipeline is D628 and the biome kit and its bar D634.
+Status: **design, 2026-11-07; A decided 2026-11-08 (D635)**: one game with an iso camera, "just make sure its modularized enough to not collide". The camera is D629's question, the characters' budgets D630's; the art pipeline is D628 and the biome kit and its bar D634.
 
 ## Intent
 
@@ -12,14 +12,16 @@ This doc says what iso shares with the game and what stays its own, the order th
 
 | Option | What it is | What is shared |
 |---|---|---|
-| **A. One game with an iso camera** (recommended) | Iso is a camera, its controls and a look over the game's world: one binary, one world and one server. Iso's biomes become realms' themes and sites. | Everything below the camera. |
+| **A. One game with an iso camera** (chosen, D635) | Iso is a camera, its controls and a look over the game's world: one binary, one world and one server. Iso's biomes become realms' themes and sites. | Everything below the camera. |
 | B. A sibling game on shared crates | Iso has its own binary and its own authored scenes, on the game's rules crates and plugins. | The tick, intent, mover, fight, creatures and net. Not the world: iso keeps its own world layer and server. |
 | C. Keep them separate | Iso stays an art and look lab. | Only what flows back. |
 
-Why A: the developer asked for one ECS, one set of systems and one network. A server decides everything (D51), so B means a second world layer and a second server to keep in step for as long as both exist, and C does not answer the ask. Steps 0 to 6 below are the same under A and B, so the choice between them is not needed before step 7. Under C they are not built at all, so C has to be ruled out before step 1.
+The developers chose A on 2026-11-08: "one game, just make sure its modularized enough to not collide". Why A: the developer asked for one ECS, one set of systems and one network. A server decides everything (D51), so B means a second world layer and a second server to keep in step for as long as both exist, and C does not answer the ask. Steps 0 to 6 below are the same under A and B, so the choice between them is not needed before step 7. Under C they are not built at all, so C has to be ruled out before step 1.
 
 ## Constraints
 
+- **Modular enough not to collide** (D635, the developers): iso's camera, controls, look kit and figures are their own plugins and modules beside the third-person game's, talking through components, events and small shared types. Neither camera's work forks or breaks the other's: what assumes a horizon or a third-person eye takes the camera as an input, and a change for one camera keeps the other's checks passing.
+- **Assets are reused, made with Tripo, never bought** (the developers, 2026-11-08: "i am not paying for assets right now. we will use tripo generally. we can reuse existing assets as much as we can"). Reuse what the repository has first, else make it with Tripo (D628). A licensed or non-redistributable file (a paid pack, a Bestiary-style licence) goes in the private repository `dcramer/terra-private` (D599's licences; `tools/characters/vendored.ts` finds it at `~/src/terra-private` or `$TERRA_PRIVATE`), never this public one. The non-fantasy biomes' people are iso's own cast, made with Tripo ("Own cast, Tripo").
 - **The rules are plain Rust** (D28, D447): iso's movement and fight run in `terra_motion`, so a server can decide them (D51) and a client can predict them.
 - **One tick** (D138): movement and the fight run in `FixedUpdate` at 64 Hz. The camera, clips and effects run each frame and only read.
 - **Intent is the seam** (D51): iso's input does nothing but write the walker's `Intent`. The server writes other players' intents.
@@ -112,7 +114,7 @@ Each step is small and lands on its own with its check, movement first (develope
 
 ## Questions for the developers
 
-1. A, B or C (D635).
+1. ~~A, B or C (D635).~~ A, 2026-11-08.
 2. Under A, is the iso camera the game's only camera, or one of two? Building, for instance, may want the third-person view. With two cameras, players in one world see differently: from above, iso sees round corners and behind a body, and third-person sees to the horizon. That matters wherever players fight players.
 3. One game has one art style (D14), but D634's bar leans further into realism than D14's lightly stylised realism. Which holds?
 4. Pause cannot exist on a shared server (D51). Party orders can, as intents for companions, but only in real time. Keep pause for solo play, or drop it with the fixed camera (D629)?

@@ -47,7 +47,7 @@ What we are building, its tenets, scope and players.
 | [D590](decisions/D590.md) | Beating the demo's boss imprints a mark on you | Design | Developers | Decided | In v0's demo (D589) the boss leaves no item… |
 | [D592](decisions/D592.md) | Characters are saved on the server | Design | Developers | Decided | A character's record is kept by the server it plays on… |
 | [D629](decisions/D629.md) | The iso experiment's camera follows the hero as an ARPG's does, or stays the spike's fixed Baldur's Gate II view | Design | — | Open | Two cameras for the 2.5D isometric experiment… |
-| [D635](decisions/D635.md) | The iso experiment is the game under an iso camera, a sibling game on shared crates, or kept apart | Design | — | Open | There are three ways for the 2.5D top-down experiment… |
+| [D635](decisions/D635.md) | The iso experiment is one game with the main game, under an iso camera, modular enough not to collide | Design | Developers | Decided | The 2.5D top-down experiment (`crates/terra_iso`, once… |
 
 ## Worlds and realms
 
