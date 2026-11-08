@@ -393,6 +393,12 @@ pub struct Plant {
     pub tint: Vec<(f32, f32, f32)>,
     #[serde(default)]
     pub flowers: f32,
+    /// How far each texel of the card is taken to its own grey before the tint, 0 (the
+    /// atlas's green as it is) to 1: dead grass from a green card. A multiplied tint cannot
+    /// do it, as the card's green blades and tan tips need opposite factors (the
+    /// wasteland's straw came out olive with orange tips, judges to 261107-1917-2).
+    #[serde(default)]
+    pub grey: f32,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]

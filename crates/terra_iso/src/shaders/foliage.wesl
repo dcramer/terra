@@ -34,6 +34,9 @@ struct Foliage {
     forward: vec4<f32>,
     // The camp fire and the party's middles; w is 1 for one standing there.
     party: array<vec4<f32>, 6>,
+    // x: how far each texel of the card goes to its own grey before the vertex colour tints
+    // it (a plant set's `grey`, 0 leaves the card as it is).
+    tone: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -190,6 +193,18 @@ fn fragment(in: VertexOutput) {
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     cut(in.world_position.xyz, in.position.xy);
     var pbr_input = pbr_input_from_standard_material(in, is_front);
+    // The card's texel taken toward its own grey, then tinted again: the base colour is the
+    // texel times the vertex colour, so the texel is that over the colour. A multiplied
+    // tint alone cannot grey a card whose blades are green and tips tan.
+@if(VERTEX_COLORS) {
+    if foliage.tone.x > 0.0 {
+        let tint = max(in.color.rgb, vec3<f32>(1e-5));
+        let texel = pbr_input.material.base_color.rgb / tint;
+        let grey = vec3<f32>(dot(texel, vec3<f32>(0.2126, 0.7152, 0.0722)));
+        let rgb = mix(texel, grey, foliage.tone.x) * tint;
+        pbr_input.material.base_color = vec4<f32>(rgb, pbr_input.material.base_color.a);
+    }
+}
     pbr_input.material.base_color = alpha_discard(pbr_input.material.flags, pbr_input.material.alpha_cutoff, pbr_input.material.base_color);
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);

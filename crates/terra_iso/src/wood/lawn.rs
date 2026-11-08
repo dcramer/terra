@@ -108,7 +108,8 @@ fn spread(rng: &mut Rng, (lo, hi): (f32, f32)) -> f32 {
     lo * libm::powf(hi / lo, rng.f())
 }
 
-/// One clump: where, how wide (m), its kind, its tint and whether a flower stands in it.
+/// One clump: where, how wide (m), its kind, its tint, whether a flower stands in it and how
+/// far its card's texels are taken to their own grey before the tint (0 to 1, foliage.wesl).
 #[derive(Clone, Copy, Debug)]
 pub struct Clump {
     pub at: Vec2,
@@ -116,6 +117,7 @@ pub struct Clump {
     pub kind: Kind,
     pub tint: Vec3,
     pub flower: Option<Vec2>,
+    pub grey: f32,
 }
 
 pub fn plugin(app: &mut App) {
@@ -176,6 +178,7 @@ pub fn clumps(land: &Land, trees: &[Spot]) -> Vec<Clump> {
             kind,
             tint: tint * grade(kind),
             flower,
+            grey: 0.0,
         });
     }
     out
@@ -225,6 +228,7 @@ pub fn floor(land: &Land) -> Vec<Clump> {
             kind,
             tint: tint * grade(kind),
             flower: None,
+            grey: 0.0,
         });
     }
     out
@@ -447,27 +451,56 @@ pub fn draw(
     clumps: &[Clump],
     seed: u32,
 ) -> Vec<usize> {
-    let (leaves, stems, each) = cards(land, clumps, seed);
-    // The tree crowns' cards' material, its leaves fluttering a little and its stems bending.
-    let cards = StandardMaterial {
-        base_color_texture: Some(asset.load("materials/foliage/cards.png")),
-        alpha_mode: AlphaMode::Mask(0.45),
-        cull_mode: None,
-        perceptual_roughness: 0.8,
-        reflectance: 0.2,
-        diffuse_transmission: 0.15,
-        ..default()
-    };
-    let flutter = crate::foliage::material(materials, mats, cards.clone(), 0.0, 0.01, false);
-    let bend = crate::foliage::material(materials, mats, cards, 0.05, 0.0, false);
-    for (mesh, material) in [(leaves.mesh(), flutter), (stems.mesh(), bend)] {
-        commands.spawn((
-            Mesh3d(meshes.add(mesh)),
-            MeshMaterial3d(material),
-            Transform::default(),
-        ));
+    let mut each = vec![0; clumps.len()];
+    // A pair of meshes and materials for each grey the clumps ask (one in every lawn but a
+    // set's own `grey`), each card's turn from the same seed.
+    for (grey, idx) in by_grey(clumps) {
+        let group: Vec<Clump> = idx.iter().map(|&i| clumps[i]).collect();
+        let (leaves, stems, tris) = cards(land, &group, seed);
+        for (&i, t) in idx.iter().zip(tris) {
+            each[i] = t;
+        }
+        // The tree crowns' cards' material, its leaves fluttering a little and its stems
+        // bending.
+        let cards = StandardMaterial {
+            base_color_texture: Some(asset.load("materials/foliage/cards.png")),
+            alpha_mode: AlphaMode::Mask(0.45),
+            cull_mode: None,
+            perceptual_roughness: 0.8,
+            reflectance: 0.2,
+            diffuse_transmission: 0.15,
+            ..default()
+        };
+        let flutter = crate::foliage::material(materials, mats, cards.clone(), 0.0, 0.01, false);
+        let bend = crate::foliage::material(materials, mats, cards, 0.05, 0.0, false);
+        for (mesh, material) in [(leaves.mesh(), flutter), (stems.mesh(), bend)] {
+            if let Some(mut m) = materials.get_mut(&material) {
+                m.extension.foliage.tone.x = grey;
+            }
+            commands.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(material),
+                Transform::default(),
+            ));
+        }
     }
     each
+}
+
+/// The clumps by how far their cards are greyed: each grey once, in the order it first
+/// comes, with its clumps' indices in order.
+pub fn by_grey(clumps: &[Clump]) -> Vec<(f32, Vec<usize>)> {
+    let mut out: Vec<(f32, Vec<usize>)> = Vec::new();
+    for (i, c) in clumps.iter().enumerate() {
+        match out
+            .iter_mut()
+            .find(|(g, _)| g.to_bits() == c.grey.to_bits())
+        {
+            Some((_, idx)) => idx.push(i),
+            None => out.push((c.grey, vec![i])),
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -486,6 +519,7 @@ mod tests {
                 kind,
                 tint: Vec3::splat(0.5),
                 flower: None,
+                grey: 0.0,
             };
             let (mut leaves, mut stems) = (Cards::default(), Cards::default());
             build(&c, &land, &mut Rng::new(7), &mut leaves, &mut stems);

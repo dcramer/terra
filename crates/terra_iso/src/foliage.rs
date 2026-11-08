@@ -22,6 +22,9 @@ pub struct Foliage {
     pub up: Vec4,
     pub forward: Vec4,
     pub party: [Vec4; 6],
+    /// x: how far each texel of the card goes to its own grey before the vertex colour
+    /// tints it, 0 (as it is) to 1 (a plant set's `grey`, kit/scatter.rs).
+    pub tone: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]

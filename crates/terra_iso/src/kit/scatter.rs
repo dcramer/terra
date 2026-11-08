@@ -283,10 +283,18 @@ pub fn plants(budget: &mut Budget, biome: &str, sets: &[Scatter], g: &Ground) ->
             kind,
             tint,
             flowers,
+            grey,
         }) = &set.plant
         else {
             continue;
         };
+        if !(0.0..=1.0).contains(grey) {
+            panic!(
+                "biome {biome:?}: scatter set {i}'s plant grey {grey}: how far the card is \
+                 taken to its own grey, 0 (as it is) to 1. Fix: a value in 0..1 (kit/scatter.rs, \
+                 D634)"
+            );
+        }
         if tint.is_empty() {
             panic!(
                 "biome {biome:?}: scatter set {i}'s plant has no `tint`. Fix: give it one or \
@@ -316,6 +324,7 @@ pub fn plants(budget: &mut Budget, biome: &str, sets: &[Scatter], g: &Ground) ->
                 },
                 tint: from.lerp(to, hue - k as f32) * dark,
                 flower,
+                grey: *grey,
             });
         }
         budget.sets.push(Set {
@@ -545,6 +554,7 @@ mod tests {
                     kind,
                     tint: vec![(0.3, 0.5, 0.15)],
                     flowers: 0.3,
+                    grey: 0.0,
                 });
                 s
             };
@@ -565,6 +575,54 @@ mod tests {
             assert_eq!(b.sets[1].cards, quads(&clumps[..first]), "{report}");
             assert_eq!(total, 300 + quads(&clumps), "{report}");
             assert!(report.contains("of plant cards"), "{report}");
+        });
+    }
+
+    fn greyed(grey: f32) -> Scatter {
+        let mut s = set(1.5, None);
+        s.models.clear();
+        s.plant = Some(Plant {
+            kind: PlantKind::Mat,
+            tint: vec![(0.3, 0.5, 0.15)],
+            flowers: 0.0,
+            grey,
+        });
+        s
+    }
+
+    /// A plant set's `grey` reaches every clump it lays, and the draw takes each grey once
+    /// (its own materials), every clump in exactly one group, in order.
+    #[test]
+    fn a_plant_sets_grey_reaches_its_clumps_and_its_own_draw() {
+        with(|g| {
+            let sets = [greyed(0.0), greyed(0.85), greyed(0.0)];
+            let clumps = plants(&mut Budget::default(), "test", &sets, g);
+            let groups = crate::wood::lawn::by_grey(&clumps);
+            let greys: Vec<f32> = groups.iter().map(|(grey, _)| *grey).collect();
+            assert_eq!(
+                greys,
+                [0.0, 0.85],
+                "two greys, in the order they first come"
+            );
+            for (grey, idx) in &groups {
+                assert!(!idx.is_empty() && idx.windows(2).all(|w| w[0] < w[1]));
+                assert!(
+                    idx.iter()
+                        .all(|&i| clumps[i].grey.to_bits() == grey.to_bits())
+                );
+            }
+            let mut all: Vec<usize> = groups.into_iter().flat_map(|(_, idx)| idx).collect();
+            all.sort_unstable();
+            assert_eq!(all, (0..clumps.len()).collect::<Vec<_>>());
+        });
+    }
+
+    /// A grey past 0..1 is refused with its fix, never clamped.
+    #[test]
+    #[should_panic(expected = "Fix: a value in 0..1")]
+    fn a_grey_past_one_is_refused() {
+        with(|g| {
+            plants(&mut Budget::default(), "test", &[greyed(1.2)], g);
         });
     }
 }
