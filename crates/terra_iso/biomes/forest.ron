@@ -123,4 +123,8 @@
         "models/iso/treant-b.glb": (value: 0.50287),
         "models/iso/tree-monster.glb": (value: 0.35, rim: 0.35),
     },
+    // The foes' attack tell (demo/tell.rs): the ember-red default is the orange litter's hue,
+    // only darker or lighter (dE 14 and 21 from lit and dark litter, iso-forest-hits j21), so
+    // a crimson fill with a pink-white rim, apart from it in hue (iso-forest-demo j23).
+    tell: (fill: Linear(1.5, 0.0, 0.25), edge: Linear(6.0, 1.8, 2.6)),
 )

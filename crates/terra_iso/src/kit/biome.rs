@@ -63,6 +63,27 @@ pub struct Biome {
     /// of models in code (D136).
     #[serde(default)]
     pub bodies: std::collections::BTreeMap<String, Tone>,
+    /// The colours a foe's attack tell is drawn in (demo/tell.rs), so it reads against this
+    /// biome's ground: data, not a constant (D136). An ember red by default.
+    #[serde(default)]
+    pub tell: Tell,
+}
+
+/// A tell's fill and rim as they reach the screen (unlit, before AgX; past 1 to bloom).
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields, default)]
+pub struct Tell {
+    pub fill: Colour,
+    pub edge: Colour,
+}
+
+impl Default for Tell {
+    fn default() -> Self {
+        Tell {
+            fill: Colour::Linear(1.2, 0.12, 0.03),
+            edge: Colour::Linear(5.0, 0.9, 0.2),
+        }
+    }
 }
 
 /// A body's albedo scale (`value`: Tripo's bark and hide are the ground's value, so a

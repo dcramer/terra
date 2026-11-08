@@ -43,12 +43,12 @@ pub fn plugin(app: &mut App) {
         );
 }
 
-/// A mob's tell: its fill and rim (tell.rs) with their materials, and the start of the last
-/// swing that landed.
+/// A mob's tell: its fill and rim (tell.rs) with their materials and the biome's colours
+/// for them, and the start of the last swing that landed.
 #[derive(Component)]
 struct Tell {
-    fill: (Entity, Handle<TellMaterial>),
-    edge: (Entity, Handle<TellMaterial>),
+    fill: (Entity, Handle<TellMaterial>, LinearRgba),
+    edge: (Entity, Handle<TellMaterial>, LinearRgba),
     landed: f32,
     leaving: Leaving,
 }
@@ -159,11 +159,13 @@ fn tells(
     mut meshes: ResMut<Assets<Mesh>>,
     mobs: Query<Entity, (With<Foe>, With<Gait>, Without<Tell>)>,
     mut shapes: Local<Option<(Handle<Mesh>, Handle<Mesh>)>>,
+    biome: Option<Res<crate::kit::biome::Biome>>,
 ) {
+    let (fill_colour, edge_colour) = tell::colours(biome.as_deref());
     for body in &mobs {
         let (fill, edge) =
             shapes.get_or_insert_with(|| (meshes.add(tell::fill()), meshes.add(tell::edge())));
-        let mut part = |mesh: &Handle<Mesh>, fan: tell::Fan, colour, alpha| {
+        let mut part = |mesh: &Handle<Mesh>, fan: tell::Fan, colour: LinearRgba, alpha| {
             let material = materials.add(tell::material(colour, alpha));
             let id = commands
                 .spawn((
@@ -177,10 +179,10 @@ fn tells(
                     bevy::light::NotShadowCaster,
                 ))
                 .id();
-            (id, material)
+            (id, material, colour)
         };
-        let fill = part(fill, tell::FILL_FAN, tell::FILL, AlphaMode::Blend);
-        let edge = part(edge, tell::EDGE_FAN, tell::EDGE, AlphaMode::Add);
+        let fill = part(fill, tell::FILL_FAN, fill_colour, AlphaMode::Blend);
+        let edge = part(edge, tell::EDGE_FAN, edge_colour, AlphaMode::Add);
         commands.entity(body).insert(Tell {
             fill,
             edge,
@@ -246,18 +248,10 @@ fn land(
         // ground and the bodies under it show (at 0.8 it hid the mob, j7's first still); the
         // rim is whole at once (a tenth of the tell in), so the reach reads before the fill.
         let parts = [
-            (
-                &tell.fill,
-                tell::FILL,
-                k.map(|k| (0.35 + 0.65 * k, 0.12 + 0.33 * k)),
-            ),
-            (
-                &tell.edge,
-                tell::EDGE,
-                k.map(|k| (1.0, (k * 10.0).min(1.0) * 0.9)),
-            ),
+            (&tell.fill, k.map(|k| (0.35 + 0.65 * k, 0.12 + 0.33 * k))),
+            (&tell.edge, k.map(|k| (1.0, (k * 10.0).min(1.0) * 0.9))),
         ];
-        for ((id, material), colour, shown) in parts {
+        for ((id, material, colour), shown) in parts {
             let Ok((mut mtr, mut vis)) = marks.get_mut(*id) else {
                 continue;
             };

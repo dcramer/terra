@@ -72,10 +72,11 @@ pub const RAISE: f32 = 0.45;
 const INNER: f32 = 0.15;
 const RIM: f32 = 0.06;
 const SEGMENTS: usize = 24;
-/// The fill's and the rim's colours as they reach the screen (unlit, before AgX): an
-/// ember red, the rim bright enough to bloom.
-pub const FILL: LinearRgba = LinearRgba::rgb(1.2, 0.12, 0.03);
-pub const EDGE: LinearRgba = LinearRgba::rgb(5.0, 0.9, 0.2);
+/// The fill's and the rim's colours, the biome's (`biome::Tell`, its default with none).
+pub fn colours(biome: Option<&crate::kit::biome::Biome>) -> (LinearRgba, LinearRgba) {
+    let t = biome.map(|b| b.tell).unwrap_or_default();
+    (t.fill.color().into(), t.edge.color().into())
+}
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<TellMaterial>::default());
@@ -189,6 +190,37 @@ mod tests {
             panic!("a tell has positions");
         };
         p.iter().map(|v| Vec2::new(v[0], v[2])).collect()
+    }
+
+    /// The biome's tell colours are what its materials draw (blows.rs `tells` builds them
+    /// through `colours` and `material`): the forest's own, and the ember default for a biome
+    /// that names none (the ruin).
+    #[test]
+    fn the_biomes_tell_colours_reach_the_material() {
+        use crate::kit::biome::{Biome, Tell};
+        let drawn = |b: &Biome| {
+            let (fill, edge) = colours(Some(b));
+            let f = material(fill, AlphaMode::Blend).base.base_color.to_linear();
+            let e = material(edge, AlphaMode::Add).base.base_color.to_linear();
+            (f, e)
+        };
+        let linear = |t: Tell| {
+            (
+                LinearRgba::from(t.fill.color()),
+                LinearRgba::from(t.edge.color()),
+            )
+        };
+        let forest = Biome::load("forest").unwrap();
+        assert_ne!(
+            forest.tell,
+            Tell::default(),
+            "the forest names its own tell"
+        );
+        assert_eq!(drawn(&forest), linear(forest.tell));
+        let ruin = Biome::load("ruin").unwrap();
+        assert_eq!(ruin.tell, Tell::default());
+        assert_eq!(drawn(&ruin), linear(Tell::default()));
+        assert_eq!(colours(None), linear(Tell::default()));
     }
 
     /// What the tell shows is what the blow judges: every corner of the fill and the rim is
