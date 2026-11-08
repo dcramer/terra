@@ -1,0 +1,19 @@
+{
+  "stages": {
+    "concept": {
+      "at": "2026-11-08T07:16:36.655Z",
+      "credits": 0,
+      "minutes": 0.35938333333333333,
+      "files": [
+        "art/iso/scavenger/concept.png"
+      ],
+      "note": "look at art/iso/scavenger/concept.png"
+    }
+  },
+  "name": "scavenger",
+  "kind": "npc",
+  "theme": "a sun-baked desert junk lot of rusted cars and broken concrete",
+  "description": "A gaunt wasteland scavenger in layered sun-bleached cotton rags under a hooded dust cloak of patched sackcloth, brass welding goggles pushed up on the hood, a frayed khaki scarf over the mouth, fingerless leather gloves, a frame backpack strapped tight to the back and stuffed with scrap metal, coiled copper wire and a dented jerrycan, holding a long iron crowbar in the right hand",
+  "body": "biped",
+  "height": 1.72
+}

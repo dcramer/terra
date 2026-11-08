@@ -1,0 +1,19 @@
+{
+  "stages": {
+    "concept": {
+      "at": "2026-11-08T07:16:38.567Z",
+      "credits": 0,
+      "minutes": 0.35795,
+      "files": [
+        "art/iso/raider/concept.png"
+      ],
+      "note": "look at art/iso/raider/concept.png"
+    }
+  },
+  "name": "raider",
+  "kind": "npc",
+  "theme": "a sun-baked desert junk lot of rusted cars and broken concrete",
+  "description": "A wasteland raider in patched brown leather and scrap-metal armour: a rusted steel panel cut from a car door bolted over the left shoulder, a dented chest plate cut from an old road sign, a black rubber gas mask with one round filter, a torn dark red sash at the waist, worn canvas trousers bound with straps, heavy desert boots, gripping a wooden club studded with nails in the right hand",
+  "body": "biped",
+  "height": 1.86
+}
