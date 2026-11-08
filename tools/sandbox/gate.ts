@@ -73,6 +73,22 @@ try {
   if (realm.kind === "world" || realm.beyond !== "world" || !realm.sun) throw new Error(`the realm beyond is of kind "${realm.kind}" leading on to "${realm.beyond}" with ${realm.sun ? "its own" : "no"} light: assets/data/realms.ron should give the first realm another kind beyond it, with its light, leading back`);
   if (!(Number(parts.at(-1)) > 0)) throw new Error(`${realm.name ?? realm.kind} stood none of its parts round the start (play::realm_parts says how many in the log)`);
 
+  // Its parts follow the player (D127): far from the start they stand round them, and the
+  // start's are there again on coming back, as many as before.
+  const partsNear = async () => {
+    const [found, at] = [(await call("sandbox.find", { name: "Industrial" })) as Found, await stands("Player")];
+    return { count: found.length, farthest: Math.max(0, ...found.map((part) => apart([part.from_start[0], part.from_start[2]], at))) };
+  };
+  const first = await partsNear();
+  await warp([me[0] + 1500, me[1]]);
+  await waitSeconds(5);
+  const far = await partsNear();
+  await warp(me);
+  await waitSeconds(5);
+  const returned = await partsNear();
+  if (far.count === 0 || far.farthest > 600) throw new Error(`1500 m from where the player arrived ${far.count} of the realm's parts stand, the farthest ${far.farthest.toFixed(0)} m from them: play::realm_parts stands them in the cells within reach of the player and lets go those past it`);
+  if (Math.abs(returned.count - first.count) > 0.1 * first.count) throw new Error(`come back to where they arrived the player has ${returned.count} of the realm's parts round them, where ${first.count} stood before they left: a cell come back to must hold what it held, by the land alone (play::realm_parts)`);
+
   // Closed in the realm beyond and started again: there, where they stood, not in the first
   // world with the realm's things written over it.
   await stop();
@@ -90,7 +106,7 @@ try {
   const borne = (await call("marks.state")) as { marks: string[] };
   if (!still.open || !borne.marks.includes("troll")) throw new Error(`started again and back, the first gate is ${still.open ? "open" : "shut"} and the player bears ${JSON.stringify(borne.marks)}: the save did not keep them`);
   if (apart(home, left) > 1) throw new Error(`back through the gate the player stands ${apart(home, left).toFixed(1)} m from where they left`);
-  console.log(`✓ gate: seed ${SEED}'s gate stands ${away.toFixed(0)} m from the start, shut to an unmarked player and opened by the troll's mark; through it to ${realm.name ?? realm.kind} (seed ${out.to.seed}, ${parts.at(-1)} of its parts standing), ${apart(there, me).toFixed(1)} m before its gate, closed and started again there (${apart(again, me).toFixed(1)} m from where it was closed), and back to within ${apart(home, left).toFixed(1)} m of where the player left the first world; the crossing out, its world warmed as the player neared, took ${took.at(-1) ?? "?"} s (a reading)`);
+  console.log(`✓ gate: seed ${SEED}'s gate stands ${away.toFixed(0)} m from the start, shut to an unmarked player and opened by the troll's mark; through it to ${realm.name ?? realm.kind} (seed ${out.to.seed}, ${parts.at(-1)} of its parts standing, ${far.count} round the player 1500 m on and ${returned.count} again on coming back), ${apart(there, me).toFixed(1)} m before its gate, closed and started again there (${apart(again, me).toFixed(1)} m from where it was closed), and back to within ${apart(home, left).toFixed(1)} m of where the player left the first world; the crossing out, its world warmed as the player neared, took ${took.at(-1) ?? "?"} s (a reading)`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 } finally {

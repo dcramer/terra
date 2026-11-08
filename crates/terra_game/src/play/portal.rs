@@ -345,7 +345,7 @@ const MIDDLE_M: f32 = 1.75;
 const OPENING_M: f32 = 1.12;
 /// How far round its foot the ground is cleared of what grows: a small glade, so its
 /// opening is seen from where one comes to it and no trunk stands in the way through.
-const CLEAR_M: f32 = 5.0;
+pub(crate) const CLEAR_M: f32 = 5.0;
 
 /// Stands a portal on the ground at `at`, its carved face and its opening toward `facing`,
 /// leading to `to`: the gate's stone ring round a violet veil, the world's (`WorldScoped`),

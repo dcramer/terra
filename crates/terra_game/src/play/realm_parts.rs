@@ -1,35 +1,87 @@
 //! A realm's built parts, stood by rule (D642, docs/realm-two.md): what its row of
 //! `data/realms.ron` says stands on its land (the industrial realm's pylons, vent stacks,
-//! tanks, generators and signs), each a catalogue item, scattered by the world's seed round
-//! the start: a cell of the ground holds one or none by the seed, which one by their shares,
-//! where the ground is dry and level enough, clear of the start and of what is kept clear (the
-//! gate). They are the realm's, not a player's: never saved, the same on every entering.
+//! tanks, generators and signs), each a catalogue item, scattered by the world's seed: a cell
+//! of the ground holds one or none by the seed, which one by their shares, where the ground
+//! is dry and level enough, clear of the start and of the gate. They are
+//! the realm's, not a player's: never saved, the same on every entering.
 //!
-//! Round the start only, for now: a realm's parts beyond it are to stream as its woods do.
+//! They stand round the player and follow them (D127): a cell is taken up as it comes within
+//! reach and let go past it, so only the ring that changed is worked on. The cells are laid on
+//! the start's level, as `Start::at` gives places, which holds for the few kilometres a
+//! player walks from it and no further than the planet's curve allows.
 
 use super::catalogue::Builds;
+use super::portal::CLEAR_M;
+use super::portal::gates::Gate;
 use super::props::{self, Models, Theirs};
 use crate::build::Site;
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use terra_gen::hash::{mix3, unit3};
+use terra_walker::walker::Player;
 use terra_world::flora::{ClearAround, KeptClear};
 use terra_world::instance::{InstanceApp, WorldSpec};
 use terra_world::planet::Planet;
 use terra_world::realm::Realms;
 use terra_world::start::Start;
 
-/// How far round the start the parts are stood, and the side of a cell that holds one at
-/// most, in metres.
-const REACH_M: f32 = 500.0;
+/// The side of a cell, which holds one part at most, in metres, and how many cells round the
+/// player's the parts stand in: 510 m, past where the haze takes a part this size.
 const CELL_M: f32 = 30.0;
+const REACH_CELLS: i32 = 17;
+/// A cell is let go this many cells past the reach, so a player pacing a cell's edge does
+/// not stand and fell the same ring.
+const SLACK_CELLS: i32 = 2;
 /// No part within this of the start, where a player arrives.
 const CLEAR_OF_START_M: f32 = 25.0;
 /// The ground may rise or fall this much across a part's footing, in metres.
 const LEVEL_M: f32 = 0.6;
 
-/// Made afresh in each world: its parts have been stood.
+/// A part stood: its entity, and the ground it keeps clear of plants while it stands.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Part {
+    entity: Entity,
+    ground: Vec3,
+    clear_m: f32,
+}
+
+/// Made afresh in each world: the cells its parts have been stood in, each with its part if
+/// it holds one that could stand, round the cell the player was last in.
 #[derive(Resource, Default)]
-struct Stood(bool);
+struct Stood {
+    middle: Option<IVec2>,
+    cells: HashMap<IVec2, Option<Part>>,
+}
+
+impl Stood {
+    /// The player is in the cell `middle`: the cells come within reach, to be taken up, and
+    /// the parts of those gone past it, let go. Nothing if they have not left their cell.
+    fn moved(&mut self, middle: IVec2) -> (Vec<IVec2>, Vec<Part>) {
+        if self.middle.replace(middle) == Some(middle) {
+            return (Vec::new(), Vec::new());
+        }
+        let within = |cell: IVec2, cells: i32| (cell - middle).length_squared() <= cells * cells;
+        let mut gone = Vec::new();
+        self.cells.retain(|cell, part| {
+            let keep = within(*cell, REACH_CELLS + SLACK_CELLS);
+            if !keep {
+                gone.extend(part.take());
+            }
+            keep
+        });
+        let mut come = Vec::new();
+        for row in -REACH_CELLS..=REACH_CELLS {
+            for column in -REACH_CELLS..=REACH_CELLS {
+                let cell = middle + IVec2::new(column, row);
+                if within(cell, REACH_CELLS) && !self.cells.contains_key(&cell) {
+                    self.cells.insert(cell, None);
+                    come.push(cell);
+                }
+            }
+        }
+        (come, gone)
+    }
+}
 
 pub fn plugin(app: &mut App) {
     app.init_world_resource::<Stood>().add_systems(
@@ -40,45 +92,37 @@ pub fn plugin(app: &mut App) {
     );
 }
 
-/// The cells of the ground round the start that hold a part, each with which part (an index
-/// into `shares`) and where in the cell and how turned, by the seed: `shares` are how many of
-/// each part a square kilometre holds.
-pub fn cells(seed: u32, shares: &[f32]) -> Vec<(usize, Vec2, f32)> {
+/// What a cell of the ground holds, by the seed: which part (an index into `shares`), where
+/// in metres east and south of the start, and how turned; or nothing. `shares` are how many
+/// of each part a square kilometre holds.
+pub fn cell(seed: u32, shares: &[f32], cell: IVec2) -> Option<(usize, Vec2, f32)> {
     let total: f32 = shares.iter().sum();
+    let (c, r) = (cell.x as u32, cell.y as u32);
     // The chance a cell holds one: the parts a square kilometre holds over its cells.
-    let chance = (total * CELL_M * CELL_M / 1.0e6).min(1.0);
-    let reach = (REACH_M / CELL_M).ceil() as i32;
-    let mut held = Vec::new();
-    for row in -reach..=reach {
-        for column in -reach..=reach {
-            let (c, r) = (column as u32, row as u32);
-            if unit3(seed, c, r, 0) >= chance {
-                continue;
-            }
-            let at = Vec2::new(
-                (column as f32 + unit3(seed, c, r, 1)) * CELL_M,
-                (row as f32 + unit3(seed, c, r, 2)) * CELL_M,
-            );
-            if !(CLEAR_OF_START_M..REACH_M).contains(&at.length()) {
-                continue;
-            }
-            // Which part: by its share of them all.
-            let mut pick = unit3(seed, c, r, 3) * total;
-            let part = shares
-                .iter()
-                .position(|share| {
-                    pick -= share;
-                    pick < 0.0
-                })
-                .unwrap_or(shares.len() - 1);
-            let turn = (mix3(seed, c, r, 4) % 360) as f32;
-            held.push((part, at, turn));
-        }
+    if unit3(seed, c, r, 0) >= (total * CELL_M * CELL_M / 1.0e6).min(1.0) {
+        return None;
     }
-    held
+    let at = Vec2::new(
+        (cell.x as f32 + unit3(seed, c, r, 1)) * CELL_M,
+        (cell.y as f32 + unit3(seed, c, r, 2)) * CELL_M,
+    );
+    if at.length() < CLEAR_OF_START_M {
+        return None;
+    }
+    // Which part: by its share of them all.
+    let mut pick = unit3(seed, c, r, 3) * total;
+    let part = shares
+        .iter()
+        .position(|share| {
+            pick -= share;
+            pick < 0.0
+        })
+        .unwrap_or(shares.len() - 1);
+    Some((part, at, (mix3(seed, c, r, 4) % 360) as f32))
 }
 
-/// Stands the realm's parts, once in each world entered that has any.
+/// Stands the realm's parts in the cells come within the player's reach, and takes down
+/// those gone past it.
 #[allow(clippy::too_many_arguments)]
 fn stand(
     mut commands: Commands,
@@ -86,18 +130,32 @@ fn stand(
     (realms, spec): (Res<Realms>, Res<WorldSpec>),
     (planet, start, site): (Res<Planet>, Res<Start>, Res<Site>),
     (builds, models): (Res<Builds>, Res<Models>),
-    kept: Option<Res<KeptClear>>,
+    player: Query<&GlobalTransform, With<Player>>,
+    gate: Option<Res<Gate>>,
+    mut kept: Option<ResMut<KeptClear>>,
     mut clear: MessageWriter<ClearAround>,
 ) {
-    if std::mem::replace(&mut stood.0, true) {
-        return;
-    }
     let Some(realm) = realms
         .of(&spec.kind)
         .filter(|realm| !realm.parts.is_empty())
     else {
         return;
     };
+    let Some(player) = player.iter().next() else {
+        return;
+    };
+    let here = start.local(player.translation());
+    let first = stood.middle.is_none();
+    let (come, gone) = stood.moved((here.xz() / CELL_M).floor().as_ivec2());
+    for part in gone {
+        commands.entity(part.entity).try_despawn();
+        if let Some(kept) = kept.as_mut() {
+            kept.release(part.ground, part.clear_m);
+        }
+    }
+    if come.is_empty() {
+        return;
+    }
     let items: Vec<_> = realm
         .parts
         .iter()
@@ -117,17 +175,24 @@ fn stand(
     let to_site = site.frame.compute_affine().inverse();
     let on_ground = |at: Vec2| planet.ground_at(start.at(at.x, at.y));
     let mut count = 0;
-    for (part, at, turn) in cells(seed, &shares) {
+    for at_cell in come {
+        let Some((part, at, turn)) = cell(seed, &shares, at_cell) else {
+            continue;
+        };
         let (item, _) = &items[part];
         let ground = on_ground(at);
-        // Dry, level under its footing, and clear of what is kept clear.
+        // Dry, level under its footing, and clear of the gate: by the land alone, never by
+        // what else stands, so a cell come back to holds what it held.
         let footing = item.dims.x.max(item.dims.z) / 2.0;
         let rise = [Vec2::X, Vec2::NEG_X, Vec2::Y, Vec2::NEG_Y]
             .iter()
             .map(|way| (on_ground(at + *way * footing).length() - ground.length()).abs())
             .fold(0.0, f32::max);
         let wet = ground.length() < planet.water_near_m(ground) + 0.05;
-        if wet || rise > LEVEL_M || kept.as_ref().is_some_and(|kept| kept.holds(ground)) {
+        let in_gate = gate
+            .as_ref()
+            .is_some_and(|gate| gate.at.distance(ground) < footing + CLEAR_M);
+        if wet || rise > LEVEL_M || in_gate {
             continue;
         }
         let Some(entity) = props::place(
@@ -144,27 +209,44 @@ fn stand(
             continue;
         };
         commands.entity(entity).insert(Theirs);
-        clear.write(ClearAround(ground, footing + 0.8));
+        let clear_m = footing + 0.8;
+        clear.write(ClearAround(ground, clear_m));
+        let part = Part {
+            entity,
+            ground,
+            clear_m,
+        };
+        stood.cells.insert(at_cell, Some(part));
         count += 1;
     }
-    info!(
-        "{}: {count} of its parts stand round the start.",
-        realm.name
-    );
+    if first {
+        info!(
+            "{}: {count} of its parts stand round the player.",
+            realm.name
+        );
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// What the cells within the reach of the start's hold.
+    fn round_the_start(seed: u32, shares: &[f32]) -> Vec<(usize, Vec2, f32)> {
+        let (come, _) = Stood::default().moved(IVec2::ZERO);
+        come.into_iter()
+            .filter_map(|at| cell(seed, shares, at))
+            .collect()
+    }
+
     #[test]
     fn the_seed_scatters_the_parts_by_their_shares_and_clear_of_the_start() {
         let shares = [20.0, 25.0, 25.0, 30.0, 20.0];
-        let held = cells(7, &shares);
-        // About as many as the land round the start holds at those shares: 120 a square
-        // kilometre over a disc of 500 m, 0.785 km2: some 94.
-        assert!((60..130).contains(&held.len()), "{} parts", held.len());
-        // Each kind stands, none within the start's clearing or past the reach.
+        let held = round_the_start(7, &shares);
+        // About as many as the land in reach holds at those shares: 120 a square kilometre
+        // over a disc of 510 m, 0.82 km2: some 98.
+        assert!((60..135).contains(&held.len()), "{} parts", held.len());
+        // Each kind stands, none within the start's clearing.
         for part in 0..shares.len() {
             assert!(
                 held.iter().any(|(which, ..)| *which == part),
@@ -173,10 +255,67 @@ mod tests {
         }
         assert!(
             held.iter()
-                .all(|(_, at, _)| (CLEAR_OF_START_M..REACH_M).contains(&at.length()))
+                .all(|(_, at, _)| at.length() >= CLEAR_OF_START_M)
         );
         // The same seed, the same land; another seed, another.
-        assert_eq!(cells(7, &shares), held);
-        assert_ne!(cells(8, &shares), held);
+        assert_eq!(round_the_start(7, &shares), held);
+        assert_ne!(round_the_start(8, &shares), held);
+    }
+
+    /// The parts follow the player (D127): a step within a cell changes nothing, a step into
+    /// the next takes up only a ring, a long walk holds no more cells than the reach and its
+    /// slack, and the parts of the cells left behind are let go, each once.
+    #[test]
+    fn the_parts_follow_the_player_a_ring_at_a_time_and_let_go_what_is_left_behind() {
+        let mut stood = Stood::default();
+        let (first, _) = stood.moved(IVec2::ZERO);
+        // Every cell held is given a part, numbered, so what is let go can be counted.
+        let mut made = 0;
+        let mut fill = |stood: &mut Stood, come: &[IVec2]| {
+            for cell in come {
+                made += 1;
+                let part = Part {
+                    entity: Entity::from_raw_u32(made).unwrap(),
+                    ground: Vec3::ZERO,
+                    clear_m: 0.0,
+                };
+                stood.cells.insert(*cell, Some(part));
+            }
+        };
+        fill(&mut stood, &first);
+        assert_eq!(stood.moved(IVec2::ZERO), (Vec::new(), Vec::new()));
+        let (ring, gone) = stood.moved(IVec2::X);
+        assert!(
+            !ring.is_empty() && ring.len() < first.len() / 8,
+            "{}",
+            ring.len()
+        );
+        assert!(gone.is_empty(), "a step of one cell is within the slack");
+        fill(&mut stood, &ring);
+        let most = (2 * (REACH_CELLS + SLACK_CELLS) + 1).pow(2) as usize;
+        let mut let_go = Vec::new();
+        for step in 2..200 {
+            let (come, gone) = stood.moved(IVec2::new(step, step / 3));
+            fill(&mut stood, &come);
+            let_go.extend(gone);
+            assert!(
+                stood.cells.len() <= most,
+                "{} cells held",
+                stood.cells.len()
+            );
+        }
+        assert!(
+            !stood.cells.contains_key(&IVec2::ZERO),
+            "the start's cell is still held"
+        );
+        let before = let_go.len();
+        let_go.sort_by_key(|part| part.entity);
+        let_go.dedup();
+        assert_eq!(let_go.len(), before, "a part was let go twice");
+        assert_eq!(
+            let_go.len() + stood.cells.len(),
+            made as usize,
+            "a part was lost"
+        );
     }
 }

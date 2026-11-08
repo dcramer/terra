@@ -18,6 +18,12 @@ impl KeptClear {
         }
     }
 
+    /// Keeps a place clear no longer: the thing that stood there is gone (a realm's part let
+    /// go behind the player), so what is laid there after may stand.
+    pub fn release(&mut self, at: Vec3, radius: f32) {
+        self.0.retain(|kept| *kept != (at, radius));
+    }
+
     /// Whether a place is within one kept clear, measured over the ground.
     pub fn holds(&self, place: Vec3) -> bool {
         self.0
@@ -41,5 +47,22 @@ pub(crate) fn clear_grown(
         if kept.holds(transform.translation) {
             clear_away(entity, growth, visibility, &mut obstacles, &mut gone);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_place_kept_clear_is_held_until_released() {
+        let mut kept = KeptClear::default();
+        let at = Vec3::new(0.0, 1000.0, 0.0);
+        kept.keep(at, 3.0);
+        kept.keep(at, 3.0);
+        assert!(kept.holds(at + Vec3::X * 2.0) && !kept.holds(at + Vec3::X * 4.0));
+        // Asked twice it was kept once, so one release frees it.
+        kept.release(at, 3.0);
+        assert!(!kept.holds(at + Vec3::X * 2.0));
     }
 }
