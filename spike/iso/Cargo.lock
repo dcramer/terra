@@ -3261,6 +3261,7 @@ dependencies = [
  "ron",
  "serde",
  "terra_core",
+ "terra_gen",
 ]
 
 [[package]]

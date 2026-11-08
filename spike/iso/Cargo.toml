@@ -10,6 +10,8 @@ publish = false
 [dependencies]
 bevy = { version = "0.20", features = ["jpeg", "experimental_pbr_pcss"] }
 terra_core = { path = "../../crates/terra_core" }
+# The shared hash (an idle's phase from where an actor stands); already built through terra_core.
+terra_gen = { path = "../../crates/terra_gen" }
 # The biome kit's files (src/kit/, D634): RON through serde, both already in the lock
 # through Bevy, at its versions.
 ron = "0.12.2"

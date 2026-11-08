@@ -491,16 +491,25 @@ fn make_clips(
     });
 }
 
+/// Where along its idle (0 to 2 s) an actor standing at `at` starts: a hash of where it
+/// stands, so the same actor starts at the same place every run (the entity's index, used
+/// before, follows load order and changed the forest's still run to run) and a crowd does
+/// not breathe as one. Nobody walks before their model is in, so `at` is where they spawned.
+fn idle_phase(at: Vec3) -> f32 {
+    let h = terra_gen::hash::of(&[at.x.to_bits(), at.z.to_bits()]);
+    terra_gen::hash::unit(h) * 2.0
+}
+
 fn start_animators(
     mut commands: Commands,
     clips: Res<Clips>,
-    actors: Query<(Entity, &Actor), Without<Animator>>,
+    actors: Query<(Entity, &Actor, &Transform), Without<Animator>>,
     children: Query<&Children>,
     parents: Query<&ChildOf>,
     pieces: Query<(), With<Clothing>>,
     mut players: Query<&mut AnimationPlayer>,
 ) {
-    for (entity, actor) in &actors {
+    for (entity, actor, at) in &actors {
         let Some(set) = clips.ready.get(actor.model) else {
             continue;
         };
@@ -517,7 +526,7 @@ fn start_animators(
         transitions
             .play(&mut p, set.nodes[0], Duration::ZERO)
             .repeat()
-            .seek_to(entity.index().index() as f32 * 0.37 % 2.0);
+            .seek_to(idle_phase(at.translation));
         commands
             .entity(player)
             .insert((AnimationGraphHandle(set.graph.clone()), transitions));
@@ -732,5 +741,33 @@ fn wander(time: Res<Time>, nav: Res<Nav>, mut folk: Query<(&mut Actor, &mut Wand
             actor.path = path.into();
         }
         wander.wait = 3.0 + r2 * 6.0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A crowd standing about starts its idles spread over the clip, each where it did last
+    /// run: the phase is a function of where it stands alone.
+    #[test]
+    fn idle_phase_is_stable_and_spread() {
+        let crowd: Vec<Vec3> = (0..25)
+            .map(|i| Vec3::new((i % 5) as f32 * 1.3 - 20.0, 0.4, (i / 5) as f32 * 0.9 + 7.0))
+            .collect();
+        let phases: Vec<f32> = crowd.iter().map(|&p| idle_phase(p)).collect();
+        let again: Vec<f32> = crowd.iter().rev().map(|&p| idle_phase(p)).rev().collect();
+        assert_eq!(
+            phases, again,
+            "the same spot started elsewhere along the idle"
+        );
+        assert!(phases.iter().all(|t| (0.0..2.0).contains(t)), "{phases:?}");
+        let (lo, hi) = phases
+            .iter()
+            .fold((2.0f32, 0.0f32), |(l, h), &t| (l.min(t), h.max(t)));
+        assert!(
+            hi - lo > 1.2,
+            "the crowd breathes as one: phases {lo} to {hi}"
+        );
     }
 }
