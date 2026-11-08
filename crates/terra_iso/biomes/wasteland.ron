@@ -125,13 +125,14 @@
             (model: "models/iso/city/trash-bag.glb", side: South, line: Wall, at: [-3.0, 8.5],
              out: 0.2, turn: 30.0),
             // The fight at the focus, on the road's north lane (j2's still had no one in it):
-            // the hero's chop landing (fight.rs's 1.3 s) on a raider winding up his own blow
-            // (0.45 s), 2.3 m apart, each facing the other, a faint rim off the sunlit road.
+            // the hero's chop landing (fight.rs's 1.3 s) on a scavenger winding up his crowbar
+            // (0.45 s, the game's sword attack), 2.3 m apart, each facing the other, a faint
+            // rim off the sunlit road.
             (model: "models/iso/knight.glb", side: North, line: Road, at: [-0.8], out: 1.4,
              turn: 121.0, pose: ("attack", 1.3), rim: 0.25,
              // In a film he walks in up the road from its south lane, then chops (ruin/walk.rs).
              walk: Some((from: (-2.5, 3.0), fight: true))),
-            (model: "models/iso/knight.glb", side: North, line: Road, at: [1.2], out: 2.6,
+            (model: "models/iso/scavenger.glb", side: North, line: Road, at: [1.2], out: 2.6,
              turn: -59.0, pose: ("attack", 0.45), rim: 0.25),
         ],
     ),
@@ -160,11 +161,11 @@
     light: (preset: "desert-day"),
     weather: (wind: (1.4, 0.3)),
     // Play's roster (`--play`, play.rs): each foe at (x, z) m from the hero at the focus,
-    // facing him; the first where the ruin's ogre stands from its knight, so the ruin's
-    // scripted click strikes it here too, the second behind him on the road.
+    // facing him: the lot's scavengers, the first where the ruin's ogre stands from its
+    // knight, so the ruin's scripted click strikes it here too, the second behind him.
     foes: [
-        (model: "models/iso/ogre.glb", at: (2.0, -1.4)),
-        (model: "models/iso/ogre.glb", at: (-2.2, 1.8)),
+        (model: "models/iso/scavenger.glb", at: (2.0, -1.4)),
+        (model: "models/iso/scavenger.glb", at: (-2.2, 1.8)),
     ],
     ground: (
         // The verges: a dead lot's dirt of broken concrete and brick rubble in dust, sand
