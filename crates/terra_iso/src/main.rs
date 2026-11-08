@@ -23,6 +23,7 @@ mod rest;
 mod rim;
 mod ruin;
 mod scene;
+mod shader_gate;
 mod smoke;
 mod terrain;
 mod ui;
@@ -403,8 +404,14 @@ fn main() -> AppExit {
                 .set(AssetPlugin {
                     watch_for_changes_override: Some(false),
                     ..default()
+                })
+                // A shader that does not compile fails the run (shader_gate.rs, D632).
+                .set(bevy::log::LogPlugin {
+                    custom_layer: shader_gate::layer,
+                    ..default()
                 }),
         )
+        .add_plugins(shader_gate::plugin)
         .add_systems(Last, shoot);
     // A still runs on the film's fixed step too, so the same code gives the same still: in
     // real time the fires' flicker moved a still's p95 by 0.0025 between shots (iso-kit j1),
