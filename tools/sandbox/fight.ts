@@ -6,11 +6,14 @@
 // must fall to their blows, the player must live, and they must bear its mark. What the
 // fight took is said: its length, the blows each landed, the health left.
 //
-//   node tools/sandbox/fight.ts [--seed 3] [--tries 2] [--trace]
+//   node tools/sandbox/fight.ts [--seed 3] [--tries 2] [--trace] [--film shots/fight.mp4]
 //
 // Node 22.18 or later; no dependencies. About five minutes.
 
-import { call, give, press, start, stop, unpress, waitSeconds, waitUntil, warp } from "./client.ts";
+import { spawnSync } from "node:child_process";
+import { readdirSync, rmSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
+import { call, film, give, press, start, stop, unpress, waitSeconds, waitUntil, warp } from "./client.ts";
 
 const args = process.argv.slice(2);
 const SEED = args.includes("--seed") ? args[args.indexOf("--seed") + 1] : "3";
@@ -26,6 +29,8 @@ const LANDS_S: [number, number][] = [[0.9, 2.5]];
 /// A swing commits the arm for this long, seconds (the set's slash, to where a guard may cut
 /// it short): none is begun with a blow due to land sooner, nor sooner after the last.
 const SWING_S = 0.7;
+/// A film of the fight is so many frames from its beginning.
+const FILM_FRAMES = 900;
 
 type Place = [number, number, number];
 type Den = { den: { mouth: Place; floor: Place; ahead: Place } | null };
@@ -75,6 +80,9 @@ async function fight(): Promise<string> {
   await press("t");
   await waitSeconds(1.5);
 
+  // Filmed, if asked: the next frames from here, the fight's opening, for an eye to judge.
+  const FILM = args.includes("--film") ? args[args.indexOf("--film") + 1] : "";
+  const filming = FILM ? await film(FILM.replace(/\.mp4$/, ".png"), FILM_FRAMES) : "";
   // The fight, ten looks a second: face it, close, guard its blow, swing between.
   const began = Date.now();
   let [guards, swings, lowest, left] = [0, 0, hale, whole];
@@ -146,6 +154,19 @@ async function fight(): Promise<string> {
     await waitSeconds(0.1);
   }
   const took = (Date.now() - began) / 1000;
+  if (filming) {
+    // Saving every frame slows the game to a few a second, so the film is made of what was
+    // saved by the fight's end, played at the rate it was saved at: the fight at its own
+    // speed, a few pictures a second. For how a move looks, the duel's films; this shows
+    // what happened.
+    const dir = dirname(resolve(FILM));
+    const stem = basename(FILM).replace(/\.mp4$/, "-");
+    const saved = readdirSync(dir).filter((name) => name.startsWith(stem) && name.endsWith(".png"));
+    const rate = Math.max(1, Math.round(saved.length / Math.max(1, took)));
+    const made = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-framerate", String(rate), "-i", join(dir, `${stem}%05d.png`), "-pix_fmt", "yuv420p", FILM]);
+    if (made.status !== 0) throw new Error(`ffmpeg could not make ${FILM} of the fight's ${saved.length} frames: ${made.stderr}`);
+    for (const name of saved) rmSync(join(dir, name), { force: true });
+  }
   if (left > 0) throw new Error(`after ${MOST_S} s the troll has ${left.toFixed(0)} of ${whole.toFixed(0)} health, the player ${lowest.toFixed(0)} at their lowest, after ${swings} swings and ${guards} guards: the sword's blows are not landing or do too little (shots/remote.log's "Melee:" lines say what each swing did)`);
   await waitUntil("the player to bear the troll's mark after felling it themselves", async () => (await call("marks.state")) as { marks: string[] }, (now) => now.marks.includes("troll"), 10);
   const won = `✓ fight: seed ${SEED}'s troll fell to the player's own sword in ${took.toFixed(0)} s, ${swings} swings, ${guards} guards and ${hops} hops over the floor's lips; the player, of ${hale.toFixed(0)} health, was at ${lowest.toFixed(0)} at their lowest and bears its mark`;
