@@ -164,6 +164,31 @@ fn a_biomes_scale_grows_the_effect_and_keeps_its_timing() {
     assert_eq!(e.scale, 1.0);
 }
 
+/// A parry as the forest plays it is a flash at the blade, not a disc about him: its quad
+/// narrower than his shoulders (0.5 m), its streaks thrown in two jets to either side of
+/// the blow (along a blade held across it), none straight back along it (j29's judge: "a
+/// body-sized blue disc with radial spikes").
+#[test]
+fn a_parry_flashes_at_the_blade_and_throws_its_sparks_along_it() {
+    let b = Biome::load("forest").unwrap();
+    let fx = Effects::load(Some(&b)).unwrap();
+    let p = &fx.0.iter().find(|e| e.0 == "parry-ring").unwrap().1;
+    let f = p.flash.unwrap();
+    assert!(f.size < 0.5, "the parry's flash is {} m across", f.size);
+    let s = p.sparks.unwrap();
+    let out = Vec3::Z;
+    let (a, b) = (spark_out(&s, out, 0), spark_out(&s, out, 1));
+    assert!(a.x * b.x < 0.0, "both jets go one way: {a}, {b}");
+    for w in [a, b] {
+        // Out more across the blow than along it, the cone not closing the gap.
+        assert!(
+            w.x.abs() > w.z.abs() && s.spread < w.x.abs(),
+            "{w}, cone {}",
+            s.spread
+        );
+    }
+}
+
 /// A name with no file fails naming the folder and the presets there are.
 #[test]
 fn an_unknown_preset_names_the_fix() {

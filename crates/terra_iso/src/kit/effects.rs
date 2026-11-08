@@ -172,6 +172,18 @@ pub struct Sparks {
     /// way out (iso-kit j43: born together, a still showed a starburst).
     #[serde(default)]
     pub delay: f32,
+    /// The way out turned about the vertical (degrees), every other streak to the other
+    /// side: 0 straight out; near 90 two jets along a blade held across the blow, as a
+    /// parry's glancing steel throws them (iso-forest-demo j30).
+    #[serde(default)]
+    pub sides: f32,
+}
+
+/// The way spark `j` of `s` flies out, before its cone: `out` turned `sides` degrees about
+/// the vertical, the odd ones the other way.
+pub fn spark_out(s: &Sparks, out: Vec3, j: usize) -> Vec3 {
+    let turn = if j % 2 == 0 { s.sides } else { -s.sides };
+    Quat::from_rotation_y(turn.to_radians()) * out.normalize_or(Vec3::Y)
 }
 
 /// Puffs of smoke or steam: how many, size at birth and death (m), life range (s), how
@@ -699,7 +711,7 @@ fn spawn(
                     rng.range(-1.0, 1.0),
                     rng.range(-1.0, 1.0),
                 );
-                let dir = (out.normalize() + r * s.spread).normalize_or(Vec3::Y);
+                let dir = (spark_out(&s, out, j) + r * s.spread).normalize_or(Vec3::Y);
                 let from = here
                     + Vec3::new(
                         rng.range(-1.0, 1.0),

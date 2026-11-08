@@ -118,11 +118,12 @@
         (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.9, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.65),
         (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.31, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.8),
     ],
-    // The staged fight's effects (biomes/effects/, kit/effects.rs). The hit's spark and the
-    // parry's ring grown to read at the route's 10 m camera (iso-forest-demo j26): as the presets
-    // are, a blow's burst was 15 to 20 px of 1080 and its streaks 1.5 px thick (route frames
-    // 182, 254, 289, 550), so the judge saw no hit at all; the ARPGs' sparks are large and bright.
-    effects: [(preset: "slash"), (preset: "hit-spark", scale: 2.5), (preset: "parry-ring", scale: 1.45), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
+    // The staged fight's effects (biomes/effects/, kit/effects.rs). The hit's spark grown to read
+    // at the route's 10 m camera (iso-forest-demo j26): as the preset is, a blow's burst was 15
+    // to 20 px of 1080 and its streaks 1.5 px thick (route frames 182, 254, 289, 550), so the
+    // judge saw no hit at all; the ARPGs' sparks are large and bright. The parry's flash as its
+    // preset is (j30): grown, its halo read as a disc about him.
+    effects: [(preset: "slash"), (preset: "hit-spark", scale: 2.5), (preset: "parry-ring"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
     // How the fighters stand off the floor (ruin/fight.rs `cast`): darker than the ground
     // about them, as the ruin's (iso-art j34). The treants at the ruin's 0.2 and 0.35 read
     // as black cut-outs on the shaded floor by day, no lit form (judges 261107-0437 and
