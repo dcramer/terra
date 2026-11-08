@@ -175,8 +175,10 @@ fn ground(mut commands: Commands, args: Res<Args>, biome: Option<Res<Biome>>) {
             }
         }
         Some(Layout::Forest) => {
-            let k = crate::wood::KNIGHT;
-            let inside = rect(k - 14.0, k + 14.0);
+            // The whole wood the nav grid covers (nav.rs `HALF`), so a route's packs
+            // (demo/mobs.rs) lie on open ground: what blocks him there is the grid's.
+            let edge = Vec2::splat(crate::nav::HALF - 1.0);
+            let inside = rect(-edge, edge);
             Ground {
                 floor: Box::new(crate::terrain::shape),
                 open: Box::new(inside),

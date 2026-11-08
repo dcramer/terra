@@ -681,6 +681,11 @@ pub struct Foe {
     /// staged still's day treants are lifted; play's mobs walk in the wood's shade).
     #[serde(default)]
     pub tone: Option<Tone>,
+    /// Its pack along a route (demo/mobs.rs): a pack stands until the hero comes near one of
+    /// it, then all of it walks to him (an ARPG's wave); one pack (the default) about him
+    /// wakes at once.
+    #[serde(default)]
+    pub pack: u32,
 }
 
 fn one() -> f32 {

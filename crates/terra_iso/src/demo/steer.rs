@@ -219,6 +219,8 @@ pub fn step(
     for (i, m) in mobs.iter_mut().enumerate() {
         if !active[i] {
             m.vel = Vec2::ZERO;
+            // Its stuck clock starts when it moves again (a pack woken late is not stuck).
+            m.anchor = (m.at, now);
             continue;
         }
         let goal = m.wants(hero, now);
@@ -556,6 +558,42 @@ mod tests {
             left && right,
             "{:?}",
             mobs.iter().map(|m| m.at).collect::<Vec<_>>()
+        );
+    }
+
+    /// A mob held out of play (a pack not yet woken) walks straight to him when it wakes:
+    /// the time it stood is not counted as stuck, so it neither sidesteps nor replans.
+    #[test]
+    fn a_mob_woken_late_is_not_stuck() {
+        let inside = |_: Vec2| true;
+        let field = Field {
+            nav: None,
+            circles: &[],
+            open: &inside,
+        };
+        let mut mobs = vec![Mob::new(Vec2::new(0.0, 9.0))];
+        let mut now = 0.0;
+        for active in [false, true] {
+            for _ in 0..(5.0 / DT) as usize {
+                step(
+                    &mut mobs,
+                    &[active],
+                    Vec2::ZERO,
+                    &field,
+                    Rules::ALL,
+                    now,
+                    DT,
+                );
+                now += DT;
+                if active {
+                    assert!(mobs[0].sidestep.is_none(), "it sidestepped at {now:.2} s");
+                }
+            }
+        }
+        assert!(
+            mobs[0].at.length() < RING + 0.5,
+            "it stands at {}",
+            mobs[0].at
         );
     }
 }

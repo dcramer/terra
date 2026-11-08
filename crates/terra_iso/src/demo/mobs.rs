@@ -39,6 +39,9 @@ const BLEND: Duration = Duration::from_millis(200);
 /// A stall is warned of once it passes this (s), and again each time it grows by `GROWS`.
 pub const STALLED: f32 = 1.0;
 const GROWS: f32 = 0.5;
+/// A pack wakes once the hero comes this near one of it (m): about the camera's half height
+/// on the ground, so it is in frame as it starts toward him.
+pub const WAKE: f32 = 10.0;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(PostStartup, spawn)
@@ -83,6 +86,19 @@ pub struct Horde {
     /// The nav grid with the footprints blocked, and how many circles it was built with.
     paths: Option<(usize, Nav)>,
     blows: Vec<u32>,
+    /// Each mob's pack (its roster line's `pack`), and whether it has woken.
+    packs: Vec<u32>,
+    pub awake: Vec<bool>,
+}
+
+/// Wakes every pack one of whose mobs is `near` (the hero within `WAKE` of it, or it struck):
+/// all of that pack, for good.
+pub(super) fn wake(awake: &mut [bool], packs: &[u32], near: &[bool]) {
+    for (i, _) in near.iter().enumerate().filter(|(_, n)| **n) {
+        for (j, p) in packs.iter().enumerate() {
+            awake[j] |= *p == packs[i];
+        }
+    }
 }
 
 /// The roster set down in play off the stage's hero, each on open ground facing him.
@@ -138,6 +154,8 @@ fn spawn(
         }
         horde.mobs.push(Mob::new(p));
         horde.blows.push(0);
+        horde.packs.push(foe.pack);
+        horde.awake.push(false);
     }
     info!("{} mobs set down about the hero", horde.mobs.len());
     commands.insert_resource(horde);
@@ -177,10 +195,15 @@ fn steer(
     {
         horde.paths = Some((circles.len(), steer::with_circles(n, &circles)));
     }
+    let mut near = vec![false; horde.mobs.len()];
+    for (foe, _, struck, fallen, _) in &bodies {
+        near[foe.i] = !fallen && (horde.mobs[foe.i].at.distance(him) <= WAKE || struck.is_some());
+    }
+    wake(&mut horde.awake, &horde.packs, &near);
     let mut active = vec![false; horde.mobs.len()];
     for (foe, _, struck, fallen, gait) in &bodies {
         let m = &mut horde.mobs[foe.i];
-        active[foe.i] = !fallen;
+        active[foe.i] = !fallen && horde.awake[foe.i];
         let blows = struck.map_or(0, |s| s.blows);
         if blows > horde.blows[foe.i] {
             horde.blows[foe.i] = blows;
@@ -210,6 +233,10 @@ fn steer(
         }
         let m = &horde.mobs[foe.i];
         tr.translation = m.at.extend((ground.floor)(m.at)).xzy();
+        // A pack asleep stands as it was set down.
+        if !horde.awake[foe.i] {
+            continue;
+        }
         let way = if m.vel.length() > STILL {
             m.vel
         } else {
@@ -346,5 +373,32 @@ pub(super) fn gait(
             g.playing = want;
             pose.clip = want;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One of a pack near him wakes all of it and no other pack, and a pack once woken stays
+    /// awake when he walks on; with no near mob nothing wakes.
+    #[test]
+    fn a_pack_wakes_whole_and_alone() {
+        let packs = [0, 0, 1, 1, 1, 2];
+        let mut awake = [false; 6];
+        wake(&mut awake, &packs, &[false; 6]);
+        assert_eq!(awake, [false; 6]);
+        wake(
+            &mut awake,
+            &packs,
+            &[false, false, false, true, false, false],
+        );
+        assert_eq!(awake, [false, false, true, true, true, false]);
+        wake(
+            &mut awake,
+            &packs,
+            &[true, false, false, false, false, false],
+        );
+        assert_eq!(awake, [true, true, true, true, true, false]);
     }
 }
