@@ -238,6 +238,11 @@ pub(super) fn take(
     }
 }
 
+/// The footprints the hero walks round: every one but his own and a felled body's, which he
+/// steps over as ARPGs' corpses are (one kept left him held fast beside the camp for the
+/// rest of the forest's route, iso-forest-demo j10).
+pub type Blocking = (Without<super::Hero>, Without<super::Fallen>);
+
 /// Every footprint's circles in the world.
 pub fn world<F: bevy::ecs::query::QueryFilter>(
     footprints: &Query<(&Footprint, &GlobalTransform), F>,
@@ -285,6 +290,27 @@ mod tests {
         let stuck = Vec2::new(0.2, 0.0);
         assert!(!blocked(&c, stuck, Vec2::new(0.3, 0.0)), "out of it");
         assert!(blocked(&c, stuck, Vec2::new(0.1, 0.0)), "deeper in");
+    }
+
+    /// A felled body is walked over: of a standing creature's, a fallen one's and the hero's
+    /// own footprints, only the standing creature's blocks him.
+    #[test]
+    fn a_felled_body_does_not_block_the_hero() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut w = World::new();
+        let at = |x: f32| GlobalTransform::from_translation(Vec3::new(x, 0.0, 0.0));
+        let foot = || Footprint(vec![(Vec2::ZERO, CREATURE)]);
+        w.spawn((foot(), at(0.0)));
+        w.spawn((foot(), at(5.0), super::super::Fallen));
+        w.spawn((foot(), at(9.0), super::super::Hero));
+        let circles = w
+            .run_system_once(|q: Query<(&Footprint, &GlobalTransform), Blocking>| world(&q))
+            .unwrap();
+        assert_eq!(
+            circles,
+            vec![(Vec2::ZERO, CREATURE)],
+            "only the standing one"
+        );
     }
 
     /// Only an opaque material is solid: a fern's cut-out fronds and a blended pane are

@@ -390,7 +390,7 @@ fn control(
     mut hero: Query<(Entity, &mut Transform, &mut Rig), With<Hero>>,
     (foes, footprints): (
         Query<(Entity, &Transform), (With<Pose>, Without<Hero>, Without<Fallen>)>,
-        Query<(&footprint::Footprint, &GlobalTransform), Without<Hero>>,
+        Query<(&footprint::Footprint, &GlobalTransform), footprint::Blocking>,
     ),
     mut players: Query<&mut AnimationPlayer>,
     mut transitions: Query<&mut AnimationTransitions>,

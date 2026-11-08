@@ -87,7 +87,7 @@ pub fn act(
     mut hero: Query<(&mut Transform, &HeroIntent, &mut Doing), With<Hero>>,
     (foes, footprints): (
         Query<(Entity, &Transform), (With<Pose>, Without<Hero>, Without<Fallen>)>,
-        Query<(&footprint::Footprint, &GlobalTransform), Without<Hero>>,
+        Query<(&footprint::Footprint, &GlobalTransform), footprint::Blocking>,
     ),
     mut was_blocking: Local<bool>,
 ) {
