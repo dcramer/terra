@@ -56,7 +56,7 @@ Measure every still (judging.md) and tune to the refs of the same kind of frame.
 - Impacts (j32): a star over about 0.6 m hides what it hits; a small glint gone in 0.1 s, a ring shell swelling to 1.7 m, thicker sparks (2.6 to 3.2 cm), a light 0.5 m over the floor under it and a `mark.rs` decal (glowing rim, cooling to residue) carry the hit. The ruin's p95 went 0.13 to 0.21 with them: the pools light a lot of floor.
 - Every effect has a light, a bright core over bloom, and fades rather than pops.
 - Marks on the ground (scorch, frost): Bevy 0.20's `ForwardDecal` works at the ARPG camera unchanged (its SSAO already needs the `DepthPrepass` a decal reads), on uneven ground too.
-- The fighters' rim: every body `ruin::fight` poses takes `rim::Fighter` in every scene (a new scene adds `rim::plugin` to its branch in main.rs); `fight::value` sets each body's albedo and rim share. The rim is a thin cold band on the outline (`fighter_rim`, `lift`), not a wash; 1:1 crops of each fighter judge it (traps.md).
+- The fighters' rim: every body `ruin::fight` poses takes `rim::Fighter` in every scene (a new scene adds `rim::plugin` to its branch in main.rs); its biome file's `bodies` (by model path) or its roster entry's `tone` sets its albedo and rim share (`fight::cast`). The rim is a thin cold band on the outline (`fighter_rim`, `lift`), not a wash; 1:1 crops of each fighter judge it (traps.md).
 
 ## Ambient and living nature (`ambient/`)
 

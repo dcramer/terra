@@ -130,6 +130,12 @@ fn spawn(
             },
             Foe { i, walk: foe.walk },
         ));
+        if let Some(tone) = foe.tone {
+            // Its own value and rim over the biome's for its model (ruin/fight.rs `cast`).
+            commands
+                .entity(body)
+                .insert(crate::ruin::fight::Toned(tone));
+        }
         horde.mobs.push(Mob::new(p));
         horde.blows.push(0);
     }

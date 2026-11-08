@@ -12,54 +12,39 @@ pub fn plugin(app: &mut App) {
 }
 
 /// Every body the fight poses, in every scene that stages it (the ruin, the forest, the
-/// marsh), takes the fighters' rim (rim.rs; the scene adds `rim::plugin`), so it lifts off
-/// the ground as the ARPGs' bodies do: the three biome judges found the fighters lost in
-/// it (iso-art j28).
+/// marsh, a street's people), takes the fighters' rim (rim.rs; the scene adds `rim::plugin`),
+/// so it lifts off the ground as the ARPGs' bodies do: the three biome judges found the
+/// fighters lost in it (iso-art j28). How dark and how rimmed is data: the body's own
+/// `Toned` (play's roster entry) or its biome's `bodies` for its model (kit/biome.rs `Tone`,
+/// D136), else as it comes.
 fn cast(
     mut commands: Commands,
-    posed: Query<(Entity, &Pose), Added<Pose>>,
-    hour: Option<Res<crate::scene::Hour>>,
+    posed: Query<(Entity, &Pose, Option<&Toned>), Added<Pose>>,
+    biome: Option<Res<crate::kit::biome::Biome>>,
 ) {
-    let day = hour.is_some_and(|h| *h == crate::scene::Hour::Day);
-    for (body, pose) in &posed {
+    for (body, pose, own) in &posed {
         let name = pose.gltf.path().map(|p| p.to_string()).unwrap_or_default();
-        let (albedo, rim) = value(&name);
-        // The forest by day: its treants at j34's values read as black cut-outs on the
-        // shaded floor, no lit form (judges 261107-0437 and 0507, iso-kit j50's FOUND):
-        // their bark lifted most of the way back, so the sun models their limbs, still
-        // under the trodden earth's value.
-        let albedo = if day && name.contains("treant") {
-            albedo.sqrt() * 0.85
-        } else {
-            albedo
-        };
+        let tone = tone_of(own, biome.as_deref(), &name);
         commands
             .entity(body)
-            .insert(crate::rim::Fighter::valued(albedo, rim));
+            .insert(crate::rim::Fighter::valued(tone.value, tone.rim));
     }
 }
 
-/// How much a body's albedo and rim are scaled, so each stands darker than the ground
-/// beside it as the ARPGs' creatures do (their crops: refs/creatures.json). Tripo's bark
-/// and hide are the ground's value: in the forest's sun the tree creatures stood 5 to 10
-/// L* lighter than the dirt about them (the judges' "pale, at the rocks' value"). Measured
-/// on a magenta mask of each body against a 10 px ring of ground (iso-art j34), these
-/// take them to 5 to 10 L* darker; with the fighters' duller specular (rim.rs `FIGHTER_
-/// REFLECTANCE`). The tree monster's crown is all leaf edges, each of which takes the
-/// band, so it frosts: a share of it. The rest as they come.
-pub(crate) fn value(path: &str) -> (f32, f32) {
-    if path.contains("ogre") {
-        (0.5, 1.0)
-    } else if path.contains("treant-a") {
-        (0.2, 1.0)
-    } else if path.contains("treant-b") {
-        (0.35, 1.0)
-    } else if path.contains("tree-monster") {
-        (0.35, 0.35)
-    } else {
-        (1.0, 1.0)
-    }
+/// A posed body's tone: its own, else its biome's for its model, else as it comes.
+fn tone_of(
+    own: Option<&Toned>,
+    biome: Option<&crate::kit::biome::Biome>,
+    model: &str,
+) -> crate::kit::biome::Tone {
+    own.map(|t| t.0)
+        .or_else(|| biome.map(|b| b.tone(model)))
+        .unwrap_or_default()
 }
+
+/// A posed body's own tone, over its biome's for its model (a roster entry's `tone`).
+#[derive(Component, Clone, Copy)]
+pub struct Toned(pub crate::kit::biome::Tone);
 
 /// A body's clip and where in it to stand.
 #[derive(Component)]
@@ -231,5 +216,29 @@ mod tests {
             .id();
         app.update();
         assert!(app.world().get::<crate::rim::Fighter>(body).is_some());
+    }
+
+    /// A body's tone is data: its biome's for its model, its own (a roster entry's) over
+    /// that, and a model the biome does not name as it comes.
+    #[test]
+    fn a_bodys_tone_is_its_biomes_or_its_own() {
+        use crate::kit::biome::{Biome, Tone};
+        let mut biome = Biome::load("forest").expect("the forest's file reads");
+        let dark = Tone {
+            value: 0.25,
+            rim: 2.0,
+        };
+        biome.bodies.insert("models/iso/a.glb".into(), dark);
+        assert_eq!(tone_of(None, Some(&biome), "models/iso/a.glb"), dark);
+        let own = Toned(Tone {
+            value: 0.6,
+            rim: 0.5,
+        });
+        assert_eq!(tone_of(Some(&own), Some(&biome), "models/iso/a.glb"), own.0);
+        assert_eq!(
+            tone_of(None, Some(&biome), "models/iso/unnamed.glb"),
+            Tone::default()
+        );
+        assert_eq!(tone_of(None, None, "models/iso/a.glb"), Tone::default());
     }
 }

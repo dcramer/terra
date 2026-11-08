@@ -58,6 +58,39 @@ pub struct Biome {
     /// and encounters read them, never a list of their own). None by default.
     #[serde(default)]
     pub foes: Vec<Foe>,
+    /// How each posed body stands off this biome's ground, by its model's path (ruin/fight.rs
+    /// `cast`, rim.rs `Fighter::valued`): a model not named is as it comes. Data, not a list
+    /// of models in code (D136).
+    #[serde(default)]
+    pub bodies: std::collections::BTreeMap<String, Tone>,
+}
+
+/// A body's albedo scale (`value`: Tripo's bark and hide are the ground's value, so a
+/// creature is taken darker than the floor about it, as the ARPGs' are) and its rim band's
+/// share (`rim`).
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Tone {
+    #[serde(default = "one")]
+    pub value: f32,
+    #[serde(default = "one")]
+    pub rim: f32,
+}
+
+impl Default for Tone {
+    fn default() -> Self {
+        Tone {
+            value: 1.0,
+            rim: 1.0,
+        }
+    }
+}
+
+impl Biome {
+    /// How a posed body of `model` stands off this ground (`bodies`), as it comes if unnamed.
+    pub fn tone(&self, model: &str) -> Tone {
+        self.bodies.get(model).copied().unwrap_or_default()
+    }
 }
 
 /// The kind of a reference and a still.
@@ -644,6 +677,10 @@ pub struct Foe {
     /// its walk at its speed over this, so its feet do not slide (demo/mobs.rs).
     #[serde(default = "one")]
     pub walk: f32,
+    /// How it stands off the ground, when not as the biome's `bodies` say of its model (the
+    /// staged still's day treants are lifted; play's mobs walk in the wood's shade).
+    #[serde(default)]
+    pub tone: Option<Tone>,
 }
 
 fn one() -> f32 {

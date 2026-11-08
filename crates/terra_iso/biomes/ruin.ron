@@ -77,4 +77,13 @@
     ),
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
+    // How the fighters stand off the court (ruin/fight.rs `cast`): Tripo's hide and bark
+    // are the ground's value, so each is taken darker than the ground about it as the ARPGs'
+    // creatures are (their crops: refs/creatures.json), measured on a magenta mask of each
+    // body against a 10 px ring of ground (iso-art j34). The tree monster's crown is all
+    // leaf edges, each taking the rim band, so it frosts: a share of it.
+    bodies: {
+        "models/iso/ogre.glb": (value: 0.5),
+        "models/iso/tree-monster.glb": (value: 0.35, rim: 0.35),
+    },
 )

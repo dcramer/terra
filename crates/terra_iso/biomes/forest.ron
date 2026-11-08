@@ -88,4 +88,14 @@
     ],
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
+    // How the fighters stand off the floor (ruin/fight.rs `cast`): darker than the ground
+    // about them, as the ruin's (iso-art j34). The treants at the ruin's 0.2 and 0.35 read
+    // as black cut-outs on the shaded floor by day, no lit form (judges 261107-0437 and
+    // 0507, iso-kit j50): their bark lifted most of the way back (0.85 of the root of it),
+    // so the sun models their limbs, still under the trodden earth's value.
+    bodies: {
+        "models/iso/treant-a.glb": (value: 0.38013),
+        "models/iso/treant-b.glb": (value: 0.50287),
+        "models/iso/tree-monster.glb": (value: 0.35, rim: 0.35),
+    },
 )

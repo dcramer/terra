@@ -161,4 +161,11 @@
         clear: [(-1.8, 1.35, 4.5)])),
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
+    // How the fighters stand off the mud (ruin/fight.rs `cast`): darker than the ground about
+    // them, as the ruin's (iso-art j34); the tree monster's leafy crown a share of the rim.
+    bodies: {
+        "models/iso/ogre.glb": (value: 0.5),
+        "models/iso/treant-a.glb": (value: 0.2),
+        "models/iso/tree-monster.glb": (value: 0.35, rim: 0.35),
+    },
 )

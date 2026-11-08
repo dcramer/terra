@@ -251,7 +251,7 @@ fn street_hero(
             yaw,
             1.0,
         );
-        // Darker than the ground about it as the ruin's (fight.rs `value`), a faint rim as
+        // Darker than the ground about it as the ruin's (the biome's `bodies`), a faint rim as
         // the street's people, its contact shadow under its feet (kit/contact.rs).
         commands.entity(foe).insert((
             crate::rim::Fighter::valued(0.5, 0.35),

@@ -214,13 +214,19 @@ pub(super) fn spawn(
     crate::kit::cables::spawn(&mut commands, &mut meshes, &mut materials, &st.cables);
     lamps(&mut commands, &mut meshes, &mut materials, &st);
     signs(&mut commands, &asset, &mut meshes, &mut materials, &st);
-    props(&mut commands, &asset, &args, &st);
+    props(&mut commands, &asset, &args, &biome, &st);
 }
 
 /// The street's props: each at its spots, grounded by its bounds, its feet or not at all,
 /// rimmed, posed and walked in as its entry says; a film's own left out of a still or play,
 /// the staged fight's out of play (`Prop::stands`).
-fn props(commands: &mut Commands, asset: &AssetServer, args: &Args, st: &super::Street) {
+fn props(
+    commands: &mut Commands,
+    asset: &AssetServer,
+    args: &Args,
+    biome: &Biome,
+    st: &super::Street,
+) {
     for p in &st.props {
         if !p.stands(args.film > 0, args.play) {
             continue;
@@ -243,7 +249,7 @@ fn props(commands: &mut Commands, asset: &AssetServer, args: &Args, st: &super::
             }
             if p.rim > 0.0 {
                 // Darker than the ground about it as the ruin's fighters (an ogre at half).
-                let (albedo, _) = crate::ruin::fight::value(&p.model);
+                let albedo = biome.tone(&p.model).value;
                 commands
                     .entity(body)
                     .insert(crate::rim::Fighter::valued(albedo, p.rim));
