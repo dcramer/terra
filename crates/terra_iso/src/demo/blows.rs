@@ -23,8 +23,9 @@ use terra_motion::moves::{MoveSet, Taken, judge};
 const HIT: f32 = 0.45;
 /// How long before its hit a blow is told on the ground (s).
 const TELL: f32 = 0.5;
-/// How high over the mob's feet the tell lies (m): it is drawn over everything, so only
-/// enough to keep it off the ground's own plane.
+/// How high over the mob's feet the tell lies (m): only enough to keep it off the ground's
+/// own plane. It is drawn under the bodies and over the ground: depth tested, and moved
+/// `tell::RAISE` toward the camera besides (`land`), so low cover stays under it.
 const LIFT: f32 = 0.03;
 /// A blow on his shield flinches him this share of a full one.
 const ON_GUARD: f32 = 0.4;
