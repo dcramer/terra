@@ -105,6 +105,8 @@ pub struct Mob {
 }
 
 impl Mob {
+    /// A mob of the default body (the tests'; the game sizes each by its roster line).
+    #[cfg(test)]
     pub fn new(at: Vec2) -> Mob {
         Mob::sized(at, RADIUS)
     }
