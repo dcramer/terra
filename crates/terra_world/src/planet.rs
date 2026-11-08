@@ -111,6 +111,9 @@ pub struct Planet {
     /// Which way from the centre the player starts (`terra_land::spawn`): the planet's own
     /// start, which its frame is turned for, but where a seed's search moved it.
     start: Vec3,
+    /// Its den, the troll's cave (D591, D643): found from the seed on the land round the
+    /// start and carved from its ground; none on a test level or where the land holds none.
+    den: Option<terra_land::cave::Den>,
     /// The share of the first realm's plants that grow here (`realm::Realm::plants`): 1 where
     /// the realm says nothing.
     plants: f32,
@@ -148,7 +151,21 @@ impl Planet {
                 start.angle_between(START) * spec.radius_m / 1000.0
             );
         }
-        let ground = land.ground;
+        // Its den, found from the seed as the start is, and carved from the ground.
+        let looking = std::time::Instant::now();
+        let den = terra_land::cave::find(&land, start);
+        let caves: Vec<_> = den.iter().map(|den| den.system(&land)).collect();
+        info!(
+            "The den of seed {} {} in {:.2} s.",
+            spec.seed.0,
+            if den.is_some() {
+                "found"
+            } else {
+                "not found: this land holds none"
+            },
+            looking.elapsed().as_secs_f32()
+        );
+        let ground = land.ground.with_caves(terra_voxel::Caves::new(caves));
         // Its hills, and on a world large enough its mountains (D322).
         let relief_m = RELIEF_M
             + ground
@@ -161,6 +178,7 @@ impl Planet {
             round: None,
             plants: 1.0,
             start,
+            den,
         }
     }
 
@@ -174,6 +192,7 @@ impl Planet {
             round: None,
             plants: 1.0,
             start: START,
+            den: None,
         }
     }
 
@@ -187,6 +206,7 @@ impl Planet {
             round: None,
             plants: 1.0,
             start: START,
+            den: None,
         }
     }
 
@@ -370,6 +390,12 @@ impl Planet {
     /// Sets how much of the first realm's plants grow here, as its realm says.
     pub fn set_plants(&mut self, share: f32) {
         self.plants = share.clamp(0.0, 1.0);
+    }
+
+    /// The world's den, if its land holds one: where its mouth opens and its chamber's
+    /// floor is (`terra_land::cave`).
+    pub fn den(&self) -> Option<&terra_land::cave::Den> {
+        self.den.as_ref()
     }
 
     pub fn start(&self) -> Vec3 {

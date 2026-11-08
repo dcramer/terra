@@ -1,6 +1,6 @@
 # Natural caves
 
-Status: **designed, 2026-11-08; not read by the developers; step 1 built** (D591, D643): `terra_voxel::caves` carves systems from a generated planet's ground (`GeneratedPlanet::with_caves`); no world has any yet. Research: [natural-caves](../research/natural-caves.md).
+Status: **designed, 2026-11-08; not read by the developers; step 1 built** (D591, D643): `terra_voxel::caves` carves systems from a generated planet's ground (`GeneratedPlanet::with_caves`); and step 2: every world has a den found from its seed (`terra_land::cave`, `Planet::den`, `den.state`), held by the sweep on seeds 1 to 128. Seen once in the game: a passage going down into the ground in the forest; grass grows on its walls, a sapling stands in its mouth, its far end shows a hole, and nothing lights or darkens it yet (step 3). Research: [natural-caves](../research/natural-caves.md).
 
 Natural caves are part of how a world is made (D591), and v0's boss, the troll, lives in one that fits a 4 m body and a fight and is reached from the surface on every seed. A cave here is a **system placed by rule and carved from the ground's distance field** (D643): the best fit of what shipped games do (Valheim places its troll caves; Deep Rock Galactic carves authored rooms joined by rule; Minecraft kept placed carvers beside its noise caves), and the way our streaming needs no new rule.
 

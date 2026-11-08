@@ -11,7 +11,7 @@ use std::time::Instant;
 use terra_core::{PlanetSpec, Seed};
 use terra_land::fingerprint::{self, Fingerprint};
 use terra_land::survey::{self, Biome, Survey};
-use terra_land::{Land, PLANET_START, gate, ground, spawn, start_climate};
+use terra_land::{Land, PLANET_START, cave, gate, ground, spawn, start_climate};
 
 const USAGE: &str = "cargo xtask worlds [--seeds 1-128] [--radius 30000] [--out target/worlds] [--against <an earlier worlds.tsv>]
   --seeds    the seeds swept, first to last
@@ -88,6 +88,7 @@ struct World {
     /// What is wrong with the world's gate (`terra_land::gate`): none found from its start,
     /// or one a walker does not reach.
     gate_faults: Vec<String>,
+    den_faults: Vec<String>,
 }
 
 fn run() -> Result<bool, String> {
@@ -129,6 +130,15 @@ fn run() -> Result<bool, String> {
                     gate::FARTHEST_M
                 )],
             },
+            den_faults: match cave::find(&land, start) {
+                Some(den) => cave::faults(&land, start, &den),
+                None => vec![format!(
+                    "no den: no ground {} to {} m from the start that a walk reaches holds a cave with {} m of rock over it and its floor over the sea (terra_land::cave, D591)",
+                    cave::NEAR_M,
+                    cave::FARTHEST_M,
+                    cave::COVER_M
+                )],
+            },
         }
     });
     let slowest = worlds.iter().map(|w| w.search_s).fold(0.0, f32::max);
@@ -143,6 +153,7 @@ fn run() -> Result<bool, String> {
     for world in &worlds {
         let mut faults = world.survey.faults();
         faults.extend(world.gate_faults.iter().cloned());
+        faults.extend(world.den_faults.iter().cloned());
         if !faults.is_empty() {
             invalid += 1;
             ok = false;

@@ -8,6 +8,7 @@
 //! the snow lies) changes play, so every machine works it out the same. `terra_world` draws
 //! it; `cargo xtask fields` maps it without the GPU (D326).
 
+pub mod cave;
 pub mod drift;
 pub mod fingerprint;
 pub mod frame;

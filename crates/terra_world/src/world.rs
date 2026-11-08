@@ -31,6 +31,7 @@ impl Plugin for WorldPlugin {
         sky_occlusion::plugin(app);
         daylight::plugin(app);
         crate::realm::plugin(app);
+        crate::den::plugin(app);
         crate::indoor::plugin(app);
         climate::plugin(app);
         wind::plugin(app);
