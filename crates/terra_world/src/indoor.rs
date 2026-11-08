@@ -56,9 +56,15 @@ const EASE_S: f32 = 1.5;
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
 pub struct ShutOff(pub f32);
 
+/// When how shut off the eye is is worked out from the sky reaching the air round it
+/// (`scene::IndoorSky`): what says less sky reaches it there (a den, `den_light`) says so
+/// before.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Shuts;
+
 pub fn plugin(app: &mut App) {
     app.init_resource::<ShutOff>()
-        .add_systems(PostUpdate, (ease, fill).chain());
+        .add_systems(PostUpdate, (ease, fill).chain().in_set(Shuts));
 }
 
 /// How shut off from the sky the air round the eye is, from 0 (outdoors, or a room open

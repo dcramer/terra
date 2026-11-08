@@ -78,7 +78,53 @@ enum Light {
 pub fn plugin(app: &mut App) {
     use crate::instance::InstanceApp;
     app.init_world_resource::<Light>()
-        .add_systems(Update, light.run_if(crate::instance::in_world));
+        .add_systems(Update, light.run_if(crate::instance::in_world))
+        .add_systems(
+            PostUpdate,
+            shut_in
+                .before(crate::indoor::Shuts)
+                .run_if(crate::instance::in_world),
+        );
+}
+
+impl Seen {
+    /// How much light is about at a point, of the open sky's, if it is in the den's box.
+    fn about_at(&self, point: Vec3) -> Option<f32> {
+        let axis = |axis: Vec3| (point - self.middle).dot(axis) / axis.length_squared() + 0.5;
+        let at = Vec3::new(
+            axis(self.axes.x_axis),
+            axis(self.axes.y_axis),
+            axis(self.axes.z_axis),
+        );
+        if at.cmplt(Vec3::ZERO).any() || at.cmpge(Vec3::ONE).any() {
+            return None;
+        }
+        let cell = (at * self.cells.as_vec3()).as_uvec3().min(self.cells - 1);
+        let index = (cell.z * self.cells.y + cell.y) * self.cells.x + cell.x;
+        self.about.get(index as usize).copied()
+    }
+}
+
+/// In a den the eye is shut off from the sky as it is in a closed room (`indoor`, D485): no
+/// more of the sky's light reaches the air round the camera than is about it there, so the
+/// eye opens to the room's key, its dark has the cool fill a dungeon's has, and a torch
+/// burns as by night. Said after whatever else says how much sky reaches the eye (a
+/// building's rooms) and before it is eased, so leaving the den eases out as leaving a room.
+fn shut_in(
+    state: Res<Light>,
+    camera: Query<&GlobalTransform, With<crate::planet::MainCamera>>,
+    air: Option<ResMut<crate::scene::IndoorSky>>,
+) {
+    let (Light::Lit { seen, .. }, Some(camera), Some(mut air)) =
+        (&*state, camera.iter().next(), air)
+    else {
+        return;
+    };
+    if let Some(about) = seen.about_at(camera.translation())
+        && about < air.0
+    {
+        air.0 = about;
+    }
 }
 
 /// The box that holds a den's parts and a margin, upright as the planet is at its middle.
@@ -377,6 +423,11 @@ mod tests {
         // Over the ground the whole sky is overhead, and none below.
         let over = at(base + Vec3::new(20.0, 3.0, 0.0));
         assert_eq!((over[2], over[3]), (1.0, 0.0));
+        // The light about at a point: little at the far end, all of it over the ground, and
+        // nothing said of a place outside the den's box.
+        assert!(seen.about_at(base + Vec3::new(36.0, -12.0, 0.0)).unwrap() < 0.2);
+        assert!(seen.about_at(base + Vec3::new(20.0, 3.0, 0.0)).unwrap() > 0.4);
+        assert_eq!(seen.about_at(base + Vec3::new(500.0, 0.0, 0.0)), None);
         // Lit, the far end keeps a trace and the open air is many times brighter.
         let sky = [(Vec3::ONE, Vec3::splat(0.2)); 6];
         let data = texels(&seen, &sky);
