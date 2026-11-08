@@ -120,6 +120,7 @@ impl Plugin for GameplayPlugin {
         build_menu::plugin(app);
         crafting::plugin(app);
         station_screen::plugin(app);
+        terra_survival::station_remote::plugin(app);
         storage::plugin(app);
         storage_screen::plugin(app);
         interact::plugin(app);
@@ -158,6 +159,7 @@ impl Plugin for GameplayPlugin {
         held::plugin(app);
         terra_survival::hands_net::plugin(app);
         terra_survival::storage_net::plugin(app);
+        terra_survival::works_net::plugin(app);
         base_net::plugin(app);
         props_net::plugin(app);
         worn::plugin(app);

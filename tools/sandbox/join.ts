@@ -212,7 +212,7 @@ try {
       remote(host, "wait", "Placed a Claim stone", "--timeout", "20");
       claimed = true;
     } catch {
-      remote(host, "press", "escape", "w:40");
+      remote(host, "press", "esc", "w:40");
       await sleep(2);
     }
   }
@@ -260,6 +260,47 @@ try {
   const both = chest(friend);
   await until(`the friend left wood in the chest, which holds ${both} in its game, and the host's holds ${chest(host)}: a joined game asks the host to hold what its player left (terra_survival::storage_net)`, () => chest(host) === both && both.includes("Wood"), 30);
   console.log(`✓ a chest holds the same in both games: the host left stone in it and the friend wood, and it holds ${both} in each`);
+
+  // A station that works on its own is one station in both games (netcode.md, step 5): the
+  // friend sets the host's campfire to cook meat, the host's fire cooks it and the host takes
+  // it; the host sets it to make a torch, and the friend takes that.
+  type Stations = { stations: { station: string; from_start: Place; queue: string[]; made: string[] }[] };
+  const fire = (port: number) => {
+    const found = (JSON.parse(remote(port, "call", "station.state")) as Stations).stations.filter((each) => each.station === "Campfire");
+    return found.length === 1 ? found[0] : undefined;
+  };
+  const fireSays = (port: number) => {
+    const at = fire(port);
+    return at ? `queue [${at.queue.join(", ")}], made [${at.made.join(", ")}]` : "no campfire";
+  };
+  remote(host, "give", "wood:3", "stone:2");
+  const lit = JSON.parse(remote(host, "call", "storage.place", JSON.stringify({ item: "Campfire", at: [9.5, 0, 2.5] }))) as { done: boolean; refused?: string };
+  if (!lit.done) throw new Error(`the host's campfire was refused: ${lit.refused}`);
+  await until("the host set down a campfire and the friend's game has none (play::props_net)", () => fire(friend) !== undefined, 60);
+  const hearth = fire(host)!.from_start;
+  const fromFire = (port: number) => {
+    const at = (JSON.parse(remote(port, "call", "play.state")) as { at: [number, number] }).at;
+    return Math.hypot(at[0] - hearth[0], at[1] - hearth[2]);
+  };
+  remote(host, "call", "play.warp", JSON.stringify({ at: [hearth[0] + 1.6, hearth[2]] }));
+  remote(host, "call", "net.place_guests", JSON.stringify({ at: [hearth[0] - 1.6, hearth[2]] }));
+  await until(`both players are put beside the campfire, and the host stands ${fromFire(host).toFixed(1)} m from it and the friend ${fromFire(friend).toFixed(1)} m`, () => fromFire(host) < 3 && fromFire(friend) < 3, 30);
+  remote(friend, "give", "meat:1");
+  remote(friend, "call", "station.queue", JSON.stringify({ recipe: "Cooked meat" }));
+  await until(`the friend set the campfire to cook meat and the host's says ${fireSays(host)}: a joined game asks the host for what its player does at a station that works alone, and the host runs it (terra_survival::works_net)`, () => fire(host)!.made.includes("Cooked meat"), 40);
+  await until(`the host's campfire has cooked the meat and the friend's says ${fireSays(friend)}: a joined game shows each lone station as the host tells it`, () => fire(friend)!.made.includes("Cooked meat") && fire(friend)!.queue.length === 0, 20);
+  const cooked = JSON.parse(remote(host, "call", "station.take")) as { took: string[] };
+  if (!cooked.took.includes("Cooked meat")) throw new Error(`the host took ${JSON.stringify(cooked.took)} from its campfire, not the meat the friend set cooking`);
+  await until(`the host took the cooked meat and the friend's campfire still says ${fireSays(friend)}`, () => fire(friend)!.made.length === 0, 20);
+  remote(host, "give", "wood:1", "fibre:1");
+  remote(host, "call", "station.queue", JSON.stringify({ recipe: "Torch" }));
+  await until(`the host set the campfire to make a torch and the friend's says ${fireSays(friend)}`, () => fire(friend)!.made.includes("Torch"), 30);
+  const torch = JSON.parse(remote(friend, "call", "station.take")) as { took: string[] };
+  if (!torch.took.includes("Torch")) throw new Error(`the friend took ${JSON.stringify(torch.took)} from the host's campfire, not the torch it made`);
+  await until(`the friend took the torch and the host's campfire still says ${fireSays(host)}: what a joined player takes is asked of the host (terra_survival::works_net)`, () => fire(host)!.made.length === 0, 20);
+  await sleep(3);
+  if (fire(friend)!.made.length > 0) throw new Error(`the torch the friend took is back in its campfire (${fireSays(friend)}): a word the host said before the ask reached it must take nothing back`);
+  console.log("✓ a campfire is one station in both games: the friend set meat cooking, the host's fire cooked it and the host took it; the host's torch was the friend's to take");
 
   // Creatures are the host's (netcode.md, step 5): the friend's game puts out none of its
   // own and shows the host's, each where the host has it.

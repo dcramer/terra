@@ -443,6 +443,7 @@ fn work(
     kinds: Res<Stations>,
     recipes: Res<Recipes>,
     staff: Staff,
+    joined: Option<Res<terra_walker::net::link::Link>>,
     players: Query<&Transform, (With<Player>, Without<Works>)>,
     mut stations: Query<(Entity, &Prop, &Transform, &mut Works)>,
 ) {
@@ -455,7 +456,12 @@ fn work(
                 .iter()
                 .any(|player| within_reach(player.translation, prop, at.translation))
         };
-        if staff.works(entity, station) && (kinds.works_alone(station) || attended()) {
+        // In a joined game a station that works alone is the host's to run (`works_net`).
+        let alone = kinds.works_alone(station);
+        if alone && joined.is_some() {
+            continue;
+        }
+        if staff.works(entity, station) && (alone || attended()) {
             works.advance(time.delta_secs() * staff.pace(entity, station), &recipes);
         }
     }
@@ -500,29 +506,47 @@ fn hand_over(
             continue;
         };
         let player = inventory.player();
-        while let Some(&first) = works.done.first() {
-            let made = recipes[first].makes;
-            let name = made.name(inventory.items());
-            if !inventory.receive(made) {
-                if !works.told_full {
-                    told.write(Told::new(
-                        player,
-                        format!(
-                            "No room in your backpack: the {name} waits in the {}",
-                            kinds.name(station).to_lowercase()
-                        ),
-                    ));
-                    works.told_full = true;
-                }
-                break;
-            }
-            works.done.remove(0);
-            works.told_full = false;
+        let (taken, waits) = collect(&mut works, &recipes, &mut inventory);
+        for name in taken {
             did.write(Did(player, Skill::Crafting, ONCE));
             info!("Made {name}.");
             told.write(Told::new(player, format!("Made {name}")));
         }
+        if let Some(name) = waits
+            && !works.told_full
+        {
+            told.write(Told::new(
+                player,
+                format!(
+                    "No room in your backpack: the {name} waits in the {}",
+                    kinds.name(station).to_lowercase()
+                ),
+            ));
+            works.told_full = true;
+        }
     }
+}
+
+/// Hands what a station has made to a player, first made first, until their backpack has
+/// no room: the names of what they took, and of the first thing left waiting for want of
+/// room, if any.
+pub fn collect(
+    works: &mut Works,
+    recipes: &Recipes,
+    inventory: &mut Inventory,
+) -> (Vec<String>, Option<String>) {
+    let mut taken = Vec::new();
+    while let Some(&first) = works.done.first() {
+        let made = recipes[first].makes;
+        let name = made.name(inventory.items()).to_string();
+        if !inventory.receive(made) {
+            return (taken, Some(name));
+        }
+        works.done.remove(0);
+        works.told_full = false;
+        taken.push(name);
+    }
+    (taken, None)
 }
 
 /// Queues one of a recipe at a station, paying for it now. Says why not if it cannot.

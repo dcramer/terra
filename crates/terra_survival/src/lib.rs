@@ -35,6 +35,7 @@ pub mod pile;
 pub mod props;
 pub mod registries;
 pub mod skills;
+pub mod station_remote;
 pub mod station_screen;
 pub mod storage;
 pub mod storage_net;
@@ -46,6 +47,7 @@ pub mod vitals;
 pub mod warmth;
 pub mod wear;
 pub mod work;
+pub mod works_net;
 pub mod worn;
 
 #[cfg(any(test, feature = "testing"))]
