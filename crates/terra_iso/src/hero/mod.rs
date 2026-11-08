@@ -1,8 +1,9 @@
 //! The hero in play (`--play`) is the game's own body: `models/character/male.glb`'s skeleton
-//! and clips, dressed in the wardrobe's knight armour, the arming sword and heater shield in
-//! his hands, playing the sword set's moves (D628 as amended, D635: one game, the shared code
-//! called, never copied). The developer, 2026-11-08: "better character, better animations on
-//! the character (no auto magic)", so no Tripo preset clip plays on him.
+//! and clips, dressed in the wardrobe's Knight Cloth (a surcoat over the knight's plate), the
+//! arming sword and heater shield in his hands, playing the sword set's moves (D628 as
+//! amended, D635: one game, the shared code called, never copied). The developer, 2026-11-08:
+//! "better character, better animations on the character (no auto magic)", so no Tripo
+//! preset clip plays on him.
 //!
 //! Three parts, each its own module, talking through two components on the hero:
 //! - `abilities`: what he can do (`Ability`, named in the play help), read from the keys and
@@ -33,8 +34,14 @@ pub use moves::Doing;
 
 /// The game's body: its skeleton, sockets and clips, no mesh of its own.
 const BODY: &str = "models/character/male.glb";
-/// The wardrobe's look he wears (wardrobe.json), and his hands' things.
-const LOOK: &str = "knight";
+/// The wardrobe's look he wears (wardrobe.json), and his hands' things. The Knight Cloth as
+/// made, its white and red surcoat over the knight's plate: the plain Knight's bare plate read
+/// a dull grey-blue in the forest's shade at the iso camera, the surcoat reads as the staged
+/// Tripo knight's red did; colourways 2 (gilt plate, blue surcoat) and 3 (blackened) read
+/// gaudy and duller (iso-hero j4's forest trial). Its horned helmet stays: bareheaded, his
+/// buzzed head read as a white bald blob from above, and the plate's armet is refused over
+/// the surcoat (the wardrobe's pairings).
+const LOOK: &str = "knight_cloth";
 const SWORD: &str = "models/held/arming_sword.glb";
 const SHIELD: &str = "models/held/heater_shield.glb";
 
@@ -133,5 +140,28 @@ fn dress(
             }
             None => warn!("the hero's body has no {socket}: no {item} in it"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// His look composes whole on the game's body: a worn piece in every slot, none bare
+    /// (a refused pairing would leave one bare), the surcoat on his body and a helmet on.
+    #[test]
+    fn he_wears_the_whole_look() {
+        let w = terra_walker::wardrobe::wardrobe();
+        let pieces = w.compose("male", LOOK, None);
+        let items: Vec<&str> = (pieces.iter())
+            .filter_map(|p| w.pieces.get(*p)?.item.as_deref())
+            .collect();
+        let bare = (w.bodies["male"].bare.values()).find(|b| pieces.contains(&b.as_str()));
+        assert!(bare.is_none(), "{bare:?} bare in {pieces:?}");
+        for want in ["surcoat", "plate_legs", "sabatons"] {
+            assert!(items.contains(&want), "no {want} in {items:?}");
+        }
+        let helmet = items.iter().any(|i| i.ends_with("helmet"));
+        assert!(helmet, "no helmet: {items:?}");
     }
 }
