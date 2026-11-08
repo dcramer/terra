@@ -12,6 +12,7 @@
 //! near any more lets its animals go. Far from every player nothing here runs at all (D145).
 
 mod asked;
+mod census;
 mod groups;
 mod hiding;
 mod meet;
@@ -49,8 +50,11 @@ const RELEASE_M: f32 = 150.0;
 const FRESH_A_LOOK: usize = 3;
 /// How often the cells round each player are looked at.
 const LOOK_EVERY_S: f32 = 0.25;
-/// At most so many wild animals about at once, for every player together.
+/// At most so many wild animals about at once, for every player together: of those that
+/// walk, and of the birds, which are small, many to a flock and what a place's life is seen
+/// by first (D647: dozens about, never rare).
 const MOST: usize = 48;
+const MOST_BIRDS: usize = 120;
 /// A wood is at least so many trunks within so far; open ground has none that near.
 const WOODED: (usize, f32) = (2, 10.0);
 const OPEN_M: f32 = 14.0;
@@ -137,6 +141,7 @@ const LAPSE_C_PER_M: f32 = 0.0065;
 const PICTURE_EDGE: f32 = 1.15;
 
 pub fn plugin(app: &mut App) {
+    terra_world::remote::method(app, "wildlife.state", census::state);
     // What is about, where birds sit, what hides them and how warm the land is are the
     // world's: made afresh on entering each, so the cells round the arrival are looked at
     // and put out again from their seeds, as when a player walks back into their reach
@@ -661,7 +666,7 @@ fn populate(
             creatures::leave(&mut commands, animal);
         }
     }
-    let mut about: usize = cells.looked.values().map(Vec::len).sum();
+    let mut about = census::About::of(&cells.looked, &placed, &bestiary);
     let reach = (furthest / CELL_M).ceil() as i32;
     let seed = around.planet.seed().derive("wildlife");
     let mut fresh = 0;
@@ -702,7 +707,7 @@ fn populate(
                 if !reach::due(reach, now_m, before_m) {
                     continue;
                 }
-                if about >= MOST {
+                if about.full(species, &bestiary) {
                     continue;
                 }
                 let group = put_kind(
@@ -713,7 +718,7 @@ fn populate(
                     (species, per_ha, (fewest, most), niche),
                     seed,
                 );
-                about += group.len();
+                about.add(species, &bestiary, group.len());
                 put.extend(group);
             }
             cells.looked.insert(cell, put);
