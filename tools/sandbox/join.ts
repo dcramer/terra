@@ -128,7 +128,20 @@ try {
   // gate, the host's gate opens, and it is open in both; nobody crosses a shared world.
   const gate = (port: number) => JSON.parse(remote(port, "call", "portal.state")) as { open: boolean };
   if (gate(host).open || gate(friend).open) throw new Error("the world's gate stands open before anyone bears a mark");
-  remote(friend, "call", "marks.give", JSON.stringify({ mark: "troll" }));
+  // The mark is earned (D590): the host puts the friend at the den's mouth and fells the
+  // troll in it; the fall is ordered where it happened, and the friend by it bears the mark
+  // in its own game, the host's own player, far off at the start, not.
+  const den = (JSON.parse(remote(host, "call", "den.state")) as { den: { mouth: Place } | null }).den;
+  if (!den) throw new Error("the host's world has no den to earn the mark at (cargo xtask worlds says why)");
+  const bears = (port: number) => (JSON.parse(remote(port, "call", "marks.state")) as { marks: string[] }).marks;
+  remote(host, "call", "net.place_guests", JSON.stringify({ at: [den.mouth[0], den.mouth[2]] }));
+  await until("the friend's game never stood at the den's mouth, where the host put it", () => {
+    const [mine, there] = [net(friend).mine, net(host).guests[0]?.at];
+    return !!mine && !!there && apart(mine, there) < 0.5;
+  }, 30);
+  remote(host, "call", "creatures.strike", JSON.stringify({ name: "Troll", damage: 5000 }));
+  await until(`the troll fell with the friend at its den's mouth and the friend bears ${JSON.stringify(bears(friend))}, not its mark: the host orders a mark earned where the creature fell, and a joined game near imprints it (play::marks, MARKED)`, () => bears(friend).includes("troll"), 20);
+  if (bears(host).includes("troll")) throw new Error("the host's player, hundreds of metres from the den, bears the troll's mark too");
   remote(friend, "call", "portal.step");
   await until("the host's gate never opened to the mark the friend bears", () => gate(host).open, 60);
   await until("the friend's game never showed the gate the host opened", () => gate(friend).open, 60);
