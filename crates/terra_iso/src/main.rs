@@ -10,6 +10,7 @@ mod camp;
 mod command;
 mod foliage;
 mod forest;
+mod hero;
 mod kit;
 mod marsh;
 mod mipmaps;
@@ -68,6 +69,10 @@ pub struct Args {
     pub play: bool,
     pub press: Vec<(String, u32, u32)>,
     pub clicks: Vec<(Vec2, u32)>,
+    /// `--do NAME[:X,Z]@FROM[-TO]`: one of the hero's abilities (hero/abilities.rs, `Ability`:
+    /// light, heavy, block, roll, walk, sprint) pressed at FROM, or held to TO, aimed at the
+    /// ground point X,Z.
+    pub abilities: Vec<(String, Option<Vec2>, u32, u32)>,
 }
 
 impl Args {
@@ -97,6 +102,7 @@ fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
         play: false,
         press: Vec::new(),
         clicks: Vec::new(),
+        abilities: Vec::new(),
     };
     let mut hour = None;
     let mut it = std::env::args().skip(1);
@@ -126,6 +132,28 @@ fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
                 let (xy, at) = v.split_once('@').expect("--click X,Y@FRAME");
                 let p: Vec<f32> = xy.split(',').map(|s| s.parse().unwrap()).collect();
                 a.clicks.push((Vec2::new(p[0], p[1]), at.parse().unwrap()));
+            }
+            "--do" => {
+                let v = val();
+                let (what, span) = v.split_once('@').expect("--do NAME[:X,Z]@FROM[-TO]");
+                let (name, at) = match what.split_once(':') {
+                    Some((n, xz)) => {
+                        let p: Vec<f32> = xz.split(',').map(|s| s.parse().unwrap()).collect();
+                        (n, Some(Vec2::new(p[0], p[1])))
+                    }
+                    None => (what, None),
+                };
+                if hero::Ability::named(name).is_none() {
+                    let all: Vec<_> = hero::Ability::ALL.iter().map(|a| a.name()).collect();
+                    panic!(
+                        "--do {name}: no such ability; the hero's are {all:?} (hero/abilities.rs)"
+                    );
+                }
+                let (from, to) = match span.split_once('-') {
+                    Some((f, t)) => (f.parse().unwrap(), t.parse().unwrap()),
+                    None => (span.parse().unwrap(), span.parse::<u32>().unwrap() + 1),
+                };
+                a.abilities.push((name.into(), at, from, to));
             }
             "--demo-at" => a.demo_at = val().parse().unwrap(),
             "--zoom" => a.zoom = val().parse().unwrap(),

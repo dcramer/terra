@@ -19,8 +19,9 @@ use bevy::input::InputSystems;
 use bevy::prelude::*;
 use std::time::Duration;
 
-mod footprint;
-mod strike;
+// The hero (crate::hero) walks round the same footprints and strikes as this does.
+pub(crate) mod footprint;
+pub(crate) mod strike;
 
 /// How far the swing reaches (m, from his feet) and half its arc (degrees): the staged
 /// fight's ogre stands 2.4 m off.
@@ -47,7 +48,7 @@ pub struct Hero;
 
 /// A body felled by its last blow (strike.rs).
 #[derive(Component)]
-struct Fallen;
+pub(crate) struct Fallen;
 
 /// The hero's clips on his player, and what he is doing.
 #[derive(Component)]
@@ -77,7 +78,9 @@ pub fn plugin(app: &mut App) {
         .add_systems(PreUpdate, script.after(InputSystems))
         .add_systems(Update, (adopt, rig, control, follow).chain())
         .add_systems(Update, footprint::take.after(adopt).before(control))
-        .add_plugins(strike::plugin);
+        // The staged Tripo knight, once adopted, gives way to the game's body (hero/, D628).
+        .add_systems(Update, crate::hero::swap.after(adopt).before(rig))
+        .add_plugins((strike::plugin, crate::hero::plugin));
     // The street stages no fight, so nothing else hangs the sword on its hero (held.rs) or
     // draws his blows: its stage (the effects aim at it from Startup) and play's effects.
     let layout = app.world().get_resource::<Args>().and_then(|a| a.layout);
@@ -487,18 +490,8 @@ fn control(
     }
     // The props and creatures he walks round (footprint.rs).
     let circles = footprint::world(&footprints);
-    let open = |q: Vec2| {
-        (ground.open)(q)
-            && nav.as_ref().is_none_or(|n| n.open_at(q))
-            && !footprint::blocked(&circles, here, q)
-    };
     let step = dir * if walk { WALK } else { RUN } * dt;
-    // Slide along what blocks him: the whole step, else along x or z alone.
-    match [step, Vec2::new(step.x, 0.0), Vec2::new(0.0, step.y)]
-        .into_iter()
-        .map(|s| here + s)
-        .find(|q| open(*q))
-    {
+    match step_to(&ground, nav.as_deref(), &circles, here, step) {
         Some(to) => tr.translation = to.extend((ground.floor)(to)).xzy(),
         None => debug!("hero blocked at {here:.2}, frame {}", frame.0),
     }
@@ -509,10 +502,31 @@ fn control(
     tr.rotation = tr.rotation.slerp(facing(dir), k);
 }
 
+/// Where a step `step` from `here` lands: the whole step, else along x or z alone, sliding
+/// along what blocks it (the layout's ground, the nav grid, the props' and creatures'
+/// `circles`, footprint.rs); None where all three are blocked.
+pub(crate) fn step_to(
+    ground: &Ground,
+    nav: Option<&crate::nav::Nav>,
+    circles: &[(Vec2, f32)],
+    here: Vec2,
+    step: Vec2,
+) -> Option<Vec2> {
+    let open = |q: Vec2| {
+        (ground.open)(q)
+            && nav.is_none_or(|n| n.open_at(q))
+            && !footprint::blocked(circles, here, q)
+    };
+    [step, Vec2::new(step.x, 0.0), Vec2::new(0.0, step.y)]
+        .into_iter()
+        .map(|s| here + s)
+        .find(|q| open(*q))
+}
+
 /// The camera on the hero's chest at its fixed angle and distance, catching up smoothly.
 fn follow(
     time: Res<Time>,
-    hero: Query<&Transform, (With<Hero>, With<Rig>)>,
+    hero: Query<&Transform, With<Hero>>,
     mut camera: Query<&mut Transform, (With<MainCamera>, Without<Hero>)>,
     mut on: Local<bool>,
 ) {
