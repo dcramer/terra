@@ -1,26 +1,27 @@
 //! The ruin's standing water, the kit's (kit/water.rs, iso-kit j38) as the forest's pond and
 //! the marsh's channels are, its look the biome file's `water` (biomes/ruin.ron): a rain pool
-//! where the flags have sunk and broken by the west brazier, dark and still, the fires and
+//! where the flags have sunk a few cm by the west brazier, dark and still, the fires and
 //! the fight in its planar mirror and the fires' streaks across it; and shallow puddles in
 //! the paving's dips, drawn by the flags' own material (Diablo IV's wet crypt floors: what
 //! reads as wet stone is the light's mirror, not a sheen).
 //!
-//! The pool's line runs out past where the flags broke, over whole flags under a skin of
-//! water, so its rim is the face's smooth fade over the depth below, not the paving's cut;
-//! the flags are wet under it and damp a hand's width beyond (`soaked`). Before, pool.rs's
-//! face filled only the cut, and its rim was the cut's: "stepped polygon rims and no wet
-//! edge" (judge, round 261107-0302).
+//! The pool's line runs over whole flags under a skin of water, so its rim is the face's
+//! smooth fade over the depth below; the flags are wet under it and damp a hand's width
+//! beyond (`soaked`). Before, pool.rs's face filled only a cut in the paving, and its rim
+//! was the cut's: "stepped polygon rims and no wet edge" (judge, round 261107-0302); then
+//! the cut stayed under a 45 cm fiction of depth, "a flat opaque black sheet" (uc-gaps).
+//! Now the flags run on under it, sunk (`sink`), and show through.
 
 use crate::kit::biome::Biome;
 use crate::kit::water::KitWater;
 use crate::terrain::fbm;
 use bevy::prelude::*;
 
-/// The pool: its middle, its half-size (m) before its ragged bank, and its depth (m) where
-/// the flags broke. It lies 1 m toward the camera from the west brazier (fire.rs), so the
-/// brazier's mirror (about 0.7 x the light's 1.35 m height toward the eye from its foot)
-/// falls on it.
-pub const POOL: (Vec2, Vec2, f32) = (Vec2::new(-1.35, 2.05), Vec2::new(1.45, 0.95), 0.45);
+/// The pool: its middle, its half-size (m) before its ragged bank, and how far the flags
+/// have sunk in its middle (m). It lies 1 m toward the camera from
+/// the west brazier (fire.rs), so the brazier's mirror (about 0.7 x the light's 1.35 m
+/// height toward the eye from its foot) falls on it.
+pub const POOL: (Vec2, Vec2, f32) = (Vec2::new(-1.35, 2.05), Vec2::new(1.45, 0.95), 0.02);
 /// The puddles: middle, half-size, depth: films in the flags' dips, each where a fire's
 /// mirror falls (0.7 x the light's height toward the camera from its foot: the east
 /// brazier, the back wall's torches, the pillar's), since a puddle no light glints in
@@ -37,6 +38,9 @@ const SHORE: f32 = 1.12;
 /// How fast the water deepens in from its line (m a unit of `reach`): about 4 cm over the
 /// sunk flags where they break.
 const SHELVE: f32 = 0.2;
+/// The water over the whole flags at most (m): ruin.ron's level 3 cm over their 1 cm top,
+/// less their settling (the kit's water test holds the level).
+const SKIN: f32 = 0.025;
 
 /// How wet `p` is under a blob of `half` size at `at`, 0 (dry) to 1 (its deep middle): an
 /// ellipse with a ragged noisy bank, steep at the water line so the edge reads crisp (a
@@ -60,14 +64,22 @@ fn reach(p: Vec2) -> f32 {
     ((p - at) / half).length() + (fbm(p * 1.3, 331) - 0.5) * 0.7
 }
 
-/// How deep the pool stands at `p` (m, under 0 dry): shelving in from its line over the sunk
-/// flags, then down where they broke.
+/// How far the flags have sunk at `p` (m, ground.rs lowers them by it): a shallow dish
+/// under the pool, from nothing just inside its line to `POOL.2` in its middle.
+pub fn sink(p: Vec2) -> f32 {
+    POOL.2 * super::ground::smooth(1.0, 0.35, reach(p))
+}
+
+/// How deep the pool stands at `p` (m, under 0 dry): shelving in from its line to a skin of
+/// water over the flags, deeper where they have sunk: the depth of the water over the
+/// flags ground.rs builds, so the body absorbs what is there.
 pub fn depth(p: Vec2) -> f32 {
-    // Down where they broke over half the pool's radius by its broad line, not at the
-    // paving's ragged cut: the cut drew the deep water's edge as an ink hole's (judge
-    // 261107-0507), where now the broken flags show through the shallows, then dim.
-    let r = reach(p);
-    (SHORE - r) * SHELVE + POOL.2 * super::ground::smooth(0.95, 0.4, r)
+    // A rain pool on a sunk court is a few cm deep: the face's absorption over 45 cm, a
+    // hole cut in the paving, drew it as "a flat opaque black sheet with a hard edge"
+    // (uc-gaps panel), where through a real one the flags and their joints show, dimmer
+    // toward its middle (photographs of puddled flagstones).
+    let shelf = ((SHORE - reach(p)) * SHELVE).min(SKIN);
+    shelf + sink(p)
 }
 
 /// How much of the pool's water is at `p` (0..1): nothing lies or grows in it.
@@ -175,12 +187,19 @@ mod tests {
             let a = k as f32 / 24.0 * std::f32::consts::TAU;
             let dir = Vec2::new(a.cos(), a.sin());
             let along = |t: f32| at + dir * t;
-            let broken = (0..400).map(|i| i as f32 * 0.01).find(|&t| pool(along(t)) < 0.5);
-            let line = (0..400).map(|i| i as f32 * 0.01).find(|&t| depth(along(t)) < 0.0);
+            let broken = (0..400)
+                .map(|i| i as f32 * 0.01)
+                .find(|&t| pool(along(t)) < 0.5);
+            let line = (0..400)
+                .map(|i| i as f32 * 0.01)
+                .find(|&t| depth(along(t)) < 0.0);
             let (Some(b), Some(l)) = (broken, line) else {
                 panic!("no bank at heading {k}");
             };
-            assert!(l > b + 0.05, "heading {k}: the line at {l} m is on the cut at {b} m");
+            assert!(
+                l > b + 0.05,
+                "heading {k}: the line at {l} m is on the cut at {b} m"
+            );
             assert!(
                 soaked(along(l)) > 0.3,
                 "heading {k}: the flags at the line are dry"
@@ -190,6 +209,48 @@ mod tests {
                 "heading {k}: wet a metre out"
             );
         }
+    }
+
+    /// The flags run on under the pool, sunk above the court's earth, and the body absorbs
+    /// only the water there is over them (the level over their lowest settling and sink), so
+    /// they show through everywhere (ruin.ron's absorb passes over a fifth of their light at
+    /// the deepest), not an ink sheet over a hole.
+    #[test]
+    fn the_flags_show_through_the_water() {
+        let b = Biome::load("ruin").unwrap_or_else(|e| panic!("{e}"));
+        let w = b.water.expect("ruin.ron has no `water`");
+        let (top, earth) = (super::super::ground::TOP, super::super::ground::EARTH);
+        let (at, half, _) = POOL;
+        let mut deepest = 0.0f32;
+        for i in 0..=60 {
+            for j in 0..=60 {
+                let p = at + half * 1.6 * Vec2::new(i as f32 / 30.0 - 1.0, j as f32 / 30.0 - 1.0);
+                if standing(p) == 0.0 {
+                    continue;
+                }
+                assert!(
+                    super::super::ground::paved(p) > 0.5,
+                    "at {p} the pool lies over no flags"
+                );
+                let bed = top - 0.015 - sink(p);
+                assert!(
+                    bed > earth,
+                    "at {p} the sunk flags at {bed} go under the earth at {earth}"
+                );
+                let d = depth(p);
+                assert!(
+                    d <= w.level - bed + 1e-4,
+                    "at {p} the water is {d} m deep over flags at {bed}"
+                );
+                deepest = deepest.max(d);
+            }
+        }
+        let a = (w.absorb.0 + w.absorb.1 + w.absorb.2) / 3.0;
+        let through = (-a * deepest).exp();
+        assert!(
+            through > 0.2,
+            "at its deepest {deepest} m the pool passes {through} of the bed's light"
+        );
     }
 
     /// The water stands as a skin over the flags (their settling is 1.5 cm either way about

@@ -18,7 +18,7 @@ pub const PAVED_X: (f32, f32) = (-9.0, 13.0);
 pub const PAVED_Z: (f32, f32) = (-7.2, 9.0);
 /// Where the flags' tops lie, and the earth below them.
 pub const TOP: f32 = 0.01;
-const EARTH: f32 = -0.03;
+pub const EARTH: f32 = -0.03;
 /// The paving's mesh spacing: fine enough that its cut edge reads as broken stone.
 const CELL: f32 = 0.2;
 /// The maps the paving carries for the kit's laid floor (kit/laid.rs `Place`): how mossy
@@ -52,9 +52,9 @@ pub fn paved(p: Vec2) -> f32 {
     // Holes: none under the fight, so it stands on whole flags.
     let clear = smooth(3.5, 5.5, (p - Vec2::new(0.5, -1.0)).length());
     let holes = smooth(0.66, 0.72, fbm(p * 0.6 + Vec2::splat(40.0), 303)) * clear;
-    // The rain pool by the west brazier, where the flags have sunk and broken (water.rs).
-    let pool = smooth(0.2, 0.5, super::water::pool(p));
-    edge * (1.0 - holes) * (1.0 - pool)
+    // The rain pool by the west brazier lies over whole flags, sunk (water.rs `sink`): a
+    // hole cut under it read as an opaque sheet (uc-gaps).
+    edge * (1.0 - holes)
 }
 
 pub fn spawn(
@@ -157,7 +157,8 @@ fn paving(flags_m: f32) -> Mesh {
                 for p in &kept {
                     let left = paved(*p);
                     let settle = (fbm(*p * 0.3, 311) - 0.5) * 0.03;
-                    pos.push([p.x, TOP + settle, p.y]);
+                    let sunk = super::water::sink(*p);
+                    pos.push([p.x, TOP + settle - sunk, p.y]);
                     uv.push((*p / flags_m).to_array());
                     // The maps the laid floor reads (`SITES`): how mossy, how wet (the
                     // puddles, and the flags under the pool's skin and round its line).
