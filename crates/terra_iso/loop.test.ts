@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { barOf, blindOrder, delta, EPS, type History, isChanged, newerKept, NOISE_MARGIN, noiseOf, outcome, type Pair, parseBiome, PIXEL_SHARE, PLAIN, pixelShare, refRanges, reserveRound, type Round, runNotes, script, shotAgainst, type Side, staleAgainst, statsLine, testResult, updateHistory, verdict, winnerOf } from "./loop.ts";
+import { barOf, blindOrder, delta, EPS, type History, isChanged, MEASURED_SHARE, newerKept, NOISE_MARGIN, noiseOf, outcome, type Pair, parseBiome, PIXEL_SHARE, PLAIN, pixelShare, refRanges, reserveRound, type Round, runNotes, script, shotAgainst, type Side, staleAgainst, statsLine, testResult, updateHistory, verdict, winnerOf } from "./loop.ts";
 
 const pair = (a: Side, winner?: Side | "same", margin?: Pair["margin"]): Pair => ({ folder: "f", brief: "b", a, winner, margin });
 const changed = (...pairs: Pair[]) => ({ changed: true, pairs });
@@ -253,9 +253,17 @@ test("a biome's own noise lifts its bars: a plain re-shoot within it is the same
   assert.equal(isChanged({}, 0.03 * NOISE_MARGIN - 0.001, bar), false, "a re-shoot within the noise is the same");
   assert.equal(isChanged({}, 0.03), true, "the plain bar would have asked for judges");
   assert.equal(isChanged({}, 0.03 * NOISE_MARGIN + 0.001, bar), true);
-  // A measure's spread lifts only that measure's bar; the plain one stays the floor.
-  const spread = barOf({ ...n, spread: { dark_share: 0.004, saturation: 0.0001 }, share: 0.001 });
-  assert.equal(spread.share, PIXEL_SHARE);
+  // A deterministic biome (the ruin: 0.005% px between shots) sees a change at the frame's edge
+  // that the plain bar called "same" (its scanned rocks, 0.23% px, round 261107-2009).
+  const still = barOf({ ...n, spread: {}, share: 0.00005 });
+  assert.equal(still.share, MEASURED_SHARE, "a measured biome's floor, under the plain bar");
+  assert.ok(MEASURED_SHARE < PIXEL_SHARE);
+  assert.equal(isChanged({}, 0.0023, still), true, "the rocks' 0.23% is a change");
+  assert.equal(isChanged({}, 0.0023), false, "the plain bar hid it");
+  assert.equal(isChanged({}, 0.0002, still), false, "under the floor stays the same");
+  // A measure's spread lifts only that measure's bar; the floor stays.
+  const spread = barOf({ ...n, spread: { dark_share: 0.004, saturation: 0.0001 }, share: 0.00001 });
+  assert.equal(spread.share, MEASURED_SHARE);
   assert.equal(spread.eps.dark_share, Math.round(0.004 * NOISE_MARGIN * 1e4) / 1e4);
   assert.equal(spread.eps.saturation, EPS);
   assert.equal(isChanged({ dark_share: 0.004 * NOISE_MARGIN - 0.0005 }, 0, spread), false);

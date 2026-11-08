@@ -41,6 +41,11 @@ export const LEVELS = 2;
  * the forest up to 0.33% in specks on its fight's effects, iso-kit j5); a look change moves
  * several percent. */
 export const PIXEL_SHARE = 0.005;
+/** The pixel bar's floor for a biome whose noise is measured (noise.json): its stills are
+ * deterministic now (uc-infra j3: four biomes 0.00-0.01% apart over three shots), so the plain
+ * bar's 0.5%, set over the forest's old specks, only hid real changes at the frame's edge: the
+ * ruin's scanned rocks for its snow-white lumps moved 0.23% (round 261107-2009) and read "same". */
+export const MEASURED_SHARE = 0.00025;
 /** A biome's own noise (uc-infra): `noise` shoots it N times on one commit and keeps, in
  * crates/terra_iso/noise.json, the most pixels any two shots differ by and each measure's spread;
  * a still changed only past this many times that, so a plain re-shoot is "same" (the forest's
@@ -57,12 +62,13 @@ export type Noise = { share: number; spread: Partial<Stats>; shots: number; rev:
 export type Bar = { share: number; eps: Partial<Stats> };
 export const PLAIN: Bar = { share: PIXEL_SHARE, eps: {} };
 
-/** A biome's bars: its noise times `NOISE_MARGIN`, never under the plain ones. */
+/** A biome's bars: its noise times `NOISE_MARGIN`, never under `MEASURED_SHARE` of pixels
+ * nor the plain measure bar `EPS`; an unmeasured biome keeps the plain ones. */
 export function barOf(noise: Noise | undefined): Bar {
   if (!noise) return PLAIN;
   const eps: Partial<Stats> = {};
   for (const [k] of SHOWN) eps[k] = Math.max(EPS, Math.round((noise.spread[k] ?? 0) * NOISE_MARGIN * 1e4) / 1e4);
-  return { share: Math.max(PIXEL_SHARE, noise.share * NOISE_MARGIN), eps };
+  return { share: Math.max(MEASURED_SHARE, noise.share * NOISE_MARGIN), eps };
 }
 
 /** The noise of N stills of one commit: the most pixels any two differ by, each measure's
