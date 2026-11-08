@@ -230,7 +230,20 @@ fn land(
             );
             continue;
         };
-        info!("frame {}: mob {}'s blow on him: {t:?}", frame.0, foe.i);
+        // What he was doing and how far he faced from it, so a film's script is timed off the
+        // log (a block that lands as Hit was not up yet, or faced away past the guard).
+        let doing_now = doing.runner.current.as_ref().map_or("nothing", |(n, _)| n);
+        let off = libm::acosf(
+            his_face
+                .dot((at - him).normalize_or(Vec2::Y))
+                .clamp(-1.0, 1.0),
+        );
+        info!(
+            "frame {}: mob {}'s blow on him: {t:?} (doing {doing_now}, facing {:.0} deg off it)",
+            frame.0,
+            foe.i,
+            off.to_degrees()
+        );
         let strength = match t {
             Taken::Hit | Taken::GuardBroken => 1.0,
             Taken::Blocked | Taken::Parried => ON_GUARD,
