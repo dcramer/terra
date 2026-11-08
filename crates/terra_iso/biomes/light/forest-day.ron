@@ -31,11 +31,12 @@
         // 1.15 left saturation 0.254 (the day refs' 0.27 to 0.47).
         mid_saturation: 1.25,
     ),
-    // The glade's day haze over the land beyond the fight; none toward the sun.
-    haze: Some((
-        colour: Srgba(0.62, 0.7, 0.78, 0.55),
-        toward_key: Srgba(0.0, 0.0, 0.0, 0.0),
-        start: -2.0,
-        end: 70.0,
-    )),
+    // No haze. The glade's (pale blue Srgba(0.62, 0.7, 0.78, 0.55), linear from 2 m before
+    // the camera's 19 m to 70 m past it) is not "the land beyond the fight" at the ARPG
+    // camera: the ground in frame lies 18 m (bottom) to about 28 m (top corners) off the
+    // eye, so it laid up to ~7% of a bright blue-grey (fog is mixed after exposure) over the
+    // top of the frame, doubling the shade's linear value there: the "milky grey veil
+    // lifting the shade top-right" of judges 261107-1830 and 1918, the frame's flat look. A
+    // wood seen through 20 to 30 m of air shows no aerial haze; its depth is light and shade.
+    // (A brighter sun to win contrast back read lime, round 261107-1822.)
 )
