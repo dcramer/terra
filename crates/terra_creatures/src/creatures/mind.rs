@@ -549,6 +549,21 @@ const BIRD_IDLES: f32 = 0.15;
 const BIRD_FEEDS: f32 = 0.5;
 const BIRD_FLIGHT_M: (f32, f32) = (8.0, 30.0);
 
+/// Of a bird's flights with a player about, the share that go past them; and how far off the
+/// player may be for it, metres.
+const PASSES_BY: f32 = 0.5;
+const PASSES_WITHIN_M: f32 = 40.0;
+
+/// Whether a bird may fly past the nearest player: they are about, and not so near that it
+/// would be fleeing them.
+fn passes_by(about: &SpeciesDef, s: &Sense) -> bool {
+    let keeps_m = match about.temper {
+        Temper::Shy { flees_within_m, .. } => flees_within_m * 1.5,
+        _ => 6.0,
+    };
+    s.quarry.is_some() && s.apart > keeps_m && s.apart < PASSES_WITHIN_M
+}
+
 /// Going on with what it was doing, or else resting a while, grazing if it can, or wandering
 /// somewhere near home; one that flies flits to its next place rather than walking far.
 fn settle(
@@ -608,6 +623,16 @@ fn settle(
     let here = s.here;
     match about.moves {
         // Up into a crown now and then, among trees.
+        // Past a player who is about but not near: across in front of them and on, to come
+        // down well beyond, so a place's birds are seen flying and not only known to be
+        // there (D647: a bird 12 cm long is a few pixels at forty metres).
+        Moves::Flies(_) if passes_by(about, s) && dice.unit() < PASSES_BY => {
+            let toward = s.toward.unwrap_or(way);
+            let side = if dice.unit() < 0.5 { 1.0 } else { -1.0 };
+            let aside = Quat::from_axis_angle(up, side * dice.range(0.25, 0.6));
+            let beyond = (s.apart + 8.0, s.apart + 20.0);
+            flight(about, here, aside * toward, beyond, around, dice).unwrap_or(State::Idle(1.0))
+        }
         Moves::Flies(_) if dice.unit() < 0.3 => {
             up_high(here, way, (5.0, 20.0), around, dice).unwrap_or(State::Idle(1.0))
         }
