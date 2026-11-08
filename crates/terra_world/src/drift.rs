@@ -340,12 +340,14 @@ fn sow(
     camera: Query<(), With<MainCamera>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<DriftMaterial>>,
-    mut sown: Local<bool>,
+    sown: Query<(), With<Field>>,
 ) {
-    if *sown || camera.is_empty() {
+    // Once in each world: the fields are the world's and go with it (D469), so a world
+    // entered has none until they are sown again. Sown once for the app, no world after the
+    // first had leaves, dust or snow in its air.
+    if !sown.is_empty() || camera.is_empty() {
         return;
     }
-    *sown = true;
     for (index, kind) in drifts.kinds.iter().enumerate() {
         let count = ((kind.count as f32 * share(*quality)) as usize).max(1);
         let (code, a, b, c) = match kind.motion {

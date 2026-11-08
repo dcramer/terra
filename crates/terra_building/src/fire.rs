@@ -463,15 +463,22 @@ fn blazes(
     // A fire frightens what lives round it, the more of it burns the further off: from the
     // middle of its blazes, past their reach by as much again.
     let count = fire.blazes.len();
-    let entity = *fright.get_or_insert_with(|| {
-        commands
-            .spawn((
-                Name::new("Fire: fright"),
-                Transform::IDENTITY,
-                Frightful { within_m: 0.0 },
-            ))
-            .id()
-    });
+    // The world's, gone with it (D469): made again in a world entered, where the one kept
+    // from the world left was looked for in vain and no fire frightened anything.
+    let entity = match fright.filter(|entity| frights.contains(*entity)) {
+        Some(entity) => entity,
+        None => {
+            let entity = commands
+                .spawn((
+                    Name::new("Fire: fright"),
+                    Transform::IDENTITY,
+                    Frightful { within_m: 0.0 },
+                ))
+                .id();
+            *fright = Some(entity);
+            entity
+        }
+    };
     if let Ok((mut at, mut frightful)) = frights.get_mut(entity) {
         if count == 0 {
             frightful.within_m = 0.0;

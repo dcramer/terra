@@ -333,6 +333,8 @@ fn follow(
     commands.spawn((
         Name::new("Upscaled view"),
         Presenter,
+        // The window's, not a world's (D469): a world left took it, the screen black after.
+        crate::instance::Global,
         Camera2d,
         Camera {
             order: 1,

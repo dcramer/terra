@@ -5,7 +5,8 @@
 // holds it to the doc's rules: after trips 2 to 5 the forest's entities by archetype, assets by
 // type and resources equal trip 1's exactly, and the GPU's memory and the process's resident
 // memory are within 2% of trip 1's; what lives (creatures, D469) is counted apart, by kind, and
-// each kind living before the first trip lives after every return; in the realm, what of the
+// each kind living before the first trip lives after every return, and no kind of entity
+// there before the first trip is gone after it; in the realm, what of the
 // forest is still there is listed; every crossing is over within 3 s (D501), as the game
 // measured it;
 // the forest's state before the first trip and after the last differs only in the player's
@@ -117,6 +118,15 @@ try {
       trip1 = home;
       const changed = snaps.changes(counts(first), counts(home));
       console.log(`  against before the first trip (caches may fill): ${changed.length} changes${changed.length ? ": " + changed.slice(0, 12).join("; ") : ""}`);
+      // A cache may fill on the first trip; nothing may be gone. A kind of entity there before
+      // any world was left and missing after the first return was the app's, taken with the
+      // world: the camera that shows the picture went so, the screen black from the first
+      // crossing on, and this line had listed it as a change.
+      const taken = changed.filter((change) => change.startsWith("- entities."));
+      if (taken.length) {
+        console.log(`  FAIL: a crossing took what was there before any world was left: ${taken.join("; ").slice(0, 600)}. It is the app's, not the world's: mark it terra_world::instance::Global where it is spawned.`);
+        failed = true;
+      }
       continue;
     }
     const changed = snaps.changes(counts(trip1), counts(home));
