@@ -53,7 +53,27 @@ pub struct RimExt {
     /// unused.
     #[uniform(108)]
     pub metal: Vec4,
+    /// Ground cover's cut before the hero (`Cut`, a `Shade`'s or `Stone`'s only): xyz his
+    /// middle, w the hole's radius (m), 0 cuts nothing.
+    #[uniform(109)]
+    pub near: Vec4,
+    /// x: the frame (0..64), turning the cut's dither as foliage.wesl's `leaf.w`.
+    #[uniform(110)]
+    pub hole: Vec4,
 }
+
+/// Where ground cover (a `Shade`'s or `Stone`'s materials: ferns, rocks, logs) opens before
+/// the hero, his middle, set each frame in play (demo/occlude.rs); none in a still. The
+/// judge on j25's film: "the hero vanishes into ferns" (c3, c5): Diablo IV and Path of Exile
+/// 2 dither out whatever stands between the camera and the player, low props too. Cut in
+/// the camera's prepass as in the main pass (rim_prepass.wesl), or the fern's depth there
+/// still hides him behind a hole.
+#[derive(Resource, Default)]
+pub struct Cut(pub Option<Vec3>);
+
+/// The cover's hole's radius about his middle on the screen (m): his 1.8 m body is 0.9 m
+/// above and below it, and the hole thins from `0.72` of it.
+pub const CUT: f32 = 1.3;
 
 /// The canopy map's width in metres, about the world's middle.
 const SPAN: f32 = 128.0;
@@ -175,10 +195,15 @@ impl MaterialExtension for RimExt {
     fn fragment_shader() -> ShaderRef {
         "embedded://iso/shaders/rim.wesl".into()
     }
+
+    fn prepass_fragment_shader() -> ShaderRef {
+        "embedded://iso/shaders/rim_prepass.wesl".into()
+    }
 }
 
 pub fn plugin(app: &mut App) {
     embedded_asset!(app, "shaders/rim.wesl");
+    embedded_asset!(app, "shaders/rim_prepass.wesl");
     // A biome's finishes (kit/finish.rs) set a model's material as it loads, before it is
     // spawned and swapped here, so the swapped copy carries them.
     app.add_plugins((
@@ -187,8 +212,32 @@ pub fn plugin(app: &mut App) {
     ))
     .init_resource::<Swapped>()
     .init_resource::<Mirrored>()
+    .init_resource::<Cut>()
     .add_systems(Startup, (canopy_map, scans))
-    .add_systems(Update, (swap, fighters, tint, mirror).chain());
+    .add_systems(Update, (swap, fighters, tint, mirror).chain())
+    .add_systems(PostUpdate, cut);
+}
+
+/// The cover's hole (`Cut`) and the frame, to every `Shade`'s and `Stone`'s material.
+pub fn cut(
+    at: Res<Cut>,
+    frames: Res<bevy::diagnostic::FrameCount>,
+    swapped: Res<Swapped>,
+    mut rims: ResMut<Assets<RimMaterial>>,
+) {
+    let near = at.0.map_or(Vec4::ZERO, |m| m.extend(CUT));
+    for ((.., kind), h) in &swapped.0 {
+        if !matches!(kind, Kind::Shade | Kind::Stone(_)) {
+            continue;
+        }
+        if near == Vec4::ZERO && rims.get(h).is_some_and(|m| m.extension.near == near) {
+            continue;
+        }
+        if let Some(mut m) = rims.get_mut(h) {
+            m.extension.near = near;
+            m.extension.hole.x = (frames.0 % 64) as f32;
+        }
+    }
 }
 
 /// The ground's scan array, loaded as kit/ground.rs loads it.
@@ -281,7 +330,7 @@ enum Kind {
 }
 
 #[derive(Resource, Default)]
-struct Swapped(HashMap<(AssetId<StandardMaterial>, [u32; 3], Kind), Handle<RimMaterial>>);
+pub struct Swapped(HashMap<(AssetId<StandardMaterial>, [u32; 3], Kind), Handle<RimMaterial>>);
 
 /// The rim for the hour: faint by day, the sky's blue at dusk and by night.
 fn rim_for(hour: Hour) -> LinearRgba {
@@ -424,6 +473,8 @@ fn rimmed_as(
             stone,
             moss,
             metal,
+            near: Vec4::ZERO,
+            hole: Vec4::ZERO,
         },
     });
     swapped.0.insert(key, h.clone());
@@ -615,5 +666,63 @@ mod tests {
                 "flash {flash}: swapped {e:?}"
             );
         }
+    }
+
+    /// The cover's hole reaches the ferns', rocks' and logs' materials alone, follows the
+    /// hero, and closes when there is none (a still).
+    #[test]
+    fn the_cut_opens_cover_alone_about_the_hero() {
+        let mut app = App::new();
+        app.init_resource::<Assets<RimMaterial>>()
+            .init_resource::<Swapped>()
+            .init_resource::<Cut>()
+            .init_resource::<bevy::diagnostic::FrameCount>()
+            .add_systems(Update, cut);
+        let mut standard = Assets::<StandardMaterial>::default();
+        let plate = MeshMaterial3d(standard.add(StandardMaterial::default()));
+        let tex = (Canopy(Handle::default()), Scans(Handle::default()));
+        let kinds = [
+            Kind::Shade,
+            Kind::Stone(0.5f32.to_bits()),
+            Fighter::default().kind(),
+            Kind::Actor,
+        ];
+        let made: Vec<_> = kinds
+            .iter()
+            .map(|k| {
+                let world = app.world_mut();
+                let mut swapped = world.remove_resource::<Swapped>().unwrap();
+                let mut rims = world.remove_resource::<Assets<RimMaterial>>().unwrap();
+                let to = (&tex.0, &tex.1);
+                let h = rimmed_as(
+                    &mut swapped,
+                    &standard,
+                    &mut rims,
+                    to,
+                    &plate,
+                    Vec3::ONE,
+                    (*k, LinearRgba::NONE),
+                )
+                .unwrap();
+                world.insert_resource(swapped);
+                world.insert_resource(rims);
+                h
+            })
+            .collect();
+        let near = |app: &App| -> Vec<Vec4> {
+            let rims = app.world().resource::<Assets<RimMaterial>>();
+            made.iter()
+                .map(|h| rims.get(h).unwrap().extension.near)
+                .collect()
+        };
+        for at in [Vec3::new(1.0, 0.9, -2.0), Vec3::new(4.0, 1.2, 3.0)] {
+            app.world_mut().resource_mut::<Cut>().0 = Some(at);
+            app.update();
+            let open = at.extend(CUT);
+            assert_eq!(near(&app), [open, open, Vec4::ZERO, Vec4::ZERO]);
+        }
+        app.world_mut().resource_mut::<Cut>().0 = None;
+        app.update();
+        assert_eq!(near(&app), [Vec4::ZERO; 4], "a still cuts nothing");
     }
 }

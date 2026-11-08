@@ -40,6 +40,11 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (seen, backfaces))
         .add_systems(
             PostUpdate,
+            aim.after(TransformSystems::Propagate)
+                .before(crate::rim::cut),
+        )
+        .add_systems(
+            PostUpdate,
             (check, gate)
                 .chain()
                 .after(TransformSystems::Propagate)
@@ -93,6 +98,14 @@ pub fn verdict(seen: &Hidden) -> Result<String, String> {
 pub struct Hidden {
     pub frames: u32,
     pub through: u32,
+}
+
+/// Ground cover opens before him (rim.rs `Cut`), about his middle.
+fn aim(hero: Query<&GlobalTransform, With<Hero>>, mut cut: ResMut<crate::rim::Cut>) {
+    cut.0 = hero
+        .single()
+        .ok()
+        .map(|h| h.translation() + Vec3::Y * MIDDLE);
 }
 
 /// The wood opens about the hero (foliage.rs's party holes).

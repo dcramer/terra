@@ -6,6 +6,7 @@ import bevy_pbr::render::{
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
     mesh_view_bindings::view,
+    utils::interleaved_gradient_noise,
     view_transformations::{depth_ndc_to_view_z, direction_world_to_view},
 };
 @if(DEPTH_PREPASS) import bevy_pbr::prepass::utils::prepass_depth;
@@ -28,6 +29,10 @@ var<uniform> stone: vec4<f32>;
 var<uniform> moss: vec4<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(108)
 var<uniform> metal: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(109)
+var<uniform> near: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(110)
+var<uniform> hole: vec4<f32>;
 
 // How much of a fighter's band this fragment keeps: whole where it is the body's outline,
 // none inside it. The mesh normal alone cannot tell: every leaf of a crown and every fold
@@ -135,8 +140,25 @@ fn dress(base: vec3<f32>, world: vec3<f32>, n: vec3<f32>, relief: vec3<f32>) -> 
     return Dressed(c, max(cover, foot), under * contact);
 }
 
+// Ground cover's cut before the hero (rim.rs `Cut`), rim_prepass.wesl's twin: a fern, rock
+// or log fragment from a hand's breadth before his middle, near him on the screen, drops
+// through interleaved gradient noise turned each frame, as foliage.wesl's `cut`.
+fn cut(world: vec3<f32>, frag: vec2<f32>) {
+    if near.w <= 0.0 {
+        return;
+    }
+    let d = world - near.xyz;
+    let s = length(vec2<f32>(dot(d, view.world_from_view[0].xyz), dot(d, view.world_from_view[1].xyz)));
+    let before = dot(d, view.world_from_view[2].xyz);
+    let fade = (1.0 - smoothstep(near.w * 0.72, near.w, s)) * smoothstep(0.05, 0.45, before);
+    if fade > interleaved_gradient_noise(frag, u32(hole.x)) {
+        discard;
+    }
+}
+
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
+    cut(in.world_position.xyz, in.position.xy);
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     pbr_input.material.base_color = alpha_discard(pbr_input.material.flags, pbr_input.material.alpha_cutoff, pbr_input.material.base_color);
     // A fighter's metal greyed by its steel share (rim.rs `Fighter::with_steel`), by each
