@@ -5,6 +5,9 @@ modules other scripts import are imported for real, since they run nothing when 
 
     tools/blender/run.sh tools/blender/check.py tools/characters/look.py ...
 
+A script that runs in another program's Python (Kimodo's) says so in a line `# runs-in: <program>`
+and is only compiled: what it imports is that program's, not this Blender's.
+
 Prints a line for each fault and ends with BLENDERCHECK pass or BLENDERCHECK fail.
 """
 
@@ -16,21 +19,45 @@ import sys
 
 paths = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
 faults = []
+elsewhere = []
 trees = {}
 for path in paths:
     try:
         with open(path, encoding="utf-8") as f:
-            trees[path] = ast.parse(f.read(), path)
+            text = f.read()
+        tree = ast.parse(text, path)
+        if any(line.startswith("# runs-in: ") for line in text.splitlines()):
+            elsewhere.append(path)
+        else:
+            trees[path] = tree
     except SyntaxError as e:
         faults.append(f"{path}:{e.lineno}: {e.msg}")
 
 # Our own modules are the .py files in the scripts' folders; a script may reach another
-# folder's, as the props scripts do look.py.
+# folder's, as the props scripts do look.py. Two folders may each have one of a name
+# (haft.py): a script means its own folder's, or else the one that defines what it takes.
 ours = {}
-for folder in {os.path.dirname(os.path.abspath(p)) for p in paths}:
+for folder in sorted({os.path.dirname(os.path.abspath(p)) for p in paths}):
     for n in os.listdir(folder):
         if n.endswith(".py"):
-            ours.setdefault(n[:-3], folder)
+            ours.setdefault(n[:-3], []).append(folder)
+
+
+def defines(folder, name, taken):
+    with open(os.path.join(folder, name + ".py"), encoding="utf-8") as f:
+        top = ast.parse(f.read()).body
+    names = {t.id for n in top if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)}
+    names |= {n.name for n in top if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
+    return all(a in names for a in taken or [])
+
+
+def home(path, name, taken):
+    folders = ours[name]
+    own = os.path.dirname(os.path.abspath(path))
+    if own in folders:
+        return own
+    return next((f for f in folders if defines(f, name, taken)), folders[0])
+
 
 shared = {}
 for path, tree in trees.items():
@@ -43,7 +70,7 @@ for path, tree in trees.items():
             continue
         for top, taken, line in names:
             if top in ours:
-                shared.setdefault((ours[top], top), []).append((path, line, taken))
+                shared.setdefault((home(path, top, taken), top), []).append((path, line, taken))
             elif importlib.util.find_spec(top) is None:
                 faults.append(f"{path}:{line}: no module {top} in this Blender")
 
@@ -76,5 +103,5 @@ for (folder, name), users in sorted(shared.items()):
 
 for fault in faults:
     print(f"  {fault}")
-print(f"BLENDERCHECK {'fail' if faults else 'pass'}: {len(paths)} scripts")
+print(f"BLENDERCHECK {'fail' if faults else 'pass'}: {len(paths)} scripts" + (f", {len(elsewhere)} only compiled (runs-in)" if elsewhere else ""))
 sys.exit(1 if faults else 0)

@@ -37,6 +37,7 @@ from the guard's, the upper arm's line), the keys' bar and the guard's own hands
 tools/characters/keys.ts (check, search, between), which owns everything but the skeleton.
 """
 
+# runs-in: Kimodo (tools/blender/check.py only compiles it)
 import json
 import math
 import sys
