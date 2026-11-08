@@ -7,7 +7,11 @@
 // the player, unmarked before, bears its mark. Checked with no picture, by what the game
 // says. How long the walk took is said: a reading.
 //
-//   node tools/sandbox/den.ts [--seed 3]
+//   node tools/sandbox/den.ts [--seed 3] [--fight]
+//
+// --fight: the troll is not struck down by the script. The player walks in and stands; the
+// troll, roused, must warn (its roar) and then deal blows that land, by what `play.state`
+// says it is doing and the health the player loses; what it did, in order, is said.
 //
 // Node 22.18 or later; no dependencies. About three minutes.
 
@@ -15,6 +19,7 @@ import { call, press, start, stop, waitSeconds, waitUntil, warp } from "./client
 
 const args = process.argv.slice(2);
 const SEED = args.includes("--seed") ? args[args.indexOf("--seed") + 1] : "3";
+const FIGHT = args.includes("--fight");
 /// The player has come to the chamber when they stand in it: within its half width of its
 /// floor's middle, less a pace, and this near its floor's level, in metres; and this long to
 /// walk there, in seconds (some 45 m at a walk). Walking straight on does not follow a bend
@@ -54,11 +59,32 @@ try {
     at = await player();
     // Met on the way in: struck down before it lands a blow.
     const it = await troll();
-    if (!fell && it && Math.hypot(it[0] - at[0], it[1] - at[1], it[2] - at[2]) < 25) {
+    if (FIGHT && it && Math.hypot(it[0] - at[0], it[1] - at[1], it[2] - at[2]) < 14) break;
+    if (!FIGHT && !fell && it && Math.hypot(it[0] - at[0], it[1] - at[1], it[2] - at[2]) < 25) {
       const blow = (await call("creatures.strike", { name: "Troll", damage: 5000 })) as { health: number; away_m: number };
       if (blow.health > 0) throw new Error(`struck for 5000 the troll has ${blow.health} health left`);
       fell = `${blow.away_m.toFixed(0)} m off`;
     }
+  }
+  if (FIGHT) {
+    // Standing where the troll has noticed them: what it does, a quarter second at a time.
+    type State = { health: number; near: { what?: string; doing?: string; distance?: number }[] };
+    const doing: string[] = [];
+    let health = 100;
+    const hale = ((await call("play.state")) as State).health;
+    for (let looks = 0; looks < 80 && health > 25; looks++) {
+      const now = (await call("play.state")) as State;
+      health = now.health;
+      const it = now.near.find((each) => each.what === "Troll");
+      const what = it?.doing?.replace(/\(.*/, "") ?? "gone";
+      if (doing.at(-1) !== what) doing.push(what);
+      await waitSeconds(0.25);
+    }
+    const bouts = doing.filter((what) => what === "Attack").length;
+    if (bouts < 2 || health >= hale) throw new Error(`roused by a player standing 14 m off for 20 s the troll did ${doing.join(", ")} and took ${(hale - health).toFixed(0)} health: it should warn, come, and deal blows that land (data/creatures.ron's Troll: warns, blows; terra_creatures mind::hostile)`);
+    console.log(`✓ den --fight: seed ${SEED}'s troll, roused, did ${doing.join(", ")}; the player, standing, lost ${(hale - health).toFixed(0)} of ${hale.toFixed(0)} health`);
+    await stop().catch(() => undefined);
+    process.exit(0);
   }
   const [away, level] = off(at);
   if (away > NEAR_M || level > LEVEL_M) throw new Error(`walking in from the den's mouth for ${MOST_S} s the player stands ${away.toFixed(1)} m from the chamber floor's middle and ${level.toFixed(1)} m off its level (at ${at.map((x) => x.toFixed(1)).join(", ")} east, up, south of the start; the floor is at ${den.floor.map((x) => x.toFixed(1)).join(", ")}): the way in is shut, too steep, or bends where walking straight on does not follow it (terra_land::cave, terra_voxel::caves)`);
