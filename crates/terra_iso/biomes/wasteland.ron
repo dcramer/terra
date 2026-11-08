@@ -55,6 +55,10 @@
             // uniform sheet: thin crack seal and oil stains, round 1513/1514, barely showed;
             // `damp: 1.0`'s soft glossy patches read as wet, round 261107-1518).
             grime: (blotch: 1.0, earth: 0.8, tar: 0.7),
+            // Crazed by fatigue cracking in long stretches, as a dead highway's lanes are
+            // (the judges of 261107-1721 and 1728: "a soft empty asphalt sheet, hairline
+            // cracks only"; fine detail 0.070 against the refs' 0.103 and up).
+            wear: (crazed: 0.5),
             marks: [
                 (kind: Stain, at: (0.0, 1.75), size: (80.0, 0.6), every: (0.0, 3.5),
                  count: (1, 2), amount: 0.45),

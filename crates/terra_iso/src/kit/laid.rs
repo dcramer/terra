@@ -52,7 +52,7 @@ pub struct Params {
     pub wear: Vec4,
     /// x how wide (m) the units' joints have opened (`Wear.gap`, 0: the scan's own), y how
     /// far each unit's width wanders (`Wear.uneven`), z how far in (m) its arris is worn
-    /// round (`Wear.round`).
+    /// round (`Wear.round`), w the share crazed by fatigue cracking (`Wear.crazed`).
     pub seams: Vec4,
     /// The floor's grime (biome.rs `Grime`): x how far (m) it soaks in from the joints, y
     /// how dark its blotches and banks, z its spots a square metre, w the largest spot (m).
@@ -226,7 +226,12 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
             laid.wear.broken,
             laid.wear.missing,
         ),
-        seams: Vec4::new(laid.wear.gap, laid.wear.uneven, laid.wear.round, 0.0),
+        seams: Vec4::new(
+            laid.wear.gap,
+            laid.wear.uneven,
+            laid.wear.round,
+            laid.wear.crazed,
+        ),
         grime: Vec4::new(g.edges, g.blotch, g.spots, g.size),
         aged: Vec4::new(g.earth, g.lichen, g.litter, g.tar),
         ..default()
@@ -247,6 +252,14 @@ pub fn params(laid: &Laid, place: &Place) -> Result<Params, String> {
              earth, lichen and tar 0 to 1, litter 0 to 200 leaves a square metre. Fix: chewing \
              gum is about 0.025 m, an oil drip about 0.12 m, a damp spot about 0.1 m \
              (kit/laid.rs, D634)"
+        ));
+    }
+    if !(0.0..=1.0).contains(&laid.wear.crazed) {
+        return Err(format!(
+            "laid wear crazed {}: the share of the floor fatigue cracking crazes, 0 (none) to \
+             1. Fix: about 0.5 for an old road worn through in its wheel paths; a sound one \
+             none (kit/laid.rs, D634)",
+            laid.wear.crazed
         ));
     }
     let bad_mark = |m: &Mark| {
@@ -402,8 +415,24 @@ mod tests {
         assert!(e.contains("Fix:") && e.contains("tar"), "{e}");
         // The wasteland's road is the one floor tarred, its share passed on as named.
         let w = super::super::biome::Biome::load("wasteland").unwrap();
-        let road = params(&w.street.expect("the street").asphalt, &PLACE).unwrap();
+        let street = w.street.as_ref().expect("the street");
+        let road = params(&street.asphalt, &PLACE).unwrap();
         assert!(road.aged.w > 0.0, "the wasteland road's tar {}", road.aged);
+        // Crazing is named, never assumed: the wasteland's road crazed, its kerbs, verges
+        // and every floor naming none pass 0 (the shader's branch skipped); past 1 refused.
+        assert!(
+            road.seams.w > 0.0,
+            "the wasteland road's crazing {}",
+            road.seams
+        );
+        assert_eq!(params(&street.kerbs, &PLACE).unwrap().seams.w, 0.0);
+        let verges = w.ground.laid.as_ref().expect("the verges");
+        assert_eq!(params(verges, &PLACE).unwrap().seams.w, 0.0);
+        assert_eq!(params(&laid(None, None), &PLACE).unwrap().seams.w, 0.0);
+        let mut bad = laid(None, None);
+        bad.wear.crazed = 1.2;
+        let e = params(&bad, &PLACE).unwrap_err();
+        assert!(e.contains("Fix:") && e.contains("crazed"), "{e}");
     }
 
     fn mark(size: (f32, f32), every: (f32, f32), count: (u32, u32), turn: f32) -> Mark {

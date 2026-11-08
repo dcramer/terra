@@ -215,6 +215,11 @@ pub struct Wear {
     /// How far in (m) each piece's arris is worn round, shaded toward its joint (0: sharp).
     #[serde(default)]
     pub round: f32,
+    /// How much of the floor is crazed by fatigue cracking, 0 (none) to 1: an old road
+    /// worn through under its wheels, in stretches along it, a web of dark cracks round
+    /// pieces a hand to a third of a metre across, each its own value and tilt (laid.wesl).
+    #[serde(default)]
+    pub crazed: f32,
 }
 
 /// A floor's grime (none by default), as a street's paving and road are in

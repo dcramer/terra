@@ -105,6 +105,31 @@ fn cell_wall(p: vec2<f32>) -> f32 {
     return f2 - f1;
 }
 
+// The same Voronoi pattern's F2 - F1 and two hashes of the nearest cell, so each piece of
+// a crazed floor (`crazed`, below) is told apart.
+fn craze_cell(p: vec2<f32>) -> vec3<f32> {
+    let i = floor(p);
+    let f = fract(p);
+    var f1 = 8.0;
+    var f2 = 8.0;
+    var near = i;
+    for (var y = -1; y <= 1; y++) {
+        for (var x = -1; x <= 1; x++) {
+            let g = vec2<f32>(f32(x), f32(y));
+            let o = vec2<f32>(hash(i + g), hash(i + g + 17.0));
+            let d = length(g + o - f);
+            if d < f1 {
+                f2 = f1;
+                f1 = d;
+                near = i + g;
+            } else if d < f2 {
+                f2 = d;
+            }
+        }
+    }
+    return vec3<f32>(f2 - f1, hash(near + 211.0), hash(near + 223.0));
+}
+
 // Which unit a point of the scan lies in (kit/laid.rs's `unit`, tested there): the tile,
 // the course and the unit along it, a unit cut by the tile's edge counted where it starts.
 fn unit(uv: vec2<f32>) -> vec4<f32> {
@@ -550,6 +575,35 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         colour = mix(colour, dark, tar * 0.9);
         colour *= mix(1.0, 0.7, tide);
         mark_rough *= mix(1.0, 0.85, tar);
+    }
+
+    // Fatigue cracking (`seams.w`, biome.rs `Wear.crazed`): where an old road has worn
+    // through under its wheels, its surface crazed into a web of pieces a hand to a third
+    // of a metre across (alligator cracking, the FHWA's distress manual), in stretches
+    // drawn out along the road (x), the web thinning out at their edges rather than cut
+    // (a crisp-edged patch reads as a decal, round 261107-1728's tar). Each crack dark
+    // and about a centimetre wide, drawn at least a pixel and as dark as the share of it it
+    // covers (as `gap`, so it neither vanishes nor shimmers), paler where soil has drifted
+    // into it; each piece its own value and a slight tilt of its own, so the sun picks them
+    // apart (the floor keeps its relief: a flat layer over it lost, round 261107-1555).
+    if laid.seams.w > 0.0 {
+        let z = noise(p * vec2<f32>(0.22, 0.55) + 181.0) * 0.55 + noise(p * 0.9 + 187.0) * 0.3
+            + noise(p * 3.4 + 191.0) * 0.15;
+        let thr = mix(0.74, 0.4, laid.seams.w);
+        let zone = smoothstep(thr, thr + 0.1, z);
+        let s = 4.5;
+        let warp = vec2<f32>(noise(p * 6.0 + 193.0), noise(p * 6.0 + 197.0)) - 0.5;
+        let c = craze_cell(p * s + warp * 0.8);
+        // F2 - F1 is about twice the distance to the wall, in cells.
+        let d = c.x * 0.5 / s;
+        let width = mix(0.004, 0.013, noise(p * 9.0 + 199.0)) * zone;
+        let w = max(width, px * 0.7);
+        let line = (1.0 - smoothstep(w * 0.5, w, d)) * (width / max(w, 1e-5));
+        let rim = (1.0 - smoothstep(w, w + 0.025, d)) * (1.0 - line) * zone;
+        colour *= mix(1.0, mix(0.9, 1.08, c.y), zone);
+        colour *= mix(1.0, 1.07, rim);
+        colour *= mix(1.0, mix(0.22, 0.6, dirty), line);
+        tilt_n += vec3<f32>(c.y - 0.5, 0.0, c.z - 0.5) * 0.1 * zone;
     }
 
     // Moss: out of the joints first, then over the units where it is mossiest.
