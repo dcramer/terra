@@ -215,6 +215,22 @@ fn cuttable(mats: &Assets<FoliageMaterial>, m: &MeshMaterial3d<FoliageMaterial>)
     })
 }
 
+/// The check's hit on a mesh `e`: its hole's radius and whether it is ground cover's.
+fn surface(
+    e: Entity,
+    hit: &bevy::picking::mesh_picking::ray_cast::RayMeshHit,
+    (cut, cover): (f32, bool),
+) -> Hit {
+    Hit {
+        what: Some(e),
+        at: hit.point,
+        distance: hit.distance,
+        cut,
+        cover,
+        body: false,
+    }
+}
+
 /// Whether a foliage material is ground cover's (foliage.rs `Hole::Cover`).
 fn is_cover(mats: &Assets<FoliageMaterial>, m: &MeshMaterial3d<FoliageMaterial>) -> bool {
     mats.get(&m.0)
@@ -451,8 +467,11 @@ fn check(
     };
     let uprights = uprights(&standing, &kids, &bounds);
     let laid = shown(&tells, &tell_mats);
-    let cut = |e: Entity| leaves.get(e).map_or(0.0, |(m, _)| cuttable(&mats, m));
-    let cover = |e: Entity| leaves.get(e).is_ok_and(|(m, _)| is_cover(&mats, m));
+    let cut = |e: Entity| {
+        leaves.get(e).map_or((0.0, false), |(m, _)| {
+            (cuttable(&mats, m), is_cover(&mats, m))
+        })
+    };
     let settings = MeshRayCastSettings::default()
         .with_visibility(RayCastVisibility::VisibleInView)
         .with_filter(&occluder)
@@ -467,14 +486,7 @@ fn check(
             let mut hits: Vec<Hit> = ray
                 .cast_ray(r, &settings)
                 .iter()
-                .map(|(e, hit)| Hit {
-                    what: Some(*e),
-                    at: hit.point,
-                    distance: hit.distance,
-                    cut: cut(*e),
-                    cover: cover(*e),
-                    body: false,
-                })
+                .map(|(e, hit)| surface(*e, hit, cut(*e)))
                 .collect();
             hits.extend(met(r, &uprights));
             hits.extend(fans(r, &laid));
