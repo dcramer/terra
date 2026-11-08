@@ -136,10 +136,22 @@ fn read(
         Query<&Window>,
     ),
     camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
-    mut hero: Query<(&Transform, &mut HeroIntent, Option<&super::Doing>), With<Hero>>,
-    mut arrived: Local<Vec<bool>>,
+    mut hero: Query<
+        (
+            &Transform,
+            &mut HeroIntent,
+            Option<&super::Doing>,
+            Option<&super::react::Told>,
+        ),
+        With<Hero>,
+    >,
+    (time, mut arrived, mut answers): (
+        Res<Time>,
+        Local<Vec<bool>>,
+        Local<Vec<super::react::Answers>>,
+    ),
 ) {
-    let Ok((tr, mut intent, doing)) = hero.single_mut() else {
+    let Ok((tr, mut intent, doing, told)) = hero.single_mut() else {
         return;
     };
     let key = |k: KeyCode| keys.pressed(k);
@@ -193,6 +205,35 @@ fn read(
         };
         if now {
             intent.ask(ability, *at);
+        }
+    }
+    // The answers to blows told on him (hero/react.rs), last so one wins a press this frame.
+    let blows = told.map_or(&[][..], |t| &t.0[..]);
+    let here = tr.translation.xz();
+    let now = (frame.0, time.elapsed_secs());
+    let (asks, fired) = super::react::answer(&args.on_tell, now, blows, here, &mut answers);
+    for (ability, at) in asks {
+        intent.ask(ability, at);
+    }
+    for (i, blow) in fired {
+        info!(
+            "frame {}: on-tell {} answers mob {}'s blow, {:.2} s before it lands",
+            frame.0,
+            args.on_tell[i].ability.name(),
+            blow.by,
+            blow.lands - now.1
+        );
+    }
+    for (rule, done) in args.on_tell.iter().zip(answers.iter()) {
+        if frame.0 == rule.to && done.count() == 0 {
+            warn!(
+                "✗ on-tell {}@{}-{}: no blow was told on him in its window, so nothing was \
+                 answered: widen the window or move it to when the pack swings (routes/*.txt; \
+                 the blows' log lines say when each landed)",
+                rule.ability.name(),
+                rule.from,
+                rule.to
+            );
         }
     }
 }

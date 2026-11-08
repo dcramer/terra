@@ -10,6 +10,7 @@
 
 use super::mobs::{self, Foe, Gait};
 use super::tell::{self, TellMaterial};
+use crate::hero::react::{Blow, Told};
 use crate::hero::{Doing, HeroSystems, Kit};
 use crate::kit::effects::{Contact, Cues, Landed};
 use crate::play::{Fallen, Hero, in_arc};
@@ -213,10 +214,12 @@ fn land(
     >,
     mut materials: ResMut<Assets<TellMaterial>>,
     mut guard_since: Local<Option<f32>>,
+    mut told: Query<&mut Told, With<Hero>>,
 ) {
     let (Some(kit), Ok((he, htr, doing))) = (kit, hero.single()) else {
         return;
     };
+    let mut on_him = Vec::new();
     let now = time.elapsed_secs();
     // The tell drawn nearer the camera than the ground it lies on (tell.rs `RAISE`).
     let raise = camera
@@ -244,6 +247,16 @@ fn land(
         let k = hit_at
             .filter(|h| now < *h && *h - now <= TELL)
             .map(|h| 1.0 - (h - now) / TELL);
+        // A blow told with him in its arc is told on him (his script answers it, hero/react.rs).
+        if let (Some(_), Some(lands)) = (k, hit_at)
+            && in_arc(at, face, him)
+        {
+            on_him.push(Blow {
+                by: foe.i as u32,
+                from: at,
+                lands,
+            });
+        }
         // The fill grows out from the mob and strengthens to the hit, never past half so the
         // ground and the bodies under it show (at 0.8 it hid the mob, j7's first still); the
         // rim is whole at once (a tenth of the tell in), so the reach reads before the fill.
@@ -323,6 +336,11 @@ fn land(
         if let Some(c) = cues.as_deref_mut() {
             cue(c, (now, t, strength), htr.translation, away, [he, mob]);
         }
+    }
+    if let Ok(mut told) = told.single_mut()
+        && told.0 != on_him
+    {
+        told.0 = on_him;
     }
 }
 

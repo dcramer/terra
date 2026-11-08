@@ -28,6 +28,7 @@ use terra_walker::character;
 pub mod abilities;
 mod anim;
 mod moves;
+pub mod react;
 
 pub use abilities::{Ability, HeroIntent, HeroSystems};
 pub use moves::Doing;
@@ -110,6 +111,7 @@ pub fn swap(
                 GameBody,
                 HeroIntent::default(),
                 Doing::default(),
+                react::Told::default(),
                 // The oaks before the fight open about him as about the staged cast.
                 crate::foliage::Seen,
                 WorldAssetRoot(asset.load(GltfAssetLabel::Scene(0).from_asset(BODY))),

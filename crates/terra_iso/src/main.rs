@@ -80,6 +80,12 @@ pub struct Args {
     /// frames); gotos whose windows overlap are waypoints, each taken once the one before
     /// arrived. One not reached by TO is warned of.
     pub goto: Vec<(Vec2, u32, u32)>,
+    /// `--on-tell NAME[:X,Z][~LEAD]@FROM-TO`: over frames FROM to TO, each foe's blow told on
+    /// him (its ground tell shown with him in its arc) is answered by NAME, LEAD seconds
+    /// before it lands (else as it is told), aimed at X,Z, else at the foe (a roll: away from
+    /// it); a held one is held until the blow lands (hero/react.rs). A route's dodge and
+    /// parry, closed-loop: they keep to the blow when a change before them moves it.
+    pub on_tell: Vec<hero::react::OnTell>,
     /// The packs a route's run must clear (demo/tally.rs `cleared`): its file's `expect`
     /// line, else all of them; a run without a route is asked nothing. Not a flag: route data.
     pub expect: demo::tally::Expect,
@@ -222,6 +228,7 @@ fn parse(flags: impl Iterator<Item = String>) -> (Args, Option<scene::Hour>) {
         clicks: Vec::new(),
         abilities: Vec::new(),
         goto: Vec::new(),
+        on_tell: Vec::new(),
         expect: demo::tally::Expect::Nothing,
     };
     let mut hour = None;
@@ -301,6 +308,10 @@ fn parse(flags: impl Iterator<Item = String>) -> (Args, Option<scene::Hour>) {
                     panic!("{}", bad());
                 };
                 a.goto.push((Vec2::new(x, z), from, to));
+            }
+            "--on-tell" => {
+                let rule = hero::react::OnTell::parse(&val()).unwrap_or_else(|e| panic!("{e}"));
+                a.on_tell.push(rule);
             }
             "--demo-at" => a.demo_at = val().parse().unwrap(),
             "--zoom" => a.zoom = val().parse().unwrap(),
