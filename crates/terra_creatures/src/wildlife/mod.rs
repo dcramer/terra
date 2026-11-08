@@ -252,6 +252,9 @@ impl Place {
 #[derive(SystemParam)]
 pub struct Surroundings<'w, 's> {
     planet: Res<'w, Planet>,
+    /// Which kinds live in this world's realm (`data/realms.ron`).
+    realms: Option<Res<'w, terra_world::realm::Realms>>,
+    spec: Option<Res<'w, terra_world::instance::WorldSpec>>,
     trunks: Res<'w, Trunks>,
     obstacles: Res<'w, Obstacles>,
     cover: Option<Res<'w, CoverRules>>,
@@ -366,6 +369,14 @@ impl Surroundings<'_, '_> {
     }
 
     /// Nothing of the land's lives in a cave (D643): its ground is no place of theirs.
+    /// Whether a kind of creature, by name, lives in this world's realm.
+    pub fn lives(&self, name: &str) -> bool {
+        match (&self.realms, &self.spec) {
+            (Some(realms), Some(spec)) => realms.lives(&spec.kind, name),
+            _ => true,
+        }
+    }
+
     pub fn fits(&self, niche: &Niche, point: Vec3) -> bool {
         !self.planet.in_cave(point) && self.place(point).fits(niche)
     }
@@ -622,9 +633,9 @@ fn populate(
         .all()
         .filter_map(
             |species| match (bestiary.get(species).lives, &bestiary.get(species).niche) {
-                (Lives::About { per_ha, group }, Some(niche)) => {
-                    Some((species, per_ha, group, niche))
-                }
+                (Lives::About { per_ha, group }, Some(niche)) => around
+                    .lives(bestiary.name(species))
+                    .then_some((species, per_ha, group, niche)),
                 _ => None,
             },
         )

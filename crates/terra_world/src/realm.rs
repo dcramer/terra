@@ -49,6 +49,10 @@ pub struct Realm {
     /// The share of the first realm's trees and undergrowth that grow here, 0 to 1.
     #[serde(default)]
     pub plants: Option<f32>,
+    /// The kinds of creature that live in it, by name (`data/creatures.ron`): every kind
+    /// where it says nothing, as the first realm does.
+    #[serde(default)]
+    pub animals: Option<Vec<String>>,
     /// What stands on its land by rule (the game's to stand, `terra_game::play::realm_parts`).
     #[serde(default)]
     pub parts: Vec<Part>,
@@ -81,6 +85,14 @@ impl Realms {
     /// The realm a world of a kind is, if the data has it.
     pub fn of(&self, kind: &str) -> Option<&Realm> {
         self.0.iter().find(|realm| realm.kind == kind)
+    }
+
+    /// Whether a kind of creature lives in worlds of a kind: any does where the realm does
+    /// not say which.
+    pub fn lives(&self, kind: &str, animal: &str) -> bool {
+        self.of(kind)
+            .and_then(|realm| realm.animals.as_ref())
+            .is_none_or(|animals| animals.iter().any(|name| name == animal))
     }
 
     /// The kind of the realm beyond a world's gate: its own row's, or its own kind where the
@@ -179,6 +191,10 @@ mod tests {
         // The first realm's plants keep their own colours; the industrial one's are turned.
         assert_eq!(realms.of("world").unwrap().plants_hue, None);
         assert!(realms.of("industrial").unwrap().plants_hue.is_some());
+        // Every kind lives in the first realm; the industrial one names its few.
+        assert!(realms.lives("world", "Troll") && realms.lives("world", "Chaffinch"));
+        assert!(realms.lives("industrial", "Red fox") && !realms.lives("industrial", "Troll"));
+        assert!(realms.lives("a realm not in the data", "Troll"));
         // A kind the data does not have leads to its own kind, and sets nothing.
         assert_eq!(realms.beyond("yard"), "yard");
         assert!(realms.of("yard").is_none());

@@ -389,8 +389,17 @@ fn prepare(
     bestiary: Res<Bestiary>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     options: Res<terra_world::shell::Options>,
+    (realms, spec): (
+        Option<Res<terra_world::realm::Realms>>,
+        Option<Res<terra_world::instance::WorldSpec>>,
+    ),
 ) {
     terra_gen::stat_scope!("creatures");
+    // Only the kinds that live in this world's realm (`data/realms.ron`).
+    let lives = |species: Species| match (&realms, &spec) {
+        (Some(realms), Some(spec)) => realms.lives(&spec.kind, bestiary.name(species)),
+        _ => true,
+    };
     if kinds
         .models
         .iter()
@@ -414,7 +423,7 @@ fn prepare(
     // A demo's or film's place has no lair (D421): play keeps it.
     if let Some(lair) = lair_site(&planet, &start).filter(|_| !options.no_lair) {
         commands.insert_resource(Lair(lair));
-        for species in bestiary.all() {
+        for species in bestiary.all().filter(|species| lives(*species)) {
             let Lives::Lair(count) = bestiary.get(species).lives else {
                 continue;
             };
@@ -442,7 +451,7 @@ fn prepare(
     }
     // Those that keep the world's den (D591): one of each, on its chamber's floor.
     if let Some(den) = planet.den().filter(|_| !options.no_lair) {
-        for species in bestiary.all() {
+        for species in bestiary.all().filter(|species| lives(*species)) {
             if bestiary.get(species).lives == Lives::Den {
                 let at = start.local(den.floor);
                 info!(

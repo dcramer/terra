@@ -5,6 +5,7 @@
 //   name          what a player is told it is
 //   beyond        the kind of the realm its gate leads to (D641)
 //   plants_hue    how far its plants' own colours are turned round the hue circle, radians
+//   animals       the kinds of creature that live in it, by name; every kind if not given
 //   sun, sky      its light against the first realm's: the sun's colour and the sky's (the
 //                 horizon, the zenith, the shade), multiplied in, linear, red green blue
 //   ground_low, ground_high, ground_steep, grass_dry, grass_lush, sand
@@ -32,6 +33,9 @@
         ground_cover: Some(0.25),
         // What does grow is parched: its greens turned toward ochre.
         plants_hue: Some(-0.4),
+        // Little lives on a worked-out land: scavengers, and nothing in its den yet. A
+        // stand-in until the realm has creatures of its own (D642: the developers').
+        animals: Some(["Red fox", "Brown hare"]),
         // A worked-out land: one tree in ten.
         plants: Some(0.1),
         parts: [

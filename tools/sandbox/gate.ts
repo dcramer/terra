@@ -96,6 +96,15 @@ try {
   if (far.count === 0 || far.farthest > 600) throw new Error(`1500 m from where the player arrived ${far.count} of the realm's parts stand, the farthest ${far.farthest.toFixed(0)} m from them: play::realm_parts stands them in the cells within reach of the player and lets go those past it`);
   if (Math.abs(returned.count - first.count) > 0.1 * first.count) throw new Error(`come back to where they arrived the player has ${returned.count} of the realm's parts round them, where ${first.count} stood before they left: a cell come back to must hold what it held, by the land alone (play::realm_parts)`);
 
+  // Only the kinds its row names live in it (data/realms.ron's animals): none of the first
+  // realm's others, after the walk out and back gave them time to be put out.
+  const strangers: string[] = [];
+  for (const name of ["Wild boar", "Chaffinch", "Red squirrel", "Spider", "Troll"]) {
+    const found = (await call("sandbox.find", { name })) as Found;
+    if (found.length > 0) strangers.push(`${found.length} ${name}`);
+  }
+  if (strangers.length > 0) throw new Error(`${realm.name ?? realm.kind} holds ${strangers.join(", ")}, kinds its row of data/realms.ron does not name among its animals: the wildlife, the lair and the den put out only the kinds a realm says live in it (Realms::lives)`);
+
   // Closed in the realm beyond and started again: there, where they stood, not in the first
   // world with the realm's things written over it.
   await stop();
