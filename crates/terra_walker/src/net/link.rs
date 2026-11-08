@@ -187,6 +187,13 @@ impl Link {
         (self.answered, newest)
     }
 
+    /// Forgets the walks kept, as a jump of the clock or a wait does: for a test of an
+    /// answer that then falls on a tick with no walk kept.
+    #[cfg(test)]
+    pub(crate) fn forget_walks(&mut self) {
+        self.history.clear();
+    }
+
     /// How many of the server's answers were for a tick this game kept no walk of.
     pub fn missed(&self) -> u64 {
         self.history.missed

@@ -66,3 +66,44 @@ fn a_guest_returns_to_where_it_left_and_is_told_when_the_host_leaves() {
         back.heard.last()
     );
 }
+
+/// A guest the host moves while it stands still, when the joined game holds no walk of the
+/// tick the host's answer is for (its clock jumped, or it stood loading): the answer is
+/// taken as it stands. Dropped, as it once was, the joined game stayed where it wrongly was
+/// for good, the host saying a body again only when it changes (found by
+/// `tools/sandbox/land.ts`: a guest a hop behind its host).
+#[test]
+fn an_answer_for_a_tick_with_no_walk_kept_still_puts_a_standing_guest_where_its_host_has_it() {
+    let mut together = Together::new(Conditions::PERFECT);
+    together.still = true;
+    together.run(0..120);
+    // The host moves the guest thirty metres.
+    let mut guests = together
+        .host
+        .query_filtered::<&mut Transform, With<Guest>>();
+    let mut guest = guests.single_mut(&mut together.host).expect("one guest");
+    let aside = guest.translation.normalize().cross(Vec3::X).normalize() * 30.0;
+    guest.translation += aside;
+    // For a second the joined game keeps no walk (as while it makes the land it was put
+    // on): every answer of the body's moving and coming to rest falls on a tick with none.
+    for step in 120..184 {
+        together.run(step..step + 1);
+        together.client.resource_mut::<link::Link>().forget_walks();
+    }
+    together.run(184..420);
+    let theirs = guests
+        .single(&together.host)
+        .expect("one guest")
+        .translation;
+    let mine = together
+        .client
+        .get::<Transform>(together.player)
+        .unwrap()
+        .translation;
+    assert!(
+        mine.distance(theirs) < 0.5,
+        "the joined game has its player {} m from where its host has it",
+        mine.distance(theirs)
+    );
+    assert!(together.client.resource::<link::Link>().missed() > 0);
+}

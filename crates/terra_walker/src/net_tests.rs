@@ -338,6 +338,8 @@ struct Together {
     player: Entity,
     network: Network,
     budget: f64,
+    /// The joined player stands still, where it otherwise walks by `keys`.
+    still: bool,
     predicted: std::collections::BTreeMap<u32, bevy::math::DVec3>,
     truth: std::collections::BTreeMap<u32, bevy::math::DVec3>,
 }
@@ -353,6 +355,7 @@ impl Together {
             player,
             network,
             budget: 0.0,
+            still: false,
             predicted: Default::default(),
             truth: Default::default(),
         }
@@ -365,7 +368,11 @@ impl Together {
             self.budget += self.client.resource::<link::Link>().rate();
             while self.budget >= 1.0 {
                 self.budget -= 1.0;
-                *self.client.get_mut::<Intent>(self.player).unwrap() = keys(step);
+                *self.client.get_mut::<Intent>(self.player).unwrap() = if self.still {
+                    Intent::default()
+                } else {
+                    keys(step)
+                };
                 self.client.run_system_once(link::listen).unwrap();
                 self.client.run_system_once(walk).unwrap();
                 self.client.run_system_once(link::record).unwrap();
