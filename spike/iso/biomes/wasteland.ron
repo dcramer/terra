@@ -129,6 +129,25 @@
              turn: -59.0, pose: ("attack", 0.45), rim: 0.25),
         ],
     ),
+    // The junk weathered by years in a dead desert lot, dulled and dusted (kit/finish.rs), not
+    // the packs' showroom finish (round 261107-1710's judges: "glossy blue-black blobs with a
+    // blue plastic sheen", "candy-gloss red barrels", "showroom-yellow generator"; the
+    // junk-lot photos' plastic and paint are chalky, sun-faded and filmed with dust).
+    finishes: [
+        // The bin bags: the scan's albedo is near black (linear 0.0034, under any real
+        // plastic's 0.02 to 0.04) and its roughness 0.18 at the median, so all they show is
+        // the cold sky's highlight. Rough, a dielectric's lower specular, dusty tan over the
+        // black.
+        (models: ["models/iso/city/trash-bag.glb"], rough: 0.6, reflectance: 0.3,
+         value: 8.0, tint: (1.15, 1.02, 0.85)),
+        // The barrels and the jerrycan: their red paint faded toward oxide (red over green 9
+        // in the scan, about 3.5 graded), dulled, the chips' bare metal kept.
+        (models: ["models/iso/city/oil-barrel.glb", "models/iso/city/jerrycan.glb"],
+         rough: 0.55, desaturate: 0.45, value: 0.75, tint: (1.05, 1.0, 0.9)),
+        // The generator's yellow sun-faded and filmed with dust.
+        (models: ["models/iso/city/generator.glb"], rough: 0.5, desaturate: 0.4,
+         value: 0.8, tint: (1.05, 1.0, 0.88)),
+    ],
     light: (preset: "desert-day"),
     weather: (wind: (1.4, 0.3)),
     ground: (
