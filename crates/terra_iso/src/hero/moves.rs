@@ -33,6 +33,12 @@ pub struct Doing {
 }
 
 impl Doing {
+    /// Holds his move for `s` seconds more, a hit-stop's (play/feel.rs); a longer one already
+    /// under way stands.
+    pub fn hold(&mut self, s: f32) {
+        self.halt = self.halt.max(s);
+    }
+
     /// Whether blows pass through him now (a roll's tuck).
     pub fn invulnerable(&self, kit_set: &terra_motion::moves::MoveSet) -> bool {
         self.runner
@@ -145,7 +151,11 @@ pub fn act(
         let mut bit = false;
         for (foe, ftr) in &foes {
             if in_arc(here, doing.face, ftr.translation.xz()) {
-                commands.entity(foe).insert(strike::Blow { from: here, t });
+                commands.entity(foe).insert(strike::Blow {
+                    from: here,
+                    t,
+                    weight: if m.heavy { 1.0 } else { 0.0 },
+                });
                 bit = true;
             }
         }

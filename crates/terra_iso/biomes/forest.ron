@@ -109,7 +109,7 @@
         (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.31, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 2),
     ],
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
-    effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
+    effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "parry-ring"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],
     // How the fighters stand off the floor (ruin/fight.rs `cast`): darker than the ground
     // about them, as the ruin's (iso-art j34). The treants at the ruin's 0.2 and 0.35 read
     // as black cut-outs on the shaded floor by day, no lit form (judges 261107-0437 and

@@ -1,0 +1,22 @@
+// A blow on the hero parried (demo/blows.rs, kit/effects.rs `Cue::Parry`), steel on steel:
+// a white-blue core in a wide pale halo that rings on a fifth of a second (longer than a
+// hit's eighth, so a parry reads apart from a hit or a block), a cold light set out toward the
+// camera as the hit's is (iso-kit j50), and a burst of fast bright sparks thrown wide and
+// falling, cooling to steel blue. It plays beside the hit's spark, which the blow sets off
+// too. Its feel holds both a tenth of a second and shakes the view a little more than a light
+// blow (terra_motion::contact's parry stops 0.12 s).
+(
+    cue: Parry,
+    at: Strike,
+    still: 0.08,
+    life: 0.6,
+    flash: (core: Srgb(0.92, 0.96, 1.0), core_nits: 9000.0, rim: Srgb(0.62, 0.78, 1.0), rim_nits: 700.0,
+        size: 1.2, core_size: 0.14, falloff: 4.5, swell: 0.25, fall: 0.2),
+    lamps: [
+        (lm: 160000.0, colour: Srgb(0.75, 0.85, 1.0), up: 0.6, toward: 1.1, range: 5.0, fall: 0.2),
+    ],
+    sparks: (count: 40, speed: (3.0, 8.0), life: (0.15, 0.4), width: 0.016, spread: 1.0,
+        gravity: 9.8, shutter: 0.025, hot: Srgb(1.0, 0.98, 0.92), hot_nits: 8000.0,
+        cool: Srgb(0.45, 0.6, 1.0), cool_nits: 600.0, area: 0.04, delay: 0.02),
+    feel: (stop: (0.1, 0.12), shake: (0.06, 0.08), fall: 0.12, hz: 18.0),
+)

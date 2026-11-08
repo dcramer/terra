@@ -8,7 +8,7 @@
 //! `--play`, so the staged scenes are as before.
 
 use super::{Fallen, Hero};
-use crate::kit::effects::{Contact, Cues};
+use crate::kit::effects::{Contact, Cues, Landed};
 use crate::ruin::effects::hit::{FLINCH, flash, flinch};
 use crate::ruin::effects::slash::Blade;
 use crate::ruin::fight::Pose;
@@ -31,6 +31,8 @@ const BACK: Duration = Duration::from_millis(250);
 pub struct Blow {
     pub from: Vec2,
     pub t: f32,
+    /// 0 a light blow, 1 a heavy (its feel, play/feel.rs).
+    pub weight: f32,
 }
 
 /// A body the hero has struck: the blows it took, the last one's time, the flinch's tilt
@@ -161,13 +163,21 @@ fn land(
     mut players: Query<(&mut AnimationPlayer, Option<&mut AnimationTransitions>)>,
     (blade, hero, cues): (
         Option<Res<Blade>>,
-        Query<&GlobalTransform, With<Hero>>,
+        Query<(Entity, &GlobalTransform), With<Hero>>,
         Option<ResMut<Cues>>,
     ),
 ) {
     let now = time.elapsed_secs();
     let mut contact = None;
+    let mut landed = Landed {
+        at: now,
+        weight: 0.0,
+        parried: false,
+        bodies: hero.iter().map(|(e, _)| e).collect(),
+    };
     for (body, blow, pose, tr, struck) in &mut blown {
+        landed.bodies.push(body);
+        landed.weight = landed.weight.max(blow.weight);
         // A struck body stops walking in (walk.rs).
         commands
             .entity(body)
@@ -178,7 +188,7 @@ fn land(
             .as_ref()
             .and_then(|b| b.edge(blow.t))
             .zip(hero.single().ok())
-            .map(|((i, o), g)| (g.transform_point(i), g.transform_point(o)));
+            .map(|((i, o), (_, g))| (g.transform_point(i), g.transform_point(o)));
         contact = Some(Contact {
             point: bite(blow.from, foe, edge, tr.translation.y),
             floor: tr.translation.y,
@@ -237,6 +247,7 @@ fn land(
     if let (Some(c), Some(mut cues)) = (contact, cues) {
         cues.blow = now;
         cues.contact = Some(c);
+        cues.landed = Some(landed);
     }
 }
 

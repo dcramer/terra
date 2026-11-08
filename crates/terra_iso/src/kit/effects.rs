@@ -61,11 +61,31 @@ pub struct Preset {
     pub puffs: Option<Puffs>,
     #[serde(default)]
     pub trail: Option<Trail>,
+    /// What a blow in play does to the bodies and the view (play/feel.rs): none in a staged
+    /// scene.
+    #[serde(default)]
+    pub feel: Option<Feel>,
+}
+
+/// A blow's feel, each from a light blow's to a heavy's (`Landed::weight`, 0 to 1): the
+/// hit-stop both bodies are held in (s), the camera's shake (m on the screen's plane), its
+/// e-fold (s) and its rate (Hz). The ARPGs' hit-pause and screen shake (Diablo IV's, Path of
+/// Exile 2's, Hades's; Vlambeer's "screen shake" talk, Jan Willem Nijman 2013: a short stop
+/// and a shake that dies fast, bigger for a bigger blow).
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Feel {
+    pub stop: (f32, f32),
+    pub shake: (f32, f32),
+    pub fall: f32,
+    pub hz: f32,
 }
 
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum Cue {
     Blow,
+    /// A blow on the hero parried (demo/blows.rs).
+    Parry,
     Bolt,
     Swing,
     Loop(f32),
@@ -305,6 +325,10 @@ pub struct Cues {
     pub blow: f32,
     pub bolt: f32,
     pub contact: Option<Contact>,
+    /// When a blow on the hero was last parried.
+    pub parry: f32,
+    /// The last blow landed in play, for its feel (play/feel.rs); none in a staged scene.
+    pub landed: Option<Landed>,
 }
 
 impl Default for Cues {
@@ -313,8 +337,20 @@ impl Default for Cues {
             blow: -10.0,
             bolt: -10.0,
             contact: None,
+            parry: -10.0,
+            landed: None,
         }
     }
+}
+
+/// A blow landed in play: when, how heavy (0 a light blow, 1 a heavy or a mob's full hit),
+/// whether it was parried, and the bodies its hit-stop holds (the striker and the struck).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Landed {
+    pub at: f32,
+    pub weight: f32,
+    pub parried: bool,
+    pub bodies: Vec<Entity>,
 }
 
 /// Where a blow in play bites (on the foe, at the blade's height), the floor under it, and
@@ -347,7 +383,7 @@ impl Shift {
 /// draws as it always did.
 pub fn shift(p: &Preset, at: Option<Vec2>, here: Vec3, toward: Vec2, cues: &Cues) -> Option<Shift> {
     let c = cues.contact?;
-    if at.is_some() || p.cue != Cue::Blow {
+    if at.is_some() || !matches!(p.cue, Cue::Blow | Cue::Parry) {
         return None;
     }
     let to = match p.at {
@@ -366,11 +402,16 @@ pub fn shift(p: &Preset, at: Option<Vec2>, here: Vec3, toward: Vec2, cues: &Cues
 
 /// An effect's age at the clock: the still's chosen moment, else the time since its cue.
 pub fn age(p: &Preset, clock: &Clock, cues: &Cues) -> f32 {
+    // A parry is play's alone: the staged fight parries nothing, so a still shows none.
+    if clock.still && p.cue == Cue::Parry {
+        return -1.0;
+    }
     if clock.still {
         return p.still;
     }
     match p.cue {
         Cue::Blow => clock.t - cues.blow,
+        Cue::Parry => clock.t - cues.parry,
         Cue::Bolt => clock.t - cues.bolt,
         Cue::Swing => -1.0,
         Cue::Loop(period) => clock.t.rem_euclid(period.max(0.01)),

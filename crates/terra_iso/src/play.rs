@@ -20,6 +20,7 @@ use bevy::prelude::*;
 use std::time::Duration;
 
 // The hero (crate::hero) walks round the same footprints and strikes as this does.
+pub(crate) mod feel;
 pub(crate) mod footprint;
 pub(crate) mod strike;
 
@@ -80,7 +81,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, footprint::take.after(adopt).before(control))
         // The staged Tripo knight, once adopted, gives way to the game's body (hero/, D628).
         .add_systems(Update, crate::hero::swap.after(adopt).before(rig))
-        .add_plugins((strike::plugin, crate::hero::plugin));
+        .add_plugins((strike::plugin, feel::plugin, crate::hero::plugin));
     // The street stages no fight, so nothing else hangs the sword on its hero (held.rs) or
     // draws his blows: its stage (the effects aim at it from Startup) and play's effects.
     let layout = app.world().get_resource::<Args>().and_then(|a| a.layout);
@@ -449,7 +450,11 @@ fn control(
             let mut bit = false;
             for (foe, ftr) in &foes {
                 if in_arc(here, face, ftr.translation.xz()) {
-                    commands.entity(foe).insert(strike::Blow { from: here, t });
+                    commands.entity(foe).insert(strike::Blow {
+                        from: here,
+                        t,
+                        weight: 0.0,
+                    });
                     bit = true;
                 }
             }

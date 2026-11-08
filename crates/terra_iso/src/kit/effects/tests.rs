@@ -197,6 +197,7 @@ fn a_still_holds_the_chosen_moment() {
         blow: 2.0,
         bolt: 0.0,
         contact: None,
+        ..Cues::default()
     };
     assert_eq!(
         age(

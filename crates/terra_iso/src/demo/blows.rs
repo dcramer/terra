@@ -11,7 +11,7 @@
 use super::mobs::{self, Foe, Gait};
 use super::tell::{self, TellMaterial};
 use crate::hero::{Doing, HeroSystems, Kit};
-use crate::kit::effects::{Contact, Cues};
+use crate::kit::effects::{Contact, Cues, Landed};
 use crate::play::{Fallen, Hero, in_arc};
 use crate::ruin::effects::hit::{FLINCH, flinch};
 use bevy::prelude::*;
@@ -201,10 +201,10 @@ fn land(
     kit: Option<Res<Kit>>,
     (mut cues, mut taking): (Option<ResMut<Cues>>, ResMut<Taking>),
     mut mobs: Query<
-        (&Foe, &Gait, &Transform, &mut Tell, Has<Fallen>),
+        (Entity, &Foe, &Gait, &Transform, &mut Tell, Has<Fallen>),
         (Without<Hero>, Without<TellMark>),
     >,
-    hero: Query<(&Transform, &Doing), (With<Hero>, Without<Foe>, Without<TellMark>)>,
+    hero: Query<(Entity, &Transform, &Doing), (With<Hero>, Without<Foe>, Without<TellMark>)>,
     mut marks: Query<
         (&mut Transform, &mut Visibility),
         (With<TellMark>, Without<Foe>, Without<Hero>),
@@ -212,7 +212,7 @@ fn land(
     mut materials: ResMut<Assets<TellMaterial>>,
     mut guard_since: Local<Option<f32>>,
 ) {
-    let (Some(kit), Ok((htr, doing))) = (kit, hero.single()) else {
+    let (Some(kit), Ok((he, htr, doing))) = (kit, hero.single()) else {
         return;
     };
     let now = time.elapsed_secs();
@@ -229,7 +229,7 @@ fn land(
     };
     let him = htr.translation.xz();
     let his_face = (htr.rotation * Vec3::Z).xz().normalize_or(Vec2::Y);
-    for (foe, gait, tr, mut tell, fallen) in &mut mobs {
+    for (mob, foe, gait, tr, mut tell, fallen) in &mut mobs {
         let at = tr.translation.xz();
         let face = (tr.rotation * Vec3::Z).xz().normalize_or(Vec2::Y);
         let swing = gait.swinging(now).filter(|_| !fallen);
@@ -327,14 +327,36 @@ fn land(
             tilt: taking.tilt,
         };
         if let Some(c) = cues.as_deref_mut() {
-            c.blow = now;
-            c.contact = Some(Contact {
-                point: htr.translation + Vec3::Y * 1.1 - away.extend(0.0).xzy() * 0.35,
-                floor: htr.translation.y,
-                toward: away,
-            });
+            cue(c, (now, t, strength), htr.translation, away, [he, mob]);
         }
     }
+}
+
+/// A mob's blow on him set off: the hit's effects at him (and a parry's ring when parried),
+/// and its feel on both (play/feel.rs): a full hit a heavy's, one on the guard a light's.
+fn cue(
+    c: &mut Cues,
+    (now, t, strength): (f32, Taken, f32),
+    him: Vec3,
+    away: Vec2,
+    bodies: [Entity; 2],
+) {
+    c.blow = now;
+    c.contact = Some(Contact {
+        point: him + Vec3::Y * 1.1 - away.extend(0.0).xzy() * 0.35,
+        floor: him.y,
+        toward: away,
+    });
+    let parried = t == Taken::Parried;
+    if parried {
+        c.parry = now;
+    }
+    c.landed = Some(Landed {
+        at: now,
+        weight: if strength >= 1.0 { 1.0 } else { 0.0 },
+        parried,
+        bodies: bodies.to_vec(),
+    });
 }
 
 /// His flinch from the last blow, laid on his facing as it is this frame.
