@@ -540,9 +540,9 @@ fn trim(
     }
     // The glTF loader's bounds (its default `DynamicSkinnedMeshBounds`, the box frustum
     // culling tests each frame) name joints by the file's numbering: left so, they track
-    // other joints or none, and a worn piece is culled while it is on screen (the iso hero's
-    // torso and helm vanished through his roll's dive, iso-hero j7). Made again from the
-    // renumbered skin.
+    // other joints or none, and a worn piece could be culled while it is on screen. Made
+    // again from the renumbered skin. (Not the iso hero's roll, where his torso is hidden
+    // behind his own hips as he dives, iso-hero j8.)
     if mesh.skinned_mesh_bounds().is_some()
         && let Err(e) = mesh.generate_skinned_mesh_bounds()
     {

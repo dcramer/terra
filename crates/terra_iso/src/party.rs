@@ -595,6 +595,12 @@ fn dress(
                     *joint = ours;
                 }
             }
+            // Kept from before Bevy 0.20's per-frame skinned bounds (the glTF loader's
+            // DynamicSkinnedMeshBounds), which follow the joints swapped in above since they
+            // name joints by index. Without it the village still is the same (3.6 of 2.07M
+            // pixels apart, all 49 skinned meshes seen; iso-hero j8, worker job
+            // 20261108-102407-b8f3-patch), but 8 of the 49 boxes miss one of their joints by
+            // over 0.1 m with it or without, unexplained: it stays until they are.
             commands.entity(mesh).insert(NoFrustumCulling);
         }
         // The piece's own skeleton no longer moves anything; nor should its player run.
