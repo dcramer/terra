@@ -1,0 +1,19 @@
+{
+  "stages": {
+    "concept": {
+      "at": "2026-11-08T07:20:41.173Z",
+      "credits": 0,
+      "minutes": 0.5624666666666667,
+      "files": [
+        "art/iso/gang-cutter/concept.png"
+      ],
+      "note": "look at art/iso/gang-cutter/concept.png"
+    }
+  },
+  "name": "gang-cutter",
+  "kind": "npc",
+  "theme": "the street gangs of a near-future city at night, the figure shown alone on a plain light grey studio backdrop, no street, no rain, no signs, no scenery",
+  "description": "A wiry young street gang member in a long dark olive hooded parka of worn nylon with the hood up, a scratched off-white plastic respirator mask over the face, dark denim jeans and dirty white trainers, a faded red bandana tied round the left upper arm, a machete with a black taped handle gripped in the right fist, held level and straight out in line with the outstretched arm",
+  "body": "biped",
+  "height": 1.72
+}

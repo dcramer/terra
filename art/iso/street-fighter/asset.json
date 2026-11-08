@@ -1,0 +1,19 @@
+{
+  "stages": {
+    "concept": {
+      "at": "2026-11-08T07:19:37.199Z",
+      "credits": 0,
+      "minutes": 0.2277,
+      "files": [
+        "art/iso/street-fighter/concept.png"
+      ],
+      "note": "look at art/iso/street-fighter/concept.png"
+    }
+  },
+  "name": "street-fighter",
+  "kind": "hero",
+  "theme": "the street gangs of a near-future city at night, the figure shown alone on a plain light grey studio backdrop, no street, no rain, no signs, no scenery",
+  "description": "A bare-knuckle street fighter, a lean, muscular man in his thirties with a shaved head and a short dark beard, wearing a dark charcoal hooded rain jacket of waxed cotton left open over a faded grey cotton vest, grimy cloth tape wrapped round his knuckles and wrists, black canvas cargo trousers with worn knee patches, and scuffed black leather work boots; the jacket creased and worn",
+  "body": "biped",
+  "height": 1.8
+}

@@ -1,0 +1,19 @@
+{
+  "stages": {
+    "concept": {
+      "at": "2026-11-08T07:21:17.817Z",
+      "credits": 0,
+      "minutes": 0.35863333333333336,
+      "files": [
+        "art/iso/gang-bruiser/concept.png"
+      ],
+      "note": "look at art/iso/gang-bruiser/concept.png"
+    }
+  },
+  "name": "gang-bruiser",
+  "kind": "npc",
+  "theme": "the street gangs of a near-future city at night, the figure shown alone on a plain light grey studio backdrop, no street, no rain, no signs, no scenery",
+  "description": "A heavy-set street gang enforcer who fights with his fists, a big broad-shouldered man in a black quilted nylon bomber jacket with a torn sleeve and one strip of dull orange reflective tape, a dark knitted beanie, a black cloth face mask over nose and mouth, heavy fingerless leather gloves with steel knuckle studs, baggy grey sweatpants and heavy black boots; empty-handed, both arms raised straight out to the sides",
+  "body": "biped",
+  "height": 1.9
+}
