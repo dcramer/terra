@@ -174,6 +174,11 @@ impl Link {
     }
 
     /// How many of the server's answers differed from what was predicted.
+    /// How many of the server's answers were for a tick this game kept no walk of.
+    pub fn missed(&self) -> u64 {
+        self.history.missed
+    }
+
     pub fn corrections(&self) -> u64 {
         self.history.corrections
     }

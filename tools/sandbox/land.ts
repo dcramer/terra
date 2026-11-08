@@ -10,10 +10,11 @@
 //
 //   node tools/sandbox/land.ts [--seed 3]
 //
-// Not yet a gate (D632): of ten runs three failed, each with the friend's game not standing
-// where its host had put it, or not following, after a hop: moving a guest by script is
-// rougher than a walk, and what goes wrong in the joined game then is not yet understood.
-// A pass says the two games agreed; a failure of that kind is the script's, until it is.
+// Not yet a gate (D632): since each hop waits for the friend and the clock runs at twelve,
+// one run of seven failed, the friend's game not standing where its host had put it after a
+// hop, the host still holding it; not understood. A failure says where each game has the
+// friend, how often its walk was corrected, and how many of the host's answers were for
+// ticks it kept no walk of (`net.state`'s `missed`): read those first.
 //
 // Node 22.18 or later; no dependencies. About five minutes.
 
@@ -157,6 +158,8 @@ try {
   // What the host said of its guests coming and going, when the walk failed.
   if (failed) {
     try {
+      const [theirs, mine] = [JSON.parse(remote(ports[0], "call", "net.state")), JSON.parse(remote(ports[1], "call", "net.state"))];
+      console.error(`the host has its guest at ${JSON.stringify(theirs.guests?.[0]?.at)}; the friend's game has itself at ${JSON.stringify(mine.mine)}, corrected ${mine.corrections} times, ${mine.missed} answers for ticks it kept no walk of, tick ${mine.tick}`);
       console.error(remote(ports[0], "said", "--all", "--containing", "the world.").trim().split("\n").slice(-4).join("\n"));
     } catch {}
   }

@@ -165,6 +165,7 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "players": host.map(Host::players).or(link.map(|link| link.players().to_vec())),
         "ended": world.get_resource::<Ended>().map(|ended| ended.0.clone()),
         "corrections": link.map(Link::corrections),
+        "missed": link.map(Link::missed),
         "puppets": puppets,
     }))
 }

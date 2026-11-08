@@ -20,6 +20,9 @@ pub struct History<I, S> {
     entries: VecDeque<Entry<I, S>>,
     /// How many answers differed and were replayed from.
     pub corrections: u64,
+    /// How many answers were for a tick the history does not hold, so nothing could be
+    /// checked against them: after a jump, or when ticks were never recorded.
+    pub missed: u64,
 }
 
 impl<I, S> Default for History<I, S> {
@@ -27,6 +30,7 @@ impl<I, S> Default for History<I, S> {
         History {
             entries: VecDeque::new(),
             corrections: 0,
+            missed: 0,
         }
     }
 }
@@ -83,10 +87,11 @@ impl<I, S: Clone> History<I, S> {
         while self.entries.front().is_some_and(|entry| entry.tick < tick) {
             self.entries.pop_front();
         }
-        let first = self
-            .entries
-            .front_mut()
-            .filter(|entry| entry.tick == tick)?;
+        if self.entries.front().is_none_or(|entry| entry.tick != tick) {
+            self.missed += 1;
+            return None;
+        }
+        let first = self.entries.front_mut()?;
         if same(&first.after, answer) {
             self.entries.pop_front();
             return None;
