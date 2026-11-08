@@ -21,11 +21,16 @@ use terra_gen::Seed;
 use terra_world::mesh_sink::MeshSink;
 use terra_world::sky_occlusion;
 
-/// Every kind's model, the grown `KINDS` then the `VETERANS`, without its materials, and the
-/// forest's seed they grew from; empty until the forest is first planted, and grown again
-/// for a world of another seed.
+/// Every kind's model, the grown `KINDS` then the `VETERANS`, without its materials, by the
+/// forest's seed they grew from, the world played last; empty until a forest is first
+/// planted.
 #[derive(Resource, Default)]
-pub(super) struct Grown(Vec<TreeModel>, Option<Seed>);
+pub(super) struct Grown(Vec<(Seed, Vec<TreeModel>)>);
+
+/// How many worlds' kinds are kept grown: the one played and the one last left, so a
+/// crossing back (the way a portal is used, D470) grows nothing again, a third of a second
+/// of every crossing's cover (D501) before.
+const WORLDS_KEPT: usize = 2;
 
 /// Which of `BARKS` a grown kind's wood is drawn in, and which species' leaves, tint and far
 /// crown it takes (0 oak, 1 pine, 2 spruce).
@@ -58,27 +63,39 @@ pub(super) fn trees(
     materials: &mut Assets<Foliage>,
     shapes: &mut Shapes,
 ) -> Vec<TreeModel> {
-    if grown.1 != Some(with.seed) {
-        grown.0.clear();
-        grown.1 = Some(with.seed);
-        // Every kind at once, over every core, as the woods' conifers are grown.
-        let kinds: Vec<usize> = (0..KINDS.len()).collect();
-        let (seed, looks, ivy_leaves) = (with.seed, with.looks, with.ivy_leaves);
-        let grown_kinds = MeshSink::making(meshes, |sink| {
-            terra_gen::par::map(&kinds, |&kind| {
-                grow(kind, seed, looks, Some(ivy_leaves), sink)
-            })
-        });
-        for (model, trunk, seen) in grown_kinds {
-            shapes.remember(&model.wood[0], trunk);
-            shapes.remember(&model.crown_near, seen);
-            grown.0.push(model.bare());
+    // The world's kinds, the newest last; a world not kept is grown now, the oldest let go.
+    let kept = grown.0.iter().position(|(seed, _)| *seed == with.seed);
+    let models = match kept {
+        Some(kept) => grown.0.remove(kept).1,
+        None => {
+            // Every kind at once, over every core, as the woods' conifers are grown.
+            let kinds: Vec<usize> = (0..KINDS.len()).collect();
+            let (seed, looks, ivy_leaves) = (with.seed, with.looks, with.ivy_leaves);
+            let grown_kinds = MeshSink::making(meshes, |sink| {
+                terra_gen::par::map(&kinds, |&kind| {
+                    grow(kind, seed, looks, Some(ivy_leaves), sink)
+                })
+            });
+            let mut models = Vec::new();
+            for (model, trunk, seen) in grown_kinds {
+                shapes.remember(&model.wood[0], trunk);
+                shapes.remember(&model.crown_near, seen);
+                models.push(model.bare());
+            }
+            for n in 0..VETERANS.len() {
+                models.push(veteran(n, with, meshes, shapes));
+            }
+            models
         }
-        for n in 0..VETERANS.len() {
-            grown.0.push(veteran(n, with, meshes, shapes));
-        }
+    };
+    grown.0.push((with.seed, models));
+    if grown.0.len() > WORLDS_KEPT {
+        grown.0.remove(0);
     }
-    let mut trees: Vec<TreeModel> = grown.0.to_vec();
+    let mut trees: Vec<TreeModel> = grown
+        .0
+        .last()
+        .map_or_else(Vec::new, |(_, models)| models.to_vec());
     for (kind, model) in trees.iter_mut().enumerate() {
         if kind < KINDS.len() {
             let (bark, species) = materials_of(kind);

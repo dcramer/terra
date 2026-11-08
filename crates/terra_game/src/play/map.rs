@@ -110,38 +110,48 @@ fn draw_land(
     mut images: ResMut<Assets<Image>>,
 ) {
     let sea = planet.sea_radius_m();
-    let mut heights = vec![0.0; PIXELS * PIXELS];
-    let mut land = vec![[0u8; 4]; PIXELS * PIXELS];
-    for y in 0..PIXELS {
-        for x in 0..PIXELS {
-            let point = planet.ground_at(pixel_to_planet(&start, x, y));
-            heights[y * PIXELS + x] = point.length() - sea;
-        }
-    }
-    for y in 0..PIXELS {
-        for x in 0..PIXELS {
-            let height = heights[y * PIXELS + x];
-            // Light from the north-west, so hills read.
-            let west = heights[y * PIXELS + x.saturating_sub(1)];
-            let north = heights[y.saturating_sub(1) * PIXELS + x];
-            let shade = (1.0 + ((west - height) + (north - height)) * 0.35).clamp(0.6, 1.3);
-            let colour: [f32; 3] = if height < 0.0 {
-                let deep = (-height / 6.0).clamp(0.0, 1.0);
-                [0.32 - 0.12 * deep, 0.5 - 0.15 * deep, 0.62 - 0.1 * deep]
-            } else {
-                let point = planet.ground_at(pixel_to_planet(&start, x, y));
-                let cover = planet.cover(point, point.normalize());
-                let grass = cover.grass;
-                [
-                    (0.72 * (1.0 - grass) + 0.42 * grass) * shade,
-                    (0.66 * (1.0 - grass) + 0.55 * grass) * shade,
-                    (0.5 * (1.0 - grass) + 0.3 * grass) * shade,
-                ]
-            };
-            let byte = |value: f32| (value.clamp(0.0, 1.0) * 255.0) as u8;
-            land[y * PIXELS + x] = [byte(colour[0]), byte(colour[1]), byte(colour[2]), 255];
-        }
-    }
+    // A row of the map a core (D406): each pixel asks the ground once, and the colours are
+    // worked out from the heights after, a row a core again.
+    let (start, planet): (&Start, &Planet) = (&start, &planet);
+    let rows: Vec<usize> = (0..PIXELS).collect();
+    let ground: Vec<Vec3> = terra_gen::par::map(&rows, |&y| {
+        (0..PIXELS)
+            .map(|x| planet.ground_at(pixel_to_planet(start, x, y)))
+            .collect::<Vec<Vec3>>()
+    })
+    .into_iter()
+    .flatten()
+    .collect();
+    let heights: Vec<f32> = ground.iter().map(|point| point.length() - sea).collect();
+    let land: Vec<[u8; 4]> = terra_gen::par::map(&rows, |&y| {
+        (0..PIXELS)
+            .map(|x| {
+                let height = heights[y * PIXELS + x];
+                // Light from the north-west, so hills read.
+                let west = heights[y * PIXELS + x.saturating_sub(1)];
+                let north = heights[y.saturating_sub(1) * PIXELS + x];
+                let shade = (1.0 + ((west - height) + (north - height)) * 0.35).clamp(0.6, 1.3);
+                let colour: [f32; 3] = if height < 0.0 {
+                    let deep = (-height / 6.0).clamp(0.0, 1.0);
+                    [0.32 - 0.12 * deep, 0.5 - 0.15 * deep, 0.62 - 0.1 * deep]
+                } else {
+                    let point = ground[y * PIXELS + x];
+                    let cover = planet.cover(point, point.normalize());
+                    let grass = cover.grass;
+                    [
+                        (0.72 * (1.0 - grass) + 0.42 * grass) * shade,
+                        (0.66 * (1.0 - grass) + 0.55 * grass) * shade,
+                        (0.5 * (1.0 - grass) + 0.3 * grass) * shade,
+                    ]
+                };
+                let byte = |value: f32| (value.clamp(0.0, 1.0) * 255.0) as u8;
+                [byte(colour[0]), byte(colour[1]), byte(colour[2]), 255]
+            })
+            .collect::<Vec<[u8; 4]>>()
+    })
+    .into_iter()
+    .flatten()
+    .collect();
     let image = images.add(Image::new_fill(
         Extent3d {
             width: PIXELS as u32,

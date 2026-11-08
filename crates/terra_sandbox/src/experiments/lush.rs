@@ -1184,6 +1184,9 @@ fn plant(
     let (Some(planet), Some(flora), Some(sun)) = (planet, flora, sun) else {
         return;
     };
+    // Its parts timed apart (the recorder names a `terra` span as it does a system), each
+    // inside the one before, so each one's own time is its part's.
+    let _part = info_span!("lush plant", name = "looks").entered();
     // The shapes of the meshes a world left behind (its logs and stumps, its rocks loaded
     // again), which nothing will ask for again (instances j10).
     shapes.0.retain(|mesh, _| meshes.contains(*mesh));
@@ -1263,6 +1266,7 @@ fn plant(
     });
 
     // The kinds of tree, then the veteran oaks (`kinds`), in this world's materials.
+    let _part = info_span!("lush plant", name = "growing kinds").entered();
     let trees = kinds::trees(
         &mut grown,
         &kinds::Grow {
@@ -1298,6 +1302,7 @@ fn plant(
         }
     };
 
+    let _part = info_span!("lush plant", name = "placing trees").entered();
     // Grown trees, tried at random over the patch and kept if far enough from the others
     // and off the paths; then young ones in the gaps between them. Pines grow nearly
     // everywhere, spruces in the stand's hollows, where a field of noise is high, oaks in the
@@ -1531,6 +1536,7 @@ fn plant(
     }
     .tell();
 
+    let _part = info_span!("lush plant", name = "the far forest").entered();
     // The forest carried on past the meadow (D273).
     far::lay(
         far::Lay {
@@ -1551,6 +1557,7 @@ fn plant(
         &mut far_forest,
     );
 
+    let _part = info_span!("lush plant", name = "the floor").entered();
     // The floor under the trees, and the map the grass grows by (D246).
     let occluders = SkyOccluders {
         middle: start,

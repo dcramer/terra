@@ -6,7 +6,8 @@
 // type and resources equal trip 1's exactly, and the GPU's memory and the process's resident
 // memory are within 2% of trip 1's; what lives (creatures, D469) is counted apart, by kind, and
 // each kind living before the first trip lives after every return; in the realm, what of the
-// forest is still there is listed;
+// forest is still there is listed; every crossing is over within 3 s (D501), as the game
+// measured it;
 // the forest's state before the first trip and after the last differs only in the player's
 // place. Says each crossing's time, as the game measured it (step through to play).
 //
@@ -29,6 +30,8 @@ const TRIPS = value("--trips", 5);
 // Game seconds let pass in each world before its census, for what streams in round the eye.
 const SETTLE_S = value("--settle", 5);
 const MEMORY_SLACK = 0.02;
+// The longest a crossing's cover may last, s (D501).
+const COVER_S = 3;
 
 type Census = {
   entities: Record<string, number>;
@@ -58,6 +61,7 @@ const living = (c: Census) =>
 // Each kind living in the forest as it was first entered is living there after a return.
 const lost = (first: Census, home: Census) => Object.keys(first.living ?? {}).filter((kind) => !(home.living ?? {})[kind]);
 
+const slow: string[] = [];
 let entered = 0;
 let line = 0;
 /// Through the nearest portal, then the census once the next world plays and has settled.
@@ -69,6 +73,9 @@ async function cross(): Promise<{ census: Census; took: string }> {
   const heard = await said(line, "Portal: crossed", 4);
   line = heard.next_line;
   const took = heard.lines.map((l) => l.text.replace(/^.*Portal: /, "")).join("; ") || "(no crossing said)";
+  const seconds = Number(/ in ([0-9.]+) s/.exec(took)?.[1] ?? NaN);
+  // The game not saying how long is a failure too: the bar is held only by what it measured.
+  if (!(seconds <= COVER_S)) slow.push(`crossing ${entered} took ${Number.isNaN(seconds) ? "a time the game did not say" : `${seconds} s`}`);
   return { census: await census(), took };
 }
 
@@ -120,6 +127,10 @@ try {
   const after = await snaps.take("after");
   const diff = snaps.diff({ ...before, census: undefined }, { ...after, census: undefined }, { most: 30 });
   console.log(`forest's state, before the first trip to after the last: ${diff.join("\n  ")}`);
+  if (slow.length > 0) {
+    failed = true;
+    console.log(`FAIL: the cover lasted over ${COVER_S} s (D501): ${slow.join("; ")}. Which systems hold the long frames: add --systems.`);
+  }
   if (args.includes("--systems")) {
     // Each long frame of a crossing, by what held it.
     const { lines } = await said(0, "freeze: frame", 60).catch(() => ({ lines: [] }));

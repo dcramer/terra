@@ -83,10 +83,13 @@ pub(super) fn lay(
     });
     let edge = Noise::new(lay.seed.derive("far edge"));
     let cells = (TO_M / CELL_M).ceil() as i32;
-    let mut squares: HashMap<(i32, i32), Vec<FarCard>> = HashMap::default();
-    let mut count = [0usize; 3];
+    // A row of the grid at a time, on every core (D406): each tree is its own square's, by
+    // the seed, and asks the ground where it stands; the rows are gathered in their order,
+    // so the cards are as one thread would lay them.
     let seed = far_seed(lay.seed);
-    for i in -cells..=cells {
+    let rows: Vec<i32> = (-cells..=cells).collect();
+    let laid = terra_gen::par::map(&rows, |&i| {
+        let mut row: Vec<((i32, i32), FarCard)> = Vec::new();
         for j in -cells..=cells {
             let cell = Vec2::new(i as f32, j as f32);
             let luck = |salt: u32| hash(seed, i, j, salt);
@@ -120,27 +123,35 @@ pub(super) fn lay(
             let foot = lay
                 .planet
                 .ground_at(lay.start + lay.east * at.x + lay.south * at.y);
-            count[species as usize] += 1;
-            squares
-                .entry((
-                    (at.x / CHUNK_M).floor() as i32,
-                    (at.y / CHUNK_M).floor() as i32,
-                ))
-                .or_default()
-                .push(FarCard {
+            let square = (
+                (at.x / CHUNK_M).floor() as i32,
+                (at.y / CHUNK_M).floor() as i32,
+            );
+            row.push((
+                square,
+                FarCard {
                     foot,
                     width,
                     height,
                     kind: species as usize,
                     luck: luck(7),
                     comes_in: 0.0,
-                });
+                },
+            ));
         }
+        row
+    });
+    let mut squares: HashMap<(i32, i32), Vec<FarCard>> = HashMap::default();
+    let mut count = [0usize; 3];
+    for (square, card) in laid.into_iter().flatten() {
+        count[card.kind] += 1;
+        squares.entry(square).or_default().push(card);
     }
     let squares_count = squares.len();
-    for (_, cards) in squares {
-        // The world's far cards, cut to their trees' outlines (D396: one primitive).
-        let (mesh, middle, aabb) = far_mesh(&cards);
+    // The world's far cards, cut to their trees' outlines (D396: one primitive), a square's
+    // mesh a core.
+    let squares: Vec<Vec<FarCard>> = squares.into_values().collect();
+    for (mesh, middle, aabb) in terra_gen::par::map(&squares, |cards| far_mesh(cards)) {
         commands.spawn((
             Name::new("Far forest"),
             Mesh3d(meshes.add(mesh)),
