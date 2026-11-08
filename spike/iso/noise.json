@@ -1,0 +1,82 @@
+{
+ "forest": {
+  "share": 0.01009,
+  "spread": {
+   "luma_p50": 0,
+   "luma_p95": 0,
+   "luma_mean": 0,
+   "fine_detail": 0,
+   "saturation": 0.0001,
+   "dark_share": 0.0001,
+   "mid_share": 0.0001,
+   "bright_share": 0
+  },
+  "shots": 3,
+  "rev": "029d8fbbd",
+  "at": "2026-11-08T00:45:55.678Z"
+ },
+ "marsh": {
+  "share": 0.00011,
+  "spread": {
+   "luma_p50": 0,
+   "luma_p95": 0,
+   "luma_mean": 0,
+   "fine_detail": 0,
+   "saturation": 0,
+   "dark_share": 0.0001,
+   "mid_share": 0.0001,
+   "bright_share": 0
+  },
+  "shots": 3,
+  "rev": "029d8fbbd",
+  "at": "2026-11-08T00:45:56.418Z"
+ },
+ "neon-street": {
+  "share": 0.04243,
+  "spread": {
+   "luma_p50": 0.0002,
+   "luma_p95": 0.0008,
+   "luma_mean": 0.0004,
+   "fine_detail": 0.0001,
+   "saturation": 0.0005,
+   "dark_share": 0.0022,
+   "mid_share": 0.0023,
+   "bright_share": 0.0001
+  },
+  "shots": 3,
+  "rev": "029d8fbbd",
+  "at": "2026-11-08T00:45:57.353Z"
+ },
+ "ruin": {
+  "share": 0.00008,
+  "spread": {
+   "luma_p50": 0,
+   "luma_p95": 0,
+   "luma_mean": 0,
+   "fine_detail": 0.0001,
+   "saturation": 0,
+   "dark_share": 0.0001,
+   "mid_share": 0,
+   "bright_share": 0.0001
+  },
+  "shots": 3,
+  "rev": "029d8fbbd",
+  "at": "2026-11-08T00:45:58.111Z"
+ },
+ "wasteland": {
+  "share": 0.01082,
+  "spread": {
+   "luma_p50": 0,
+   "luma_p95": 0,
+   "luma_mean": 0,
+   "fine_detail": 0,
+   "saturation": 0,
+   "dark_share": 0,
+   "mid_share": 0,
+   "bright_share": 0
+  },
+  "shots": 3,
+  "rev": "029d8fbbd",
+  "at": "2026-11-08T00:45:58.853Z"
+ }
+}

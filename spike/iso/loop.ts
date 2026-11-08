@@ -44,8 +44,10 @@ export const PIXEL_SHARE = 0.005;
 /** A biome's own noise (uc-infra): `noise` shoots it N times on one commit and keeps, in
  * spike/iso/noise.json, the most pixels any two shots differ by and each measure's spread;
  * a still changed only past this many times that, so a plain re-shoot is "same" (the forest's
- * wind and clips differ 1.2-2.4% between shots, the neon street's probe up to 9%). */
-export const NOISE_MARGIN = 1.5;
+ * wind and clips differ 1.2-2.4% between shots, the neon street's probe up to 9%). Shots in
+ * one worker job differ less than shots of separate jobs (uc-infra, 7d65ed9c0's code: forest
+ * 1.01% in one job, 2.41% across two; neon 4.24% against 8.96%), so the margin is 2.5. */
+export const NOISE_MARGIN = 2.5;
 const NOISE = join(ROOT, "spike/iso/noise.json");
 
 /** What a biome's shots of one commit differ by: the most pixels of any two, each measure's

@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { barOf, blindOrder, delta, EPS, type History, isChanged, newerKept, noiseOf, outcome, type Pair, parseBiome, PIXEL_SHARE, PLAIN, pixelShare, refRanges, reserveRound, type Round, runNotes, script, shotAgainst, type Side, staleAgainst, statsLine, testResult, updateHistory, verdict, winnerOf } from "./loop.ts";
+import { barOf, blindOrder, delta, EPS, type History, isChanged, newerKept, NOISE_MARGIN, noiseOf, outcome, type Pair, parseBiome, PIXEL_SHARE, PLAIN, pixelShare, refRanges, reserveRound, type Round, runNotes, script, shotAgainst, type Side, staleAgainst, statsLine, testResult, updateHistory, verdict, winnerOf } from "./loop.ts";
 
 const pair = (a: Side, winner?: Side | "same", margin?: Pair["margin"]): Pair => ({ folder: "f", brief: "b", a, winner, margin });
 const changed = (...pairs: Pair[]) => ({ changed: true, pairs });
@@ -248,22 +248,23 @@ test("a biome's own noise lifts its bars: a plain re-shoot within it is the same
   assert.equal(n.share, 0.03);
   assert.equal(n.shots, 3);
   const bar = barOf(n);
-  assert.equal(bar.share, 0.045, "the most two shots differ by, times the margin");
-  assert.equal(isChanged({}, 0.04, bar), false, "a re-shoot within the noise is the same");
-  assert.equal(isChanged({}, 0.04), true, "the plain bar would have asked for judges");
-  assert.equal(isChanged({}, 0.06, bar), true);
+  assert.ok(NOISE_MARGIN > 1);
+  assert.equal(bar.share, 0.03 * NOISE_MARGIN, "the most two shots differ by, times the margin");
+  assert.equal(isChanged({}, 0.03 * NOISE_MARGIN - 0.001, bar), false, "a re-shoot within the noise is the same");
+  assert.equal(isChanged({}, 0.03), true, "the plain bar would have asked for judges");
+  assert.equal(isChanged({}, 0.03 * NOISE_MARGIN + 0.001, bar), true);
   // A measure's spread lifts only that measure's bar; the plain one stays the floor.
   const spread = barOf({ ...n, spread: { dark_share: 0.004, saturation: 0.0001 }, share: 0.001 });
   assert.equal(spread.share, PIXEL_SHARE);
-  assert.equal(spread.eps.dark_share, 0.006);
+  assert.equal(spread.eps.dark_share, Math.round(0.004 * NOISE_MARGIN * 1e4) / 1e4);
   assert.equal(spread.eps.saturation, EPS);
-  assert.equal(isChanged({ dark_share: 0.005 }, 0, spread), false);
-  assert.equal(isChanged({ dark_share: 0.007 }, 0, spread), true);
+  assert.equal(isChanged({ dark_share: 0.004 * NOISE_MARGIN - 0.0005 }, 0, spread), false);
+  assert.equal(isChanged({ dark_share: 0.004 * NOISE_MARGIN + 0.0005 }, 0, spread), true);
   assert.equal(isChanged({ luma_p95: 0.002 }, 0, spread), true, "a measure with no spread keeps the plain bar");
   assert.equal(barOf(undefined), PLAIN);
   assert.throws(() => noiseOf([im(1)], "abc", "t"), /two shots/);
-  const line = statsLine("neon-street", S, null, { round: "k", delta: {}, share: 0.04, bar });
-  assert.match(line, /same as kept k \(its noise: 4\.50% px\)$/);
+  const line = statsLine("neon-street", S, null, { round: "k", delta: {}, share: 0.03, bar });
+  assert.match(line, new RegExp(`same as kept k \\(its noise: ${(3 * NOISE_MARGIN).toFixed(2)}% px\\)$`));
 });
 
 test("the noise script shoots each biome N times and no film", () => {
