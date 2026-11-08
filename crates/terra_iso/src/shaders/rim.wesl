@@ -144,6 +144,18 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let base = pbr_input.material.base_color.rgb;
     let grey = vec3<f32>(dot(base, vec3<f32>(0.2126, 0.7152, 0.0722)));
     pbr_input.material.base_color = vec4<f32>(mix(base, grey, metal.x * pbr_input.material.metallic), pbr_input.material.base_color.a);
+    // A fighter's metal mirrors the sky only where its reflection points up (rim.rs
+    // `Fighter::with_sky`): the rest of what it reflects is the wood about it, `metal.y`
+    // darker than the sky. Bevy's ambient light is one colour from every direction, so a
+    // plate's sides mirrored the sky as brightly as its top, an even white (iso-hero j9's
+    // judges); this is a horizon occlusion of the reflection, as Marmoset's (Russell,
+    // Horizon Occlusion for Normal Mapped Reflections, 2015) fades what dips below it. A
+    // metal texel's ambient light is all reflection (its diffuse colour is none), so its
+    // diffuse occlusion carries it; the environment map's, where a biome has one, too.
+    let reflected = reflect(-pbr_input.V, pbr_input.N);
+    let sky_seen = mix(1.0 - metal.y, 1.0, smoothstep(0.0, 0.7, reflected.y));
+    pbr_input.diffuse_occlusion *= vec3<f32>(mix(1.0, sky_seen, pbr_input.material.metallic));
+    pbr_input.specular_occlusion *= sky_seen;
     // The fresnel of the mesh's own normal, not the normal map's: the map's fur and folds
     // graze the view all over a hunched body seen from above, frosting it whole instead of
     // edging it (iso-art j28).

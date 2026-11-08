@@ -48,6 +48,13 @@ const LOOK: &str = "knight_cloth";
 /// his plate's brightest tenth read chroma 10.9 at hue 133, mint, beside the staged Tripo
 /// knight's 2.2 (forest --play, iso-hero j5).
 const STEEL: f32 = 1.0;
+/// The wood's brightness beside and below him, a share of the sky's, in his plate's
+/// reflection (rim.rs `Fighter::with_sky`). Forest --play (iso-hero j10), sunlit legs at
+/// frame 30: all-pixel L* 33.8 and 46% of the crop pale grey at 1.0 (the sky all round);
+/// 28.4 and 23% at 0.3; 26.0 and 17% at 0.1; the Tripo knight 20.2 and 6%. In shade, the
+/// body 20.5, 17.9, 16.8 against his 21.5: 0.3 darkens the sun's plate without sinking the
+/// shade's below his.
+const SKY: f32 = 0.3;
 const SWORD: &str = "models/held/arming_sword.glb";
 const SHIELD: &str = "models/held/heater_shield.glb";
 
@@ -177,10 +184,11 @@ fn lit_once_in(commands: &mut Commands, body: Entity, looks: &[Entity]) {
                 };
                 left.0 = left.0.saturating_sub(1);
                 if left.0 == 0 {
-                    commands
-                        .entity(body)
-                        .remove::<Dressing>()
-                        .insert(crate::rim::Fighter::default().with_steel(STEEL));
+                    commands.entity(body).remove::<Dressing>().insert(
+                        crate::rim::Fighter::default()
+                            .with_steel(STEEL)
+                            .with_sky(SKY),
+                    );
                 }
             },
         );
