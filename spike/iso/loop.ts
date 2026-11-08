@@ -102,7 +102,7 @@ export type Entry = {
   score?: { overall: number; gaps: string };
   film?: string;
 };
-export type Round = { at: string; rev: string; dirty: boolean; job: string; biomes: Record<string, Entry>; verdict?: { result: "KEEP" | "REVERT"; losers: string[]; at: string; rebased?: string } };
+export type Round = { at: string; rev: string; dirty: boolean; job: string; biomes: Record<string, Entry>; verdict?: { result: "KEEP" | "REVERT" | "DROP"; losers: string[]; at: string; rebased?: string; dropped?: string } };
 export type Kept = { round: string; still: string; stats: Stats };
 export type History = { kept: Record<string, Kept>; rounds: Record<string, Round> };
 
@@ -716,13 +716,40 @@ function rebase(argv: string[], say: (l: string) => void) {
   say(`KEEP ${round} unjudged as the kept stills of ${Object.keys(rnd!.biomes).join(", ")}: ${why}`);
 }
 
+/** The biomes of `round` with an answered pair that still says something: one judged against
+ * a kept still since replaced says nothing of the new one (staleAgainst), so it may be dropped. */
+export function liveAnswers(h: Pick<History, "kept" | "rounds">, round: string): string[] {
+  const stale = staleAgainst(h, round).changed;
+  return Object.entries(h.rounds[round]?.biomes ?? {}).filter(([b, e]) => e.pairs.some((p) => p.winner) && !stale.includes(b)).map(([b]) => b);
+}
+
+/** Closes a round no judge will answer (a plain re-shoot, a withdrawn or superseded change, a
+ * film-only round) as DROP, said why: its stills are never kept and nothing measures against it
+ * (shotAgainst reads only KEEPs). A round a judge answered closes by its pairs instead. */
+function drop(argv: string[], say: (l: string) => void) {
+  const [round, ...words] = argv;
+  const why = words.join(" ").trim();
+  const h = loadHistory(say);
+  const rnd = h.rounds[round];
+  if (!rnd) fail(`no round ${round}: \`node spike/iso/loop.ts history\` lists them`);
+  if (!why) fail(`drop needs its why (a plain re-shoot, withdrawn, superseded by a later round): drop ${round} "<why>"`);
+  if (rnd!.verdict) fail(`${round} is closed already (${rnd!.verdict.result}${rnd!.verdict.dropped ? `: ${rnd!.verdict.dropped}` : ""}); a verdict is changed by \`verdict ${round} [--revert]\`, never dropped over`);
+  const live = liveAnswers(h, round);
+  if (live.length) fail(`${round}'s ${live.join(", ")} ${live.length > 1 ? "have" : "has"} a judge's answer, so the round closes by its pairs (D634): \`node spike/iso/loop.ts verdict ${round}\`, or \`verdict ${round} --revert\` when the change was undone or cannot win; drop is for rounds no judge answered`);
+  const said = { result: "DROP" as const, losers: [], at: new Date().toISOString(), dropped: why };
+  updateHistory(HISTORY, (now) => {
+    now.rounds[round].verdict = said;
+  });
+  say(`DROP ${round} unjudged, its stills not kept: ${why}`);
+}
+
 function history(say: (l: string) => void) {
   const h = loadHistory(say);
   const names = [...new Set([...Object.keys(h.kept), ...Object.values(h.rounds).flatMap((r) => Object.keys(r.biomes))])].sort();
   for (const b of names) {
     const cells = Object.entries(h.rounds).filter(([, r]) => r.biomes[b]).map(([name, r]) => {
       const e = r.biomes[b];
-      const o = r.verdict?.rebased ? "unjudged" : outcome(e);
+      const o = r.verdict?.rebased || r.verdict?.dropped ? "unjudged" : outcome(e);
       const p = e.pairs.filter((x) => x.winner).map((x) => `${x.winner}${x.margin ? " " + x.margin : ""}`).join("/");
       const v = r.verdict ? ` ${r.verdict.result}${r.verdict.rebased ? " (rebased)" : ""}` : "";
       return `${name} ${o}${p ? ` (${p})` : ""}${e.score ? ` ${e.score.overall}` : ""}${v}`;
@@ -738,7 +765,8 @@ const USAGE = `usage: node spike/iso/loop.ts
   record <round> <biome> score <overall> "<gaps>"
   verdict <round> [--revert]                KEEP if no biome lost and a changed one won, REVERT if one lost; a round whose changes only tied is refused unless --revert
   rebase <round> "<why>"                    its stills kept unjudged, when how stills are shot changed, never the look
-  history                                   each biome's rounds, pairs, scores and kept still`;
+  drop <round> "<why>"                      closes a round no judge answered (a plain re-shoot, withdrawn, superseded) as DROP; its stills never kept
+  history                                  each biome's rounds, pairs, scores and kept still`;
 
 export function main(argv: string[], say = (l: string) => console.log(l)): number {
   const [cmd, ...rest] = argv;
@@ -748,6 +776,7 @@ export function main(argv: string[], say = (l: string) => console.log(l)): numbe
     else if (cmd === "record") record(rest, say);
     else if (cmd === "verdict") judgeVerdict(rest, say);
     else if (cmd === "rebase") rebase(rest, say);
+    else if (cmd === "drop") drop(rest, say);
     else if (cmd === "history") history(say);
     else return say(USAGE), 2;
     return 0;

@@ -310,3 +310,41 @@ test("a re-judge replaces a pair's answer, keeps the earlier one and warns when 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("drop closes a round no judge answered as DROP, never one a judge answered unless its kept still was replaced", () => {
+  const dir = mkdtempSync(join(tmpdir(), "iso-drop-"));
+  try {
+    const h: History = {
+      kept: { ruin: { round: "r0", still: "k", stats: {} as never } },
+      rounds: {
+        r0: { at: "2026-11-07T08:00:00Z", rev: "a", dirty: false, job: "j", biomes: { ruin: { still: "s0", stats: {} as never, changed: true, pairs: [pair("new", "new", "clear")] } }, verdict: { result: "KEEP", losers: [], at: "2026-11-07T08:01:00Z" } },
+        r1: { at: "2026-11-07T09:00:00Z", rev: "b", dirty: false, job: "j", biomes: { ruin: { still: "s1", stats: {} as never, changed: true, against: "r0", pairs: [pair("new")] } } },
+        r2: { at: "2026-11-07T09:10:00Z", rev: "c", dirty: false, job: "j", biomes: { ruin: { still: "s2", stats: {} as never, changed: true, against: "r0", pairs: [pair("new", "kept", "slight"), pair("kept")] } } },
+      },
+    };
+    writeFileSync(join(dir, "history.json"), JSON.stringify(h));
+    const run = (...args: string[]) => spawnSync(process.execPath, [join(import.meta.dirname, "loop.ts"), "drop", ...args], { env: { ...process.env, ISO_KIT_HOME: dir }, encoding: "utf8" });
+    assert.equal(run("r1").status, 1, "a drop says why");
+    const answered = run("r2", "superseded");
+    assert.equal(answered.status, 1, answered.stdout);
+    assert.match(answered.stdout, /closes by its pairs.*verdict r2 --revert/s);
+    const dropped = run("r1", "a plain re-shoot");
+    assert.equal(dropped.status, 0, dropped.stdout + dropped.stderr);
+    const after: History = JSON.parse(readFileSync(join(dir, "history.json"), "utf8"));
+    assert.deepEqual([after.rounds.r1.verdict?.result, after.rounds.r1.verdict?.dropped], ["DROP", "a plain re-shoot"]);
+    assert.equal(after.kept.ruin.round, "r0", "a dropped round's still is never kept");
+    assert.match(run("r1", "again").stdout, /closed already \(DROP: a plain re-shoot\)/);
+    // r2's answer was against r0's still; once r3 replaced it, the answer says nothing and r2 drops.
+    after.rounds.r3 = { at: "2026-11-07T09:30:00Z", rev: "d", dirty: false, job: "j", biomes: { ruin: { still: "s3", stats: {} as never, changed: true, against: "r0", pairs: [pair("new", "new", "clear")] } }, verdict: { result: "KEEP", losers: [], at: "2026-11-07T09:40:00Z" } };
+    after.kept.ruin = { round: "r3", still: "k", stats: {} as never };
+    writeFileSync(join(dir, "history.json"), JSON.stringify(after));
+    const stale = run("r2", "judged against a replaced still");
+    assert.equal(stale.status, 0, stale.stdout + stale.stderr);
+    // A later shoot measures against the last KEEP, never a DROP made after it.
+    after.rounds.r4 = { at: "2026-11-07T10:00:00Z", rev: "e", dirty: false, job: "j", biomes: { ruin: { still: "s4", stats: {} as never, changed: false, pairs: [] } } };
+    after.rounds.r1.verdict = { result: "DROP", losers: [], at: "2026-11-07T09:50:00Z", dropped: "x" };
+    assert.equal(shotAgainst(after, "r4", "ruin"), "r3");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
