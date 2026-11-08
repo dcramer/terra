@@ -273,3 +273,40 @@ test("the noise script shoots each biome N times and no film", () => {
   assert.ok(!sh.includes("--film"));
   assert.ok(script(["ruin"], false).includes("--shot $d/ruin.png"));
 });
+
+test("a re-judge replaces a pair's answer, keeps the earlier one and warns when the verdict no longer follows", () => {
+  const dir = mkdtempSync(join(tmpdir(), "iso-rejudge-"));
+  try {
+    // Round 261107-1544's shape: kept on a non-blind judge's slight win both orders.
+    const h: History = {
+      kept: {},
+      rounds: {
+        r1: { at: "2026-11-07T09:00:00Z", rev: "b", dirty: false, job: "j", biomes: { forest: { still: "s", stats: {} as never, changed: true, pairs: [pair("kept", "new", "slight"), pair("new", "new", "slight")] } }, verdict: { result: "KEEP", losers: [], at: "2026-11-07T09:10:00Z" } },
+      },
+    };
+    writeFileSync(join(dir, "history.json"), JSON.stringify(h));
+    const run = (...args: string[]) => spawnSync(process.execPath, [join(import.meta.dirname, "loop.ts"), "record", "r1", "forest", "pair", ...args], { env: { ...process.env, ISO_KIT_HOME: dir }, encoding: "utf8" });
+    const plain = run("same", "slight");
+    assert.equal(plain.status, 1, "without --rejudge an answered pair is not overwritten");
+    assert.match(plain.stdout, /--rejudge/);
+    assert.equal(run("A", "slight", "--rejudge", "3").status, 1, "there is no pair 3");
+    const first = run("same", "slight", "--rejudge");
+    assert.equal(first.status, 0, first.stdout + first.stderr);
+    assert.match(first.stdout, /pair 1 re-judged.*\n.*warning: r1's verdict was KEEP, its pairs now say TIED/);
+    const second = run("--rejudge", "2", "same", "slight");
+    assert.equal(second.status, 0, second.stdout + second.stderr);
+    const after: History = JSON.parse(readFileSync(join(dir, "history.json"), "utf8"));
+    const [p1, p2] = after.rounds.r1.biomes.forest.pairs;
+    assert.deepEqual([p1.winner, p1.earlier], ["same", [{ winner: "new", margin: "slight" }]]);
+    assert.deepEqual([p2.winner, p2.earlier], ["same", [{ winner: "new", margin: "slight" }]]);
+    assert.equal(outcome(after.rounds.r1.biomes.forest), "tie");
+    // A blind answer that agrees with the verdict warns of nothing.
+    h.rounds.r1.biomes.forest.pairs = [pair("kept", "new", "clear")];
+    writeFileSync(join(dir, "history.json"), JSON.stringify(h));
+    const agrees = run("B", "strong", "--rejudge", "1");
+    assert.equal(agrees.status, 0, agrees.stdout + agrees.stderr);
+    assert.doesNotMatch(agrees.stdout, /warning/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

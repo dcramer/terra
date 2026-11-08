@@ -86,7 +86,8 @@ function loadNoise(): Record<string, Noise> {
 
 export type Margin = "slight" | "clear" | "strong";
 export type Side = "new" | "kept";
-export type Pair = { folder: string; brief: string; a: Side; winner?: Side | "same"; margin?: Margin };
+/** `earlier`: answers a re-judge replaced (a non-blind judge's, say), oldest first. */
+export type Pair = { folder: string; brief: string; a: Side; winner?: Side | "same"; margin?: Margin; earlier?: { winner: Side | "same"; margin?: Margin }[] };
 export type Entry = {
   still: string;
   stats: Stats;
@@ -569,15 +570,26 @@ function record(argv: string[], say: (l: string) => void) {
     e!.score = { overall, gaps: rest.slice(1).join(" ") };
     say(`${biome} ${round}: score ${overall} recorded`);
   } else if (what === "pair") {
-    const p = e!.pairs.find((x) => !x.winner);
-    if (!p) fail(`${biome} in ${round} has no pair waiting for an answer (${e!.changed === false ? "it tied its kept still unchanged" : "each is answered"})`);
-    const margin = rest[1] as Margin | undefined;
-    if (rest[0]?.toUpperCase() !== "SAME" && !["slight", "clear", "strong"].includes(margin ?? "")) fail(`a pair's answer needs its margin: record ${round} ${biome} pair <A|B|same> <slight|clear|strong>`);
-    p!.winner = winnerOf(rest[0] ?? "", p!.a);
+    const r = rest.indexOf("--rejudge");
+    const which = r >= 0 && /^\d+$/.test(rest[r + 1] ?? "") ? Number(rest[r + 1]) : 1;
+    const args = r < 0 ? rest : rest.filter((_, i) => i !== r && !(i === r + 1 && /^\d+$/.test(rest[i])));
+    const p = r >= 0 ? e!.pairs[which - 1] : e!.pairs.find((x) => !x.winner);
+    if (r >= 0 && !p?.winner) fail(`${biome} in ${round} has no answered pair ${which} to re-judge (${e!.pairs.length} pair${e!.pairs.length === 1 ? "" : "s"}); an unanswered pair is recorded without --rejudge`);
+    if (!p) fail(`${biome} in ${round} has no pair waiting for an answer (${e!.changed === false ? "it tied its kept still unchanged" : "each is answered"}); a blind judge's answer over an earlier one: record ${round} ${biome} pair <A|B|same> <margin> --rejudge <n>`);
+    const margin = args[1] as Margin | undefined;
+    if (args[0]?.toUpperCase() !== "SAME" && !["slight", "clear", "strong"].includes(margin ?? "")) fail(`a pair's answer needs its margin: record ${round} ${biome} pair <A|B|same> <slight|clear|strong>`);
+    if (r >= 0) p!.earlier = [...(p!.earlier ?? []), { winner: p!.winner!, margin: p!.margin }];
+    p!.winner = winnerOf(args[0] ?? "", p!.a);
     p!.margin = margin;
-    const n = e!.pairs.length;
-    say(`${biome} ${round}: pair ${n} recorded`);
-    if (n === 1 && p!.winner !== "same" && margin === "slight") {
+    const n = r >= 0 ? which : e!.pairs.length;
+    say(`${biome} ${round}: pair ${n} ${r >= 0 ? `re-judged (was ${p!.earlier!.at(-1)!.winner} ${p!.earlier!.at(-1)!.margin ?? ""})` : "recorded"}`);
+    const said = h.rounds[round].verdict;
+    const now = verdict({ ...h.rounds[round].biomes, [biome]: e! }).result;
+    if (said && !said.rebased && now && (now === "KEEP") !== (said.result === "KEEP"))
+      say(`warning: ${round}'s verdict was ${said.result}, its pairs now say ${now}: undo or redo what it did (\`git revert\` the change, then \`node spike/iso/loop.ts verdict ${round} --revert\`; or land it again and judge a new round)`);
+    if (r >= 0 && n === 1 && e!.pairs[1]?.winner && p!.winner !== "same" && margin === "slight")
+      say(`pair 2 keeps its earlier answer (${e!.pairs[1].winner} ${e!.pairs[1].margin ?? ""}): re-judge it too, \`record ${round} ${biome} pair <A|B|same> <margin> --rejudge 2\` (its brief ${e!.pairs[1].brief})`);
+    if (n === 1 && e!.pairs.length === 1 && p!.winner !== "same" && margin === "slight") {
       const kept = h.kept[biome];
       const q = preparePair(round, biome, e!, kept, refsOf(biome).dir);
       e!.pairs.push(q);
@@ -722,7 +734,7 @@ function history(say: (l: string) => void) {
 const USAGE = `usage: node spike/iso/loop.ts
   shoot [--biomes a,b] [--film] [--dirty]   every biome's still on the worker, measured and judged against its kept one
   noise [--biomes a,b] [--shots 3] [--dirty] each biome shot N times on one commit: its noise in spike/iso/noise.json, the bar a shoot's "same" passes
-  record <round> <biome> pair <A|B|same> <slight|clear|strong>
+  record <round> <biome> pair <A|B|same> <slight|clear|strong> [--rejudge [n]]   --rejudge: a blind answer over pair n's earlier one (kept in its "earlier")
   record <round> <biome> score <overall> "<gaps>"
   verdict <round> [--revert]                KEEP if no biome lost and a changed one won, REVERT if one lost; a round whose changes only tied is refused unless --revert
   rebase <round> "<why>"                    its stills kept unjudged, when how stills are shot changed, never the look
