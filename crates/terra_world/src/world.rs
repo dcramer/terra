@@ -32,6 +32,7 @@ impl Plugin for WorldPlugin {
         daylight::plugin(app);
         crate::realm::plugin(app);
         crate::den::plugin(app);
+        crate::land_state::plugin(app);
         crate::den_light::plugin(app);
         crate::indoor::plugin(app);
         climate::plugin(app);

@@ -87,7 +87,7 @@ On the real mover (four men walking, sprinting and jumping for 30 simulated minu
 | `terra_creatures` | Creatures, simulated only on the server, in cells any player is near | Built (`terra_creatures::net`): each creature a thing the host tells of, its kind, place, facing and what it is at, by which a joined game plays the clip itself and puts out none of its own; a joined player's blow asked of the host, a creature's blow on a guest ordered for the guest's game to take, a mark earned ordered to those by (`play::marks`). The host puts animals out round every player, a guest's body being a player there (read once: 4 within 80 m of a guest 379 m from the host's own) |
 | `terra_game` | A gate's state (D590) | An ordered operation once it is open; a joined player's ask carries the marks they bear, taken at their word until characters are the server's (`play::portal::shared`) |
 | `terra_game` | A guest's character (D592) | Its record, asked of the host every few seconds and kept with the world's save by who the player is; given back in the greeting when they come again (`play::save::guest`, `net::Host::keep`). Taken at the guest's word until the pack is the server's |
-| `terra_climate`, the sky | Nothing travels but the clock and the seed (D540) | `Welcome`, then a clock correction |
+| `terra_climate`, the sky | Nothing travels but the clock and the seed (D540) | The seed in `Welcome`; the clock said by the host every two seconds where each player stands, its day, hour and pace, which a joined game takes as its own (`net::clock`, built) |
 
 ## Tests, with no window
 

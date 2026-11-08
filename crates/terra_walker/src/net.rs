@@ -14,6 +14,7 @@
 //! The server is `terra_net`'s and knows nothing of Bevy; this is the thin side. A client that
 //! joins need not be a game at all (D73): the tests' is a few lines.
 
+pub mod clock;
 pub mod ground;
 pub mod instance;
 pub mod link;
@@ -337,6 +338,10 @@ pub fn plugin(app: &mut App) {
                 .in_set(Sim::End)
                 .after(link::show)
                 .run_if(joined),
+            clock::take
+                .in_set(Sim::End)
+                .after(link::show)
+                .run_if(joined),
             worn::unjoined.in_set(Sim::End).run_if(not(joined)),
             ground::joined.in_set(Sim::End).run_if(joined),
             ground::unjoined.in_set(Sim::End).run_if(not(joined)),
@@ -362,7 +367,7 @@ pub fn hosting(app: &mut App) {
         FixedUpdate,
         (
             hear.in_set(Sim::Act).before(walk),
-            (looks::host, worn::host, ground::host)
+            (looks::host, worn::host, ground::host, clock::tell)
                 .in_set(Sim::End)
                 .before(tell),
             tell.in_set(Sim::End),

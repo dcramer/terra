@@ -60,6 +60,7 @@ pub mod instance;
 #[cfg(test)]
 mod joint_cracks;
 pub mod lakes;
+pub mod land_state;
 pub mod loading;
 pub mod lod;
 pub mod log_file;
