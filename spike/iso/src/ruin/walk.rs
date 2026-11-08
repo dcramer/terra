@@ -31,7 +31,7 @@ pub enum Floor {
 }
 
 impl Floor {
-    fn at(self, p: Vec2) -> f32 {
+    pub fn at(self, p: Vec2) -> f32 {
         match self {
             Floor::Flat(y) => y,
             Floor::Shape(f) => f(p),

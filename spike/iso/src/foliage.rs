@@ -96,7 +96,10 @@ fn breathe(
     mats: Res<Mats>,
     mut materials: ResMut<Assets<FoliageMaterial>>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
-    party: Query<&GlobalTransform, Or<(With<Member>, With<Seen>)>>,
+    party: Query<
+        (&GlobalTransform, Option<&crate::ruin::walk::WalkIn>),
+        Or<(With<Member>, With<Seen>)>,
+    >,
     land: Res<crate::terrain::Land>,
     frames: Res<bevy::diagnostic::FrameCount>,
 ) {
@@ -107,8 +110,19 @@ fn breathe(
     let mut at = [Vec4::ZERO; 6];
     let fire = crate::scene::FIRE;
     at[0] = Vec3::new(fire.x, land.height(fire) + 0.6, fire.y).extend(1.0);
-    for (slot, t) in at[1..].iter_mut().zip(&party) {
-        *slot = (t.translation() + Vec3::Y * 0.9).extend(1.0);
+    // Each of them, and where one walking in to fight will stand (ruin/walk.rs): the film's
+    // hero walks in under the oak before the fight, which a still shows open about him; cut
+    // only about him as he goes, it stood shut over the camp till he got there, a flat green
+    // burst of leaf cards over the forest film's first 2 to 3 s. In a still he stands at his
+    // walk's end, so the second hole is the first's.
+    let places = party.iter().flat_map(|(t, walk)| {
+        let end = walk
+            .filter(|w| w.fight)
+            .map(|w| w.to.extend(w.floor.at(w.to)).xzy());
+        std::iter::once(t.translation()).chain(end)
+    });
+    for (slot, p) in at[1..].iter_mut().zip(places) {
+        *slot = (p + Vec3::Y * 0.9).extend(1.0);
     }
     let t = time.elapsed_secs_wrapped();
     for h in &mats.0 {
