@@ -179,6 +179,18 @@ try {
   await until(`the host holds ${held} and the friend's game says ${JSON.stringify(hands(friend))} and has ${net(friend).puppets.length} puppets`, () => (hands(friend).others[0]?.main ?? null) === held, 30);
   console.log(`✓ what each holds is shown in the other's game: the friend's torch on the host's guest, the host's ${held ?? "empty hand"} on the friend's puppet`);
 
+  // A tree felled is felled for both (netcode.md, step 5): the host fells the trees round
+  // where they stand, and in the friend's game they are gone: asked to fell them there, it
+  // finds none.
+  type Felled = { felled: number };
+  const round = JSON.stringify({ at: beside, within: 60 });
+  const cut = (JSON.parse(remote(host, "call", "world.fell", round)) as Felled).felled;
+  if (cut === 0) throw new Error(`no tree stands within 60 m of the host at ${beside.map((x) => x.toFixed(0)).join(", ")} to fell: the check needs woods round the players`);
+  await sleep(4);
+  const left = (JSON.parse(remote(friend, "call", "world.fell", round)) as Felled).felled;
+  if (left > 0) throw new Error(`the host felled ${cut} trees round the players and ${left} of them still stood in the friend's game: the host orders each felled tree where it stood, and a joined game fells it again (terra_walker::net::woods)`);
+  console.log(`✓ a tree felled is felled for both: the host felled ${cut} round the players, and none of them stood in the friend's game`);
+
   // Creatures are the host's (netcode.md, step 5): the friend's game puts out none of its
   // own and shows the host's, each where the host has it.
   type Animal = { name: string; at: Place };

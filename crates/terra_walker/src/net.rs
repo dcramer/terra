@@ -21,6 +21,7 @@ pub mod link;
 pub mod looks;
 pub mod remote;
 pub mod session;
+pub mod woods;
 pub mod worn;
 
 use crate::intent::Intent;
@@ -361,6 +362,10 @@ pub fn plugin(app: &mut App) {
                 .run_if(joined),
             worn::unjoined.in_set(Sim::End).run_if(not(joined)),
             ground::joined.in_set(Sim::End).run_if(joined),
+            woods::joined
+                .in_set(Sim::End)
+                .after(link::show)
+                .run_if(joined),
             ground::unjoined.in_set(Sim::End).run_if(not(joined)),
         ),
     )
@@ -380,11 +385,18 @@ pub fn plugin(app: &mut App) {
 /// no player of its own runs too (`instance`).
 pub fn hosting(app: &mut App) {
     let hosted = resource_exists::<Host>;
+    app.init_resource::<woods::Told>();
     app.init_resource::<ground::Ground>().add_systems(
         FixedUpdate,
         (
             hear.in_set(Sim::Act).before(walk),
-            (looks::host, worn::host, ground::host, clock::tell)
+            (
+                looks::host,
+                worn::host,
+                ground::host,
+                clock::tell,
+                woods::host,
+            )
                 .in_set(Sim::End)
                 .before(tell),
             tell.in_set(Sim::End),
