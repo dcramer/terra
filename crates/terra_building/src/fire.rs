@@ -29,6 +29,7 @@ use terra_survival::hazards::{BreathesFire, Frightful};
 use terra_world::climate::ClimateFields;
 use terra_world::daylight::Clock;
 use terra_world::fire::{Blaze, Blazes, Jet};
+use terra_world::instance::InstanceApp;
 use terra_world::remote::{method, refused};
 
 /// The base's fire, what each kind burns as, and its blazes as last worked out.
@@ -67,7 +68,8 @@ const SPLASH_TALL_M: f32 = 5.5;
 const SPLASH_WIDE_M: f32 = 4.0;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<SiteFire>().add_systems(
+    // The base's fire is its world's (D469): another world's base does not burn on with it.
+    app.init_world_resource::<SiteFire>().add_systems(
         Update,
         (kinds, breathe, burn, ease, blazes)
             .chain()
@@ -554,8 +556,16 @@ fn heat(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 /// How the base burns: how many cubes are burning, how many blazes it is drawn as, and how
 /// long the fire's last ticks took on the main thread.
 fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
-    let fire = world.resource::<SiteFire>();
-    let cubes = world.resource::<Site>().base.cubes().count();
+    // Both are the world's: there is neither while one is being made.
+    let (Some(fire), Some(site)) = (
+        world.get_resource::<SiteFire>(),
+        world.get_resource::<Site>(),
+    ) else {
+        return Err(refused(
+            "There is no base to burn while a world is being made: ask again once it is played.",
+        ));
+    };
+    let cubes = site.base.cubes().count();
     Ok(json!({
         "burning": fire.fire.burning_count(),
         "blazes": fire.blazes.len(),
@@ -642,5 +652,25 @@ mod tests {
         assert!(!world.contains_resource::<Blazes>());
         // Stepped by its tick, the fire is gathered into blazes for a drawing that is not there.
         assert!(!world.resource::<SiteFire>().blazes.is_empty());
+
+        // The fire is its world's (D469): crossed to another world, whose base is laid new,
+        // nothing burns and nothing is drawn of the base left burning. With the fire kept for
+        // the app this fails: the old base's blazes burn on in the new world.
+        use terra_world::instance::{Cross, InstanceKey, WorldSpec};
+        app.world_mut().commands().queue(Cross(WorldSpec {
+            key: InstanceKey(1),
+            kind: "world".into(),
+            seed: 2,
+        }));
+        app.world_mut().flush();
+        for _ in 0..6 {
+            app.update();
+        }
+        let fire = app.world().resource::<SiteFire>();
+        assert_eq!(fire.fire.burning_count(), 0, "the next world's base burns");
+        assert!(
+            fire.blazes.is_empty(),
+            "the old world's blazes are still drawn"
+        );
     }
 }
