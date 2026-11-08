@@ -15,6 +15,10 @@ use std::collections::HashMap;
 
 /// A line this often (frames: 5 s of a film's 30 a second).
 const EVERY: u32 = 150;
+/// A run whose hero went further than this from where he began (m) walked off from the
+/// roster (a hero film's script): its mobs are not asked to have reached him, only never
+/// to have stood stuck.
+const LEASH: f32 = 8.0;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(PostUpdate, tally);
@@ -61,11 +65,15 @@ fn tally(
     hero: Query<&Transform, With<Hero>>,
     foes: Query<(Entity, &Transform, Has<Struck>, Has<Fallen>), (With<Pose>, Without<Hero>)>,
     mut walks: Local<HashMap<Entity, Walk>>,
+    mut roam: Local<Option<(Vec2, f32)>>,
     (horde, mut exit): (Option<Res<Horde>>, MessageWriter<AppExit>),
 ) {
     let Ok(h) = hero.single() else {
         return;
     };
+    let here = h.translation.xz();
+    let (from, far) = roam.get_or_insert((here, 0.0));
+    *far = far.max(from.distance(here));
     let (mut struck, mut fallen) = (0, 0);
     for (e, tr, s, f) in &foes {
         walks
@@ -81,7 +89,7 @@ fn tally(
         info!("{}", line(frame.0, &w, struck, fallen));
         // The run's gate, once its mobs are in play (mobs.rs): its exit an error on a fail.
         if last && let Some(h) = horde {
-            match verdict(&w, h.stalls.worst) {
+            match verdict(&w, h.stalls.worst, roam.map_or(0.0, |r| r.1)) {
                 Ok(()) => info!("✓ the mobs: each walked to him, none stalled"),
                 Err(e) => {
                     error!("✗ {e}");
@@ -94,9 +102,9 @@ fn tally(
 
 /// The bar a play run's mobs meet (iso-forest-demo, D632): each reached the hero, and none
 /// stood wanting to move past `STALLED` (steer.rs `Stalls`, worst and which).
-pub fn verdict(walks: &[Walk], (stall, who): (f32, usize)) -> Result<(), String> {
+pub fn verdict(walks: &[Walk], (stall, who): (f32, usize), roamed: f32) -> Result<(), String> {
     let short = walks.iter().filter(|w| !w.reached).count();
-    if short > 0 {
+    if short > 0 && roamed <= LEASH {
         return Err(format!(
             "{short} of {} mobs never reached the hero (within {REACH} m): one is stuck on its \
              way or set down where it cannot walk to him; see the `mob N stalled` lines and \
@@ -153,11 +161,24 @@ mod tests {
             w
         };
         let good = [walked(&[8.0, 5.0, 2.0]), walked(&[-7.0, -2.0])];
-        assert_eq!(verdict(&good, (0.4, 1)), Ok(()));
-        let e = verdict(&good, (2.5, 1)).unwrap_err();
+        assert_eq!(verdict(&good, (0.4, 1), 2.0), Ok(()));
+        let e = verdict(&good, (2.5, 1), 2.0).unwrap_err();
         assert!(e.contains("mob 1 stood 2.5 s"), "{e}");
         let stuck = [good[0], walked(&[-7.0, -6.0, -6.0])];
-        let e = verdict(&stuck, (0.0, 0)).unwrap_err();
+        let e = verdict(&stuck, (0.0, 0), 2.0).unwrap_err();
         assert!(e.contains("1 of 2 mobs never reached"), "{e}");
+    }
+
+    /// A hero who walked off past the leash (a hero film's script) leaves mobs behind: they
+    /// are not asked to have reached him, but a stall still fails.
+    #[test]
+    fn a_hero_who_walks_off_is_not_waited_for() {
+        let hero = Vec2::ZERO;
+        let mut far = Walk::default();
+        far.at(Vec2::new(-7.0, 0.0), hero);
+        far.at(Vec2::new(-5.0, 0.0), hero);
+        assert!(verdict(&[far], (0.0, 0), LEASH - 1.0).is_err());
+        assert_eq!(verdict(&[far], (0.0, 0), LEASH + 12.0), Ok(()));
+        assert!(verdict(&[far], (2.5, 0), LEASH + 12.0).is_err());
     }
 }
