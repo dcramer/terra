@@ -30,13 +30,18 @@ pub const MOOSE: &str = "models/iso/moose.glb";
 /// flat salmon, so the same hue at 0.58 of it (at (0.62, 0.36, 0.22) the lit calf went
 /// orange); the boar, a pale coat untinted (near white in the fern), a wild boar's dark
 /// grey-brown: at (0.42, 0.34, 0.27) still a light tan (iso-forest-art j2, route frame
-/// 200). A beast not here keeps its model's own.
-const COATS: [(&str, Vec3); 5] = [
+/// 200). The fox and hares, the pack's bright orange and tan at glTF's sheen, were the
+/// "two orange critters" glowing in the fern's shade (loop round 261108-0708's judge): a
+/// red fox's russet and a brown hare's grey-brown, darker (iso-forest-art j3). A beast not
+/// here keeps its model's own.
+const COATS: [(&str, Vec3); 7] = [
     (MOOSE, Vec3::new(0.55, 0.38, 0.25)),
     (STAG, Vec3::new(0.55, 0.36, 0.25)),
     (HIND, Vec3::new(0.55, 0.36, 0.25)),
     (CALF, Vec3::new(0.55, 0.36, 0.25)),
     (BOAR, Vec3::new(0.32, 0.27, 0.22)),
+    (FOX, Vec3::new(0.2, 0.12, 0.07)),
+    (HARE, Vec3::new(0.12, 0.14, 0.3)),
 ];
 
 /// The coat a beast's model wears, if the table names one (`COATS`).
