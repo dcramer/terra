@@ -39,13 +39,23 @@ export function parseOutput(stdout: string): any {
   return { text: stdout };
 }
 
-export const runTripo: Tripo = (args, log) => {
+/** Minutes a Tripo command may take before it is stopped: its image call sometimes hangs at
+ * "running" for good (iso-forest-art j3, 2026-11-08), where one takes 0.2 min. */
+export const TRIPO_LIMITS: Record<string, number> = { image: 5 };
+
+export const runTripo: Tripo = (args, log) => runTripoWithin(args, log, TRIPO_LIMITS[args[0]]);
+
+export function runTripoWithin(args: string[], log: string, limitMinutes: number | undefined): ReturnType<Tripo> {
   mkdirSync(dirname(log), { recursive: true });
   const fd = openSync(log, "a");
   const start = Date.now();
-  const r = spawnSync(process.execPath, [TRIPO, ...args], { cwd: ROOT, stdio: ["ignore", "pipe", fd], encoding: "utf8", maxBuffer: 1 << 26 });
+  const timeout = limitMinutes === undefined ? undefined : Math.max(1, Math.round(limitMinutes * 60000));
+  const r = spawnSync(process.execPath, [TRIPO, ...args], { cwd: ROOT, stdio: ["ignore", "pipe", fd], encoding: "utf8", maxBuffer: 1 << 26, timeout });
   closeSync(fd);
   const minutes = (Date.now() - start) / 60000;
+  if (r.error && (r.error as NodeJS.ErrnoException).code === "ETIMEDOUT") {
+    throw new Error(`tripo.ts ${args[0]} ran past ${limitMinutes} min and was stopped (Tripo's task hangs at "running" at times; one takes well under that): run the same command again. Its log: ${relative(ROOT, log)}`);
+  }
   if (r.status !== 0) {
     const tail = readFileSync(log, "utf8").trim().split("\n").slice(-3).join("\n");
     throw new Error(`tripo.ts ${args[0]} failed (exit ${r.status}):\n${tail}\nfull log: ${relative(ROOT, log)}`);

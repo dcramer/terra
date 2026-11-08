@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { check, measure, skeleton } from "./check.ts";
 import { splice } from "./decimate.ts";
 import { type Glb, accessor, addTyped, clips, invert, pixelSize, points, pose, readGlb, sample, writeGlb } from "./gltf.ts";
-import { type Ctx, ROOT, conceptPrompt, main, parseOutput } from "./iso-art.ts";
+import { type Ctx, ROOT, TRIPO_LIMITS, conceptPrompt, main, parseOutput, runTripoWithin } from "./iso-art.ts";
 import { budget, clipsFor } from "./kinds.ts";
 import { readAsset, readmeCost, statusTable, writeAsset } from "./ledger.ts";
 import { centre, cut, inPlace, loop, place, renameClips } from "./normalize.ts";
@@ -129,6 +129,12 @@ test("export refuses a run going the other way from the walk, and names both", (
   raw([footL, footR]);
   main(["export", "stump"], ctx);
   assert.ok(existsSync(join(ctx.root, "assets", "models", "iso", "stump.glb")), "a run the walk's way ships");
+});
+
+test("a Tripo call past its limit is stopped and says to run it again; concept's image has one", () => {
+  const log = join(mkdtempSync(join(tmpdir(), "iso-art-")), "slow.log");
+  assert.throws(() => runTripoWithin(["balance"], log, 1e-5), /tripo.ts balance ran past [0-9.e-]+ min and was stopped .* run the same command again/);
+  assert.ok(TRIPO_LIMITS.image > 0 && TRIPO_LIMITS.image <= 10, `image limit ${TRIPO_LIMITS.image} min`);
 });
 
 test("a model turned a quarter is seen walking toward +X, and export's root node turns it back and makes it life size", () => {
