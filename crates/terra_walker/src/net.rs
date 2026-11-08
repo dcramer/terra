@@ -367,6 +367,7 @@ pub fn plugin(app: &mut App) {
                 .after(link::show)
                 .run_if(joined),
             ground::unjoined.in_set(Sim::End).run_if(not(joined)),
+            woods::alone.in_set(Sim::End).run_if(not(joined)),
         ),
     )
     .add_systems(

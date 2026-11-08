@@ -183,13 +183,20 @@ try {
   // where they stand, and in the friend's game they are gone: asked to fell them there, it
   // finds none.
   type Felled = { felled: number };
+  // First the friend's own felling, of what stands within its reach: asked of the host,
+  // those trees are gone there too.
+  const near = JSON.stringify({ at: [beside[0] + 2, beside[1]], within: 7 });
+  const own = (JSON.parse(remote(friend, "call", "world.fell", near)) as Felled).felled;
+  await sleep(4);
+  const stood = (JSON.parse(remote(host, "call", "world.fell", near)) as Felled).felled;
+  if (own > 0 && stood > 0) throw new Error(`the friend felled ${own} trees within its reach and ${stood} still stood on the host: a joined game asks the host to fell what it fells (terra_walker::net::woods); a refusal for reach is in the host's log`);
   const round = JSON.stringify({ at: beside, within: 60 });
   const cut = (JSON.parse(remote(host, "call", "world.fell", round)) as Felled).felled;
   if (cut === 0) throw new Error(`no tree stands within 60 m of the host at ${beside.map((x) => x.toFixed(0)).join(", ")} to fell: the check needs woods round the players`);
   await sleep(4);
   const left = (JSON.parse(remote(friend, "call", "world.fell", round)) as Felled).felled;
   if (left > 0) throw new Error(`the host felled ${cut} trees round the players and ${left} of them still stood in the friend's game: the host orders each felled tree where it stood, and a joined game fells it again (terra_walker::net::woods)`);
-  console.log(`✓ a tree felled is felled for both: the host felled ${cut} round the players, and none of them stood in the friend's game`);
+  console.log(`✓ a tree felled is felled for both: the host felled ${cut} round the players, and none of them stood in the friend's game; ${own > 0 ? `the friend felled ${own} within its reach first, and none of those stood on the host` : "no tree stood within the friend's reach to fell first"}`);
 
   // Creatures are the host's (netcode.md, step 5): the friend's game puts out none of its
   // own and shows the host's, each where the host has it.

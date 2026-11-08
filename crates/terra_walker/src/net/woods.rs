@@ -107,9 +107,6 @@ pub fn joined(
     felled: FelledWoods,
     mut fell: Option<MessageWriter<FellAgain>>,
 ) {
-    if link.is_added() {
-        *told = Told::default();
-    }
     let (orders, rest): (Vec<Heard>, Vec<Heard>) =
         std::mem::take(&mut link.events).into_iter().partition(
             |event| matches!(event, Heard::Op { bytes, .. } if bytes.first() == Some(&FELLED)),
@@ -137,6 +134,14 @@ pub fn joined(
         if told.feet.insert(key(foot)) && begun {
             link.ask(&said(foot));
         }
+    }
+}
+
+/// With neither a host nor a link, what was told is forgotten: the next session begins
+/// anew. (Not by the link being new: it is taken out and put back every tick.)
+pub fn alone(mut told: ResMut<Told>, host: Option<Res<Host>>) {
+    if host.is_none() && (told.begun || !told.feet.is_empty()) {
+        *told = Told::default();
     }
 }
 
