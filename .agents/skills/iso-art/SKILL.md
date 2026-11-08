@@ -1,6 +1,6 @@
 ---
 name: iso-art
-description: Make art and biomes for Terra's 2.5D isometric experiment (iso-art, an action RPG's camera on crates/terra_iso, run by `cargo iso`): a hero, creature, NPC, prop or scenery from a description to a checked GLB with its clips by tools/iso-art over Tripo's own rig and presets (concept, model, rig, animate, export in place with cuts and loops, check, budgets, the ledger, the cost per kind); a biome scene at the ARPG camera from the repository's scanned materials, lit against measured reference frames, with effects, ambient and living nature, and its film; and judging either toward realism against each biome's drone photographs and the most realistic top-down game frames by an adversarial judge's rubric, measured stats and a blind pairwise judge (D634). Use for any task that makes, places, lights, films or judges iso art or an iso biome.
+description: Make art and biomes for Terra's 2.5D isometric experiment (iso-art, an action RPG's camera on crates/terra_iso, run by `cargo iso`): a hero, creature, NPC, prop or scenery from a description to a checked GLB with its clips by tools/iso-art over Tripo's rig, people converted onto the game's skeleton and clips, creatures on Tripo's presets (concept, model, rig, animate or convert, export in place with cuts and loops, check, budgets, the ledger, the cost per kind); a biome scene at the ARPG camera from the repository's scanned materials, lit against measured reference frames, with effects, ambient and living nature, and its film; and judging either toward realism against each biome's drone photographs and the most realistic top-down game frames by an adversarial judge's rubric, measured stats and a blind pairwise judge (D634). Use for any task that makes, places, lights, films or judges iso art or an iso biome.
 ---
 
 # Iso art
@@ -43,7 +43,7 @@ The isometric experiment's art pipeline, as it proved out from 2026-11-05 (exper
 
 ## Rules
 
-- **Tripo's rig and presets as they come** (D628): one mesh a character with its gear, never converted onto our skeleton (the character skill's traps are why). What a preset cannot do, the game adds: hit flash, flinch, hit-stop, rim light, an effect.
+- **People on the game's skeleton and clips, creatures on Tripo's** (D628, amended 2026-11-08): one mesh a character with its gear. The hero is the game's own body and moves; a cast biped is Tripo's rig file (4K, never its `export --texture-size` copy: that breaks the conversion) through `TEXTURES=1024 tools/characters/finish_character.sh NAME HEIGHT art/iso/NAME/rigged.glb` on the worker, then `iso-art.ts convert NAME FILE [--unarmed]` and `check`. A creature keeps Tripo's rig and presets as they come. What a clip cannot do, the game adds: hit flash, flinch, hit-stop, rim light, an effect.
 - **Every asset is judged at the game camera** in the scene's light, at the frame height it plays at, beside a ref at the same on-screen size. Up close is not the test.
 - **Numbers before taste**: every still gets its stats line against its biome's refs that show the same thing (the night ones for a night still); tune light to them, not by eye.
 - **A biome fills the frame**: dressed ground, framing props at the edges, depth front to back; no margin of bare ground. Materials are the repository's scans at their true size (`assets/materials/`).

@@ -1,13 +1,14 @@
 # iso-art
 
-The iso experiment's art pipeline (iso-art): a hero, creature, NPC or prop from a description to a checked GLB with its clips, through [Tripo](../tripo/README.md), one command a stage. Tripo's own rig and preset clips are played as they are, one mesh per character with its gear: no conversion onto our skeleton, which is what made main Terra's people hard ([character skill](../../.agents/skills/character/SKILL.md), its traps). TypeScript on Node 22.18+, no dependencies, no build step; `node --test tools/iso-art/iso-art.test.ts`. How an agent uses it, with the scenes and judging: the [iso-art skill](../../.agents/skills/iso-art/SKILL.md).
+The iso experiment's art pipeline (iso-art): a hero, creature, NPC or prop from a description to a checked GLB with its clips, through [Tripo](../tripo/README.md), one command a stage. One mesh per character with its gear, rigged by Tripo; a creature plays Tripo's preset clips as they are, a person the game's own, converted onto our skeleton as main Terra's people are ([character skill](../../.agents/skills/character/SKILL.md)) and kept by `convert` (D628). TypeScript on Node 22.18+, no dependencies, no build step; `node --test tools/iso-art/iso-art.test.ts`. How an agent uses it, with the scenes and judging: the [iso-art skill](../../.agents/skills/iso-art/SKILL.md).
 
 ```bash
 iso=tools/iso-art/iso-art.ts
 node $iso concept ranger --kind hero --theme "a dark-fantasy ruin at night" "a hooded ranger in worn leather and a mail shirt"
 node $iso model ranger          # 55 credits (--standard 25); refuses if the balance is short
 node $iso rig ranger            # 20; humanoid for hero and npc, as its shape reads for a creature (--body)
-node $iso animate ranger        # free: the kind's presets
+node $iso animate ranger        # free: the kind's presets (a creature)
+node $iso convert ranger FILE   # free: a person, FILE finish_character.sh's NAME-game.glb (TEXTURES=1024) off art/iso/NAME/rigged.glb, kept to the game's clips (--unarmed: a punch)
 node $iso export ranger         # free: assets/models/iso/ranger.glb
 node $iso decimate ranger [CUT] # free: over its budget, the mesh cut in Blender (or CUT, decimate.py's) and spliced in
 node $iso check ranger          # exits 1 if a check fails
