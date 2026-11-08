@@ -278,8 +278,8 @@ fn land(
         let rolled_out = tell.leaving.rolled_out;
         let Some(t) = taken((at, face), (him, his_face), doing, (held, rolled_out), set) else {
             info!(
-                "frame {}: mob {}'s blow on him: out of reach",
-                frame.0, foe.i
+                "frame {}: mob {}'s blow on him: out of reach (it at ({:.1}, {:.1}), he at ({:.1}, {:.1}))",
+                frame.0, foe.i, at.x, at.y, him.x, him.y
             );
             continue;
         };
@@ -292,10 +292,16 @@ fn land(
                 .clamp(-1.0, 1.0),
         );
         info!(
-            "frame {}: mob {}'s blow on him: {t:?} (doing {doing_now}, facing {:.0} deg off it)",
+            "frame {}: mob {}'s blow on him: {t:?} (doing {doing_now}, facing {:.0} deg off it; \
+             it at ({:.1}, {:.1}), he at ({:.1}, {:.1}), swung {:.2} s before)",
             frame.0,
             foe.i,
-            off.to_degrees()
+            off.to_degrees(),
+            at.x,
+            at.y,
+            him.x,
+            him.y,
+            now - start
         );
         let strength = match t {
             Taken::Hit | Taken::GuardBroken => 1.0,
