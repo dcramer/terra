@@ -108,17 +108,8 @@ pub fn act(
         && let Some(b) = button(ability)
         && let Some(name) = doing.runner.pressed(set, b).map(str::to_string)
     {
-        let face = match (ability, at) {
-            (Ability::Roll, _) => intent.way.normalize_or(ahead),
-            (_, Some(p)) => (p - here).normalize_or(ahead),
-            // A blow with no aim point turns to the nearest foe in reach (an action RPG's
-            // soft target), so a script's or pad's press does not swing at the air.
-            (Ability::Light | Ability::Heavy, None) => {
-                nearest(here, foes.iter().map(|(_, t)| t.translation.xz()))
-                    .map_or(ahead, |p| (p - here).normalize_or(ahead))
-            }
-            _ => ahead,
-        };
+        let target = nearest(here, foes.iter().map(|(_, t)| t.translation.xz()));
+        let face = face_for(ability, at, intent.way, (here, ahead), target);
         if doing.runner.ask(set, &name) {
             begin(&mut doing, &mut tr, face);
         } else {
@@ -201,6 +192,27 @@ pub fn nearest(here: Vec2, foes: impl Iterator<Item = Vec2>) -> Option<Vec2> {
         .map(|(_, p)| p)
 }
 
+/// The way a move asked faces as it starts: a roll along the way held (else ahead); a move
+/// aimed at a point toward it; a blow or the shield with no aim point toward the nearest foe
+/// in reach, `target` (an action RPG's soft target), so a script's or pad's press neither
+/// swings at the air nor raises the shield to the side the blow does not come from; else ahead.
+fn face_for(
+    ability: Ability,
+    at: Option<Vec2>,
+    way: Vec2,
+    (here, ahead): (Vec2, Vec2),
+    target: Option<Vec2>,
+) -> Vec2 {
+    match (ability, at) {
+        (Ability::Roll, _) => way.normalize_or(ahead),
+        (_, Some(p)) => (p - here).normalize_or(ahead),
+        (Ability::Light | Ability::Heavy | Ability::Block, None) => {
+            target.map_or(ahead, |p| (p - here).normalize_or(ahead))
+        }
+        _ => ahead,
+    }
+}
+
 /// A move starts: he turns to face its way at once.
 fn begin(doing: &mut Doing, tr: &mut Transform, face: Vec2) {
     doing.face = face;
@@ -228,6 +240,35 @@ mod tests {
         assert_eq!(nearest(here, foes.into_iter()), Some(Vec2::new(1.0, -0.5)));
         assert_eq!(nearest(here, [Vec2::new(4.5, 1.0)].into_iter()), None);
         assert_eq!(nearest(here, std::iter::empty()), None);
+    }
+
+    /// An unaimed shield turns to the nearest foe in reach as a blow does; a roll keeps to the
+    /// way held, an aimed move to its point, and with no foe in reach he keeps his facing.
+    #[test]
+    fn an_unaimed_block_faces_the_nearest_foe() {
+        let (here, ahead) = (Vec2::ZERO, Vec2::X);
+        let foe = Some(Vec2::new(0.0, 2.0));
+        for a in [Ability::Block, Ability::Light, Ability::Heavy] {
+            assert_eq!(
+                face_for(a, None, Vec2::ZERO, (here, ahead), foe),
+                Vec2::Y,
+                "{a:?}"
+            );
+            assert_eq!(
+                face_for(a, None, Vec2::ZERO, (here, ahead), None),
+                ahead,
+                "{a:?}"
+            );
+        }
+        let aimed = Some(Vec2::new(0.0, -3.0));
+        assert_eq!(
+            face_for(Ability::Block, aimed, Vec2::ZERO, (here, ahead), foe),
+            Vec2::NEG_Y
+        );
+        assert_eq!(
+            face_for(Ability::Roll, None, Vec2::NEG_X, (here, ahead), foe),
+            Vec2::NEG_X
+        );
     }
 
     #[test]
