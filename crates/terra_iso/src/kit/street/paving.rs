@@ -218,10 +218,11 @@ pub(super) fn spawn(
 }
 
 /// The street's props: each at its spots, grounded by its bounds, its feet or not at all,
-/// rimmed, posed and walked in as its entry says; a film's own left out of a still or play.
+/// rimmed, posed and walked in as its entry says; a film's own left out of a still or play,
+/// the staged fight's out of play (`Prop::stands`).
 fn props(commands: &mut Commands, asset: &AssetServer, args: &Args, st: &super::Street) {
     for p in &st.props {
-        if p.film && (args.film == 0 || args.play) {
+        if !p.stands(args.film > 0, args.play) {
             continue;
         }
         for x in &p.at {

@@ -203,7 +203,10 @@ pub enum Line {
 /// `rim` times the fighters' cold rim band (rim.rs; none at 0), so a dark figure reads off
 /// the dark wet street as the ARPGs lift theirs. Its `walk` is a film's (ruin/walk.rs); a
 /// still holds it where it stands. One only in a `film` stands in no still and in no play
-/// (play stages its own foes, play.rs): the street's fight, which a still has none of.
+/// (play stages its own foes, play.rs): the street's fight, which a still has none of. One
+/// in the `fight` stands in a still and a film but in no play: the staged fight's hero and
+/// foe (the wasteland's), whom play's own hero and roster stand in for (two knights stood in
+/// its play before, iso-hero j4).
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Prop {
@@ -225,6 +228,8 @@ pub struct Prop {
     pub walk: Option<Walk>,
     #[serde(default)]
     pub film: bool,
+    #[serde(default)]
+    pub fight: bool,
     /// Metres up from its line's floor: a wall-hung thing (an air conditioner under a
     /// window, a payphone, a lamp over a door), with no contact shadow under it.
     #[serde(default)]
@@ -245,6 +250,14 @@ pub struct Walk {
     pub to: (f32, f32),
     #[serde(default)]
     pub fight: bool,
+}
+
+impl Prop {
+    /// Whether it stands in this run: a film's own only in a film without play, the staged
+    /// fight's in no play.
+    pub fn stands(&self, film: bool, play: bool) -> bool {
+        !(self.film && (!film || play) || self.fight && play)
+    }
 }
 
 fn deep() -> f32 {
@@ -426,6 +439,26 @@ mod tests {
 
     fn neon() -> Street {
         Biome::load("neon-street").unwrap().street.unwrap()
+    }
+
+    /// Play's hero and roster are the only fighters there: no street's staged fighter (a
+    /// rigged prop walked in to fight, or posed in its attack) stands in play, while its film
+    /// keeps them (the wasteland's knight stood beside play's hero, iso-hero j4).
+    #[test]
+    fn no_staged_fighter_stands_in_play() {
+        for name in ["neon-street", "wasteland"] {
+            let st = Biome::load(name).unwrap().street.unwrap();
+            let fighter = |p: &&Prop| {
+                p.walk.as_ref().is_some_and(|w| w.fight)
+                    || p.pose.as_ref().is_some_and(|(clip, _)| clip == "attack")
+            };
+            let staged: Vec<&Prop> = st.props.iter().filter(fighter).collect();
+            assert!(!staged.is_empty(), "{name} stages no fight to test");
+            for p in staged {
+                assert!(!p.stands(true, true), "{name}: {} stands in play", p.model);
+                assert!(p.stands(true, false), "{name}: {} not in its film", p.model);
+            }
+        }
     }
 
     /// The neon street lays out: its signs hang on fronts, its props lie on the street.
