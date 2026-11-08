@@ -154,7 +154,11 @@ fn spawn(
                 .entity(body)
                 .insert(crate::ruin::fight::Toned(tone));
         }
-        horde.mobs.push(Mob::new(p));
+        // Its body the hero and the others walk round (footprint.rs takes none for it then).
+        commands
+            .entity(body)
+            .insert(footprint::Footprint(vec![(Vec2::ZERO, foe.radius)]));
+        horde.mobs.push(Mob::sized(p, foe.radius));
         horde.blows.push(0);
         horde.packs.push(foe.pack);
         horde.awake.push(false);

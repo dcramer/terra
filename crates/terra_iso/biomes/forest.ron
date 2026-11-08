@@ -98,15 +98,18 @@
     // (rim.rs `Fighter::with_fill`) the route's frames 560, 650, 1030 stand them 0.7 lighter
     // to 12.3 darker than their ring (rim 0.35 alone: 7.7 to 20.5 darker, medians 8 to 29 L*,
     // now 24 to 34), streaks 0.2 to 1.4% of a body; fill 4.0 stood two in shade 4 to 6 lighter
-    // and 1.0 left the meadow's 11 to 15 darker (iso-forest-demo j15).
+    // and 1.0 left the meadow's 11 to 15 darker (iso-forest-demo j15). `radius` is each
+    // model's standing pose's, 95% of its points from 5 to 95% of its height within it of its
+    // middle: treant-a 0.67, treant-b 0.66, tree-monster 0.81 (the 0.45 every creature had
+    // let the hero stand and roll inside their bark, iso-forest-demo j18).
     foes: [
-        (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 1.06, tone: (value: 0.12, rim: 0.35, fill: 2.0)),
-        (model: "models/iso/treant-b.glb", at: (-7.0, -3.0), walk: 0.9, tone: (value: 0.12, rim: 0.35, fill: 2.0)),
-        (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.31, tone: (value: 0.12, rim: 0.35, fill: 2.0)),
-        (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.31, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 1),
-        (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 1.06, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 1),
-        (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.9, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 2),
-        (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.31, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 2),
+        (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 1.06, tone: (value: 0.12, rim: 0.35, fill: 2.0), radius: 0.65),
+        (model: "models/iso/treant-b.glb", at: (-7.0, -3.0), walk: 0.9, tone: (value: 0.12, rim: 0.35, fill: 2.0), radius: 0.65),
+        (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.31, tone: (value: 0.12, rim: 0.35, fill: 2.0), radius: 0.8),
+        (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.31, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 1, radius: 0.8),
+        (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 1.06, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 1, radius: 0.65),
+        (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.9, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 2, radius: 0.65),
+        (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.31, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 2, radius: 0.8),
     ],
     // The staged fight's effects (biomes/effects/, kit/effects.rs).
     effects: [(preset: "slash"), (preset: "hit-spark"), (preset: "parry-ring"), (preset: "smoke-puff"), (preset: "spell-burst"), (preset: "bolt")],

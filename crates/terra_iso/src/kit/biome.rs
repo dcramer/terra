@@ -690,6 +690,16 @@ pub struct Foe {
     /// wakes at once.
     #[serde(default)]
     pub pack: u32,
+    /// Its body's radius on the ground (m): its footprint, which the hero and the other mobs
+    /// walk round, and how far off him it stands to fight (demo/steer.rs `Mob::stand`). The
+    /// standing pose's (its idle's first frame) points from 5 to 95% of its height, 95% of
+    /// them within it of its middle; a play footprint's creature circle when none.
+    #[serde(default = "body")]
+    pub radius: f32,
+}
+
+fn body() -> f32 {
+    0.45
 }
 
 fn one() -> f32 {

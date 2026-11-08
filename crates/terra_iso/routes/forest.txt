@@ -12,10 +12,11 @@
 --do block@230-255
 --do light@260 --do light@280 --do light@298 --do light@316
 
-# Pack 1, the meadow: back off and west; the block at 570 aimed at mob 4 (a parry at 584).
+# Pack 1, the meadow: back off and west; the block at 585 aimed at mob 4 (a parry at 589:
+# its blow lands within the set's parry_s 0.18 s of the raise; j20, its sized body 2.0 m off).
 --press s@350-363 --press a@364-430
 --do light@470 --do light@488 --do light@506 --do heavy@535
---do block:-4.5,9.4@570-595
+--do block:-4.5,9.4@585-598
 --do light@600 --do light@620 --do light@638 --do light@656 --do heavy@685
 --do block@720-745 --do light@750
 

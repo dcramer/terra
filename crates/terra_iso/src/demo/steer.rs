@@ -17,18 +17,27 @@ use bevy::math::Vec2;
 
 /// A walking creature's pace (m/s; the treants' walk clip strides about this).
 pub const SPEED: f32 = 1.8;
-/// A body's radius on the ground (m), as play's footprint gives a creature one circle.
+/// A body's radius on the ground (m) when its roster line names none, as play's footprint
+/// gives a creature one circle; the hero's (play/footprint.rs `BODY`).
 pub const RADIUS: f32 = 0.45;
-/// The attack ring's radius about the hero (m), inside his swing's `REACH` (play.rs), and
-/// the waiting ring's.
-pub const RING: f32 = 1.8;
+pub const HERO: f32 = crate::play::footprint::BODY;
+/// Between a body's edge and his on the attack ring (m), so a body of `RADIUS` stands its
+/// `RING` off; the waiting ring stands `WAIT - RING` further out. Each mob's ring is its own
+/// radius and his apart and this beyond (`Mob::stand`), inside his swing's `REACH` (play.rs).
+pub const GAP: f32 = 1.05;
+pub const RING: f32 = RADIUS + HERO + GAP;
 pub const WAIT: f32 = 3.8;
 /// It swings once it stands within this beyond its ring (m): its slot and a little.
 pub const SWING: f32 = 0.6;
 /// Under this speed (m/s) a body stands.
 pub const STILL: f32 = 0.2;
+/// The places on each ring a slot may take (6 on the attack ring, 60 degrees apart): a slot
+/// is held by one body and keeps every other's place its two bodies apart (`assign`), so
+/// mobs of any size fit round him and a tree on one place leaves the next for a mob.
 const INNER: usize = 6;
 const OUTER: usize = 10;
+/// Between two bodies' edges in their slots (m).
+const APART: f32 = 0.15;
 /// Near enough its slot to stand (m).
 pub const ARRIVE: f32 = 0.3;
 /// A path's corner counts as passed this near (m).
@@ -56,6 +65,11 @@ pub struct Rules {
     pub separate: bool,
     /// Plan again and sidestep after `PATIENCE` without ground covered.
     pub recover: bool,
+    /// Its slot's ring by its own radius and his (else every body's as `RADIUS`'s).
+    pub sized: bool,
+    /// A step into the hero's or another standing body's circle refused, as a prop's (else
+    /// only separation's push keeps them apart).
+    pub solid: bool,
 }
 
 impl Rules {
@@ -63,6 +77,8 @@ impl Rules {
         path: true,
         separate: true,
         recover: true,
+        sized: true,
+        solid: true,
     };
 }
 
@@ -71,6 +87,10 @@ impl Rules {
 pub struct Mob {
     pub at: Vec2,
     pub vel: Vec2,
+    /// Its body's radius on the ground (m, its roster line's), and how far from the hero it
+    /// stands in an attack slot (its radius, his and `GAP`; `Rules::sized`).
+    pub radius: f32,
+    pub stand: f32,
     /// Its slot (`slot_at`), once given one.
     pub slot: Option<usize>,
     /// Stands still until then (s): a blow's stagger.
@@ -86,9 +106,16 @@ pub struct Mob {
 
 impl Mob {
     pub fn new(at: Vec2) -> Mob {
+        Mob::sized(at, RADIUS)
+    }
+
+    /// A mob of body `radius` (m).
+    pub fn sized(at: Vec2, radius: f32) -> Mob {
         Mob {
             at,
             vel: Vec2::ZERO,
+            radius,
+            stand: radius + HERO + GAP,
             slot: None,
             hold: f32::NEG_INFINITY,
             path: Vec::new(),
@@ -102,13 +129,13 @@ impl Mob {
 
     /// Where it is going, if it wants to move: its slot, while not held and not there.
     pub fn wants(&self, hero: Vec2, now: f32) -> Option<Vec2> {
-        let goal = slot_at(hero, self.slot?);
+        let goal = slot_at(hero, self.slot?, self.stand);
         (now >= self.hold && self.at.distance(goal) > ARRIVE).then_some(goal)
     }
 
     /// How near the hero it swings from (m): its ring and `SWING`.
     pub fn reach(&self) -> f32 {
-        RING + SWING
+        self.stand + SWING
     }
 
     /// Whether it stands idle out of its reach at `now`: not held (a stagger, its own swing),
@@ -138,19 +165,17 @@ pub fn with_circles(nav: &Nav, circles: &[(Vec2, f32)]) -> Nav {
 }
 
 impl Field<'_> {
-    /// Whether a body may stand at `p`.
-    pub fn stands(&self, p: Vec2) -> bool {
+    /// Whether a body of radius `body` may stand at `p`.
+    pub fn stands(&self, p: Vec2, body: f32) -> bool {
         (self.open)(p)
             && self.nav.is_none_or(|n| n.open_at(p))
-            && self
-                .circles
-                .iter()
-                .all(|&(c, r)| p.distance(c) >= r + RADIUS)
+            && self.circles.iter().all(|&(c, r)| p.distance(c) >= r + body)
     }
 
-    /// Whether a step from `here` to `to` is refused: off the ground, or into (deeper into,
-    /// for a body already in one) a blocked cell or a circle.
-    fn refuses(&self, here: Vec2, to: Vec2) -> bool {
+    /// Whether a step of a body of radius `body` from `here` to `to` is refused: off the
+    /// ground, or into (deeper into, for a body already in one) a blocked cell, a circle or
+    /// one of `bodies` (the hero's and the other mobs', each its centre and radius).
+    fn refuses(&self, here: Vec2, to: Vec2, body: f32, bodies: &[(Vec2, f32)]) -> bool {
         if !(self.open)(to) {
             return true;
         }
@@ -160,8 +185,8 @@ impl Field<'_> {
         {
             return true;
         }
-        self.circles.iter().any(|&(c, r)| {
-            let r = r + RADIUS;
+        self.circles.iter().chain(bodies).any(|&(c, r)| {
+            let r = r + body;
             to.distance(c) < r && to.distance(c) < here.distance(c)
         })
     }
@@ -174,21 +199,22 @@ impl Field<'_> {
     }
 }
 
-/// Slot `k`'s place about the hero: the first `INNER` on the attack ring, the rest on the
-/// waiting ring between them.
-pub fn slot_at(hero: Vec2, k: usize) -> Vec2 {
+/// Slot `k`'s place about the hero for a body standing `stand` off him on the attack ring:
+/// the first `INNER` on that ring, the rest on the waiting ring between them.
+pub fn slot_at(hero: Vec2, k: usize, stand: f32) -> Vec2 {
     let (r, n, k, turn) = if k < INNER {
-        (RING, INNER, k, 0.0)
+        (stand, INNER, k, 0.0)
     } else {
-        (WAIT, OUTER, k - INNER, 0.5)
+        (stand + WAIT - RING, OUTER, k - INNER, 0.5)
     };
     let a = (k as f32 + turn) / n as f32 * std::f32::consts::TAU;
     hero + Vec2::new(libm::cosf(a), libm::sinf(a)) * r
 }
 
-/// Gives each mob a slot: nearest the hero first, each the free one nearest it that a body
-/// can stand on, the attack ring before the waiting ring; a mob keeps its own unless another
-/// is much nearer it (so they do not trade places every tick).
+/// Gives each mob a slot: nearest the hero first, each the free one nearest it that its body
+/// can stand on clear of every slot already given (their two bodies and `APART`), the attack
+/// ring before the waiting ring; a mob keeps its own unless another is much nearer it (so
+/// they do not trade places every tick).
 fn assign(mobs: &mut [Mob], hero: Vec2, field: &Field, active: &[bool], now: f32) {
     let mut order: Vec<usize> = (0..mobs.len()).filter(|&i| active[i]).collect();
     order.sort_by(|&a, &b| {
@@ -196,20 +222,31 @@ fn assign(mobs: &mut [Mob], hero: Vec2, field: &Field, active: &[bool], now: f32
         d(a).total_cmp(&d(b))
     });
     let mut taken = [false; INNER + OUTER];
+    let mut held: Vec<(Vec2, f32)> = Vec::new();
     for &i in &order {
         let m = &mobs[i];
         let banned = m.banned.filter(|b| now < b.1).map(|b| b.0);
+        let place = |k: usize| slot_at(hero, k, m.stand);
         let cost = |k: usize| {
-            let p = slot_at(hero, k);
             let ring = if k < INNER { 0.0 } else { 6.0 };
             let keep = if m.slot == Some(k) { -0.8 } else { 0.0 };
-            m.at.distance(p) + ring + keep
+            m.at.distance(place(k)) + ring + keep
+        };
+        let free = |k: usize| {
+            let p = place(k);
+            !taken[k]
+                && Some(k) != banned
+                && field.stands(p, m.radius)
+                && held
+                    .iter()
+                    .all(|&(q, r)| p.distance(q) >= r + m.radius + APART)
         };
         let best = (0..INNER + OUTER)
-            .filter(|&k| !taken[k] && Some(k) != banned && field.stands(slot_at(hero, k)))
+            .filter(|&k| free(k))
             .min_by(|&a, &b| cost(a).total_cmp(&cost(b)));
         if let Some(k) = best {
             taken[k] = true;
+            held.push((place(k), m.radius));
         }
         let m = &mut mobs[i];
         if m.slot != best {
@@ -230,8 +267,16 @@ pub fn step(
     now: f32,
     dt: f32,
 ) {
+    for m in mobs.iter_mut() {
+        m.stand = if rules.sized { m.radius } else { RADIUS } + HERO + GAP;
+    }
     assign(mobs, hero, field, active, now);
-    let places: Vec<(Vec2, bool)> = mobs.iter().zip(active).map(|(m, a)| (m.at, *a)).collect();
+    // Each body as it stands, kept up to date as each moves (so two never step into one place).
+    let mut places: Vec<(Vec2, f32, bool)> = mobs
+        .iter()
+        .zip(active)
+        .map(|(m, a)| (m.at, m.radius, *a))
+        .collect();
     for (i, m) in mobs.iter_mut().enumerate() {
         if !active[i] {
             m.vel = Vec2::ZERO;
@@ -277,14 +322,33 @@ pub fn step(
                     m.sidestep = None;
                 }
             }
-            want += avoid(m.at, want, field.circles);
+            want += avoid(m.at, m.radius, want, field.circles);
         }
         if rules.separate {
-            want += separate(i, m.at, &places, hero) * if goal.is_some() { 1.0 } else { 0.6 };
+            want += separate(i, m, &places, hero) * if goal.is_some() { 1.0 } else { 0.6 };
         }
         let k = (ACCEL * dt).min(1.0);
         m.vel = (m.vel + (want - m.vel) * k).clamp_length_max(SPEED * 1.2);
-        m.at = slide(field, m.at, m.vel * dt);
+        let bodies: Vec<(Vec2, f32)> = if rules.solid {
+            std::iter::once((hero, HERO))
+                .chain(
+                    places
+                        .iter()
+                        .enumerate()
+                        .filter(|(j, p)| *j != i && p.2)
+                        .map(|(_, p)| (p.0, p.1)),
+                )
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let to = slide(field, m.at, m.radius, &bodies, m.vel * dt);
+        // A body it was refused by stops it, as a wall does (its walk not played in place).
+        if rules.solid {
+            m.vel = (to - m.at) / dt;
+        }
+        m.at = to;
+        places[i].0 = to;
         // Stuck: no stride covered for `PATIENCE` while wanting to move.
         if goal.is_none() || m.at.distance(m.anchor.0) >= STRIDE {
             if goal.is_none() {
@@ -314,7 +378,7 @@ pub fn step(
 
 /// Reynolds' obstacle avoidance: each circle ahead within `AHEAD` along the way it wants,
 /// whose edge (padded by its body) the way passes inside, turns it aside, harder the nearer.
-fn avoid(at: Vec2, want: Vec2, circles: &[(Vec2, f32)]) -> Vec2 {
+fn avoid(at: Vec2, body: f32, want: Vec2, circles: &[(Vec2, f32)]) -> Vec2 {
     let Some(ahead) = want.try_normalize() else {
         return Vec2::ZERO;
     };
@@ -322,7 +386,7 @@ fn avoid(at: Vec2, want: Vec2, circles: &[(Vec2, f32)]) -> Vec2 {
     for &(c, r) in circles {
         let d = c - at;
         let along = d.dot(ahead);
-        let r = r + RADIUS + 0.1;
+        let r = r + body + 0.1;
         if along <= 0.0 || along > AHEAD + r {
             continue;
         }
@@ -336,36 +400,37 @@ fn avoid(at: Vec2, want: Vec2, circles: &[(Vec2, f32)]) -> Vec2 {
     push
 }
 
-/// Separation: away from every other body nearer than two bodies and a gap, and from the
-/// hero nearer than the attack ring's inside.
-fn separate(i: usize, at: Vec2, places: &[(Vec2, bool)], hero: Vec2) -> Vec2 {
+/// Separation: away from every other body nearer than their two bodies and a gap, and from
+/// the hero nearer than its attack ring's inside.
+fn separate(i: usize, m: &Mob, places: &[(Vec2, f32, bool)], hero: Vec2) -> Vec2 {
     let mut push = Vec2::ZERO;
     let mut from = |p: Vec2, range: f32, w: f32| {
-        let d = at - p;
+        let d = m.at - p;
         let n = d.length();
         if n < range {
             let away = d.try_normalize().unwrap_or(Vec2::from_angle(i as f32));
             push += away * (1.0 - n / range) * SPEED * w;
         }
     };
-    for (j, &(p, alive)) in places.iter().enumerate() {
+    for (j, &(p, r, alive)) in places.iter().enumerate() {
         if j != i && alive {
-            from(p, RADIUS * 2.0 + 0.35, 1.5);
+            from(p, m.radius + r + 0.35, 1.5);
         }
     }
-    from(hero, RING - 0.3, 2.0);
+    from(hero, m.stand - 0.3, 2.0);
     push
 }
 
-/// The step taken: the one wanted if the ground takes it, else the nearest turn of it (up to
-/// a right angle either way) that does, sliding along what is in the way; else none.
-fn slide(field: &Field, at: Vec2, step: Vec2) -> Vec2 {
+/// The step taken by a body of radius `body`: the one wanted if the ground and `bodies` take
+/// it, else the nearest turn of it (up to a right angle either way) that does, sliding along
+/// what is in the way; else none.
+fn slide(field: &Field, at: Vec2, body: f32, bodies: &[(Vec2, f32)], step: Vec2) -> Vec2 {
     if step.length_squared() < 1e-10 {
         return at;
     }
     for deg in [0.0f32, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0] {
         let s = Vec2::from_angle(deg.to_radians()).rotate(step);
-        if !field.refuses(at, at + s) {
+        if !field.refuses(at, at + s, body, bodies) {
             return at + s;
         }
     }
@@ -527,9 +592,9 @@ mod tests {
             assert!(!slots.contains(&k), "mob {i} shares slot {k}");
             slots.push(k);
             assert!(
-                m.at.distance(slot_at(hero, k)) < 0.6,
+                m.at.distance(slot_at(hero, k, m.stand)) < 0.6,
                 "mob {i} {:.1} m from its slot",
-                m.at.distance(slot_at(hero, k))
+                m.at.distance(slot_at(hero, k, m.stand))
             );
             assert!(
                 nav.open_at(m.at),
@@ -558,6 +623,7 @@ mod tests {
             path: false,
             separate: true,
             recover: false,
+            ..Rules::ALL
         });
         assert!(
             worst > 1.0,
@@ -637,6 +703,50 @@ mod tests {
             "it stands at {}",
             mobs[0].at
         );
+    }
+
+    /// Bodies of every size closing on him from all sides, some through his place and each
+    /// other's way, never stand inside him or one another: each frame every pair is at least
+    /// its two radii apart (a 2 cm step's slack). Its planted fault (D632): rings by the
+    /// default body and only separation's push lets the big ones into him and each other.
+    #[test]
+    fn bodies_never_merge() {
+        let inside = |_: Vec2| true;
+        let field = Field {
+            nav: None,
+            circles: &[],
+            open: &inside,
+        };
+        let deepest = |rules: Rules| {
+            let mut mobs: Vec<Mob> = (0..5)
+                .map(|k| {
+                    let a = k as f32 * 1.3;
+                    Mob::sized(Vec2::from_angle(a) * 7.0, 0.45 + 0.15 * k as f32)
+                })
+                .collect();
+            let active = vec![true; mobs.len()];
+            let mut worst = 0.0f32;
+            for n in 0..(10.0 / DT) as usize {
+                // He walks across the ring they close on.
+                let hero = Vec2::new(-3.0 + n as f32 * DT * 0.6, 0.0);
+                step(&mut mobs, &active, hero, &field, rules, n as f32 * DT, DT);
+                for (i, m) in mobs.iter().enumerate() {
+                    worst = worst.max(m.radius + HERO - m.at.distance(hero));
+                    for o in &mobs[i + 1..] {
+                        worst = worst.max(m.radius + o.radius - m.at.distance(o.at));
+                    }
+                }
+            }
+            worst
+        };
+        let d = deepest(Rules::ALL);
+        assert!(d < 0.02, "bodies merged {d:.2} m");
+        let d = deepest(Rules {
+            sized: false,
+            solid: false,
+            ..Rules::ALL
+        });
+        assert!(d > 0.1, "the planted fault merged only {d:.2} m");
     }
 
     /// A mob given no slot it can reach stands idle out of reach and `Idles` times it; one
