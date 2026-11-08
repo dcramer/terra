@@ -1,6 +1,9 @@
 //! A hosted walker world and a client that is no game (D73): the world's own walk moves the
 //! guest by the intents its client sends, and the client is told its own body and the host's.
 
+#[path = "net_tests/leaving.rs"]
+mod leaving;
+
 use super::*;
 use crate::controls::Action;
 use bevy::ecs::system::RunSystemOnce;
@@ -169,7 +172,9 @@ fn a_guest_is_walked_by_the_worlds_own_walk_and_told_its_body_and_the_hosts() {
         .ground_at(Vec3::new(0.0, 2100.0, 3.0));
     let walked = (transform.translation - start).dot(Vec3::X);
     assert!(walked > 6.0 && walked < 10.0, "the guest walked {walked} m");
-    assert!(matches!(bot.heard.first(), Some(Heard::Welcome { realm, .. }) if realm == b"realm"));
+    assert!(
+        matches!(bot.heard.first(), Some(Heard::Welcome { realm, .. }) if greeted(realm) == (b"realm", &[]))
+    );
     // It lets go and comes to rest, so the newest word of each body is of where it is now.
     bot.holds = None;
     run(&mut world, &network, &mut bot, 64);
@@ -616,46 +621,6 @@ fn a_game_of_another_world_is_told_so_and_leaves() {
     // The host sees it go: one who left is no guest.
     let mut guests = host.query::<&Guest>();
     assert_eq!(guests.iter(&host).count(), 0);
-}
-
-/// One who leaves and comes back is put where it stood (D592, D637), and when the host leaves
-/// every guest is told so in words.
-#[test]
-fn a_guest_returns_to_where_it_left_and_is_told_when_the_host_leaves() {
-    let (mut world, _, network) = hosted();
-    let mut bot = Bot::join(&network, Some(Action::Forward));
-    run(&mut world, &network, &mut bot, 16 + 96);
-    let mut guests = world.query::<(&Guest, &Transform)>();
-    let stood = guests.single(&world).expect("one guest").1.translation;
-    let start = world
-        .resource::<Planet>()
-        .ground_at(Vec3::new(0.0, 2100.0, 3.0));
-    assert!(stood.distance(start) > 4.0, "it walked before it left");
-    {
-        use terra_net::transport::ClientTransport;
-        bot.wire.close();
-    }
-    run(&mut world, &network, &mut bot, 4);
-    assert_eq!(guests.iter(&world).count(), 0);
-    // The same player again (the bot's one identity), holding nothing: where it stood.
-    let mut back = Bot::join(&network, None);
-    run(&mut world, &network, &mut back, 16 + 32);
-    let returned = guests.single(&world).expect("it came back").1.translation;
-    assert!(
-        returned.distance(stood) < 0.2,
-        "it came back {} m from where it left",
-        returned.distance(stood)
-    );
-    assert_eq!(world.resource::<Host>().players(), ["bot"]);
-    // The host leaves.
-    world.resource_mut::<Host>().close();
-    run(&mut world, &network, &mut back, 2);
-    assert!(
-        back.heard
-            .contains(&Heard::Closed(terra_net::proto::Reason::HostLeft)),
-        "{:?}",
-        back.heard.last()
-    );
 }
 
 /// The ground across the network (D21): what the host digs, a joined game's ground has; what

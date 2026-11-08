@@ -46,6 +46,27 @@ pub const ROOM: RoomId = RoomId(0);
 
 /// What a room's welcome says of its world (D596): the planet's seed and size, which are all
 /// a game needs to make the same land, and what a joining game must already have made.
+/// A greeting's bytes: the realm, then what the host keeps of the player greeted
+/// ([`Host::keep`]; nothing for one it does not know), then how long that is.
+pub fn greeting(realm: &[u8], kept: &[u8]) -> Vec<u8> {
+    let mut bytes = realm.to_vec();
+    bytes.extend_from_slice(kept);
+    bytes.extend_from_slice(&(kept.len() as u32).to_le_bytes());
+    bytes
+}
+
+/// A greeting's realm and what was kept ([`greeting`]); bytes that are no greeting are all
+/// realm, which no game's realm will then match.
+pub fn greeted(bytes: &[u8]) -> (&[u8], &[u8]) {
+    let Some((rest, length)) = bytes.split_last_chunk::<4>() else {
+        return (bytes, &[]);
+    };
+    match rest.len().checked_sub(u32::from_le_bytes(*length) as usize) {
+        Some(realm) => rest.split_at(realm),
+        None => (bytes, &[]),
+    }
+}
+
 pub fn realm_of(planet: &terra_world::planet::Planet) -> Vec<u8> {
     let mut realm = planet.seed().0.to_le_bytes().to_vec();
     realm.extend_from_slice(&planet.radius_m().to_bits().to_le_bytes());
@@ -146,6 +167,10 @@ pub struct Host {
     identities: HashMap<Peer, [u8; 32]>,
     names: HashMap<Peer, String>,
     left: HashMap<[u8; 32], Vec3>,
+    /// What the layers above keep of each player who has been here, by who they are, as
+    /// bytes this layer does not read (the game's record of a character, D592): given back
+    /// to them in the greeting when they come again.
+    kept: HashMap<[u8; 32], Vec<u8>>,
     /// Guests whose bodies the walk has not yet made: welcomed once it has.
     arriving: Vec<(Peer, Entity)>,
     events: Vec<Event>,
@@ -173,6 +198,7 @@ impl Host {
             identities: HashMap::new(),
             names: HashMap::new(),
             left: HashMap::new(),
+            kept: HashMap::new(),
             arriving: Vec::new(),
             events: Vec::new(),
             asked: Vec::new(),
@@ -226,6 +252,27 @@ impl Host {
 
     pub fn server(&self) -> &Server {
         &self.server
+    }
+
+    /// Keeps a connection's player's record, as the layer that reads it gives it (D592): it
+    /// is theirs again in the greeting when they next come. Nothing for a connection that
+    /// never said who it is.
+    pub fn keep(&mut self, peer: Peer, record: Vec<u8>) {
+        if let Some(identity) = self.identities.get(&peer) {
+            self.kept.insert(*identity, record);
+        }
+    }
+
+    /// Every record kept, by whose it is: what a save of the world holds of its guests.
+    pub fn kept(&self) -> impl Iterator<Item = (&[u8; 32], &[u8])> {
+        self.kept
+            .iter()
+            .map(|(identity, record)| (identity, record.as_slice()))
+    }
+
+    /// Takes up the records a save of the world held, as hosting begins.
+    pub fn restore(&mut self, kept: impl IntoIterator<Item = ([u8; 32], Vec<u8>)>) {
+        self.kept.extend(kept);
     }
 
     /// Every connection that has said hello here, with a body yet or not.
@@ -339,7 +386,10 @@ pub fn hear(
                 host.identities.insert(peer, identity);
                 info!("{name} joined the world.");
                 host.names.insert(peer, name);
-                (host.server).greet(&mut host.wire, peer, ROOM, &host.realm);
+                // With what is kept of them here (D592).
+                let kept = host.kept.get(&identity).map_or(&[][..], Vec::as_slice);
+                let greeting = greeting(&host.realm, kept);
+                (host.server).greet(&mut host.wire, peer, ROOM, &greeting);
             }
             Event::Ready { peer } => {
                 if host.guests.contains_key(&peer) {

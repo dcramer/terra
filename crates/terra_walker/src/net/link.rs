@@ -88,6 +88,8 @@ pub struct Link {
     over: Option<String>,
     /// The realm the server welcomed this game to, once it has.
     welcomed: Option<Vec<u8>>,
+    /// What the host kept of this player, from its greeting, until taken ([`Link::take_kept`]).
+    kept: Option<Vec<u8>>,
     /// The link was kept waiting, the world's clock held (a title screen, a load): the next
     /// tick starts the clock and the body again from the server's newest word.
     waited: bool,
@@ -131,6 +133,7 @@ impl Link {
             realm,
             over: None,
             welcomed: None,
+            kept: None,
             waited: false,
             greeted: false,
             readied: false,
@@ -186,6 +189,12 @@ impl Link {
         self.welcomed.as_deref()
     }
 
+    /// What the host kept of this player from when they were last in its world, as the
+    /// greeting gave it (D592), once: the layer that reads it takes it.
+    pub fn take_kept(&mut self) -> Option<Vec<u8>> {
+        self.kept.take()
+    }
+
     /// The realm this game is crossing to, once the host's next server has greeted it: the
     /// land to make, after which the game says it has [`Link::arrived`].
     pub fn crossing(&self) -> Option<&[u8]> {
@@ -210,12 +219,21 @@ impl Link {
                 Heard::Welcome {
                     tick, realm, you, ..
                 } => {
-                    if !self.realm.is_empty() && *realm != self.realm {
+                    // A greeting's realm is followed by what the host keeps of this
+                    // player (D592), for the layer that reads it.
+                    let (realm, kept) = match you {
+                        None => super::greeted(realm),
+                        Some(_) => (realm.as_slice(), &[][..]),
+                    };
+                    if !self.realm.is_empty() && realm != self.realm {
                         self.over = Some(OTHER_WORLD.to_string());
                     }
                     // With no entity yet it is the greeting (D639): the realm to make.
                     self.greeted |= you.is_none();
-                    self.welcomed = Some(realm.clone());
+                    if you.is_none() && !kept.is_empty() {
+                        self.kept = Some(kept.to_vec());
+                    }
+                    self.welcomed = Some(realm.to_vec());
                     self.clock.start(*tick);
                     self.history.clear();
                     (self.answered, self.begun) = (0, false);
