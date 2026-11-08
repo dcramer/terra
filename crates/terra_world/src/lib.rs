@@ -71,6 +71,7 @@ pub mod pacing;
 pub mod parting;
 pub mod planet;
 pub mod quality;
+pub mod realm;
 pub mod record;
 pub mod recorder;
 pub mod remote;

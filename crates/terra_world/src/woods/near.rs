@@ -116,7 +116,7 @@ pub(super) fn lay(planet: &Planet, map: &Map, block: Block, seed: terra_gen::See
     let (x, y) = (block.0 * BLOCK_CELLS, block.1 * BLOCK_CELLS);
     let cells = (x..x + BLOCK_CELLS, y..y + BLOCK_CELLS);
     let trees = Woods::of(round).trees_in_cells(map.middle, cells, COARSE_M, SPACING_M, seed);
-    let trees = super::cleared(map.middle, trees);
+    let trees = super::thinned(planet, super::cleared(map.middle, trees));
     super::off_snowbeds(planet, trees)
 }
 

@@ -385,9 +385,12 @@ fn stood(
     // The cards stand for every tree, the grown ones too, as an impostor stands for its
     // model: past the grown trees' last level of detail they are the trees. Near the camera
     // they give way to the grown ones, the same trees from the same grid (`near::lay`).
-    let mid = cleared(
-        middle,
-        Woods::of(round).trees(middle, 0.0, COARSE_M, SPACING_M, seed),
+    let mid = thinned(
+        planet,
+        cleared(
+            middle,
+            Woods::of(round).trees(middle, 0.0, COARSE_M, SPACING_M, seed),
+        ),
     );
     let laid = began.elapsed().as_secs_f32();
     let mid = off_snowbeds(planet, mid);
@@ -404,6 +407,24 @@ fn cleared(middle: Vec3, trees: Vec<Tree>) -> Vec<Tree> {
     trees
         .into_iter()
         .filter(|tree| tree.at.distance(middle) > CLEAR_M)
+        .collect()
+}
+
+/// The trees a realm leaves standing: its share of them (`Planet::plants`), each kept or not
+/// by its own place, so the same trees stand however the woods are asked for (near, far, a
+/// block at a time).
+fn thinned(planet: &Planet, trees: Vec<Tree>) -> Vec<Tree> {
+    let share = planet.plants();
+    if share >= 1.0 {
+        return trees;
+    }
+    let seed = planet.seed().derive("thinned").0 as u32;
+    trees
+        .into_iter()
+        .filter(|tree| {
+            let [x, y, z] = tree.at.to_array().map(f32::to_bits);
+            terra_gen::hash::unit3(seed, x, y, z) < share
+        })
         .collect()
 }
 

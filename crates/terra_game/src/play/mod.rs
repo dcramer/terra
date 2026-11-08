@@ -19,6 +19,7 @@ pub mod music;
 mod noises;
 pub mod portal;
 mod probe;
+pub mod realm_parts;
 pub use props::{
     Look as PropLook, Making as PropMaking, glowing as prop_glowing, lit as prop_lit,
     looks as prop_looks,
@@ -122,6 +123,7 @@ impl Plugin for GameplayPlugin {
         // Crossing to another world through a portal (D470), when a run stands one.
         marks::plugin(app);
         portal::plugin(app);
+        realm_parts::plugin(app);
         claim::plugin(app);
         vitals::plugin(app);
         breath::plugin(app);

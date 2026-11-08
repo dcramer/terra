@@ -67,6 +67,12 @@ try {
   const [there, me] = [await stands("Portal"), await stands("Player")];
   if (apart(there, me) > 4) throw new Error(`in the realm beyond the player stands ${apart(there, me).toFixed(1)} m from its gate, not before it`);
 
+  // The realm beyond is another realm by its data (D642): its kind, its light, its parts.
+  const realm = (await call("realm.state")) as { kind: string; name: string | null; beyond: string; sun: number[] | null };
+  const parts = (await said(0, "of its parts stand", 5)).lines.map((line) => / (\d+) of its parts stand/.exec(line.text)?.[1]).filter(Boolean);
+  if (realm.kind === "world" || realm.beyond !== "world" || !realm.sun) throw new Error(`the realm beyond is of kind "${realm.kind}" leading on to "${realm.beyond}" with ${realm.sun ? "its own" : "no"} light: assets/data/realms.ron should give the first realm another kind beyond it, with its light, leading back`);
+  if (!(Number(parts.at(-1)) > 0)) throw new Error(`${realm.name ?? realm.kind} stood none of its parts round the start (play::realm_parts says how many in the log)`);
+
   // Closed in the realm beyond and started again: there, where they stood, not in the first
   // world with the realm's things written over it.
   await stop();
@@ -84,7 +90,7 @@ try {
   const borne = (await call("marks.state")) as { marks: string[] };
   if (!still.open || !borne.marks.includes("troll")) throw new Error(`started again and back, the first gate is ${still.open ? "open" : "shut"} and the player bears ${JSON.stringify(borne.marks)}: the save did not keep them`);
   if (apart(home, left) > 1) throw new Error(`back through the gate the player stands ${apart(home, left).toFixed(1)} m from where they left`);
-  console.log(`✓ gate: seed ${SEED}'s gate stands ${away.toFixed(0)} m from the start, shut to an unmarked player and opened by the troll's mark; through it to the realm beyond (seed ${out.to.seed}), ${apart(there, me).toFixed(1)} m before its gate, closed and started again there (${apart(again, me).toFixed(1)} m from where it was closed), and back to within ${apart(home, left).toFixed(1)} m of where the player left the first world; the crossing out, its world warmed as the player neared, took ${took.at(-1) ?? "?"} s (a reading)`);
+  console.log(`✓ gate: seed ${SEED}'s gate stands ${away.toFixed(0)} m from the start, shut to an unmarked player and opened by the troll's mark; through it to ${realm.name ?? realm.kind} (seed ${out.to.seed}, ${parts.at(-1)} of its parts standing), ${apart(there, me).toFixed(1)} m before its gate, closed and started again there (${apart(again, me).toFixed(1)} m from where it was closed), and back to within ${apart(home, left).toFixed(1)} m of where the player left the first world; the crossing out, its world warmed as the player neared, took ${took.at(-1) ?? "?"} s (a reading)`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 } finally {

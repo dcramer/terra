@@ -18,7 +18,7 @@ Each of [v0's](v0-goals.md) tracks (D589): what it has, what it needs and when i
 
 The proof that a realm is data. instances.md's playground proves loading and nothing else; this proves a world of another theme comes out of the same rules. It needs enough of each part to show that, not a full realm's worth.
 
-- **Need**: a theme, which someone settles later; until then Realms works with instances.md's placeholder realm. Then its land recipe, ground materials, plants, sky and light, wildlife, monsters and sound, each by the existing pipelines and the art style (D14). A realm's parts are new; the rules are not. Survival's rules are the same in both realms, as the developers confirmed: the realm file can hold different air, cold and gravity (D61, D63), and v0 differs only by its climate.
+- **Need**: industrial (D642, Leaning; [realm-two.md](realm-two.md): light, colours, thin plants and five parts built, as data). Then its land recipe, ground materials, plants, sky and light, wildlife, monsters and sound, each by the existing pipelines and the art style (D14). A realm's parts are new; the rules are not. Survival's rules are the same in both realms, as the developers confirmed: the realm file can hold different air, cold and gravity (D61, D63), and v0 differs only by its climate.
 - **Done when**: stills and a film pass review beside the first realm, and a stranger could tell them apart at a glance while seeing one game (D14). The generator states how many variants it makes (D182).
 
 ## Land (3)

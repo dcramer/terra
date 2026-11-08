@@ -14,6 +14,7 @@ use terra_core::Seed;
 use terra_walker::walker::ArriveAt;
 use terra_world::instance::{Building, InWorld, InstanceApp, InstanceKey, WorldSpec};
 use terra_world::planet::Planet;
+use terra_world::realm::Realms;
 use terra_world::start::Start;
 
 /// How far before its gate one who steps out of it stands, in metres.
@@ -46,13 +47,13 @@ pub(super) fn plugin(app: &mut App) {
         .add_systems(Update, follow.run_if(resource_exists::<Gate>));
 }
 
-/// The realm beyond a world's gate: its seed derived from the world's, all 64 bits (D596),
-/// its instance keyed by that seed.
-pub fn beyond(here: &WorldSpec) -> WorldSpec {
+/// The realm beyond a world's gate: of the kind its realm's data names (`data/realms.ron`),
+/// its seed derived from the world's, all 64 bits (D596), its instance keyed by that seed.
+pub fn beyond(here: &WorldSpec, realms: &Realms) -> WorldSpec {
     let seed = Seed(here.seed).derive("beyond the gate").0;
     WorldSpec {
         key: InstanceKey(seed),
-        kind: here.kind.clone(),
+        kind: realms.beyond(&here.kind),
         seed,
     }
 }
@@ -111,12 +112,12 @@ fn stand(
     mut materials: ResMut<Assets<veil::VeilMaterial>>,
     planet: Res<Planet>,
     spec: Res<WorldSpec>,
-    returns: Res<Returns>,
+    (returns, realms): (Res<Returns>, Res<Realms>),
 ) {
     let Some(gate) = gate else { return };
     let to = match returns.0.last() {
         Some(back) => back.world.clone(),
-        None => beyond(&spec),
+        None => beyond(&spec, &realms),
     };
     let portal = super::stand(
         &mut commands,
@@ -148,24 +149,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_realm_beyond_is_another_world_by_the_seed_and_the_same_each_time() {
+    fn the_realm_beyond_is_another_world_by_the_seed_of_the_kind_the_data_names() {
+        let realms = Realms::read();
         let here = WorldSpec {
             key: InstanceKey(0),
             kind: "world".into(),
             seed: 7,
         };
-        let there = beyond(&here);
+        let there = beyond(&here, &realms);
         assert_ne!(there.seed, here.seed);
         assert_eq!(there.key, InstanceKey(there.seed));
-        assert_eq!(there.kind, here.kind);
-        assert_eq!(beyond(&here).seed, there.seed);
-        // Another world's gate leads to another realm, and the realm beyond has one of its own.
-        let other = beyond(&WorldSpec {
-            seed: 8,
-            ..here.clone()
-        });
+        // The first realm's gate leads to the industrial realm (D642), the same each time.
+        assert_eq!(there.kind, "industrial");
+        assert_eq!(beyond(&here, &realms), there);
+        // Another world's gate leads to another realm of that kind.
+        let other = beyond(
+            &WorldSpec {
+                seed: 8,
+                ..here.clone()
+            },
+            &realms,
+        );
         assert_ne!(other.seed, there.seed);
-        assert_ne!(beyond(&there).seed, there.seed);
     }
 
     #[test]

@@ -1344,7 +1344,11 @@ fn plant(
     let mut planted = [0, 0];
     // The nearest of each to the start, for scripted runs to walk up to.
     let mut nearest_to_start = [Vec2::splat(f32::MAX); 2];
+    // Its realm's share of plants (D642): so many fewer tries, and a worked-out land's trees
+    // stand as far apart as the forest's.
+    let share = planet.plants();
     for (young, tries, apart) in [(false, 14_000, SPACING_M), (true, 8_000, 4.5)] {
+        let tries = (tries as f32 * share) as u32;
         for _ in 0..tries {
             let angle = dice.range(0.0, TAU);
             let distance = libm::sqrtf(dice.range(CLEARING_M * CLEARING_M, FOREST_M * FOREST_M));

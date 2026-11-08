@@ -141,6 +141,14 @@
         (name: "Shutters", tab: Openings, kind: Fit(Shutters)),
         // Seen in the world but not yet buildable: a village's well and stall. How they
         // are learned is open (D68, D108).
+        // The industrial realm's built parts (D642), stood by the realm's rules, not built.
+        (name: "Industrial parts", tab: Hidden, kind: Items([
+            (name: "Industrial pylon", file: "IndustrialPylon", dims: (3.4, 9.0, 1.8), cost: [("Stone", 40)]),
+            (name: "Industrial vent stack", file: "IndustrialVentStack", dims: (2.2, 5.2, 2.0), cost: [("Stone", 40)]),
+            (name: "Industrial tank", file: "IndustrialTank", dims: (4.2, 2.6, 2.2), cost: [("Stone", 40)]),
+            (name: "Industrial generator", file: "IndustrialGenerator", dims: (2.6, 1.9, 1.6), cost: [("Stone", 40)]),
+            (name: "Industrial sign", file: "IndustrialSign", dims: (2.4, 3.5, 0.6), cost: [("Stone", 40)]),
+        ])),
         (name: "Realm gate", tab: Hidden, kind: Items([
             (name: "Realm gate", file: "RealmGate", dims: (3.3, 3.4, 1.0), cost: [("Stone", 40)]),
         ])),

@@ -375,7 +375,9 @@ fn undergrowth<W: Ways>(
         let clear = placement.kind.clear_of();
         let mut count = 0;
         let mut closest = Vec2::splat(f32::MAX);
-        for _ in 0..area.tries(placement.tries, true, dice) {
+        // Its realm's share of plants (D642): so many fewer tries.
+        let tries = (area.tries(placement.tries, true, dice) as f32 * lay.planet.plants()) as u32;
+        for _ in 0..tries {
             let Some(at) = placement.kind.tried_at(&map.ways, area, dice) else {
                 continue;
             };

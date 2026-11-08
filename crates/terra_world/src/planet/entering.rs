@@ -144,6 +144,13 @@ pub fn made_land(
     } else {
         Planet::starting(spec, KnownStart::of(known, spec))
     };
+    // Its realm's share of plants (D642), before anything is laid on it.
+    if let Some(share) = crate::realm::Realms::shared()
+        .of(&world.kind)
+        .and_then(|realm| realm.plants)
+    {
+        planet.set_plants(share);
+    }
     let climate: terra_climate::Climate = crate::data::read(crate::daylight::WorldClimate::FILE);
     let day = options.date.map_or(0, |date| date.day(&climate.year));
     match options.site.clone() {

@@ -1,0 +1,42 @@
+// Realms (D17, D642; docs/realm-two.md): what a world of a kind is, beyond its seed. A realm
+// changes parts, materials and light, never the rules (docs/art-style.md). A kind with no row
+// here is the first realm's: the land's own light and colours.
+//   kind          the world's kind, as a save and a gate name it
+//   name          what a player is told it is
+//   beyond        the kind of the realm its gate leads to (D641)
+//   sun, sky      its light against the first realm's: the sun's colour and the sky's (the
+//                 horizon, the zenith, the shade), multiplied in, linear, red green blue
+//   ground_low, ground_high, ground_steep, grass_dry, grass_lush, sand
+//                 the land's colours, sRGB red green blue; left out, the land's own
+//   ground_cover  how much of the grass and sand the ground could have is shown, 0 to 1
+//   plants        the share of the first realm's trees and undergrowth that grow, 0 to 1
+//   parts         what stands on its land by rule, each a catalogue item's model file
+//                 (data/builds.ron) and how many of it a square kilometre holds
+[
+    (kind: "world", name: "the first realm", beyond: "industrial"),
+    (
+        kind: "industrial",
+        name: "the industrial realm",
+        beyond: "world",
+        // A hazed amber day: the sun dulled and warmed, the sky greyed toward ochre.
+        sun: Some((1.0, 0.8, 0.6)),
+        sky: Some((0.82, 0.78, 0.74)),
+        // Hardpan, stained gravel and slag: greys and rust, little that grows.
+        ground_low: Some((0.36, 0.34, 0.32)),
+        ground_high: Some((0.3, 0.29, 0.28)),
+        ground_steep: Some((0.24, 0.22, 0.21)),
+        grass_dry: Some((0.42, 0.36, 0.27)),
+        grass_lush: Some((0.33, 0.34, 0.26)),
+        sand: Some((0.45, 0.36, 0.3)),
+        ground_cover: Some(0.25),
+        // A worked-out land: one tree in ten.
+        plants: Some(0.1),
+        parts: [
+            (file: "IndustrialPylon", a_km2: 20.0),
+            (file: "IndustrialVentStack", a_km2: 25.0),
+            (file: "IndustrialTank", a_km2: 25.0),
+            (file: "IndustrialGenerator", a_km2: 30.0),
+            (file: "IndustrialSign", a_km2: 20.0),
+        ],
+    ),
+]

@@ -111,6 +111,9 @@ pub struct Planet {
     /// Which way from the centre the player starts (`terra_land::spawn`): the planet's own
     /// start, which its frame is turned for, but where a seed's search moved it.
     start: Vec3,
+    /// The share of the first realm's plants that grow here (`realm::Realm::plants`): 1 where
+    /// the realm says nothing.
+    plants: f32,
 }
 
 /// What grows at a place, each from 0 to 1.
@@ -156,6 +159,7 @@ impl Planet {
             relief_m,
             cover: Noise::new(spec.seed.derive("ground cover")),
             round: None,
+            plants: 1.0,
             start,
         }
     }
@@ -168,6 +172,7 @@ impl Planet {
             relief_m: 0.0,
             cover: Noise::new(spec.seed.derive("ground cover")),
             round: None,
+            plants: 1.0,
             start: START,
         }
     }
@@ -180,6 +185,7 @@ impl Planet {
             relief_m: ROLLING_M,
             cover: Noise::new(spec.seed.derive("ground cover")),
             round: None,
+            plants: 1.0,
             start: START,
         }
     }
@@ -356,6 +362,16 @@ impl Planet {
 
     /// Where the camera and the player start: a point on the ground, searched for from the
     /// seed on a world of biomes (`terra_land::spawn`, D596).
+    /// The share of the first realm's plants that grow on this world.
+    pub fn plants(&self) -> f32 {
+        self.plants
+    }
+
+    /// Sets how much of the first realm's plants grow here, as its realm says.
+    pub fn set_plants(&mut self, share: f32) {
+        self.plants = share.clamp(0.0, 1.0);
+    }
+
     pub fn start(&self) -> Vec3 {
         self.surface(self.start)
     }
