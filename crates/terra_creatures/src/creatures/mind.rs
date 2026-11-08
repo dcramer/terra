@@ -543,6 +543,12 @@ fn hostile(
     })
 }
 
+/// Of a small bird's choices of what to do next, the share that are standing a moment, and
+/// that or feeding; the rest are flights. And how far a flight over the ground goes, metres.
+const BIRD_IDLES: f32 = 0.15;
+const BIRD_FEEDS: f32 = 0.5;
+const BIRD_FLIGHT_M: (f32, f32) = (8.0, 30.0);
+
 /// Going on with what it was doing, or else resting a while, grazing if it can, or wandering
 /// somewhere near home; one that flies flits to its next place rather than walking far.
 fn settle(
@@ -575,12 +581,21 @@ fn settle(
     // One that can graze stands idle less than it feeds, as a grazer's day goes; standing
     // head up two times in five, a herd beside a path read as on watch (lake film r7).
     let roll = dice.unit();
-    let idles = if about.clips.eat.is_some() { 0.25 } else { 0.4 };
+    // A small bird is never still for long: a look about, a few pecks, and off again, so a
+    // place's birds are seen on the wing and not only by one who looks for them (D647).
+    let bird = matches!(about.moves, Moves::Flies(_));
+    let (idles, feeds) = match (bird, about.clips.eat.is_some()) {
+        (true, _) => (BIRD_IDLES, BIRD_FEEDS),
+        (false, true) => (0.25, 0.75),
+        (false, false) => (0.4, 0.4),
+    };
     if roll < idles {
-        return State::Idle(dice.range(2.0, 5.0));
+        let rest = if bird { (1.0, 2.5) } else { (2.0, 5.0) };
+        return State::Idle(dice.range(rest.0, rest.1));
     }
-    if roll < 0.75 && about.clips.eat.is_some() {
-        return State::Graze(dice.range(3.0, 7.0));
+    if roll < feeds && about.clips.eat.is_some() {
+        let feed = if bird { (2.0, 4.0) } else { (3.0, 7.0) };
+        return State::Graze(dice.range(feed.0, feed.1));
     }
     let up = creature.home.normalize();
     let turn = Quat::from_axis_angle(up, dice.range(0.0, std::f32::consts::TAU));
@@ -593,11 +608,11 @@ fn settle(
     let here = s.here;
     match about.moves {
         // Up into a crown now and then, among trees.
-        Moves::Flies(_) if dice.unit() < 0.2 => {
+        Moves::Flies(_) if dice.unit() < 0.3 => {
             up_high(here, way, (5.0, 20.0), around, dice).unwrap_or(State::Idle(1.0))
         }
-        Moves::Flies(_) if dice.unit() < 0.5 => {
-            flight(about, here, way, (4.0, 14.0), around, dice).unwrap_or(State::Idle(1.0))
+        Moves::Flies(_) if dice.unit() < 0.85 => {
+            flight(about, here, way, BIRD_FLIGHT_M, around, dice).unwrap_or(State::Idle(1.0))
         }
         Moves::Flies(_) => State::Wander(creature.home + way * dice.range(0.8, 3.0)),
         _ => {

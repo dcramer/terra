@@ -57,7 +57,7 @@ impl About {
 }
 
 /// `wildlife.state`: the living creatures within 150 m of this machine's player, how many
-/// of each kind and how many of them fly, so a scripted run reads how alive a place is with
+/// of each kind, how many of them are birds and how many of those on the wing now, so a scripted run reads how alive a place is with
 /// no picture (D69, D647).
 pub(super) fn state(
     In(_): In<Option<serde_json::Value>>,
@@ -71,7 +71,7 @@ pub(super) fn state(
         .ok_or_else(|| terra_world::remote::refused("There is no player yet."))?
         .translation;
     let mut kinds = std::collections::BTreeMap::<&str, u32>::new();
-    let (mut birds, mut all) = (0, 0);
+    let (mut birds, mut all, mut flying) = (0, 0, 0);
     for (at, creature) in &placed {
         if creature.health <= 0.0 || at.translation.distance(feet) > RELEASE_M {
             continue;
@@ -83,9 +83,12 @@ pub(super) fn state(
             crate::species::Moves::Flies(_)
         ) {
             birds += 1;
+            if matches!(creature.state, creatures::State::Fly { .. }) {
+                flying += 1;
+            }
         }
     }
     Ok(
-        serde_json::json!({ "about": all, "birds": birds, "kinds": kinds, "most_birds": MOST_BIRDS, "most_others": MOST }),
+        serde_json::json!({ "about": all, "birds": birds, "flying": flying, "kinds": kinds, "most_birds": MOST_BIRDS, "most_others": MOST }),
     )
 }
