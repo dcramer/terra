@@ -668,10 +668,13 @@ function judgeVerdict(argv: string[], say: (l: string) => void) {
     const s = rnd!.biomes[b].score;
     say(`${b}: ${o}${s ? `, score ${s.overall}` : ""}`);
   }
-  if (!v.result) {
+  // A revert copies no stills, so it closes a round still waiting on a pair (its change undone,
+  // or unable to win: a slight answer against it, 261107-1721-2); a keep waits for every answer.
+  if (!v.result && !revert) {
     const briefs = v.pending.map((b) => rnd!.biomes[b].pairs.find((p) => !p.winner)?.brief).filter(Boolean);
-    fail(`no verdict yet: ${v.pending.join(", ")} wait for a pair's answer; run ${briefs.join(", ")} and record each`);
+    fail(`no verdict yet: ${v.pending.join(", ")} wait for a pair's answer; run ${briefs.join(", ") || "a second pair's brief"} and record each, or record the change undone: verdict ${round} --revert`);
   }
+  if (!v.result) say(`${v.pending.join(", ")}: closed unanswered by the revert`);
   if (v.result === "TIED" && !revert)
     fail(`${round}: ${v.tied.join(", ")} changed and only tied, so no judge preferred the change; keeping it would make its stills the kept ones while the change is reverted (D634's ratchet moves only on a gain). Revert the change and record it: \`node spike/iso/loop.ts verdict ${round} --revert\` (the kept stills stay); to keep the look anyway, land it and judge a new round`);
   const result = revert || v.result !== "KEEP" ? ("REVERT" as const) : ("KEEP" as const);

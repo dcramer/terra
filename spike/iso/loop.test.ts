@@ -348,3 +348,29 @@ test("drop closes a round no judge answered as DROP, never one a judge answered 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a round waiting on a pair is never kept, but --revert closes it with the kept still untouched", () => {
+  const dir = mkdtempSync(join(tmpdir(), "iso-pending-"));
+  try {
+    // 261107-1721-2's shape: pair 1 slight for the kept still, pair 2 unanswered: it cannot win.
+    const h: History = {
+      kept: { forest: { round: "r0", still: "k", stats: {} as never } },
+      rounds: {
+        r0: { at: "2026-11-07T08:00:00Z", rev: "a", dirty: false, job: "j", biomes: {}, verdict: { result: "KEEP", losers: [], at: "2026-11-07T08:01:00Z" } },
+        r1: { at: "2026-11-07T09:00:00Z", rev: "b", dirty: false, job: "j", biomes: { forest: { still: "s1", stats: {} as never, changed: true, against: "r0", pairs: [pair("new", "kept", "slight"), pair("kept")] } } },
+      },
+    };
+    writeFileSync(join(dir, "history.json"), JSON.stringify(h));
+    const run = (...args: string[]) => spawnSync(process.execPath, [join(import.meta.dirname, "loop.ts"), "verdict", ...args], { env: { ...process.env, ISO_KIT_HOME: dir }, encoding: "utf8" });
+    const waits = run("r1");
+    assert.equal(waits.status, 1, waits.stdout);
+    assert.match(waits.stdout, /no verdict yet: forest.*--revert/);
+    const closed = run("r1", "--revert");
+    assert.equal(closed.status, 0, closed.stdout + closed.stderr);
+    assert.match(closed.stdout, /forest: closed unanswered by the revert/);
+    const after: History = JSON.parse(readFileSync(join(dir, "history.json"), "utf8"));
+    assert.deepEqual([after.rounds.r1.verdict?.result, after.kept.forest.round], ["REVERT", "r0"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
