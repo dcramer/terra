@@ -14,6 +14,7 @@ pub use flora::{FloraSystems, Growth, Obstacles};
 pub use flora_kinds::Flora;
 pub use footprint::Footprint;
 mod map;
+pub mod marks;
 pub mod music;
 mod noises;
 pub mod portal;
@@ -119,6 +120,7 @@ impl Plugin for GameplayPlugin {
         storage_screen::plugin(app);
         interact::plugin(app);
         // Crossing to another world through a portal (D470), when a run stands one.
+        marks::plugin(app);
         portal::plugin(app);
         claim::plugin(app);
         vitals::plugin(app);

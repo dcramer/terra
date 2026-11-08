@@ -8,6 +8,8 @@
 //! `portal` experiment stands one in the forest and one back in its placeholder realm.
 
 use super::interact::{CanInteract, Interactable, Interacted};
+use super::marks::{self, Marks};
+use super::told::Told;
 use super::{ArriveAt, LocalPlayer};
 use bevy::prelude::*;
 use terra_world::instance::{Building, InWorld, Travel, WorldSpec};
@@ -22,7 +24,14 @@ pub mod veil;
 #[derive(Component, Clone, Debug)]
 pub struct Portal {
     pub to: WorldSpec,
+    /// Whether it can be stepped through: a world's gate starts shut, until one who bears a
+    /// mark that opens gates comes to it (D590); its veil hangs only while it is open.
+    pub open: bool,
 }
+
+/// A portal's veil, hung while it is open.
+#[derive(Component)]
+struct Veil;
 
 /// Where the player came from, a crossing at a time (D470): the world, the spot and the
 /// point faced. Outlives every world: it is the character's, not the world's.
@@ -56,9 +65,32 @@ pub fn plugin(app: &mut App) {
                 .chain()
                 .run_if(in_state(Travel::Playing)),
         )
+        .add_systems(Update, hang_veils)
         .add_systems(OnEnter(InWorld), arrive.in_set(Building::Stage))
         .add_systems(OnEnter(Travel::Playing), crossed);
     terra_world::remote::method(app, "portal.step", step);
+    terra_world::remote::method(app, "portal.open", open);
+}
+
+/// `portal.open`: opens the portal nearest the player, as one who bears the mark does, so a
+/// scripted run crosses without beating the boss (v0-goals, Proof); says whether it was shut.
+fn open(
+    In(_): In<Option<serde_json::Value>>,
+    mut portals: Query<(&mut Portal, &Transform)>,
+    body: Option<Single<&Transform, With<LocalPlayer>>>,
+) -> bevy::remote::BrpResult {
+    let refused = terra_world::remote::refused;
+    let body = body.ok_or_else(|| refused("There is no player near any portal yet."))?;
+    let nearest = portals.iter_mut().min_by(|a, b| {
+        let away = |at: &Transform| at.translation.distance(body.translation);
+        away(a.1).total_cmp(&away(b.1))
+    });
+    let (mut portal, _) = nearest.ok_or_else(|| refused("No portal stands in this world."))?;
+    let was_shut = !portal.open;
+    if was_shut {
+        portal.open = true;
+    }
+    Ok(serde_json::json!({ "was_shut": was_shut }))
 }
 
 /// `portal.step`: the player steps through the portal nearest them, as the interact key on
@@ -79,6 +111,7 @@ fn step(
     through.write(StepThrough(portal));
     Ok(serde_json::json!({
         "away_m": at.translation.distance(body.translation),
+        "open": leads.open,
         "to": { "kind": leads.to.kind, "seed": leads.to.seed.to_string() },
     }))
 }
@@ -114,20 +147,48 @@ fn used(mut used: MessageReader<Interacted>, mut through: MessageWriter<StepThro
 fn step_through(
     mut commands: Commands,
     mut through: MessageReader<StepThrough>,
-    portals: Query<&Portal>,
-    body: Option<Single<&Transform, With<LocalPlayer>>>,
+    mut portals: Query<&mut Portal>,
+    body: Option<Single<(Entity, &Transform, &Marks), With<LocalPlayer>>>,
     spec: Res<WorldSpec>,
     mut returns: ResMut<Returns>,
     arriving: Option<Res<Arriving>>,
+    (kinds, mut told): (Res<marks::Kinds>, MessageWriter<Told>),
 ) {
-    let Some(portal) = through.read().find_map(|step| portals.get(step.0).ok()) else {
+    let Some(mut portal) = through
+        .read()
+        .map(|step| step.0)
+        .last()
+        .and_then(|portal| portals.get_mut(portal).ok())
+    else {
         return;
     };
-    let Some(body) = body else { return };
+    let Some((player, body, marks)) = body.map(Single::into_inner) else {
+        return;
+    };
     if arriving.is_some() {
         return;
     }
-    let arrive = crossing(&mut returns, &spec, &body, &portal.to);
+    if !portal.open {
+        // Shut: opened by one who bears a mark that opens gates, for everyone and for good
+        // (D590); to anyone else it stays shut, and says so.
+        match kinds.opens_gates(marks) {
+            Some(mark) => {
+                portal.open = true;
+                told.write(Told::new(
+                    player,
+                    format!("The gate opens to {}.", mark.name),
+                ));
+            }
+            None => {
+                told.write(Told::new(
+                    player,
+                    "The gate is shut. It answers a mark you do not bear.",
+                ));
+            }
+        }
+        return;
+    }
+    let arrive = crossing(&mut returns, &spec, body, &portal.to);
     info!(
         "Portal: from {} {} to {} {}",
         spec.kind, spec.key.0, portal.to.kind, portal.to.key.0
@@ -161,6 +222,24 @@ fn crossing(
         toward: body.translation + *body.forward() * 10.0,
     });
     None
+}
+
+/// A portal's veil hangs while it is open, and not while it is shut.
+fn hang_veils(
+    portals: Query<(&Portal, &Children), Changed<Portal>>,
+    mut veils: Query<&mut Visibility, With<Veil>>,
+) {
+    for (portal, children) in &portals {
+        for child in children.iter() {
+            if let Ok(mut visibility) = veils.get_mut(child) {
+                visibility.set_if_neq(if portal.open {
+                    Visibility::Inherited
+                } else {
+                    Visibility::Hidden
+                });
+            }
+        }
+    }
 }
 
 /// On entering the world crossed to, where the crossing says to arrive, or before that
@@ -199,7 +278,7 @@ pub fn stand(
     materials: &mut Assets<veil::VeilMaterial>,
     planet: &Planet,
     (at, facing): (Vec3, Vec3),
-    to: WorldSpec,
+    (to, open): (WorldSpec, bool),
 ) -> Entity {
     let feet = planet.ground_at(at);
     let up = feet.normalize();
@@ -222,7 +301,7 @@ pub fn stand(
     commands
         .spawn((
             Name::new("Portal"),
-            Portal { to },
+            Portal { to, open },
             CanInteract(Interactable::Portal),
             Transform::from_translation(feet).looking_to(facing, up),
             Visibility::default(),
@@ -234,9 +313,15 @@ pub fn stand(
                 Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
             ));
             portal.spawn((
+                Veil,
                 Mesh3d(disc),
                 MeshMaterial3d(veil),
                 Transform::from_xyz(0.0, MIDDLE_M, 0.0),
+                if open {
+                    Visibility::Inherited
+                } else {
+                    Visibility::Hidden
+                },
             ));
         })
         .id()

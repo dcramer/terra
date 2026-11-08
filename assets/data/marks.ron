@@ -1,0 +1,9 @@
+// Marks (D590): facts on a character, each imprinted by something done, never carried,
+// dropped, stored, traded or lost on a death. A new mark is a row here (D136).
+//   key          what the game and a save name it by
+//   name         what a player is told it is
+//   opens_gates  a marked player opens a shut gate, which then stays open for everyone in
+//                that world
+[
+    (key: "troll", name: "the troll's mark", opens_gates: true),
+]

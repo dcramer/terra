@@ -27,6 +27,7 @@ fn game() -> App {
         .insert_resource(DrivenByPlayer)
         .insert_resource(Flora::read())
         .init_resource::<Clock>()
+        .register_required_components::<Player, crate::play::marks::Marks>()
         .init_resource::<record::Kept>()
         .init_resource::<Entered>()
         .init_resource::<crate::play::portal::Returns>()
@@ -513,7 +514,22 @@ fn each_world_keeps_its_own_record_and_a_save_is_loaded_into_the_world_it_was_le
     play_a_while(world, player);
     world.insert_resource(spec(1));
     world.resource_mut::<Clock>().hour = 21.5;
+    // The first world's gate opened, by a player who bears the mark (D590).
+    use crate::play::marks::Marks;
+    use crate::play::portal::gates::Gate;
+    world
+        .get_mut::<Marks>(player)
+        .unwrap()
+        .0
+        .insert("troll".into());
+    world.insert_resource(Gate {
+        at: Vec3::Y,
+        facing: Vec3::X,
+        open: true,
+    });
     world.run_system_once(keep).unwrap();
+    // The next world's gate is another: not opened here.
+    world.resource_mut::<Gate>().open = false;
     // On through a gate: another world, another hour, the way back kept.
     world.insert_resource(spec(2));
     world.resource_mut::<Clock>().hour = 3.0;
@@ -531,6 +547,11 @@ fn each_world_keeps_its_own_record_and_a_save_is_loaded_into_the_world_it_was_le
     assert_eq!(file.here.key, 2);
     assert_eq!(file.instances.keys().copied().collect::<Vec<_>>(), [1, 2]);
     assert_eq!(
+        (file.instances[&1].gate_open, file.instances[&2].gate_open),
+        (true, false)
+    );
+    assert_eq!(file.player.marks, ["troll"]);
+    assert_eq!(
         (file.instances[&1].hour, file.instances[&2].hour),
         (Some(21.5), Some(3.0))
     );
@@ -538,8 +559,13 @@ fn each_world_keeps_its_own_record_and_a_save_is_loaded_into_the_world_it_was_le
     // Loaded where the save was begun, world 1: not put there, but crossed to world 2.
     let mut fresh = game();
     let world = fresh.world_mut();
-    arrive(world);
+    let player = arrive(world);
     waiting_to_be_found(world);
+    world.insert_resource(Gate {
+        at: Vec3::Y,
+        facing: Vec3::X,
+        open: false,
+    });
     // One system kept across the calls, as the game's is: a save chosen once, then a world
     // entered each time (`Entered` made afresh).
     let enter = |world: &mut World, key: u64| {
@@ -561,9 +587,16 @@ fn each_world_keeps_its_own_record_and_a_save_is_loaded_into_the_world_it_was_le
     let returns = &world.resource::<crate::play::portal::Returns>().0;
     assert_eq!(returns.len(), 1);
     assert_eq!(returns[0].world.key, InstanceKey(1));
+    // The player bears their mark again; this world's gate was not opened.
+    assert!(world.get::<Marks>(player).unwrap().0.contains("troll"));
+    assert!(!world.resource::<Gate>().open);
     // Back in world 1: its own record, as it was left.
     enter(world, 1);
     assert_eq!(world.resource::<Clock>().hour, 21.5);
+    assert!(
+        world.resource::<Gate>().open,
+        "the first world's gate, opened, is shut again"
+    );
     let _ = std::fs::remove_file(&path);
 }
 

@@ -25,16 +25,25 @@ const BEFORE_M: f32 = 3.0;
 pub struct Gate {
     pub at: Vec3,
     pub facing: Vec3,
+    /// Whether it has been opened (D590): shut in a world first come to by its start, open
+    /// in one come to through a gate; kept with the world's record.
+    pub open: bool,
 }
 
+/// The portal that is its world's gate, whose state is the world's ([`Gate`]).
+#[derive(Component)]
+struct WorldGate;
+
 pub(super) fn plugin(app: &mut App) {
-    app.world_resource::<Gate>().add_systems(
-        OnEnter(InWorld),
-        (
-            find.in_set(Building::Stage).before(super::arrive),
-            stand.in_set(Building::Place),
-        ),
-    );
+    app.world_resource::<Gate>()
+        .add_systems(
+            OnEnter(InWorld),
+            (
+                find.in_set(Building::Stage).before(super::arrive),
+                stand.in_set(Building::Place),
+            ),
+        )
+        .add_systems(Update, follow.run_if(resource_exists::<Gate>));
 }
 
 /// The realm beyond a world's gate: its seed derived from the world's, all 64 bits (D596),
@@ -49,7 +58,7 @@ pub fn beyond(here: &WorldSpec) -> WorldSpec {
 }
 
 /// Finds the world's gate from its land, before anyone arrives.
-fn find(mut commands: Commands, planet: Res<Planet>, start: Res<Start>) {
+fn find(mut commands: Commands, planet: Res<Planet>, start: Res<Start>, returns: Res<Returns>) {
     let Some(round) = planet.round() else {
         return;
     };
@@ -74,7 +83,12 @@ fn find(mut commands: Commands, planet: Res<Planet>, start: Res<Start>) {
         off.z,
         began.elapsed().as_secs_f32()
     );
-    commands.insert_resource(Gate { at, facing });
+    // Come to through a gate, this world's own stands open: it is the way back.
+    commands.insert_resource(Gate {
+        at,
+        facing,
+        open: !returns.0.is_empty(),
+    });
 }
 
 /// Where one who came through a gate stands in the world come to: before its gate, facing
@@ -104,15 +118,29 @@ fn stand(
         Some(back) => back.world.clone(),
         None => beyond(&spec),
     };
-    super::stand(
+    let portal = super::stand(
         &mut commands,
         &assets,
         &mut meshes,
         &mut materials,
         &planet,
         (gate.at, gate.facing),
-        to,
+        (to, gate.open),
     );
+    commands.entity(portal).insert(WorldGate);
+}
+
+/// The gate's portal and the world's record of it are one state: opened at the portal (by a
+/// marked player, or a script), the world keeps it; given back open by a save, the portal
+/// opens.
+fn follow(mut gate: ResMut<Gate>, mut portals: Query<&mut super::Portal, With<WorldGate>>) {
+    for mut portal in &mut portals {
+        if portal.open && !gate.open {
+            gate.open = true;
+        } else if gate.open && !portal.open {
+            portal.open = true;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -145,6 +173,7 @@ mod tests {
         let gate = Gate {
             at: Vec3::new(0.0, 1000.0, 0.0),
             facing: Vec3::X,
+            open: true,
         };
         let arrive = arrival(&gate);
         assert_eq!(arrive.at, Vec3::new(BEFORE_M, 1000.0, 0.0));

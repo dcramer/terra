@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // A world's gate, end to end in the real game (D641, D470; v0's "the gate placed from the
 // seed, reachable on every seed"): a new 30 km world of a seed is played; its gate stands
-// where the seed places it, 150 to 800 m from the start; the player, warped before it, steps
-// through to the realm beyond, a world of another seed, and stands before that world's gate,
+// where the seed places it, 150 to 800 m from the start, shut; the player, warped before it,
+// cannot step through until they bear the troll's mark (D590), which opens it for good;
+// they step through to the realm beyond, a world of another seed, and stands before that world's gate,
 // which leads back; the game is closed there and started again, and is in the realm beyond
 // where it was left (the save keeps each world's own record, D471); stepping back, they
 // stand where they left the first world. Checked with no picture, by
@@ -13,7 +14,7 @@
 //
 // Node 22.18 or later; no dependencies. About eight minutes.
 
-import { call, start, stop, waitUntil, warp } from "./client.ts";
+import { call, said, start, stop, waitSeconds, waitUntil, warp } from "./client.ts";
 
 const args = process.argv.slice(2);
 const SEED = args.includes("--seed") ? args[args.indexOf("--seed") + 1] : "3";
@@ -44,6 +45,17 @@ try {
   await warp(before);
   const left = await stands("Player");
 
+  // Shut to one who bears no mark: they are told so and stay.
+  const tried = (await call("portal.step")) as { open: boolean };
+  if (tried.open) throw new Error("a new world's gate stands open before anyone bears the mark");
+  await waitSeconds(2);
+  if ((await title()).seed !== SEED) throw new Error("an unmarked player went through a shut gate");
+  const told = (await said(0, "Notice: The gate", 5)).lines.map((line) => line.text).join(" ");
+  if (!/gate is shut/i.test(told)) throw new Error(`an unmarked player at the shut gate was told "${told}", not that it is shut`);
+  // Marked, the first step opens it and the next goes through.
+  await call("marks.give", { mark: "troll" });
+  await call("portal.step");
+  await waitUntil("the gate to open to the mark", () => call("portal.step").then((step) => step as { open: boolean; away_m: number; to: { seed: string } }), (step) => step.open, 20);
   const out = (await call("portal.step")) as { away_m: number; to: { seed: string } };
   if (out.to.seed === SEED) throw new Error("the first world's gate leads to its own world");
   await playing((seed) => seed === out.to.seed);
@@ -62,8 +74,12 @@ try {
   if (back.to.seed !== SEED) throw new Error(`the realm beyond's gate leads to seed ${back.to.seed}, not back to ${SEED}`);
   await playing((seed) => seed === SEED);
   const home = await stands("Player");
+  // The first world's gate, opened before the game was closed, is open still, and the mark borne.
+  const still = (await call("portal.step")) as { open: boolean };
+  const borne = (await call("marks.state")) as { marks: string[] };
+  if (!still.open || !borne.marks.includes("troll")) throw new Error(`started again and back, the first gate is ${still.open ? "open" : "shut"} and the player bears ${JSON.stringify(borne.marks)}: the save did not keep them`);
   if (apart(home, left) > 1) throw new Error(`back through the gate the player stands ${apart(home, left).toFixed(1)} m from where they left`);
-  console.log(`✓ gate: seed ${SEED}'s gate stands ${away.toFixed(0)} m from the start; through it to the realm beyond (seed ${out.to.seed}), ${apart(there, me).toFixed(1)} m before its gate, closed and started again there (${apart(again, me).toFixed(1)} m from where it was closed), and back to within ${apart(home, left).toFixed(1)} m of where the player left the first world`);
+  console.log(`✓ gate: seed ${SEED}'s gate stands ${away.toFixed(0)} m from the start, shut to an unmarked player and opened by the troll's mark; through it to the realm beyond (seed ${out.to.seed}), ${apart(there, me).toFixed(1)} m before its gate, closed and started again there (${apart(again, me).toFixed(1)} m from where it was closed), and back to within ${apart(home, left).toFixed(1)} m of where the player left the first world`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 } finally {

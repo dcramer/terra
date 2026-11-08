@@ -80,6 +80,9 @@ struct Instance {
     /// The day of the world's clock, which the sun's path and the climate follow.
     #[serde(default)]
     day: Option<i64>,
+    /// Whether the world's gate has been opened (D590): for everyone, and for good.
+    #[serde(default)]
+    gate_open: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -101,6 +104,9 @@ struct SavedPlayer {
     /// For each slot of the bar, which of the backpack's items it points at.
     bar: Vec<Option<usize>>,
     picked: usize,
+    /// The marks borne, by key (D590).
+    #[serde(default)]
+    marks: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -218,12 +224,13 @@ fn load(
     mut site: ResMut<Site>,
     mut items: ResMut<Items>,
     mut view: Single<&mut View, IsLocalPlayer>,
-    (mut waiting, mut kept, entered, spec, mut returns): (
+    (mut waiting, mut kept, entered, spec, mut returns, mut gate): (
         ResMut<Waiting>,
         ResMut<Kept>,
         Res<Entered>,
         Res<WorldSpec>,
         ResMut<super::portal::Returns>,
+        Option<ResMut<super::portal::gates::Gate>>,
     ),
     (mut meshes, mut fell): (ResMut<Assets<Mesh>>, MessageWriter<FellAgain>),
     placed: Query<Entity, (With<Prop>, Without<Theirs>)>,
@@ -235,6 +242,7 @@ fn load(
             &mut Backpack,
             &mut Gear,
             &mut Bar,
+            &mut super::marks::Marks,
         ),
         IsLocalPlayer,
     >,
@@ -267,8 +275,7 @@ fn load(
         return;
     }
     let instance = file.instances.get(&spec.key.0);
-    let (mut transform, (mut vitals, mut stamina), mut skills, mut backpack, mut gear, mut bar) =
-        player.into_inner();
+    let (transform, (vitals, stamina), skills, backpack, gear, bar, marks) = player.into_inner();
 
     if let Some(save) = instance {
         // The time of day and the date, unless a scripted run set them.
@@ -343,71 +350,113 @@ fn load(
 
         // The claim grows back to its size once its stone is in place, and people take up
         // what they were doing once they arrive.
+        // A gate once opened is open (D590).
+        if let (true, Some(gate)) = (save.gate_open, gate.as_mut()) {
+            gate.open = true;
+        }
         waiting.claim_step = Some(save.claim_step);
         waiting.people = save.people.clone();
     }
 
     if place {
-        // The body, its skills, and where it stands.
-        let player = &file.player;
-        let at = Vec3::from(player.at);
-        let facing = Vec3::from(player.facing);
-        *transform = Transform::from_translation(at).looking_to(facing, at.normalize());
-        view.forward = facing;
-        vitals.health = player.health;
-        stamina.left = player.stamina;
-        vitals.fed = player.fed;
-        *skills = Skills::default();
-        for (name, progress) in &player.skills {
-            if let Some(skill) = Skill::ALL.into_iter().find(|skill| skill.name() == name) {
-                skills.restore(skill, *progress);
-            }
-        }
-
-        // What is worn first, since the pack decides the backpack's size; then what is in it.
-        let mut grid = inventory::bare_backpack();
-        let mut equipment = Equipment::new(&SLOTS.map(|(slot, _)| slot));
-        for name in player.worn.iter().flatten() {
-            if let Some(item) = items.make_named(name)
-                && grid.insert(&items.catalogue, item, None).is_ok()
-            {
-                let _ = inventory::wear(&items, &mut grid, &mut equipment, item.id);
-            }
-        }
-        for (&(slot, _), &held) in SLOTS.iter().zip(&player.worn_held) {
-            if held > 0 {
-                let _ = equipment.set_held(slot, held);
-            }
-        }
-        for (&(slot, _), &wear) in SLOTS.iter().zip(&player.worn_wear) {
-            if wear > 0 {
-                let _ = equipment.set_wear(slot, wear);
-            }
-        }
-        let ids = restore_items(&mut items, &mut grid, &player.backpack);
-        let mut action_bar = ActionBar::new(player.bar.len().max(inventory::BAR_SLOTS));
-        for (slot, index) in player.bar.iter().enumerate() {
-            action_bar.set(
-                slot,
-                index.and_then(|index| ids.get(index).copied().flatten()),
-            );
-        }
-        action_bar.pick(player.picked);
-        // For testing, --give adds to what was saved, so scripted runs can follow on.
-        inventory::give_for_testing(
+        put_player(
+            &file.player,
+            &options,
             &mut items,
-            &mut grid,
-            &mut equipment,
-            &mut action_bar,
-            &options.gives,
+            &mut view,
+            (
+                transform, vitals, stamina, skills, backpack, gear, bar, marks,
+            ),
         );
-        backpack.0 = grid;
-        gear.0 = equipment;
-        bar.0 = action_bar;
-
         info!("Loaded the saved game from {}.", path.0.display());
     }
     kept.placed = true;
+}
+
+/// Puts the saved player back: where they stood and faced, their vitals and skills, what
+/// they wear and carry, their bar and their marks.
+#[allow(clippy::type_complexity)]
+fn put_player(
+    player: &SavedPlayer,
+    options: &Options,
+    items: &mut Items,
+    view: &mut View,
+    (
+        mut transform,
+        mut vitals,
+        mut stamina,
+        mut skills,
+        mut backpack,
+        mut gear,
+        mut bar,
+        mut marks,
+    ): (
+        Mut<Transform>,
+        Mut<Vitals>,
+        Mut<Stamina>,
+        Mut<Skills>,
+        Mut<Backpack>,
+        Mut<Gear>,
+        Mut<Bar>,
+        Mut<super::marks::Marks>,
+    ),
+) {
+    // The body, its skills, and where it stands.
+    let at = Vec3::from(player.at);
+    let facing = Vec3::from(player.facing);
+    *transform = Transform::from_translation(at).looking_to(facing, at.normalize());
+    view.forward = facing;
+    vitals.health = player.health;
+    stamina.left = player.stamina;
+    vitals.fed = player.fed;
+    *skills = Skills::default();
+    for (name, progress) in &player.skills {
+        if let Some(skill) = Skill::ALL.into_iter().find(|skill| skill.name() == name) {
+            skills.restore(skill, *progress);
+        }
+    }
+
+    // What is worn first, since the pack decides the backpack's size; then what is in it.
+    let mut grid = inventory::bare_backpack();
+    let mut equipment = Equipment::new(&SLOTS.map(|(slot, _)| slot));
+    for name in player.worn.iter().flatten() {
+        if let Some(item) = items.make_named(name)
+            && grid.insert(&items.catalogue, item, None).is_ok()
+        {
+            let _ = inventory::wear(items, &mut grid, &mut equipment, item.id);
+        }
+    }
+    for (&(slot, _), &held) in SLOTS.iter().zip(&player.worn_held) {
+        if held > 0 {
+            let _ = equipment.set_held(slot, held);
+        }
+    }
+    for (&(slot, _), &wear) in SLOTS.iter().zip(&player.worn_wear) {
+        if wear > 0 {
+            let _ = equipment.set_wear(slot, wear);
+        }
+    }
+    let ids = restore_items(items, &mut grid, &player.backpack);
+    let mut action_bar = ActionBar::new(player.bar.len().max(inventory::BAR_SLOTS));
+    for (slot, index) in player.bar.iter().enumerate() {
+        action_bar.set(
+            slot,
+            index.and_then(|index| ids.get(index).copied().flatten()),
+        );
+    }
+    action_bar.pick(player.picked);
+    // For testing, --give adds to what was saved, so scripted runs can follow on.
+    inventory::give_for_testing(
+        items,
+        &mut grid,
+        &mut equipment,
+        &mut action_bar,
+        &options.gives,
+    );
+    backpack.0 = grid;
+    gear.0 = equipment;
+    bar.0 = action_bar;
+    marks.0 = player.marks.iter().cloned().collect();
 }
 
 fn restore_claim(
@@ -486,7 +535,12 @@ fn keep(
     props: Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
     people: Query<(&Person, &Transform), Without<Player>>,
     player: Single<PlayerParts, IsLocalPlayer>,
-    (mut kept, spec, returns): (ResMut<Kept>, Res<WorldSpec>, Res<super::portal::Returns>),
+    (mut kept, spec, returns, gate): (
+        ResMut<Kept>,
+        Res<WorldSpec>,
+        Res<super::portal::Returns>,
+        Option<Res<super::portal::gates::Gate>>,
+    ),
 ) {
     let gathered = gather(
         &clock,
@@ -497,7 +551,7 @@ fn keep(
         &view,
         &props,
         &people,
-        &player.into_inner(),
+        (&player.into_inner(), gate.is_some_and(|gate| gate.open)),
     );
     kept.keep(&spec, &returns, gathered);
 }
@@ -531,6 +585,7 @@ type PlayerParts<'a> = (
     &'a Backpack,
     &'a Gear,
     &'a Bar,
+    &'a super::marks::Marks,
 );
 
 /// Puts saved items into a grid, each at its cell or, if that is taken, wherever it fits,
@@ -590,9 +645,9 @@ fn gather(
     view: &View,
     props: &Query<(&Prop, Option<&Works>, Option<&Storage>), Without<Theirs>>,
     people: &Query<(&Person, &Transform), Without<Player>>,
-    player: &PlayerParts,
+    (player, gate_open): (&PlayerParts, bool),
 ) -> (SavedPlayer, Instance) {
-    let (at, (vitals, stamina), skills, backpack, gear, bar) = *player;
+    let (at, (vitals, stamina), skills, backpack, gear, bar, marks) = *player;
     let placed: Vec<_> = backpack.0.iter().collect();
     let kept = kept_items(items, &backpack.0);
     let bar_slots = (0..bar.0.len())
@@ -628,6 +683,7 @@ fn gather(
         backpack: kept,
         bar: bar_slots,
         picked: bar.0.picked(),
+        marks: marks.0.iter().cloned().collect(),
     };
     let instance = Instance {
         snapshot: Some(
@@ -667,6 +723,7 @@ fn gather(
             })
             .collect(),
         claim_step: claim.step(),
+        gate_open,
         hour: Some(clock.hour),
         day: Some(clock.day),
         ground: ground::kept(planet),

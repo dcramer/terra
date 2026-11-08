@@ -176,7 +176,8 @@ fn stand_portal(
         &mut materials,
         &planet,
         (at, facing),
-        to,
+        // The experiment's portals stand open: it tries crossings, not gates.
+        (to, true),
     );
 }
 

@@ -378,12 +378,15 @@ fn footings(
             }
             obstacles.add_solid(solid.at, solid);
         }
-        commands.entity(entity).remove::<Footing>().insert(Fitted {
-            seen: shape.clone(),
-            shape,
-            top_m,
-            low,
-        });
+        commands
+            .entity(entity)
+            .try_remove::<Footing>()
+            .try_insert(Fitted {
+                seen: shape.clone(),
+                shape,
+                top_m,
+                low,
+            });
     }
 }
 
@@ -425,12 +428,17 @@ fn trunks(
         if let Some(solid) = solid {
             obstacles.add_solid(transform.translation, solid);
         }
-        commands.entity(entity).remove::<Trunk>().insert(Fitted {
-            shape: wood,
-            seen,
-            top_m: f32::INFINITY,
-            low: None,
-        });
+        // Tried, not demanded: a tree cleared this frame (a gate's glade, a village's ground)
+        // is gone before this is applied, which stopped the game.
+        commands
+            .entity(entity)
+            .try_remove::<Trunk>()
+            .try_insert(Fitted {
+                shape: wood,
+                seen,
+                top_m: f32::INFINITY,
+                low: None,
+            });
     }
     // The woods' trees stream in round the player: their fits are part of what one costs.
     if let (true, Some(aftermath)) = (fitted, aftermath.as_mut()) {
