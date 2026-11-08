@@ -144,4 +144,9 @@
     // rim a twelfth of j23's (6, 1.8, 2.6), which blew out to a pink neon arc (f-0584 rim L 74
     // a* 25 C 25, dE 70 from litter); now a red line on the ground (L 35 a* 35, dE 47; j32).
     tell: (fill: Linear(0.24, 0.02, 0.05), edge: Linear(0.5, 0.075, 0.1)),
+    // The hero's own fill (rim.rs `Fighter::with_fill`), the ARPGs' character light: in the
+    // oaks' shade he was a grey speck on black loam (j29 and j32's judges, f-0920 to f-1120).
+    // His median L* over his ring in shade 7 to 8 -> 17 to 19 (f-0920, f-1034), +5 in sun
+    // (f-0182); 0.15 gave 15, 0.6 gave 21 to 24 and read his plate a flat white (j33).
+    hero: (fill: 0.3),
 )

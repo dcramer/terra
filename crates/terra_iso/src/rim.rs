@@ -182,6 +182,12 @@ impl Fighter {
         self
     }
 
+    /// A fighter as a biome's data stands it off its ground (kit/biome.rs `Tone`): its
+    /// value, rim and fill.
+    pub fn toned(tone: crate::kit::biome::Tone) -> Self {
+        Self::valued(tone.value, tone.rim).with_fill(tone.fill)
+    }
+
     /// Its swapped materials' kind: one material a steel and sky share and fill.
     fn kind(&self) -> Kind {
         Kind::Fighter([self.steel, self.sky, self.fill].map(f32::to_bits))
@@ -622,6 +628,9 @@ mod tests {
             "a fighter's sky share shares another's material"
         );
         assert_eq!(made(&Fighter::default()), cast);
+        // A biome naming no tone (its hero's, a body's) leaves it as the cast is.
+        let untoned = Fighter::toned(crate::kit::biome::Tone::default());
+        assert_eq!(made(&untoned), cast, "an untoned body is not the cast");
         let filled = made(&Fighter::default().with_fill(0.8));
         let metal = |h: &Handle<RimMaterial>| rims.get(h).unwrap().extension.metal;
         assert_eq!((metal(&cast).x, metal(&hero).x), (0.0, 1.0));

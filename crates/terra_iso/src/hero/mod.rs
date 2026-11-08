@@ -180,14 +180,17 @@ fn lit_once_in(commands: &mut Commands, body: Entity, looks: &[Entity]) {
         commands.entity(look).observe(
             move |_: On<WorldInstanceReady>,
                   mut left: Query<&mut Dressing>,
+                  biome: Option<Res<crate::kit::biome::Biome>>,
                   mut commands: Commands| {
                 let Ok(mut left) = left.get_mut(body) else {
                     return;
                 };
                 left.0 = left.0.saturating_sub(1);
                 if left.0 == 0 {
+                    // His biome's tone (its `hero`): his own fill where shade crushes him.
+                    let tone = biome.map(|b| b.hero).unwrap_or_default();
                     commands.entity(body).remove::<Dressing>().insert(
-                        crate::rim::Fighter::default()
+                        crate::rim::Fighter::toned(tone)
                             .with_steel(STEEL)
                             .with_sky(SKY),
                     );

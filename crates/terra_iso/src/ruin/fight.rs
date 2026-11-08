@@ -27,7 +27,7 @@ fn cast(
         let tone = tone_of(own, biome.as_deref(), &name);
         commands
             .entity(body)
-            .insert(crate::rim::Fighter::valued(tone.value, tone.rim).with_fill(tone.fill));
+            .insert(crate::rim::Fighter::toned(tone));
     }
 }
 

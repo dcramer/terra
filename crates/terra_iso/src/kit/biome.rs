@@ -67,6 +67,11 @@ pub struct Biome {
     /// biome's ground: data, not a constant (D136). An ember red by default.
     #[serde(default)]
     pub tell: Tell,
+    /// How the hero stands off this ground (hero/mod.rs, rim.rs `Fighter::toned`): his own
+    /// fill light where shade crushes him, as the ARPGs' character light follows theirs.
+    /// As the plate comes (value 1, rim 1, no fill) by default.
+    #[serde(default)]
+    pub hero: Tone,
 }
 
 /// A tell's fill and rim as they reach the screen (unlit, before AgX; past 1 to bloom).
@@ -803,6 +808,17 @@ mod tests {
         let lit = b.light().unwrap();
         assert_eq!(lit.key.lux, 30.0);
         assert_eq!(lit.curve, super::super::light::Curve::AgX);
+    }
+
+    /// A biome naming no hero tone leaves him as his plate comes (no fill of his own); the
+    /// forest, whose shade left him a grey speck (iso-forest-demo j32's judge), lights him.
+    #[test]
+    fn the_hero_is_toned_by_data() {
+        let b: Biome = crate::kit::parse(FULL, "full.ron", "biome.rs").unwrap();
+        assert_eq!(b.hero, Tone::default());
+        assert_eq!(b.hero.fill, 0.0);
+        let forest = Biome::load("forest").unwrap();
+        assert!(forest.hero.fill > 0.0, "the forest's hero has no fill");
     }
 
     /// A misspelt field fails with the file, its line, the field and the fix.
