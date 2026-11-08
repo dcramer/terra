@@ -9,6 +9,7 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 - **The art is uniform** (D14, D647): whatever is a bird's size or more is a model in the game's style, made by the creature and model pipelines. Only what is a fly's size is a speck or card drawn by a shader (`terra_world::drift`).
 - **By place, season, warmth and hour**, as data (D136): a kind is about where it would be.
 - **As many at any quality preset**: how much life is about is the world's to say, not the machine's. What a preset changes is how far off a kind is drawn.
+- **Seen is measured**: `wildlife.state` counts the creatures in the camera's picture at 6 pixels tall or more. At the meadow start, standing: 5 or 6 creatures, **no bird** of 57 near. A finch at 1.6 times life size is 6 pixels tall only within 15 m, and takes flight at 7 m; a pigeon within 19 m. Dozens of birds seen needs birds that are larger (crow, pheasant, gull: models not made) or nearer in flocks (a flush staged ahead of a walking player, as the meetings stage animals, D384), not more small birds.
 - **Counted, then looked at**: `wildlife.state` and `drift.state` say what is about (`tools/sandbox/ambience.ts`); a still or film of each place shows whether it is seen.
 
 ## What there is (measured at the first realm's meadow start, a July day)

@@ -25,7 +25,7 @@ const SMALL = ["Chaffinch", "Wood pigeon", "House sparrow", "Feral pigeon", "Red
 type Drift = { kinds: { name: string; seen: number }[] };
 
 /// What drifts, and how many small animals stand near, in a new world on a date at an hour.
-async function about(date: string, hour: number): Promise<{ seen: Map<string, number>; small: string[]; wild: { birds: number; flying: number } }> {
+async function about(date: string, hour: number): Promise<{ seen: Map<string, number>; small: string[]; wild: { birds: number; flying: number; in_view: number; birds_in_view: number } }> {
   try {
     await start(["--experiment", "play", "--fresh", "--save", "shots/ambience.ron", "--radius", "2000", "--seed", SEED, "--date", date, "--time", String(hour), "--offscreen", "--mute"], { realTime: true, release: true });
     await waitUntil("the world to be played", async () => (await call("title.state")) as { screen: string }, (now) => now.screen === "Playing", 600);
@@ -37,7 +37,7 @@ async function about(date: string, hour: number): Promise<{ seen: Map<string, nu
       const found = (await call("sandbox.find", { name })) as unknown[];
       if (found.length > 0) small.push(`${found.length} ${name}`);
     }
-    const wild = (await call("wildlife.state")) as { birds: number; flying: number };
+    const wild = (await call("wildlife.state")) as { birds: number; flying: number; in_view: number; birds_in_view: number };
     return { seen: new Map(drift.kinds.map((kind) => [kind.name, kind.seen])), small, wild };
   } finally {
     await stop().catch(() => undefined);
@@ -65,7 +65,7 @@ try {
   const hardy = INSECTS.filter((name) => (winter.seen.get(name) ?? 0) > GONE);
   if (hardy.length > 0) throw new Error(`on a January day ${hardy.join(" and ")} fly (${said(winter.seen, INSECTS)}): an insect needs its air_c of warmth`);
 
-  console.log(`✓ ambience: on a July day ${said(day.seen, ["White butterflies", "Brown butterflies", "Bees", ...BIRDS])}, with ${day.small.join(", ")} near, ${day.wild.birds} birds in all and ${day.wild.flying} on the wing; that night Fireflies ${night.seen.get("Fireflies")} and the day's gone; on a January day no insect flies`);
+  console.log(`✓ ambience: on a July day ${said(day.seen, ["White butterflies", "Brown butterflies", "Bees", ...BIRDS])}, with ${day.small.join(", ")} near, ${day.wild.birds} birds in all and ${day.wild.flying} on the wing (in the picture, 6 pixels tall or more: ${day.wild.in_view} creatures, ${day.wild.birds_in_view} of them birds: a reading, the bar being dozens); that night Fireflies ${night.seen.get("Fireflies")} and the day's gone; on a January day no insect flies`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 }

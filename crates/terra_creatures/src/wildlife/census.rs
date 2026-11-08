@@ -7,6 +7,11 @@ use crate::species::{Bestiary, Moves, Species};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 
+/// A creature in the picture is seen when it is at least so many pixels tall: less is a
+/// speck nobody takes for an animal. What stands between is not asked: grass and leaves hide
+/// some of those counted.
+const SEEN_PIXELS: f32 = 6.0;
+
 /// Whether a kind flies: a bird, counted apart.
 fn flies(species: Species, bestiary: &Bestiary) -> bool {
     matches!(bestiary.get(species).moves, Moves::Flies(_))
@@ -64,6 +69,7 @@ pub(super) fn state(
     bestiary: Res<Bestiary>,
     player: Query<&Transform, terra_walker::IsLocalPlayer>,
     placed: Query<(&Transform, &creatures::Creature)>,
+    cameras: Query<(&Camera, &GlobalTransform), With<terra_world::planet::MainCamera>>,
 ) -> bevy::remote::BrpResult {
     let feet = player
         .iter()
@@ -72,12 +78,32 @@ pub(super) fn state(
         .translation;
     let mut kinds = std::collections::BTreeMap::<&str, u32>::new();
     let (mut birds, mut all, mut flying) = (0, 0, 0);
+    // Those the camera has in its picture, each at least so many pixels tall: what a player
+    // sees of them, where a count of those near says only that they are there.
+    let (mut shown, mut birds_shown) = (0, 0);
+    let pixels = |at: Vec3, tall_m: f32| -> Option<f32> {
+        let (camera, from) = cameras.iter().next()?;
+        let height = camera.physical_viewport_size()?.y as f32;
+        let foot = camera.world_to_ndc(from, at)?;
+        let head = camera.world_to_ndc(from, at + at.normalize() * tall_m)?;
+        let inside = foot.x.abs() <= 1.0 && foot.y.abs() <= 1.0 && (0.0..=1.0).contains(&foot.z);
+        inside.then_some((head.y - foot.y).abs() * height / 2.0)
+    };
     for (at, creature) in &placed {
         if creature.health <= 0.0 || at.translation.distance(feet) > RELEASE_M {
             continue;
         }
         *kinds.entry(bestiary.name(creature.species)).or_default() += 1;
         all += 1;
+        let about = bestiary.get(creature.species);
+        let seen = pixels(at.translation, about.body.radius * 2.0 * at.scale.y)
+            .is_some_and(|tall| tall >= SEEN_PIXELS);
+        if seen {
+            shown += 1;
+            if flies(creature.species, &bestiary) {
+                birds_shown += 1;
+            }
+        }
         if matches!(
             bestiary.get(creature.species).moves,
             crate::species::Moves::Flies(_)
@@ -89,6 +115,6 @@ pub(super) fn state(
         }
     }
     Ok(
-        serde_json::json!({ "about": all, "birds": birds, "flying": flying, "kinds": kinds, "most_birds": MOST_BIRDS, "most_others": MOST }),
+        serde_json::json!({ "about": all, "birds": birds, "flying": flying, "in_view": shown, "birds_in_view": birds_shown, "kinds": kinds, "most_birds": MOST_BIRDS, "most_others": MOST }),
     )
 }
