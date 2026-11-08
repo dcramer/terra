@@ -14,6 +14,8 @@ pub const CROSSINGS: f32 = 0.2;
 /// A big animal's meeting is a crossing so often, more than a small one's, since it is seen
 /// best on the move.
 pub const BIG_CROSSINGS: f32 = 0.3;
+/// A flock of birds met is a crossing so often: a bird is seen on the wing.
+pub const BIRD_CROSSINGS: f32 = 0.8;
 /// A crossing starts so far ahead and so far aside, just inside the trees about 15° off the
 /// camera's way, and crosses the way so far ahead of the player as they reach it, well
 /// before them, and walks on so long past into the trees on the far side; 10 m ahead and

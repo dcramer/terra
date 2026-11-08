@@ -173,12 +173,8 @@ pub fn meet(
             let count = (fewest + most).div_ceil(2)
                 + (dice.unit() * ((most - fewest) / 2 + 1) as f32) as u32;
             // One standing has nothing to cross ahead of.
-            let share = if staging.big {
-                BIG_CROSSINGS
-            } else {
-                CROSSINGS
-            };
-            let crossing = if moving && (!in_view || dice.unit() < share) {
+            let (flier, share) = crossing_share(bestiary, species, staging.big);
+            let crossing = if (moving || flier) && (!in_view || dice.unit() < share) {
                 cross(
                     commands,
                     (kinds, bestiary),
@@ -339,6 +335,22 @@ fn choose(
         roll -= fit.3;
         roll <= 0.0
     })
+}
+
+/// Whether a kind met flies, and the share of its meetings that are a crossing. A bird is
+/// seen in the air and hardly on the ground (in grass it is under it, and past 15 m too
+/// small): most of its meetings are a flock crossing, and one standing is crossed too, as
+/// birds fly past whoever stands in a field (D647).
+fn crossing_share(bestiary: &Bestiary, species: Species, big: bool) -> (bool, f32) {
+    let flier = matches!(bestiary.get(species).moves, crate::species::Moves::Flies(_));
+    let share = if flier {
+        BIRD_CROSSINGS
+    } else if big {
+        BIG_CROSSINGS
+    } else {
+        CROSSINGS
+    };
+    (flier, share)
 }
 
 /// How far from a player's way a group of a kind met beside it stands at the least, metres:

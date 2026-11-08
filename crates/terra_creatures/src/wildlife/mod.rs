@@ -28,7 +28,7 @@ use reach::nearest_first;
 use crate::creatures::{self, Kinds};
 use crate::species::{Bestiary, Haunt, Lives, Niche, Species};
 use bevy::{ecs::system::SystemParam, platform::collections::HashMap, prelude::*};
-use groups::{BIG_CROSSINGS, CROSSINGS, cross, put_group};
+use groups::{BIG_CROSSINGS, BIRD_CROSSINGS, CROSSINGS, cross, put_group};
 #[cfg(test)]
 use groups::{CROSS_LEAD_M, crossing_point};
 use terra_gen::Seed;
@@ -81,7 +81,7 @@ const TRODDEN: f32 = 0.4;
 /// shore. What then happens is the animals' own: each breaks from a player on the move
 /// across their way and on ahead (creatures' `bolt`), so it crosses the picture near rather
 /// than vanishing into cover.
-const MEET_EVERY_S: (f32, f32) = (3.0, 6.0);
+const MEET_EVERY_S: (f32, f32) = (2.0, 4.0);
 /// A player setting off meets something within so long, so a walk does not begin empty.
 const SET_OFF_S: f32 = 0.5;
 /// Every so many meetings on the move, the first among them, is with a big animal (a body
@@ -97,8 +97,8 @@ const MEET_BIG: Band = Band {
     aside_m: (6.0, 9.0),
 };
 const MEET_SMALL: Band = Band {
-    ahead_m: (16.0, 24.0),
-    aside_m: (4.0, 6.0),
+    ahead_m: (11.0, 17.0),
+    aside_m: (3.5, 6.0),
 };
 /// The angles off the camera's way through which a spot beside it is seen in view, as the
 /// player comes on: a little off their line, then well off it (`eyes_on`).
@@ -116,10 +116,10 @@ const EYE_UP_M: f32 = 2.2;
 /// So many met animals at most besides the land's own, for every player together, so the
 /// cells round a player, full, do not leave nothing to meet ahead; one so far from every
 /// player is let go.
-const MET_MOST: usize = 24;
+const MET_MOST: usize = 48;
 const MET_RELEASE_M: f32 = 80.0;
 /// Standing, a player meets no more than so many.
-const MET_STANDING: usize = 8;
+const MET_STANDING: usize = 16;
 /// Grass thinner than this, as thick by how much taller it grows, leaves an animal on it in
 /// plain sight.
 const BARE_GRASS: f32 = 0.35;

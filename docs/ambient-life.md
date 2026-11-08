@@ -10,6 +10,7 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 - **By place, season, warmth and hour**, as data (D136): a kind is about where it would be.
 - **As many at any quality preset**: how much life is about is the world's to say, not the machine's. What a preset changes is how far off a kind is drawn.
 - **Seen is measured**: `wildlife.state` counts the creatures in the camera's picture at 6 pixels tall or more. At the meadow start, standing: 5 or 6 creatures, **no bird** of 57 near. A finch at 1.6 times life size is 6 pixels tall only within 15 m, and takes flight at 7 m; a pigeon within 19 m. Dozens of birds seen needs birds that are larger (crow, pheasant, gull: models not made) or nearer in flocks (a flush staged ahead of a walking player, as the meetings stage animals, D384), not more small birds.
+- **Over a walk** (45 s forward from the meadow start, a look a second): 1.5 creatures in the picture on average and a bird in 2 seconds of 45, before; 2.3 and 3 seconds with small meetings nearer (11 to 17 m ahead) and oftener (every 2 to 4 s), twice as many met at once, and four bird meetings in five a flock crossing. Far short of dozens: the meadow's tall grass leaves the meetings few spots where a small animal shows, and a flying bird is counted by its body, not its wings.
 - **Counted, then looked at**: `wildlife.state` and `drift.state` say what is about (`tools/sandbox/ambience.ts`); a still or film of each place shows whether it is seen.
 
 ## What there is (measured at the first realm's meadow start, a July day)
