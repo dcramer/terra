@@ -100,22 +100,42 @@ fn scum(p: vec2<f32>, depth: f32) -> f32 {
     return clamp(mat * 1.7 - grain * 0.7, 0.0, 1.0);
 }
 
+// How the seen depth runs over the face (metres of depth a metre of world xz), from the
+// screen's derivatives of both; called in uniform control flow, before any per-pixel branch.
+fn depth_slope(p: vec2<f32>, depth: f32) -> vec2<f32> {
+    let px = dpdx(p);
+    let py = dpdy(p);
+    let dx = dpdx(depth);
+    let dy = dpdy(depth);
+    let det = px.x * py.y - px.y * py.x;
+    if abs(det) < 1e-12 {
+        return vec2<f32>(0.0);
+    }
+    return vec2<f32>(dx * py.y - px.y * dy, px.x * dy - dx * py.x) / det;
+}
+
 // Floating leaves in the open shallows: at most one a cell, round with a notch, each its
-// own size, turn and age. x: cover, y: its shade, z: how yellowed.
-fn pads(p: vec2<f32>, depth: f32) -> vec3<f32> {
+// own size, turn and age. x: cover, y: its shade, z: how yellowed. A leaf floats whole or
+// not at all: whether it lies here is asked of the depth under its whole disc (its centre's,
+// carried there along `shelf`, give or take the shelf over its radius), never of this
+// pixel's, which cut a leaf in two along a depth contour (the marsh fire's "hard yellow
+// half-disc", round 261107-0905's judge).
+fn pads(p: vec2<f32>, depth: f32, shelf: vec2<f32>) -> vec3<f32> {
     if look.float_.z <= 0.0 {
         return vec3<f32>(0.0);
     }
     let cell = inverseSqrt(look.float_.z);
     let id = floor(p / cell);
     let f = (fract(p / cell) - 0.5) * cell;
-    let calm = smoothstep(0.06, 0.14, depth) * smoothstep(0.45, 0.25, depth);
-    if hash(id + 41.0) > calm * 0.75 {
-        return vec3<f32>(0.0);
-    }
     let r = look.float_.w * (0.55 + 0.65 * hash(id + 5.3));
     let room = max(cell * 0.5 - r, 0.0);
     let d = f - (vec2<f32>(hash(id + 13.1), hash(id + 29.7)) - 0.5) * 2.0 * room;
+    let centre = depth - dot(shelf, d);
+    let spread = length(shelf) * r;
+    let calm = smoothstep(0.06, 0.14, centre - spread) * smoothstep(0.45, 0.25, centre + spread);
+    if hash(id + 41.0) > calm * 0.75 {
+        return vec3<f32>(0.0);
+    }
     let dist = length(d);
     let a = atan2(d.y, d.x) + hash(id + 3.3) * 6.283;
     let notch = smoothstep(0.16, 0.26, abs(atan2(sin(a), cos(a))));
@@ -198,7 +218,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     }
     let calm = mix(1.0 - look.ripple.w, 1.0, smoothstep(0.0, 4.0 * look.body.w, in.uv_b.x));
     let weed = scum(p, in.uv_b.x);
-    let pad = pads(p, in.uv_b.x);
+    let pad = pads(p, in.uv_b.x, depth_slope(p, in.uv_b.x));
     // A pool (the second uv's y, `pooled` in water.rs): a puddle on a track, bare of scum
     // and leaves to its soft rim, mirroring at least that share.
     let pool = in.uv_b.y;
