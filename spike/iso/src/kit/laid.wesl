@@ -69,6 +69,19 @@ fn noise(p: vec2<f32>) -> f32 {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+// An old flag's weathered face, 0 to 1 (the `lichen` court's, below): hollows worn a hand
+// across, pits of a few centimetres, and spalls, flakes of the face gone with a crisp step;
+// `fine` fades the pits out as they near a pixel, so they never shimmer.
+fn weathered(p: vec2<f32>, fine: f32) -> f32 {
+    return noise(p * 6.0 + 177.0) * 0.45 + noise(p * 17.0 + 179.0) * 0.3 * (0.5 + 0.5 * fine)
+        + noise(p * 43.0 + 181.0) * 0.25 * fine - spalled(p) * 0.35;
+}
+
+// Where a flag's face has flaked away, 0 to 1, a hand to a third of a metre across.
+fn spalled(p: vec2<f32>) -> f32 {
+    return smoothstep(0.6, 0.64, noise(p * 2.3 + 171.0) * 0.7 + noise(p * 8.0 + 173.0) * 0.3);
+}
+
 // How near `p` is to a cell wall of a Voronoi pattern (F2 - F1, Worley 1996): 0 on the
 // wall, so a thin band about it draws a crack.
 fn cell_wall(p: vec2<f32>) -> f32 {
@@ -319,6 +332,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var gone_rim = 0.0;
     var edge = 8.0;
     var unit_dirt = 0.5;
+    var unit_wear = 0.5;
     var joint_all = joint;
     if laid.shape.x > 0.5 {
         let f = flag(in.uv, uv_m, px, p, feet);
@@ -337,6 +351,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         gone_rim = f.rim;
         edge = f.edge;
         unit_dirt = hash(key + 151.0);
+        unit_wear = hash(key + 161.0);
     }
     joint = joint_all;
 
@@ -467,6 +482,26 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // patches with crisp lobed edges, 5 to 20 cm, on some flags and stretches and not
         // others, never in a joint (round discs read as polka dots, round 261107-0910).
         if laid.aged.y > 0.0 {
+            // The flags' faces weathered, each its own way (uc-gaps fault a, the court "a
+            // clean CG sheet with stickers"; the scan, Large Grey Tiles, is near flat: its
+            // normal map's z is over 0.994 on nine pixels in ten): worn hollows, pits and
+            // spalls up to 2.5 cm deep, deeper on some flags than others, tilt the normal so
+            // the torches rake them; grime packs the pits, crisp and dark, as a scan's cavity
+            // map is multiplied in, and a spall's fresh stone shows paler than the weathered
+            // face round it. The lichen stays (without it, "cleaner, smoother slabs", j76).
+            let fine = 1.0 - smoothstep(0.35, 0.7, px * 43.0);
+            let face = (1.0 - joint) * (1.0 - gone);
+            let worn = mix(0.3, 1.0, unit_wear) * face;
+            let e = 0.005;
+            let h = weathered(p, fine);
+            let slope = vec2<f32>(
+                weathered(p + vec2<f32>(e, 0.0), fine) - weathered(p - vec2<f32>(e, 0.0), fine),
+                weathered(p + vec2<f32>(0.0, e), fine) - weathered(p - vec2<f32>(0.0, e), fine),
+            ) * 0.025 * worn / (2.0 * e);
+            tilt_n += vec3<f32>(-slope.x, 0.0, -slope.y);
+            let spall = spalled(p) * worn;
+            let pit = (1.0 - smoothstep(0.2, 0.27, h + spall * 0.35)) * worn;
+            colour *= mix(1.0, 1.18, spall) * mix(1.0, 0.85, 1.0 - smoothstep(0.3, 0.5, h)) * mix(1.0, 0.45, pit);
             let patchy = noise(p * 0.7 + 131.0) * 0.6 + unit_dirt * 0.4;
             let l = noise(p * 11.0 + 137.0) * 0.55 + noise(p * 29.0 + 139.0) * 0.3 + noise(p * 70.0 + 3.0) * 0.15;
             let crust = smoothstep(0.66, 0.69, l + (patchy - 0.5) * 0.5 + (laid.aged.y - 0.5) * 0.3)
