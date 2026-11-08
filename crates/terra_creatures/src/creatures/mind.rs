@@ -548,6 +548,11 @@ fn hostile(
 const BIRD_IDLES: f32 = 0.1;
 const BIRD_FEEDS: f32 = 0.3;
 const BIRD_FLIGHT_M: (f32, f32) = (12.0, 40.0);
+/// A bird whose body is at least so big round, metres, crosses the sky on so many of its
+/// flights, so far at a crossing (a flight rises an eighth of its length, to 14 m).
+const CROSSES_FROM_M: f32 = 0.05;
+const CROSSES_SKY: f32 = 0.4;
+const CROSSING_M: (f32, f32) = (60.0, 140.0);
 /// Of a bird's choices past standing and feeding, the share that are to a stone's top, where
 /// one stands near.
 const ONTO_A_STONE: f32 = 0.4;
@@ -652,7 +657,11 @@ fn settle(
             up_high(here, way, (5.0, 20.0), around, dice).unwrap_or(State::Idle(1.0))
         }
         Moves::Flies(_) if dice.unit() < 0.85 => {
-            flight(about, here, way, BIRD_FLIGHT_M, around, dice).unwrap_or(State::Idle(1.0))
+            // A bird the size of a pigeon crosses the sky now and then: a long flight, high
+            // over its way, seen from far off as the small birds' short ones are not.
+            let far = about.body.radius >= CROSSES_FROM_M && dice.unit() < CROSSES_SKY;
+            let range = if far { CROSSING_M } else { BIRD_FLIGHT_M };
+            flight(about, here, way, range, around, dice).unwrap_or(State::Idle(1.0))
         }
         Moves::Flies(_) => State::Wander(creature.home + way * dice.range(0.8, 3.0)),
         _ => {
