@@ -1,7 +1,7 @@
-//! What lies beyond the court, out to the frame's edges: boulders and stones of the game's
-//! rock set (assets/models/nature/Rock_*.glb, the mossed ones in the shade), more dead trees,
-//! and (walls.rs) the fragments of the outer walls, so the frame fills as the refs' do and
-//! frames the fight, never a margin of bare earth.
+//! What lies beyond the court, out to the frame's edges: boulders and stones of Poly Haven's
+//! scanned Rock Moss Set (assets/models/nature/forest/mossy_rock_*.glb, the forest's and the
+//! marsh's), more dead trees, and (walls.rs) the fragments of the outer walls, so the frame
+//! fills as the refs' do and frames the fight, never a margin of bare earth.
 
 use super::ground::{PAVED_X, PAVED_Z, TOP, paved};
 use crate::forest::Rng;
@@ -9,17 +9,20 @@ use crate::scene::model;
 use bevy::prelude::*;
 
 /// Rock sets by size: the large boulders, the knee-high stones and the small ones.
-/// Only the mossed set: the bare Rock_1..10 render near white under the moon (pale scans,
-/// scene-r2/step3 first try), white blobs in a night frame.
+/// The scanned set with its own colour, normal and roughness maps: the bare Rock_1..10
+/// render near white under the moon (pale scans, scene-r2/step3 first try), and the same
+/// shapes' untextured copies (models/nature/Rock_Moss_*, one flat 0.5 grey) lay smooth
+/// pale lumps over the outer walls that every ruin judge read as snow ("white-capped
+/// blocks at the upper right", 261107-1929). Same rocks, so the layout keeps its sizes.
 const BIG: [&str; 5] = [
-    "Rock_Moss_1",
-    "Rock_Moss_2",
-    "Rock_Moss_3",
-    "Rock_Moss_4",
-    "Rock_Moss_5",
+    "mossy_rock_a_2",
+    "mossy_rock_a_1",
+    "mossy_rock_a_5",
+    "mossy_rock_b_6",
+    "mossy_rock_b_5",
 ];
-const MID: [&str; 3] = ["Rock_Moss_3", "Rock_Moss_4", "Rock_Moss_5"];
-const SMALL: [&str; 3] = ["Rock_Moss_1", "Rock_Moss_2", "Rock_Moss_5"];
+const MID: [&str; 3] = ["mossy_rock_a_5", "mossy_rock_b_6", "mossy_rock_b_5"];
+const SMALL: [&str; 3] = ["mossy_rock_a_2", "mossy_rock_a_1", "mossy_rock_b_5"];
 
 /// Clusters of rock: where, how far they spread, how many of each size, how big.
 const CLUSTERS: [(Vec2, f32, usize, usize, f32); 9] = [
@@ -64,7 +67,7 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
             let p = at + Vec2::new(rng.range(-1.0, 1.0), rng.range(-1.0, 1.0)) * spread;
             // Set into the earth, not on it.
             let sunk = -0.12 * size;
-            let path = format!("models/nature/{name}.glb");
+            let path = format!("models/nature/forest/{name}.glb");
             let yaw = rng.range(0.0, std::f32::consts::TAU);
             model(
                 &mut commands,
@@ -89,16 +92,16 @@ pub fn spawn(mut commands: Commands, asset: Res<AssetServer>) {
     let mut strewn = 0;
     while strewn < 40 {
         let p = Vec2::new(rng.range(-16.0, 16.0), rng.range(-13.0, 8.0));
-        // Not in the court's holes or at the pool: the Rock_Moss set is untextured (flat
-        // grey in its file), and one by the pool read as "an untextured cream lump" (judge
-        // 2026-11-06); litter.rs's rubble lies there instead.
+        // Not in the court's holes or at the pool: one of the untextured copies by the pool
+        // read as "an untextured cream lump" (judge 2026-11-06); litter.rs's rubble lies
+        // there instead.
         let court = (PAVED_X.0..PAVED_X.1).contains(&p.x) && (PAVED_Z.0..PAVED_Z.1).contains(&p.y);
         if paved(p) > 0.5 || court {
             continue;
         }
         strewn += 1;
         let name = SMALL[(rng.f() * 3.0) as usize % 3];
-        let path = format!("models/nature/{name}.glb");
+        let path = format!("models/nature/forest/{name}.glb");
         let yaw = rng.range(0.0, std::f32::consts::TAU);
         let size = rng.range(0.1, 0.3);
         model(

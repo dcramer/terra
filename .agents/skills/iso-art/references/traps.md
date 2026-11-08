@@ -23,7 +23,7 @@ Each cost a job before (iso-art j1 to j10). The fix follows the dash.
 
 - A slab a block, a hue a slab — a checkerboard; one cut mesh of a scan at its true size, value tint only.
 - Alpha-masked holes in the paving rendered black: the depth prepass ignores the vertex alpha discard — clip the triangles at the contour.
-- Bare `Rock_1..10` render near white at night — the `Rock_Moss_*` set.
+- Bare `Rock_1..10` and the untextured `Rock_Moss_*` (flat 0.5 grey) render near white at night, read as snow — the scanned `nature/forest/mossy_rock_*` set.
 - A brazier's bowl shadows its own light into a black disc — `NotShadowCaster` on the bowl.
 - A far fill light flattens the pools into one wash; the sky fill lifts p5 — one short shadowed light a fire, sky fill about 1.5 nits.
 - A rim light from behind spills on everything (light `RenderLayers` filter by view, not mesh: bevy_light's cluster assign) — a fresnel emissive material.
