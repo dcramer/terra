@@ -32,6 +32,9 @@ pub struct Doing {
     pub started: u32,
 }
 
+// The ability API's reads for the fight and its effects (iso-forest-demo's foes' blows on
+// him, the block's spark), which nothing in this module calls yet.
+#[allow(dead_code)]
 impl Doing {
     /// Whether blows pass through him now (a roll's tuck).
     pub fn invulnerable(&self, kit_set: &terra_motion::moves::MoveSet) -> bool {
