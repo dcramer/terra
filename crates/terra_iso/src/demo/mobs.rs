@@ -158,6 +158,11 @@ fn spawn(
         commands
             .entity(body)
             .insert(footprint::Footprint(vec![(Vec2::ZERO, foe.radius)]));
+        // How far a heavy or killing blow slides it, and which way its death falls.
+        commands.entity(body).insert(crate::play::knock::Weight {
+            kg: foe.weight,
+            falls: foe.falls.map(f32::to_radians),
+        });
         horde.mobs.push(Mob::sized(p, foe.radius));
         horde.blows.push(0);
         horde.packs.push(foe.pack);
@@ -207,7 +212,7 @@ fn steer(
     }
     wake(&mut horde.awake, &horde.packs, &near);
     let mut active = vec![false; horde.mobs.len()];
-    for (foe, _, struck, fallen, gait) in &bodies {
+    for (foe, tr, struck, fallen, gait) in &bodies {
         let m = &mut horde.mobs[foe.i];
         active[foe.i] = !fallen && horde.awake[foe.i];
         let blows = struck.map_or(0, |s| s.blows);
@@ -217,6 +222,12 @@ fn steer(
         }
         if let Some(g) = gait {
             m.hold = m.hold.max(g.swing_until);
+        }
+        // A blow's slide moves it (play/knock.rs, last frame's to its end): it stands where
+        // the slide left it.
+        if struck.is_some_and(|s| s.sliding(now - dt)) {
+            m.at = tr.translation.xz();
+            m.vel = Vec2::ZERO;
         }
     }
     let open = |p: Vec2| (ground.open)(p);

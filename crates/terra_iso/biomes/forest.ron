@@ -110,15 +110,19 @@
     // one's sank (route frame 200, blind pair clear, iso-forest-art j3); radius treant-b's
     // (its standing depth 0.90 m is treant-a's 0.87). treant-d, the same with a broken leafy
     // crown, took that slot in j4: treant-c's sawn-flat top read as a stump from above (route
-    // frame 200, blind pair clear). Walk 0.71, its planted foot's speed.
+    // frame 200, blind pair clear). Walk 0.71, its planted foot's speed. `weight` sizes a heavy
+    // blow's slide and a killing blow's throw (play/knock.rs: treant-b 0.77 and 0.43 m, the tree
+    // monster 0.57 and 0.32); `falls` is each death clip's fall from its front, its top's move
+    // from the clip's first pose to its last (iso-forest-demo j34): every one falls to its left,
+    // 93 to 96 degrees.
     foes: [
-        (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 0.96, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65),
-        (model: "models/iso/treant-d.glb", at: (-7.0, -3.0), walk: 0.71, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65),
-        (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.27, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.8),
-        (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.27, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.8),
-        (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 0.96, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.65),
-        (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.84, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.65),
-        (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.27, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.8),
+        (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 0.96, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65, weight: 160.0, falls: Some(96.0)),
+        (model: "models/iso/treant-d.glb", at: (-7.0, -3.0), walk: 0.71, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65, weight: 170.0, falls: Some(93.0)),
+        (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.27, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.8, weight: 190.0, falls: Some(95.0)),
+        (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.27, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.8, weight: 190.0, falls: Some(95.0)),
+        (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 0.96, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.65, weight: 160.0, falls: Some(96.0)),
+        (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.84, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.65, weight: 140.0, falls: Some(95.0)),
+        (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.27, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.8, weight: 190.0, falls: Some(95.0)),
     ],
     // The staged fight's effects (biomes/effects/, kit/effects.rs). The hit's spark grown to read
     // at the route's 10 m camera (iso-forest-demo j26): as the preset is, a blow's burst was 15

@@ -22,6 +22,7 @@ use std::time::Duration;
 // The hero (crate::hero) walks round the same footprints and strikes as this does.
 pub(crate) mod feel;
 pub(crate) mod footprint;
+pub(crate) mod knock;
 pub(crate) mod strike;
 
 /// How far the swing reaches (m, from his feet) and half its arc (degrees): the staged

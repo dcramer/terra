@@ -247,15 +247,17 @@ pub type Blocking = (Without<super::Hero>, Without<super::Fallen>);
 pub fn world<F: bevy::ecs::query::QueryFilter>(
     footprints: &Query<(&Footprint, &GlobalTransform), F>,
 ) -> Vec<(Vec2, f32)> {
-    let mut out = Vec::new();
-    for (f, g) in footprints {
-        let s = g.scale().x;
-        out.extend(
-            f.0.iter()
-                .map(|&(p, r)| (g.transform_point(Vec3::new(p.x, 0.0, p.y)).xz(), r * s)),
-        );
-    }
-    out
+    footprints.iter().flat_map(|(f, g)| placed(f, g)).collect()
+}
+
+/// One footprint's circles in the world, where its model stands.
+pub fn placed<'a>(
+    f: &'a Footprint,
+    g: &'a GlobalTransform,
+) -> impl Iterator<Item = (Vec2, f32)> + 'a {
+    let s = g.scale().x;
+    f.0.iter()
+        .map(move |&(p, r)| (g.transform_point(Vec3::new(p.x, 0.0, p.y)).xz(), r * s))
 }
 
 #[cfg(test)]

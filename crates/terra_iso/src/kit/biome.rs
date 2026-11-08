@@ -726,10 +726,24 @@ pub struct Foe {
     /// them within it of its middle; a play footprint's creature circle when none.
     #[serde(default = "body")]
     pub radius: f32,
+    /// Its weight (kg): how far a heavy blow slides it back and a killing one throws it
+    /// (play/knock.rs, 0.9 and 0.5 m at 120 kg, inverse to weight).
+    #[serde(default = "man")]
+    pub weight: f32,
+    /// Which way its death clip falls (degrees from its front toward its left, +x of its
+    /// model, measured from the clip's start and end poses), so a killing blow turns it to fall
+    /// away from the blow; none keeps its facing.
+    #[serde(default)]
+    pub falls: Option<f32>,
 }
 
 fn body() -> f32 {
     0.45
+}
+
+/// A man's weight (kg), the body play/knock.rs's `MASS` sizes a push for.
+fn man() -> f32 {
+    120.0
 }
 
 fn one() -> f32 {

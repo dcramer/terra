@@ -7,6 +7,7 @@
 //! moved to where the blade meets the body (`Cues::contact`). Nothing here runs without
 //! `--play`, so the staged scenes are as before.
 
+use super::knock::{Knock, Weight};
 use super::{Fallen, Hero};
 use crate::kit::effects::{Contact, Cues, Landed};
 use crate::ruin::effects::hit::{FLINCH, flash, flinch};
@@ -52,6 +53,8 @@ pub struct Struck {
     /// Its gaits on the same graph, by name (`GAITS`): a steered mob still changes gait once
     /// struck (demo/mobs.rs, `Struck::gait`).
     gaits: Vec<(&'static str, AnimationNodeIndex)>,
+    /// A heavy or killing blow's slide and turn (knock.rs).
+    pub(super) knock: Option<Knock>,
 }
 
 /// The clips a struck body keeps beside its hit and death, so it can still stand, walk and
@@ -59,6 +62,12 @@ pub struct Struck {
 pub const GAITS: [&str; 3] = ["idle", "walk", "attack"];
 
 impl Struck {
+    /// Whether a blow's slide moves it at `now`: a steered mob is left where it slides
+    /// (demo/mobs.rs).
+    pub fn sliding(&self, now: f32) -> bool {
+        self.knock.is_some_and(|k| k.sliding(now))
+    }
+
     /// The player its clips are on.
     pub fn player(&self) -> Entity {
         self.player
@@ -132,8 +141,12 @@ pub fn bite(hero: Vec2, foe: Vec2, edge: Option<(Vec3, Vec3)>, floor: f32) -> Ve
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(First, settle)
-        .add_systems(Update, (land, recover, show).chain().after(super::control));
+    app.add_systems(First, settle).add_systems(
+        Update,
+        (land, super::knock::slide, recover, show)
+            .chain()
+            .after(super::control),
+    );
 }
 
 fn player_of(
@@ -157,7 +170,14 @@ fn land(
         ResMut<Assets<AnimationGraph>>,
         ResMut<Assets<StandardMaterial>>,
     ),
-    mut blown: Query<(Entity, &Blow, &Pose, &Transform, Option<&mut Struck>)>,
+    mut blown: Query<(
+        Entity,
+        &Blow,
+        &Pose,
+        &Transform,
+        Option<&Weight>,
+        Option<&mut Struck>,
+    )>,
     children: Query<&Children>,
     skins: Query<&MeshMaterial3d<StandardMaterial>>,
     mut players: Query<(&mut AnimationPlayer, Option<&mut AnimationTransitions>)>,
@@ -175,7 +195,7 @@ fn land(
         parried: false,
         bodies: hero.iter().map(|(e, _)| e).collect(),
     };
-    for (body, blow, pose, tr, struck) in &mut blown {
+    for (body, blow, pose, tr, weight, struck) in &mut blown {
         landed.bodies.push(body);
         landed.weight = landed.weight.max(blow.weight);
         // A struck body stops walking in (walk.rs).
@@ -237,6 +257,17 @@ fn land(
             foe,
             if fell { ", it falls" } else { "" }
         );
+        // A heavy blow slides it back, a killing one throws it away from the blow (knock.rs);
+        // a body with no weight in the data is a man's.
+        let w = weight.copied().unwrap_or(Weight {
+            kg: super::knock::MASS,
+            falls: None,
+        });
+        if fell {
+            s.knock = Some(Knock::death(blow.from, foe, w, now, tr.rotation));
+        } else if blow.weight >= 0.5 {
+            s.knock = Some(Knock::heavy(blow.from, foe, w, now));
+        }
         if fell {
             commands.entity(body).insert(Fallen);
         }
@@ -330,6 +361,7 @@ fn take_over(
         hit: nodes.hit,
         death: nodes.death,
         gaits: nodes.gaits,
+        knock: None,
     })
 }
 
@@ -453,6 +485,7 @@ mod tests {
             hit: node(hit),
             death: node(death),
             gaits: Vec::new(),
+            knock: None,
         }
     }
 
