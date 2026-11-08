@@ -206,6 +206,12 @@ fn main() {
                 .set(bevy::render::RenderPlugin {
                     synchronous_pipeline_compilation: args.shot.is_some(),
                     ..default()
+                })
+                // terra_walker brings the workspace's file_watcher feature (the hero, D635);
+                // the experiment never watched its files.
+                .set(AssetPlugin {
+                    watch_for_changes_override: Some(false),
+                    ..default()
                 }),
         )
         .add_systems(Last, shoot);

@@ -22,6 +22,12 @@ libm.workspace = true
 # The biome kit's files (src/kit/, D634): RON through serde.
 ron.workspace = true
 serde.workspace = true
+# The hero in play is the game's own body, armour and clips (src/hero/, D635: one game, the
+# shared code called, never copied): its dressing (character), blends (layer, inertia, pace,
+# feet) and the move set's rules (terra_motion::moves). They bring the workspace's bevy
+# features with them; main.rs turns the file watcher off, as before.
+terra_walker.workspace = true
+terra_motion.workspace = true
 
 [lints]
 workspace = true
