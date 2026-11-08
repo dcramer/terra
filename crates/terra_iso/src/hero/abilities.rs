@@ -8,6 +8,7 @@
 use super::Hero;
 use crate::Args;
 use crate::camera::MainCamera;
+use crate::play::footprint::{self, Footprint};
 use bevy::prelude::*;
 
 /// Something the hero does, by its binding.
@@ -150,6 +151,11 @@ fn read(
         Local<Vec<bool>>,
         Local<Vec<super::react::Answers>>,
     ),
+    (nav, props, mut walks): (
+        Option<Res<crate::nav::Nav>>,
+        Query<(&Footprint, &GlobalTransform), Standing>,
+        Local<Walks>,
+    ),
 ) {
     let Ok((tr, mut intent, doing, told)) = hero.single_mut() else {
         return;
@@ -193,7 +199,21 @@ fn read(
         let at = ground_at(&camera, *px, tr.translation.y);
         intent.ask(Ability::Light, at);
     }
-    goto(&args.goto, frame.0, tr, doing, &mut intent, &mut arrived);
+    if !args.goto.is_empty() {
+        walks.refresh(nav.as_deref(), &footprint::world(&props));
+    }
+    let walk = Walk {
+        here: tr.translation.xz(),
+        speed: doing.map_or(0.0, |d| d.speed),
+    };
+    goto(
+        &args.goto,
+        frame.0,
+        walk,
+        &mut intent,
+        &mut arrived,
+        &mut walks,
+    );
     for (name, at, from, to) in &args.abilities {
         let Some(ability) = Ability::named(name) else {
             continue;
@@ -238,20 +258,54 @@ fn read(
     }
 }
 
+/// The footprints a walk's path goes round: the props', not a body's (the hero's, a mob's,
+/// which move; he slides round those as he meets them, play.rs `step_to`).
+type Standing = (Without<Hero>, Without<crate::ruin::fight::Pose>);
+
+/// Where he is and how fast he goes, for a scripted walk.
+#[derive(Clone, Copy)]
+struct Walk {
+    here: Vec2,
+    speed: f32,
+}
+
+/// The script's walks' paths: the nav grid with the props' footprints blocked (kept until
+/// their count changes) and each walk's corners left, taken as it began.
+#[derive(Default)]
+struct Walks {
+    grid: Option<(usize, crate::nav::Nav)>,
+    paths: Vec<Option<Vec<Vec2>>>,
+}
+
+impl Walks {
+    /// The grid made afresh when the props' circles change (each padded to his body by
+    /// `block_circle`, as play.rs `step_to` keeps him off them).
+    fn refresh(&mut self, nav: Option<&crate::nav::Nav>, circles: &[(Vec2, f32)]) {
+        if self.grid.as_ref().is_some_and(|g| g.0 == circles.len()) {
+            return;
+        }
+        let mut grid = nav.cloned().unwrap_or_default();
+        for &(c, r) in circles {
+            grid.block_circle(c, r);
+        }
+        self.grid = Some((circles.len(), grid));
+    }
+}
+
 /// The script's walks (`--goto X,Z@FROM-TO`, main.rs): the first in the route's order whose
-/// window holds `frame` and which has not arrived steers him (moves.rs `toward`); each says
-/// once when it arrived, or that it was not reached by its window's end.
+/// window holds `frame` and which has not arrived steers him, along a path on the nav grid
+/// round the props taken on its first frame (moves.rs `along`, ARPG click-to-move); each
+/// says once when it arrived, or that it was not reached by its window's end.
 fn goto(
     gotos: &[(Vec2, u32, u32)],
     frame: u32,
-    tr: &Transform,
-    doing: Option<&super::Doing>,
+    Walk { here, speed }: Walk,
     intent: &mut HeroIntent,
     arrived: &mut Vec<bool>,
+    walks: &mut Walks,
 ) {
     arrived.resize(gotos.len(), false);
-    let here = tr.translation.xz();
-    let speed = doing.map_or(0.0, |d| d.speed);
+    walks.paths.resize(gotos.len(), None);
     let mut steering = false;
     for (i, &(to, from, until)) in gotos.iter().enumerate() {
         if arrived[i] || !(from..until).contains(&frame) {
@@ -273,7 +327,23 @@ fn goto(
         if steering {
             continue;
         }
-        let way = super::moves::toward(here, to, speed);
+        let way = match &walks.grid {
+            Some((_, grid)) => {
+                let path = walks.paths[i].get_or_insert_with(|| {
+                    grid.path(here, to).unwrap_or_else(|| {
+                        warn!(
+                            "goto ({:.1}, {:.1}) from frame {from}: no path round the props \
+                             from ({:.1}, {:.1}), so he walks straight; move the point into the \
+                             open (routes/*.txt)",
+                            to.x, to.y, here.x, here.y
+                        );
+                        vec![to]
+                    })
+                });
+                super::moves::along(grid, here, path, speed)
+            }
+            None => super::moves::toward(here, to, speed),
+        };
         if here.distance(to) <= super::moves::ARRIVE || (way == Vec2::ZERO && speed == 0.0) {
             arrived[i] = true;
             info!(

@@ -26,9 +26,11 @@ expect all
 --do light@600 --do light@620 --do light@638 --do light@656 --do heavy@685
 --do block@720-745 --do light@750
 
-# Down and east to pack 2 (it wakes as he comes), by the corner the keys took (j22).
---goto -3.7,18.0@770-919 --goto 2.8,22.1@770-919
---do light@920 --do light@938 --do light@956 --do heavy@985
+# Down and east to pack 2 (it wakes as he comes), on the walk's own path round the props (j36:
+# its corner at -3.7,18.0 went; he stands where main's blows' drive took him, j33, now that a
+# blow lunges only at a foe in reach).
+--goto 4.4,22.3@770-939
+--do light@940 --do light@958 --do light@976 --do heavy@995
 
 # Pack 2: a roll away from the first blow told on him from 1000 (a dodge, mob 6's in j24), a
 # third of a second before it lands, then the rest fall.

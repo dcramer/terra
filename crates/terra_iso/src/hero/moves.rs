@@ -83,6 +83,26 @@ pub fn toward(here: Vec2, to: Vec2, speed: f32) -> Vec2 {
     }
 }
 
+/// How near a path's corner he must come before steering for the next (m): inside the
+/// half-metre cell it is the centre of (nav.rs `CELL`).
+const CORNER: f32 = 0.35;
+
+/// The way a scripted walk on a path asks (ARPG click-to-move: the nav grid's A* round what
+/// stands, its corners walked in turn, as Diablo's and the Infinity Engine's): `path` the
+/// corners left, `to` last (nav.rs `Nav::path` as the walk began). Each corner reached, or
+/// one he already sees past to the next on `nav`, is dropped; the last is `toward`, so he
+/// stops on it rather than past it.
+pub fn along(nav: &crate::nav::Nav, here: Vec2, path: &mut Vec<Vec2>, speed: f32) -> Vec2 {
+    while path.len() > 1 && (here.distance(path[0]) <= CORNER || nav.clear(here, path[1])) {
+        path.remove(0);
+    }
+    match path.as_slice() {
+        [] => Vec2::ZERO,
+        [to] => toward(here, *to, speed),
+        [corner, ..] => (*corner - here).normalize_or_zero(),
+    }
+}
+
 /// `speed` eased toward `wish` over `dt`: gained at `ACCEL`, shed at `BRAKE`.
 pub fn ease(speed: f32, wish: f32, dt: f32) -> f32 {
     if wish > speed {
@@ -484,6 +504,72 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A route's walk to a point behind a cup of props (circles open toward him, as the
+    /// forest's stump-and-stones pocket that held him from frame 450, iso-forest-demo j35):
+    /// walked straight (`toward`) he slides into the cup and sticks there; walked on the nav
+    /// grid's path with the circles blocked (`along`, abilities.rs `goto`) he goes round and
+    /// arrives, never inside a circle, well within the time.
+    #[test]
+    fn a_walk_on_its_path_goes_round_a_cup_of_props() {
+        let ground = Ground {
+            floor: Box::new(|_| 0.0),
+            open: Box::new(|_| true),
+        };
+        let mut cup = Vec::new();
+        for i in 0..=6 {
+            let x = -1.5 + 0.5 * i as f32;
+            cup.push((Vec2::new(x, 3.5), 0.3));
+        }
+        for i in 0..4 {
+            let z = 1.5 + 0.5 * i as f32;
+            cup.push((Vec2::new(-1.5, z), 0.3));
+            cup.push((Vec2::new(1.5, z), 0.3));
+        }
+        let mut grid = crate::nav::Nav::default();
+        for &(c, r) in &cup {
+            grid.block_circle(c, r);
+        }
+        let (from, to, dt) = (Vec2::ZERO, Vec2::new(0.0, 6.5), 1.0 / 60.0);
+        let walk = |pathed: bool| {
+            let mut path = grid.path(from, to).unwrap();
+            let (mut at, mut speed, mut nearest) = (from, 0.0, f32::INFINITY);
+            for frame in 0..600 {
+                let way = if pathed {
+                    along(&grid, at, &mut path, speed)
+                } else {
+                    toward(at, to, speed)
+                };
+                if at.distance(to) <= ARRIVE || (way == Vec2::ZERO && speed == 0.0) {
+                    return (Some(frame), at, nearest);
+                }
+                speed = ease(speed, if way == Vec2::ZERO { 0.0 } else { JOG }, dt);
+                match step_to(&ground, None, &cup, at, way * speed * dt) {
+                    Some(q) => at = q,
+                    None => speed = 0.0,
+                }
+                for &(c, r) in &cup {
+                    nearest = nearest.min(at.distance(c) - r);
+                }
+            }
+            (None, at, nearest)
+        };
+        let (straight, stuck, _) = walk(false);
+        assert_eq!(
+            straight, None,
+            "walked straight he should stick in the cup (the fault the path answers), but \
+             arrived; at {stuck:.2}"
+        );
+        let (pathed, at, nearest) = walk(true);
+        assert!(
+            pathed.is_some_and(|f| f < 300) && at.distance(to) <= 0.6,
+            "on its path he should arrive within 5 s, but stands at {at:.2} by frame {pathed:?}"
+        );
+        assert!(
+            nearest >= footprint::BODY - 1e-3,
+            "on its path he came {nearest:.2} m from a prop's edge, inside his body's 0.3"
+        );
     }
 
     /// A route's `--goto` brings him to its point and stops him there (j24): walked as `act`
