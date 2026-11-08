@@ -4,11 +4,11 @@
 // abandoned gas station's cracked apron in Arizona, a derelict lot's broken asphalt, a junk
 // lot from above, overgrown concrete ruins; Wasteland 3's camp for junk at the camera. The
 // same Street layout as the neon street (kit/street.rs): the road is sun-bleached asphalt
-// broken and patched, its lines worn to traces; the verges are sun-baked mud cracked into
-// plates; the north side a concrete garage, a rusted iron shed and a block with its
+// broken and patched, its lines worn to traces; the verges are dirt of broken concrete
+// and brick rubble in dust; the north side a concrete garage, a rusted iron shed and a block with its
 // windows out; the south a corrugated fence and a low broken wall; utility poles with
 // sagging lines; junk (tyres, barrels, cans, a covered car) gathered at the walls, dry
-// grass in the gutters. Scans: concrete_debris, mud_cracked_dry_03, rusty_corrugated_iron
+// grass in the gutters. Scans: concrete_debris, rusty_corrugated_iron
 // (Poly Haven, CC0, assets/materials/README.md); props from assets/models/iso/city/.
 (
     kind: [Day],
@@ -132,10 +132,15 @@
     light: (preset: "desert-day"),
     weather: (wind: (1.4, 0.3)),
     ground: (
-        // The verges: sun-baked mud cracked into plates, sand drifted in, broken through.
+        // The verges: a dead lot's dirt of broken concrete and brick rubble in dust, sand
+        // drifted into it, as the junk lot's and the derelict lot's ground (refs/wasteland).
+        // Not sun-baked mud cracked into plates (mud_cracked_dry_03 at 1.5 m, rounds to
+        // 261107-1544): one bright, even polygon tile that every judge named first, read as a
+        // paved pattern, and two shader jobs over it (hex tiling 1545-2, blown sand 1552,
+        // 1555) lost.
         laid: (
-            material: "mud_cracked_dry_03",
-            metres: 1.5,
+            material: "concrete_debris",
+            metres: 2.0,
             joints: 0.7,
             sand: 0.5,
             cracks: 0.8,
