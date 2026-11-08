@@ -105,9 +105,13 @@
     // treant-b and the tree monster leaf-trimmed (`iso-art trim --keep 0`): their bark at
     // 0.35 took white streaks on every fold, and from above their crowns read as bushes
     // (route frame 200's blind pair won clear and slight over both, iso-forest-art j2).
+    // treant-c, made through the concept's creature path (a bark trunk, face and limbs, a
+    // small crown), takes treant-b's first slot: its bark reads from above where the trimmed
+    // one's sank (route frame 200, blind pair clear, iso-forest-art j3); radius still
+    // treant-b's, its own unmeasured.
     foes: [
         (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 1.06, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65),
-        (model: "models/iso/treant-b.glb", at: (-7.0, -3.0), walk: 0.9, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65),
+        (model: "models/iso/treant-c.glb", at: (-7.0, -3.0), walk: 1.38, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65),
         (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.31, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.8),
         (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.31, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.8),
         (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 1.06, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.65),
