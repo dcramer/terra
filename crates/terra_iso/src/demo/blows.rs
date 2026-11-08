@@ -162,11 +162,12 @@ fn tells(
     for body in &mobs {
         let (fill, edge) =
             shapes.get_or_insert_with(|| (meshes.add(tell::fill()), meshes.add(tell::edge())));
-        let mut part = |mesh: &Handle<Mesh>, colour, alpha| {
+        let mut part = |mesh: &Handle<Mesh>, fan: tell::Fan, colour, alpha| {
             let material = materials.add(tell::material(colour, alpha));
             let id = commands
                 .spawn((
                     TellMark,
+                    fan,
                     Name::new("a foe's tell"),
                     Mesh3d(mesh.clone()),
                     MeshMaterial3d(material.clone()),
@@ -177,8 +178,8 @@ fn tells(
                 .id();
             (id, material)
         };
-        let fill = part(fill, tell::FILL, AlphaMode::Blend);
-        let edge = part(edge, tell::EDGE, AlphaMode::Add);
+        let fill = part(fill, tell::FILL_FAN, tell::FILL, AlphaMode::Blend);
+        let edge = part(edge, tell::EDGE_FAN, tell::EDGE, AlphaMode::Add);
         commands.entity(body).insert(Tell {
             fill,
             edge,

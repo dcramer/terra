@@ -22,7 +22,8 @@ pub type TellMaterial = ExtendedMaterial<StandardMaterial, OnTop>;
 
 /// A standard material writing no depth, drawn over whatever stands in front of it when
 /// `over_bodies` (j7's tell, which hid the hero), else depth tested as any surface. A field,
-/// so the occlusion check can read what the pipeline draws (not yet: occlude.rs, j14).
+/// so the occlusion check reads what the pipeline draws (occlude.rs: drawn over bodies, a
+/// tell stands before all).
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
 #[bind_group_data(OnTopKey)]
 pub struct OnTop {
@@ -112,15 +113,53 @@ pub fn sector(inner: f32, outer: f32, a_in: f32, a_out: f32) -> Mesh {
     .with_inserted_indices(Indices::U32(index))
 }
 
+/// A drawn part of a tell, its sector's span in its own frame (m from the mob, before its
+/// scale): what the occlusion check meets it as (occlude.rs), a flat sector, not its mesh.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct Fan {
+    pub inner: f32,
+    pub outer: f32,
+}
+
+/// The fill's span: the whole area a blow judges.
+pub const FILL_FAN: Fan = Fan {
+    inner: INNER * REACH,
+    outer: REACH,
+};
+/// The rim's span: the reach's edge.
+pub const EDGE_FAN: Fan = Fan {
+    inner: (1.0 - RIM) * REACH,
+    outer: REACH,
+};
+
 /// The fill, the whole area a blow judges, faint at the mob and strong at the rim; it
 /// grows out to its full as the hit nears (its scale).
 pub fn fill() -> Mesh {
-    sector(INNER * REACH, REACH, 0.25, 1.0)
+    sector(FILL_FAN.inner, FILL_FAN.outer, 0.25, 1.0)
 }
 
 /// The rim, the reach's edge, whole from the first moment of the tell.
 pub fn edge() -> Mesh {
-    sector((1.0 - RIM) * REACH, REACH, 1.0, 1.0)
+    sector(EDGE_FAN.inner, EDGE_FAN.outer, 1.0, 1.0)
+}
+
+/// How far along `ray` it meets the flat sector `fan` lies in, laid by `at` (its plane its
+/// local y = 0, facing +Z, over `ARC` either side), if it does. Met analytically, as the
+/// foes' capsules are: a ray cast on its mesh (MeshRayCast) never met the flat fan, so the
+/// check missed a tell drawn over him (iso-forest-demo j14). The ray is taken into the
+/// fan's frame, where a point along it is as far along as in the world's.
+pub fn met(ray: Ray3d, at: &GlobalTransform, fan: Fan) -> Option<f32> {
+    let to = at.affine().inverse();
+    let o = to.transform_point3(ray.origin);
+    let d = to.transform_vector3(*ray.direction);
+    if d.y.abs() < 1e-6 {
+        return None;
+    }
+    let t = -o.y / d.y;
+    let p = (o + d * t).xz();
+    let r = p.length();
+    let off = libm::atan2f(p.x, p.y).abs().to_degrees();
+    (t > 0.0 && r >= fan.inner && r <= fan.outer && off <= ARC).then_some(t)
 }
 
 /// A tell's material: unlit, unfogged, blended (the fill) or added (the rim).
@@ -180,5 +219,38 @@ mod tests {
             (widest - ARC).abs() < 0.1,
             "the rim spans {widest}°, not {ARC}°"
         );
+    }
+
+    /// A ray down onto a fan laid as play lays it (moved, turned, scaled) meets it inside
+    /// its span and arc, as far along as the fan's plane lies, and misses it inside its
+    /// inner edge, past its reach and beside its arc.
+    #[test]
+    fn a_ray_meets_the_fan_where_it_lies() {
+        let at = GlobalTransform::from(
+            Transform::from_xyz(4.0, 1.0, -2.0)
+                .with_rotation(Quat::from_rotation_y(core::f32::consts::FRAC_PI_2))
+                .with_scale(Vec3::splat(0.5)),
+        );
+        // Facing +Z turned a quarter about Y faces +X; scaled by half, its span is halved.
+        let down = |x: f32, z: f32| Ray3d::new(Vec3::new(x, 11.0, z), Dir3::NEG_Y);
+        let mid = 0.5 * (FILL_FAN.inner + FILL_FAN.outer) * 0.5;
+        let t = met(down(4.0 + mid, -2.0), &at, FILL_FAN);
+        assert!(t.is_some_and(|t| (t - 10.0).abs() < 1e-4), "{t:?}");
+        let inside = 0.5 * FILL_FAN.inner * 0.5;
+        assert_eq!(met(down(4.0 + inside, -2.0), &at, FILL_FAN), None);
+        let past = FILL_FAN.outer * 0.5 + 0.1;
+        assert_eq!(met(down(4.0 + past, -2.0), &at, FILL_FAN), None);
+        assert_eq!(
+            met(down(4.0 - mid, -2.0), &at, FILL_FAN),
+            None,
+            "behind the mob"
+        );
+        // Just inside and just past its arc's edge, at mid span.
+        let edge = |deg: f32| {
+            let a = deg.to_radians();
+            down(4.0 + mid * libm::cosf(a), -2.0 - mid * libm::sinf(a))
+        };
+        assert!(met(edge(ARC - 1.0), &at, FILL_FAN).is_some());
+        assert_eq!(met(edge(ARC + 1.0), &at, FILL_FAN), None);
     }
 }

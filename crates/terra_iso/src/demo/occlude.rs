@@ -6,9 +6,12 @@
 //!
 //! The check: each frame rays go from the camera to his body from knee to crown (`body`);
 //! a surface met before him that the cut does not drop (`foliage::fade`, the shader's twin)
-//! hides him, and is logged as `hero hidden at frame N by <name>`, counted in `Hidden`.
+//! hides him, and is logged as `hero hidden at frame N by <name>`, counted in `Hidden`. A
+//! foe's body is met as a capsule (`capsule`), a foe's tell as its flat fan (tell.rs `met`),
+//! drawn over bodies standing before all.
 
 use super::silhouette::{GAP, Silhouette};
+use super::tell::{self, Fan, TellMaterial};
 use crate::camera::MainCamera;
 use crate::foliage::{self, FoliageMaterial, Near, Seen};
 use crate::play::footprint::Footprint;
@@ -71,7 +74,8 @@ pub fn verdict(seen: &Hidden) -> Result<String, String> {
         Err(format!(
             "the hero: hidden {} frames (each logged 'hero hidden at frame N by ...'): cut the \
              surface named there in play (foliage.rs's hole) or draw his silhouette through it \
-             (silhouette.rs); do not drop it from the check",
+             (silhouette.rs), and draw a foe's tell under bodies (tell.rs `OnTop`, depth \
+             tested); do not drop it from the check",
             seen.frames
         ))
     }
@@ -250,6 +254,50 @@ fn uprights(
     out
 }
 
+/// A foe's tell as the check meets it: its part, where play lays it, its sector's span, and
+/// whether its pipeline draws it over bodies (tell.rs `OnTop`).
+pub type Laid = (Entity, GlobalTransform, Fan, bool);
+
+/// The tells shown this frame (blows.rs `land` hides each between blows), each with whether
+/// its material draws it over bodies.
+#[allow(clippy::type_complexity)]
+fn shown(
+    tells: &Query<(
+        Entity,
+        &Fan,
+        &GlobalTransform,
+        &Visibility,
+        &MeshMaterial3d<TellMaterial>,
+    )>,
+    mats: &Assets<TellMaterial>,
+) -> Vec<Laid> {
+    tells
+        .iter()
+        .filter(|t| *t.3 != Visibility::Hidden)
+        .map(|(e, fan, g, _, m)| {
+            let over = mats.get(&m.0).is_some_and(|m| m.extension.over_bodies);
+            (e, *g, *fan, over)
+        })
+        .collect()
+}
+
+/// What a ray meets of the tells shown, as the check's hits: a tell is met where its fan
+/// lies (tell.rs `met`, nearer the camera than the ground by `RAISE`), or, drawn over
+/// bodies, at once, since nothing in front of it is drawn over it.
+pub fn fans(ray: Ray3d, laid: &[Laid]) -> Vec<Hit> {
+    laid.iter()
+        .filter_map(|(e, at, fan, over)| {
+            tell::met(ray, at, *fan).map(|t| Hit {
+                what: Some(*e),
+                at: ray.get_point(t),
+                distance: if *over { 0.0 } else { t },
+                cut: false,
+                body: false,
+            })
+        })
+        .collect()
+}
+
 /// What a ray meets of the standing foes' capsules, as the check's hits.
 pub fn met(ray: Ray3d, uprights: &[Upright]) -> Vec<Hit> {
     uprights
@@ -297,6 +345,16 @@ fn check(
         Query<&Children>,
         Query<(&Aabb, &GlobalTransform), With<Mesh3d>>,
     ),
+    (tells, tell_mats): (
+        Query<(
+            Entity,
+            &Fan,
+            &GlobalTransform,
+            &Visibility,
+            &MeshMaterial3d<TellMaterial>,
+        )>,
+        Res<Assets<TellMaterial>>,
+    ),
 ) {
     let (Ok((_, h)), Ok(cam)) = (hero.single(), camera.single()) else {
         return;
@@ -318,6 +376,7 @@ fn check(
         (leaves.contains(e) || shaded.contains(e)) && !up(e).any(|a| heroes.contains(a)) && !body(e)
     };
     let uprights = uprights(&standing, &kids, &bounds);
+    let laid = shown(&tells, &tell_mats);
     let cut = |e: Entity| {
         leaves
             .get(e)
@@ -348,6 +407,7 @@ fn check(
                 })
                 .collect();
             hits.extend(met(r, &uprights));
+            hits.extend(fans(r, &laid));
             hits.sort_by(|a, b| a.distance.total_cmp(&b.distance));
             hits
         },
@@ -560,6 +620,42 @@ mod tests {
         let c = chest + (eye.xyz() - chest).normalize() * 0.35;
         assert!(hidden(eye, axes, middle, &points, true, ball(c, 0.3, true)).is_empty());
         assert!(!hidden(still, axes, middle, &points, true, ball(c, 0.3, true)).is_empty());
+    }
+
+    /// A foe's tell he stands in, laid as play lays it (blows.rs `land`: `RAISE` toward the
+    /// camera), stays behind every point of his body from the knee up, so it hides nothing;
+    /// its planted fault (D632), the same tell drawn over bodies (j7's, which hid him wholly
+    /// at the route's frame 1030), hides him, and no silhouette is drawn through it.
+    #[test]
+    fn a_tell_under_him_hides_him_only_drawn_over_bodies() {
+        use crate::demo::tell::{FILL_FAN, RAISE};
+        let feet = Vec3::new(3.0, 0.2, 5.0);
+        let (eye, axes) = view(feet, NEAR);
+        let middle = feet + Vec3::Y * MIDDLE;
+        let points = body(feet, axes[0]);
+        // The mob a little before him on the camera's side, its blow facing him.
+        let face = axes[2].with_y(0.0).normalize();
+        let mob = feet - face * 1.8;
+        let at = GlobalTransform::from(
+            Transform::from_translation(mob + Vec3::Y * 0.03 - axes[2] * RAISE)
+                .with_rotation(Quat::from_rotation_y(libm::atan2f(face.x, face.z))),
+        );
+        let laid = |over: bool| vec![(Entity::PLACEHOLDER, at, FILL_FAN, over)];
+        let under = hidden(eye, axes, middle, &points, true, |r| fans(r, &laid(false)));
+        assert!(under.is_empty(), "{} points under the tell", under.len());
+        // It lies under him: the ray to his feet meets it.
+        let to_feet = Ray3d::new(eye.xyz(), Dir3::new(feet - eye.xyz()).unwrap());
+        assert!(
+            !fans(to_feet, &laid(false)).is_empty(),
+            "the tell is not under him"
+        );
+        let fault = hidden(eye, axes, middle, &points, true, |r| fans(r, &laid(true)));
+        assert!(
+            fault.iter().any(|p| (p.0.y - feet.y - 0.5).abs() < 1e-4),
+            "drawn over bodies, it hides his knee ({} points hidden)",
+            fault.len()
+        );
+        assert!(fault.iter().all(|p| !p.3), "no silhouette through a tell");
     }
 
     /// Near the lens every cuttable surface fades, wherever it is on the screen: a bough
