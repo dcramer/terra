@@ -72,20 +72,26 @@ export function freshness(check: Check, runs: Record[], git: Git, here: string[]
 
 export type Row = { id: string; mark: "✓" | "✗" | "?"; said: string; bar: string; check?: string };
 
-/** What a live criterion reads from the catalogue. */
-export function live(kind: string, w: Wardrobe): { ok: boolean; said: string; n?: number } {
+/** The bodies a player is offered: those the creator has roles for (`Creator::offered`). */
+export const offered = (root = ROOT): string[] => Object.keys((JSON.parse(readFileSync(join(root, "assets/models/character/creator.json"), "utf8")) as { roles: object }).roles);
+
+/** What a live criterion reads from the catalogue: of the bodies players are offered, which
+ * the bars hold; a body in the catalogue not yet offered is said beside them, never judged. */
+export function live(kind: string, w: Wardrobe, on: string[] = offered()): { ok: boolean; said: string; n?: number } {
   if (kind === "hair") {
     // A look's hair is its piece of the hair slot, as the game composes it: a piece of the
     // catalogue made for that slot (a beard or a name the catalogue lacks is no hair).
-    const looks = Object.values(w.looks) as { pieces: Record<string, string> }[];
-    const with_ = looks.filter((l) => w.pieces[l.pieces.hair]?.slot === "hair").length;
-    return { ok: with_ === looks.length, said: `${with_} of ${looks.length} looks wear hair` };
+    const looks = Object.values(w.looks) as { body: string; pieces: Record<string, string> }[];
+    const haired = (ls: typeof looks) => ls.filter((l) => w.pieces[l.pieces.hair]?.slot === "hair").length;
+    const [judged, rest] = [looks.filter((l) => on.includes(l.body)), looks.filter((l) => !on.includes(l.body))];
+    const more = rest.length ? `; ${haired(rest)} of ${rest.length} on bodies not yet offered` : "";
+    return { ok: haired(judged) === judged.length, said: `${haired(judged)} of ${judged.length} looks wear hair${more}` };
   }
   if (kind === "figures") {
     const rows = ((w as unknown as { pairings?: Pairing[] }).pairings ?? []) as Pairing[];
     const per = Object.keys(w.bodies).map((b) => [b, figures(w, rows, b)] as const);
-    const least = Math.min(...per.map(([, f]) => f.count));
-    return { ok: true, n: least, said: per.map(([b, f]) => `${b} ${f.count} figures (${f.coloured} in colourways)`).join(", ") };
+    const least = Math.min(...per.filter(([b]) => on.includes(b)).map(([, f]) => f.count));
+    return { ok: true, n: least, said: per.map(([b, f]) => `${b}${on.includes(b) ? "" : " (not yet offered)"} ${f.count} figures (${f.coloured} in colourways)`).join(", ") };
   }
   return { ok: false, said: `no live reading "${kind}"` };
 }

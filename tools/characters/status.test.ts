@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { type Criteria, criteria, format, freshness, type Git, rows, where } from "./status.ts";
+import { type Criteria, criteria, format, freshness, live, offered, type Git, rows, where } from "./status.ts";
 import { record, type Record, records } from "./record.ts";
 import { type Wardrobe, wardrobeData } from "./build_steps.ts";
 import type { Pairing } from "./pairings.ts";
@@ -132,11 +132,22 @@ test("looks.hair: every look wears hair; one without, or with a beard in its hai
   for (const fault of faults) {
     const w = W();
     fault(w.looks.ranger);
-    const n = Object.keys(w.looks).length;
+    const n = Object.values(w.looks).filter((l) => offered().includes(l.body)).length;
     const r = mark(w, "looks.hair");
     assert.equal(r.mark, "✗");
-    assert.equal(r.said, `${n - 1} of ${n} looks wear hair`);
+    assert.ok(r.said.startsWith(`${n - 1} of ${n} looks wear hair`), r.said);
   }
+});
+
+test("a body not yet offered is said, not judged: its hairless look passes until the creator offers it", () => {
+  const w = W();
+  w.bodies.unoffered = w.bodies.male;
+  w.looks.bald = { ...w.looks.ranger, body: "unoffered", pieces: { ...w.looks.ranger.pieces } };
+  delete w.looks.bald.pieces.hair;
+  assert.match(live("hair", w).said, /0 of \d+ on bodies not yet offered$/);
+  assert.equal(live("hair", w).ok, true);
+  assert.equal(live("hair", w, [...offered(), "unoffered"]).ok, false);
+  assert.match(live("figures", w).said, /unoffered \(not yet offered\)/);
 });
 
 test("variants: the catalogue's figures within the bar; none (every pairing refused) or too many (nothing refused, the shoes thrice) fail", () => {
