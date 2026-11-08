@@ -47,21 +47,29 @@ async function fight(): Promise<string> {
   const state = async () => (await call("play.state")) as State;
   const troll = async () => (await state()).near.find((each) => each.what === "Troll");
 
-  // In by the mouth, forward until the troll is near.
-  await warp([den.mouth[0], den.mouth[2]], [den.ahead[0], den.ahead[2]]);
-  for (let walked = 0; walked < 60 && !(((await troll())?.distance ?? Infinity) < 14); walked++) {
-    await press("w:60");
-    await waitSeconds(1);
-  }
-  const met = await troll();
-  if (!met || (met.distance ?? Infinity) >= 14) throw new Error(`a minute's walk in by the den's mouth met no troll within 14 m (the nearest: ${met ? `${met.distance?.toFixed(0)} m` : "none near"}): node tools/sandbox/den.ts holds the walk in`);
   // A key is held for a count of frames, and how fast frames come is the machine's: measured
   // here, so each hold below is so many seconds on any of them.
   const frames = async () => ((await call("sandbox.status")) as { frame: number }).frame;
   const before = await frames();
   await waitSeconds(1);
-  const fps = Math.max(20, (await frames()) - before);
+  // Never taken for slower than 240 a second: a hold that outlasts its need is let go by
+  // the clock below, and one that ends early stops the player where they stand.
+  const fps = Math.max(240, (await frames()) - before);
   const hold = (key: string, seconds: number) => press(`${key}:${Math.ceil(seconds * fps)}`);
+  // In by the mouth, forward until the troll is near.
+  await warp([den.mouth[0], den.mouth[2]], [den.ahead[0], den.ahead[2]]);
+  let last: [number, number] = [0, 0];
+  for (let walked = 0; walked < 60 && !(((await troll())?.distance ?? Infinity) < 14); walked++) {
+    await hold("w", 1);
+    await waitSeconds(1);
+    // Held up on a lip of the passage's floor: hopped, as in the fight.
+    const here = (await state() as unknown as { at: [number, number] }).at;
+    if (Math.hypot(here[0] - last[0], here[1] - last[1]) < 0.3) await press("space");
+    last = here;
+  }
+  await unpress();
+  const met = await troll();
+  if (!met || (met.distance ?? Infinity) >= 14) throw new Error(`a minute's walk in by the den's mouth met no troll within 14 m (the nearest: ${met ? `${met.distance?.toFixed(0)} m` : "none near"}): node tools/sandbox/den.ts holds the walk in`);
   const hale = (await state()).health;
   const whole = met.health ?? 0;
   await press("t");
@@ -73,6 +81,7 @@ async function fight(): Promise<string> {
   let guarding = false;
   let swung = 0;
   let held = "";
+  let [stood, since, hops] = [[0, 0] as [number, number], Date.now(), 0];
   // What each second of the fight was, said if it is lost (--trace says it of a won one).
   const trace = traceOut;
   let traced = -1;
@@ -119,6 +128,15 @@ async function fight(): Promise<string> {
       held = want;
     }
     guarding = coming;
+    // Held up with the way ahead walked: a lip of the den's floor, which a person hops.
+    if (want === "w") {
+      if (Math.hypot(me[0] - stood[0], me[1] - stood[1]) > 0.15) [stood, since] = [me, Date.now()];
+      else if (Date.now() - since > 800) {
+        hops++;
+        since = Date.now();
+        await press("space");
+      }
+    } else since = Date.now();
     const due = through === undefined || LANDS_S.some(([from, to]) => Number(through) + SWING_S > from && Number(through) < to);
     if (!want && !due && now.stamina > 25 && Date.now() - swung > SWING_S * 1000) {
       swung = Date.now();
@@ -130,7 +148,7 @@ async function fight(): Promise<string> {
   const took = (Date.now() - began) / 1000;
   if (left > 0) throw new Error(`after ${MOST_S} s the troll has ${left.toFixed(0)} of ${whole.toFixed(0)} health, the player ${lowest.toFixed(0)} at their lowest, after ${swings} swings and ${guards} guards: the sword's blows are not landing or do too little (shots/remote.log's "Melee:" lines say what each swing did)`);
   await waitUntil("the player to bear the troll's mark after felling it themselves", async () => (await call("marks.state")) as { marks: string[] }, (now) => now.marks.includes("troll"), 10);
-  const won = `✓ fight: seed ${SEED}'s troll fell to the player's own sword in ${took.toFixed(0)} s, ${swings} swings and ${guards} guards; the player, of ${hale.toFixed(0)} health, was at ${lowest.toFixed(0)} at their lowest and bears its mark`;
+  const won = `✓ fight: seed ${SEED}'s troll fell to the player's own sword in ${took.toFixed(0)} s, ${swings} swings, ${guards} guards and ${hops} hops over the floor's lips; the player, of ${hale.toFixed(0)} health, was at ${lowest.toFixed(0)} at their lowest and bears its mark`;
   return args.includes("--trace") ? `${won}\n${trace.join("\n")}` : won;
 }
 

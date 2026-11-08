@@ -83,6 +83,10 @@ pub struct DriftKind {
     /// how many times a second each one blinks, each at its own beat; 0 is a steady light.
     #[serde(default)]
     pub lit: Option<(f32, f32)>,
+    /// Whether it is as many at every quality preset: a living kind is, as how much life is
+    /// about is the world's to say, not the machine's (D647); dust and snow are thinned.
+    #[serde(default)]
+    pub whole: bool,
 }
 
 /// A kind the weather brings: rain or snow, all of its cards seen at so many millimetres an hour
@@ -382,7 +386,8 @@ fn sow(
         return;
     }
     for (index, kind) in drifts.kinds.iter().enumerate() {
-        let count = ((kind.count as f32 * share(*quality)) as usize).max(1);
+        let thinned = if kind.whole { 1.0 } else { share(*quality) };
+        let count = ((kind.count as f32 * thinned) as usize).max(1);
         let (code, a, b, c) = match kind.motion {
             Motion::Hover {
                 wander_m, sink_mps, ..

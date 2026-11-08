@@ -18,6 +18,8 @@
 //   season_c  the growing season's mean warmth of the places it is found, °C (D313)
 //   air_c     the air's warmth it needs now, °C (insects fly from about 8)
 //   hours     the spans of the clock it is about, faded over half an hour at each end
+//   whole     as many at every quality preset (a living kind: how much life is about is the
+//             world's to say, D647)
 //   lit       a light of its own, for what is seen by it in the dark: (how bright, blinks a
 //             second, each at its own beat)
 (
@@ -96,6 +98,7 @@
             water: 1.0,
             season_c: (-10.0, 40.0),
             hours: [(5.0, 20.0)],
+            whole: true,
         ),
         (
             // Swallows and house martins hawking for flies low over roofs, streets, meadows
@@ -115,6 +118,7 @@
             season_c: (8.0, 40.0),
             air_c: 10.0,
             hours: [(6.0, 20.0)],
+            whole: true,
         ),
         (
             // Meadow pipits, wheatears and snow buntings over the fells and the heath: small
@@ -133,19 +137,20 @@
             water: 0.5,
             season_c: (-15.0, 8.0),
             hours: [(5.0, 20.0)],
+            whole: true,
         ),
         (
             // Whites over the meadow and the wood's edge on a warm day (the small white, the
             // green-veined white): each fluttering a few beats and gliding, never straight.
             name: "White butterflies",
-            count: 150,
+            count: 170,
             look: Butterfly,
-            size_m: 0.075,
+            size_m: 0.1,
             colour: (0.93, 0.91, 0.8),
             glow: 1.5,
             opacity: 1.0,
             motion: Hover(wander_m: 3.2, sink_mps: 0.0, carried: 0.3),
-            box_m: (9.0, 1.3),
+            box_m: (12.0, 1.6),
             woods: 0.25,
             open: 1.0,
             water: 0.5,
@@ -153,19 +158,20 @@
             air_c: 13.0,
             hours: [(8.0, 18.5)],
             flap_hz: 9.0,
+            whole: true,
         ),
         (
             // Tortoiseshells, commas and fritillaries: the orange-browns of rides, glades and
             // nettle beds, in the wood as much as out of it.
             name: "Brown butterflies",
-            count: 110,
+            count: 120,
             look: Butterfly,
-            size_m: 0.08,
+            size_m: 0.1,
             colour: (0.8, 0.4, 0.1),
             glow: 1.5,
             opacity: 1.0,
             motion: Hover(wander_m: 2.8, sink_mps: 0.0, carried: 0.25),
-            box_m: (9.0, 1.3),
+            box_m: (12.0, 1.6),
             woods: 0.6,
             open: 0.9,
             water: 0.4,
@@ -173,14 +179,15 @@
             air_c: 14.0,
             hours: [(9.0, 18.0)],
             flap_hz: 8.0,
+            whole: true,
         ),
         (
             // Bees and hoverflies working the flowers: dark specks low over the grass, each
             // going its own way, in the warm of the day.
             name: "Bees",
-            count: 70,
+            count: 300,
             look: Speck,
-            size_m: 0.012,
+            size_m: 0.03,
             colour: (0.24, 0.17, 0.06),
             glow: 4.0,
             opacity: 1.0,
@@ -192,18 +199,19 @@
             season_c: (8.0, 40.0),
             air_c: 12.0,
             hours: [(7.5, 19.0)],
+            whole: true,
         ),
         (
             // Dragonflies and damselflies hawking low over the water's edge on a warm day,
             // each alone and fast, its wings a blur held flat.
             name: "Dragonflies",
-            count: 9,
+            count: 24,
             look: Bird,
             size_m: 0.09,
             colour: (0.08, 0.3, 0.36),
             glow: 6.0,
             opacity: 1.0,
-            motion: Flock(flocks: 9, speed_mps: 5.0, spread_m: 2.0, height_m: (-1.3, 0.4), flap_hz: 0.0, about: 0.7),
+            motion: Flock(flocks: 24, speed_mps: 5.0, spread_m: 2.0, height_m: (-1.3, 0.4), flap_hz: 0.0, about: 0.7),
             box_m: (22.0, 3.0),
             woods: 0.0,
             open: 0.0,
@@ -211,12 +219,13 @@
             season_c: (9.0, 40.0),
             air_c: 15.0,
             hours: [(9.0, 18.5)],
+            whole: true,
         ),
         (
             // Fireflies and glow-worms on a warm night, by the water and under the wood's
             // edge: each a small green light that comes and goes.
             name: "Fireflies",
-            count: 420,
+            count: 300,
             look: Speck,
             size_m: 0.04,
             colour: (0.7, 0.95, 0.3),
@@ -231,6 +240,7 @@
             air_c: 12.0,
             hours: [(20.5, 24.0), (0.0, 2.0)],
             lit: Some((6000000.0, 0.45)),
+            whole: true,
         ),
         (
             // Cotton grass and willow down blown over the heath in late summer.

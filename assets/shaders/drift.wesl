@@ -177,8 +177,8 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     var edge = max(max(abs(rel.x) / half.x, abs(rel.z) / half.x), abs(rel.y) / half.y);
     var about = 1.0;
     if is_butterfly() {
-        // Low over the grass, below the eye more than above it.
-        rel.y -= half.y * 0.8;
+        // Over the grass and up to a little above head height: below the eye more than above.
+        rel.y -= half.y * 0.35;
     }
     if is_bird() {
         // A flock flies at its height over the eye, and is about on some of its crossings
@@ -316,7 +316,7 @@ fn coverage(uv: vec2<f32>, flap: f32) -> f32 {
     if is_bird() {
         // A body and two wings, each a tapering stroke out to a tip that rises and falls
         // with the beat, bent at the wrist.
-        let body = 1.0 - smoothstep(0.8, 1.0, length(p * vec2<f32>(1.0 / 0.07, 1.0 / 0.045)));
+        let body = 1.0 - smoothstep(0.8, 1.0, length(p * vec2<f32>(1.0 / 0.1, 1.0 / 0.065)));
         var wings = 0.0;
         for (var side = -1.0; side <= 1.0; side += 2.0) {
             let wrist = vec2<f32>(side * 0.22, 0.05 + 0.12 * flap);
@@ -327,7 +327,9 @@ fn coverage(uv: vec2<f32>, flap: f32) -> f32 {
                 let ab = b - a;
                 let s = clamp(dot(p - a, ab) / dot(ab, ab), 0.0, 1.0);
                 let along = (f32(half_wing) + s) * 0.5;
-                let width = mix(0.07, 0.015, along);
+                // Broad enough to hold a pixel when the bird is a dozen across: thinner, a far
+                // bird's wings were less than one and it was not seen at all.
+                let width = mix(0.11, 0.04, along);
                 let d = length(p - (a + ab * s));
                 wings = max(wings, 1.0 - smoothstep(width * 0.6, width, d));
             }
