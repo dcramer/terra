@@ -138,8 +138,10 @@
     },
     // The foes' attack tell (demo/tell.rs): the ember-red default is the orange litter's hue,
     // only darker or lighter (dE 14 and 21 from lit and dark litter, iso-forest-hits j21), so
-    // a crimson fill with a pink-white rim, apart from it in hue (iso-forest-demo j23). The fill
+    // a crimson fill with a crimson rim, apart from it in hue (iso-forest-demo j23). The fill
     // a sixth of its j23 strength: tell.wesl adds it as light, and at full it was a flat magenta
-    // wedge (f-0584 fill L 35 a* 52, dE 61 from dark litter; now L 23 a* 19, dE 25; j31).
-    tell: (fill: Linear(0.24, 0.02, 0.05), edge: Linear(6.0, 1.8, 2.6)),
+    // wedge (f-0584 fill L 35 a* 52, dE 61 from dark litter; now L 23 a* 19, dE 25; j31). The
+    // rim a twelfth of j23's (6, 1.8, 2.6), which blew out to a pink neon arc (f-0584 rim L 74
+    // a* 25 C 25, dE 70 from litter); now a red line on the ground (L 35 a* 35, dE 47; j32).
+    tell: (fill: Linear(0.24, 0.02, 0.05), edge: Linear(0.5, 0.075, 0.1)),
 )
