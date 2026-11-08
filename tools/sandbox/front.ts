@@ -19,7 +19,9 @@ const ALL = ["title", "join", "creator"];
 /// Runs the checks named, each the script `<dir>/<name>.ts`, and returns what to say and how
 /// many failed: a line a check, and for a failed one the lines of its own that say what
 /// failed and where the rest is. Each check's whole output is kept in `logs`.
-export function run(names: string[], dir: string, logs: string): { said: string[]; failed: number } {
+/// `suite` names the run and says what all its checks passing means (Front's by default;
+/// `realms.ts` runs its own through this).
+export function run(names: string[], dir: string, logs: string, suite = { name: "front", passed: "the title's worlds, Host and Join, and the creator all pass" }): { said: string[]; failed: number } {
   mkdirSync(logs, { recursive: true });
   const said: string[] = [];
   let failed = 0;
@@ -27,19 +29,19 @@ export function run(names: string[], dir: string, logs: string): { said: string[
     const began = Date.now();
     const ran = spawnSync("node", [resolve(dir, `${name}.ts`)], { cwd: ROOT, encoding: "utf8" });
     const all = `${ran.stdout}${ran.stderr}`;
-    writeFileSync(resolve(logs, `front-${name}.log`), all);
+    writeFileSync(resolve(logs, `${suite.name}-${name}.log`), all);
     const took = `${Math.round((Date.now() - began) / 1000)}s`;
     if (ran.status === 0) {
       said.push(`✓ ${name} (${took})`);
       continue;
     }
     failed += 1;
-    const why = all.split("\n").filter((line) => line.startsWith("✗"));
+    const why = all.split("\n").filter((line) => line.startsWith("✗") || line.startsWith("FAIL"));
     said.push(`✗ ${name} (${took})`);
     for (const line of why.length ? why : ["it ended with no verdict"]) said.push(`  ${line.slice(0, 600)}`);
-    said.push(`  full log: ${resolve(logs, `front-${name}.log`)}; what the game said: shots/remote.log`);
+    said.push(`  full log: ${resolve(logs, `${suite.name}-${name}.log`)}; what the game said: shots/remote.log`);
   }
-  said.push(failed ? `✗ front: ${failed} of its checks failed` : "✓ front: the title's worlds, Host and Join, and the creator all pass");
+  said.push(failed ? `✗ ${suite.name}: ${failed} of its checks failed` : `✓ ${suite.name}: ${suite.passed}`);
   return { said, failed };
 }
 

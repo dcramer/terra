@@ -390,12 +390,18 @@ fn footings(
     }
 }
 
+/// Within this of the eye a tree is fitted the frame it is planted, in metres; of those
+/// farther, this many a frame, the nearest first.
+const NEAR_M: f32 = 40.0;
+const FAR_A_FRAME: usize = 80;
+
 /// Gives each tree its trunk's solid shape, at its real width over a step's height, root
 /// flare and all, and its skirt where it has one: 0.7 of how far its branches reach near the
 /// ground (D248). Filed at its foot, where it is felled from.
 fn trunks(
     mut commands: Commands,
     pending: Query<(Entity, &Trunk, &Transform)>,
+    eye: Query<&GlobalTransform, With<terra_world::planet::MainCamera>>,
     meshes: Res<Assets<Mesh>>,
     mut shapes: ResMut<Shapes>,
     planet: Option<Res<Planet>>,
@@ -406,8 +412,19 @@ fn trunks(
     let began = Instant::now();
     // Each kind's shapes, once, here; each tree's fit, sampling the ground under it, on every
     // core: a world's 3,500 trees took 5 to 8 s of one frame on entering it (instances j9).
+    // The nearest first, and of those beyond reach only so many a frame: on entering a
+    // world every tree waits at once, a quarter of a second of the crossing's cover in one
+    // frame, and nobody is among the far ones for the second it takes to come to them.
+    let mut waiting: Vec<_> = pending.iter().collect();
+    if let Ok(eye) = eye.single() {
+        let eye = eye.translation();
+        let away = |tree: &(Entity, &Trunk, &Transform)| tree.2.translation.distance_squared(eye);
+        waiting.sort_by(|a, b| away(a).total_cmp(&away(b)));
+        let near = waiting.partition_point(|tree| away(tree) < NEAR_M * NEAR_M);
+        waiting.truncate((near + FAR_A_FRAME).min(waiting.len()));
+    }
     let mut fits = Vec::new();
-    for (entity, trunk, transform) in &pending {
+    for (entity, trunk, transform) in waiting {
         let reach = trunk.reach_m;
         let Some(wood) = shapes.get(&trunk.wood, &meshes, |p| {
             p.y < CROP_M && Vec2::new(p.x, p.z).length() < reach

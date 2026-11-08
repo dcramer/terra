@@ -387,7 +387,15 @@ fn undergrowth<W: Ways>(
                 0.62,
                 0.5 + 0.5 * drift.fbm(Vec3::new(at.x, 0.0, at.y) / placement.drift_m, 2, 2.0, 0.5),
             );
-            if !lay.starts(placement.kind, at, map.here(at), dice.unit(), drifts) {
+            // Rolled as before; passed over without asking what the place is where no place
+            // could start it: a kind likes a place 1 at most, so a roll past its drifts starts
+            // nothing, and most tries end here (153,000 tries a laying, each asking the
+            // floor's map: a quarter of a second of a crossing). The same places are kept.
+            let roll = dice.unit();
+            if roll > drifts {
+                continue;
+            }
+            if !lay.starts(placement.kind, at, map.here(at), roll, drifts) {
                 continue;
             }
             let many = placement.clump.0 + dice.below(placement.clump.1 - placement.clump.0 + 1);
