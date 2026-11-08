@@ -74,7 +74,7 @@ pub(super) struct Asked {
     wear: u16,
     /// A spot to aim at, east and south and how far above the ground, and the frames
     /// spent turning toward it so far.
-    aim: Option<((f32, f32), f32, u32)>,
+    aim: Option<((f32, f32), f32, u32, bool)>,
 }
 
 #[derive(Deserialize)]
@@ -167,11 +167,15 @@ fn take(
 struct Aim {
     at: [f32; 2],
     up: Option<f32>,
+    /// Whether `up` is from the player's own level, not the ground's at the spot: under a
+    /// roof or in a cave, where the ground over the spot is not where the thing stands.
+    #[serde(default)]
+    level: bool,
 }
 
 fn ask_aim(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
-    let Aim { at, up } = parse_some(params)?;
-    world.resource_mut::<Asked>().aim = Some(((at[0], at[1]), up.unwrap_or(1.0), 0));
+    let Aim { at, up, level } = parse_some(params)?;
+    world.resource_mut::<Asked>().aim = Some(((at[0], at[1]), up.unwrap_or(1.0), 0, level));
     Ok(json!("aiming from the next frame"))
 }
 
@@ -182,13 +186,19 @@ fn aim(
     mut asked: ResMut<Asked>,
     start: Res<Start>,
     planet: Res<Planet>,
-    mut view: Single<&mut View, IsLocalPlayer>,
-    camera: Single<&Transform, With<MainCamera>>,
+    player: Single<(&mut View, &Transform), IsLocalPlayer>,
+    camera: Single<&Transform, (With<MainCamera>, Without<View>)>,
 ) {
-    let Some(((east, south), up_m, frames)) = asked.aim else {
+    let Some(((east, south), up_m, frames, level)) = asked.aim else {
         return;
     };
-    let ground = planet.ground_at(start.at(east, south));
+    let (mut view, feet) = player.into_inner();
+    let over = start.at(east, south);
+    let ground = if level {
+        over.normalize() * feet.translation.length()
+    } else {
+        planet.ground_at(over)
+    };
     let target = ground + ground.normalize() * up_m;
     let eye = camera.translation;
     let off = (target - eye).reject_from(*camera.forward()).length();
@@ -206,7 +216,7 @@ fn aim(
     let toward = (target - eye).normalize();
     view.forward = toward.reject_from(up).normalize_or(view.forward);
     view.pitch = libm::asinf(toward.dot(up).clamp(-1.0, 1.0)).clamp(-1.2, 1.2);
-    asked.aim = Some(((east, south), up_m, frames + 1));
+    asked.aim = Some(((east, south), up_m, frames + 1, level));
 }
 
 #[derive(Deserialize)]

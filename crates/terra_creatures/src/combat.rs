@@ -10,6 +10,7 @@
 mod scripted;
 
 use crate::creatures::{self, Bitten, Creature, Species};
+use crate::melee::quarry::Answer;
 use crate::species::{Bestiary, Part};
 use crate::zones::Zones;
 use bevy::prelude::*;
@@ -290,6 +291,7 @@ fn take_blows(
             &mut Stamina,
             &mut Gear,
             Has<Downed>,
+            Option<&crate::melee::Fighter>,
         ),
         With<Player>,
     >,
@@ -297,16 +299,20 @@ fn take_blows(
     mut broke: MessageWriter<Broke>,
 ) {
     for &Bitten { player, damage } in bitten.read() {
-        let Ok((mut stance, mut vitals, mut stamina, mut gear, downed)) = players.get_mut(player)
+        let Ok((mut stance, mut vitals, mut stamina, mut gear, downed, fighter)) =
+            players.get_mut(player)
         else {
             continue;
         };
-        if downed || stance.dodging > 0.0 {
+        // With a sword drawn the set's own guard, parry and roll answer it (`melee::quarry`).
+        let drawn = fighter.map(crate::melee::quarry::answer);
+        if downed || stance.dodging > 0.0 || drawn == Some(Answer::Clear) {
             continue;
         }
         // Leather takes some of it.
         let damage = damage * (1.0 - inventory::protection(&items, &gear.0));
-        let taken = if stance.guarding && stamina.spend(GUARD_STAMINA) {
+        let guarding = stance.guarding || drawn == Some(Answer::Guarded);
+        let taken = if guarding && stamina.spend(GUARD_STAMINA) {
             damage * GUARDED
         } else {
             damage
@@ -321,7 +327,17 @@ fn take_blows(
             broke.write(Broke { player, kind });
         }
         stance.flinch = 0.35;
-        info!("Bitten for {taken:.0}; health {:.0}.", vitals.health);
+        // How it was met, for a scripted fight to read (D69): a drawn fighter's answer, and
+        // what its hands were at.
+        let met = fighter.map_or(String::new(), |fighter| {
+            format!(
+                " {:?} (at {}, guard {:?})",
+                crate::melee::quarry::answer(fighter),
+                fighter.runner.name().unwrap_or("nothing"),
+                fighter.guard_s
+            )
+        });
+        info!("Bitten for {taken:.0}; health {:.0}.{met}", vitals.health);
     }
 }
 

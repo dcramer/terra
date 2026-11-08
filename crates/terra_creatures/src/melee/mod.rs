@@ -19,6 +19,7 @@ mod feet;
 mod hud;
 mod partner;
 mod pose;
+pub mod quarry;
 mod record;
 mod script;
 mod sole;
@@ -58,6 +59,9 @@ const PACE: f32 = 2.2;
 const GUARD_PACE: f32 = 1.4;
 /// A fighter's health in a spar.
 pub const HEALTH: f32 = 100.0;
+/// A hostile creature within this of a player drawing is a foe at hand, metres: no sparring
+/// partner steps up then.
+const FOE_AT_HAND_M: f32 = 40.0;
 /// How far the lock-on reaches, metres.
 const LOCK_M: f32 = 15.0;
 /// How long a beaten fighter lies before the spar starts again, seconds.
@@ -170,7 +174,14 @@ pub fn plugin(app: &mut App) {
     app.insert_resource(MoveSets(read_sets()))
         .add_systems(
             FixedUpdate,
-            (draw, act, partner::think, contact::strike, contact::again)
+            (
+                draw,
+                act,
+                partner::think,
+                quarry::strike,
+                contact::strike,
+                contact::again,
+            )
                 .chain()
                 .before(Sim::Act),
         )
@@ -210,6 +221,10 @@ fn draw(
     >,
     grips: Query<(Entity, &Grip)>,
     partners: Query<&Transform, With<partner::Partner>>,
+    (foes, bestiary): (
+        Query<(&Transform, &crate::creatures::Creature)>,
+        Res<crate::species::Bestiary>,
+    ),
     mut notice: ResMut<Notice>,
 ) {
     for (player, intent, at, motion, drawn_now, mut stance, mut hands, gear) in &mut players {
@@ -264,7 +279,14 @@ fn draw(
         let near = partners
             .iter()
             .any(|place| place.translation.distance(at.translation) < 30.0);
-        if !near {
+        // Sparring is for when there is nothing to fight: with a living foe at hand (the
+        // troll in its den) no partner steps up to make it two against one.
+        let foe = foes.iter().any(|(place, creature)| {
+            creature.health > 0.0
+                && bestiary.hostile(creature.species)
+                && place.translation.distance(at.translation) < FOE_AT_HAND_M
+        });
+        if !near && !foe {
             partner::bring(&mut commands, at.translation, motion.facing, &items, &sets);
         }
     }
