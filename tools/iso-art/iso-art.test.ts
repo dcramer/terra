@@ -300,6 +300,25 @@ test("the concept prompt ends with the style guide's paragraph, word for word", 
   assert.doesNotMatch(conceptPrompt("a wolf", "a ruin", "creature", "other", GUIDE), /T-pose/);
 });
 
+test("a creature's concept is all body, before a studio backdrop, by its kind alone", () => {
+  // The treant of 2026-11-08 came with a belt, sword and shield and a forest behind it: the
+  // gear sentence was every rigged kind's, and the theme read as "its setting".
+  const creature = conceptPrompt("a walking oak tree", "a temperate oak forest", "creature", "biped", GUIDE);
+  const hero = conceptPrompt("a hooded ranger in leather", "a temperate oak forest", "hero", "biped", GUIDE);
+  for (const gear of [/weapon/, /shield/, /armour/, /clothes/, /wears/]) {
+    assert.doesNotMatch(creature, gear);
+    assert.match(hero, gear);
+  }
+  assert.match(creature, /all its own body/);
+  assert.match(creature, /T-pose/);
+  // Never a negative a filter or an image model takes the wrong way ("no clothes" was banned).
+  assert.doesNotMatch(creature, /\bno (clothes|gear|weapon)|without|nothing (worn|carried)/);
+  for (const p of [creature, hero, conceptPrompt("a barrel", "a ruin", "prop", undefined, GUIDE)]) {
+    assert.doesNotMatch(p, /setting:/);
+    assert.match(p, /neutral grey studio backdrop/);
+  }
+});
+
 function fakeCtx(credits: number, calls: string[][]): Ctx {
   const root = mkdtempSync(join(tmpdir(), "iso-art-"));
   return {

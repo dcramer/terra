@@ -21,12 +21,23 @@ export type KindSpec = {
   /** Height in metres it may have, and the one it is made to when none is given. */
   height: [number, number];
   defaultHeight?: number;
+  /** What the concept says of what a rigged figure wears and carries: a person's gear, fixed to
+   * the one figure; a creature is all body. Said as what it is, never what it is not: Tripo's
+   * image filter banned a project for "wearing nothing (no clothes ...)" (2026-11-08), and an
+   * image model draws what a prompt names, "no weapon" included. */
+  carries?: string;
 };
 
+/** A person's gear: everything they wear and carry is one mesh with them (D628). */
+const GEAR = "Everything it wears and carries is part of the one figure and fixed to it: armour and clothes close to the body, a weapon held firmly in a hand or sheathed, a shield strapped on, nothing loose, floating or hanging free.";
+/** A creature: its own body from end to end, its hands, paws or claws open and empty. The gear
+ * sentence gave the treant concept of 2026-11-08 a belt, tunic, sword and shield. */
+const BODY = "It is all its own body, every part of it grown from it as one piece, its hands, paws or claws open and empty.";
+
 export const SPECS: Record<Kind, KindSpec> = {
-  hero: { body: "biped", triangles: 24_000, texture: 2048, height: [1.5, 2.2], defaultHeight: 1.85 },
-  npc: { body: "biped", triangles: 16_000, texture: 1024, height: [1.3, 2.1], defaultHeight: 1.75 },
-  creature: { body: "other", triangles: 24_000, texture: 2048, height: [0.2, 8] },
+  hero: { body: "biped", triangles: 24_000, texture: 2048, height: [1.5, 2.2], defaultHeight: 1.85, carries: GEAR },
+  npc: { body: "biped", triangles: 16_000, texture: 1024, height: [1.3, 2.1], defaultHeight: 1.75, carries: GEAR },
+  creature: { body: "other", triangles: 24_000, texture: 2048, height: [0.2, 8], carries: BODY },
   prop: { triangles: 8_000, texture: 1024, height: [0.05, 3] },
   // Trees, ruins, wagons' worth of set piece taller than a figure: the largest things on screen
   // (a 7 m tree is 800 px tall at the closest camera), a dozen in view.
@@ -106,7 +117,7 @@ export function clipsFor(rigType: string | undefined): ClipSpec[] {
 export function isoPart(kind: Kind, body: Body | undefined): string {
   const whole = "The whole subject from head to foot, seen straight from the front at eye level, as a model sheet.";
   const above = "Its shapes read from above at a distance: a clear outline, big simple masses on the head, shoulders and back, light and dark parts set against each other, no thin parts that vanish.";
-  const gear = "Everything it wears and carries is part of the one figure and fixed to it: armour and clothes close to the body, a weapon held firmly in a hand or sheathed, a shield strapped on, nothing loose, floating or hanging free.";
+  const gear = SPECS[kind].carries ?? GEAR;
   if (!SPECS[kind].body) return `${whole.replace(" from head to foot", "")} Its shapes read from above at a distance: a clear outline and big simple masses, no thin parts that vanish.`;
   const posed = body === "biped"
     ? "Standing in a T-pose for rigging: arms straight out to the sides, hands open, legs straight and a little apart, feet flat, nothing touching between the arms and the body."

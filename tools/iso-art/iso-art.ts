@@ -83,12 +83,16 @@ const needRig = (a: Asset, stage: string) => {
   return a.rig;
 };
 
-/** The concept's prompt: the subject and its theme, the iso part, then the style guide's
- * paragraph word for word, last, as docs/art-style.md asks. */
+/** The concept's prompt: the subject and its theme, the iso part, the backdrop, then the style
+ * guide's paragraph word for word, last, as docs/art-style.md asks. The theme is the game the
+ * subject is made for, never a place it stands in: "its setting: a temperate oak forest" drew a
+ * forest behind the treant of 2026-11-08, which Tripo's model would read as part of it. */
 export function conceptPrompt(description: string, theme: string, kind: Kind, body: Body | undefined, guide: string): string {
   const subject = description.trim().replace(/\.$/, "");
-  return `${subject}; its setting: ${theme}. ${isoPart(kind, body)} ${stylePrompt(guide)}`;
+  return `${subject}, made for a game set in ${theme}. ${isoPart(kind, body)} ${BACKDROP} ${stylePrompt(guide)}`;
 }
+/** What the concept stands on and before: a studio's, the one thing in the picture. */
+export const BACKDROP = "Shown alone, the only thing in the picture, before a plain, even, neutral grey studio backdrop.";
 
 export function concept(ctx: Ctx, name: string, opts: { kind?: string; theme?: string; body?: string; height?: string }, description?: string): void {
   const prior = existsSync(join(assetDir(ctx.root, name), "asset.json")) ? readAsset(ctx.root, name) : undefined;

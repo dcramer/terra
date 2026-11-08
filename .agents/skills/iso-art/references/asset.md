@@ -10,9 +10,9 @@ A hero, creature, NPC, prop or piece of scenery, from a description to a checked
 
 ## 1. Concept
 
-`concept NAME --kind hero|creature|npc|prop|scenery --theme "the biome" [--body biped|other] [--height M] "DESCRIPTION"`. The description says what it is and what it is made of, nothing of style: the tool adds the iso part (whole subject from the front; big masses that read from above; gear fixed to the one figure, nothing loose; a T-pose for a biped, square on its feet for another body) and docs/art-style.md's concept paragraph word for word. `--height` is its real height (D110); a hero defaults to 1.85 m, an NPC to 1.75.
+`concept NAME --kind hero|creature|npc|prop|scenery --theme "the biome" [--body biped|other] [--height M] "DESCRIPTION"`. The description says what it is and what it is made of, nothing of style: the tool adds the iso part (whole subject from the front; big masses that read from above; a person's gear fixed to the one figure, nothing loose, a creature all its own body (the kind's `carries`, kinds.ts); a T-pose for a biped, square on its feet for another body; a neutral studio backdrop, the theme only the game it is for, never a scene) and docs/art-style.md's concept paragraph word for word. `--height` is its real height (D110); a hero defaults to 1.85 m, an NPC to 1.75.
 
-Read `art/iso/NAME/concept.png` against [art-style.md](../../../../docs/art-style.md)'s checklist before `model`: one figure, gear on it, no weapon floating, values that separate the parts. A bad concept costs a model's 55 credits later.
+Read `art/iso/NAME/concept.png` against [art-style.md](../../../../docs/art-style.md)'s checklist before `model`: one figure, gear on it (a creature none), no weapon floating, no scene behind it, values that separate the parts. A bad concept costs a model's 55 credits later.
 
 Concepts now cost 10 to 20 credits: the month's 100 free images were used by 2026-11-05 (a 403 "Insufficient credits"); try no other `--model` without the credits for it.
 
