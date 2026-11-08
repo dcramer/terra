@@ -435,6 +435,7 @@ fn plant(
                     .with_rotation(rot)
                     .with_scale(Vec3::splat(scale)),
                 Visibility::default(),
+                foliage::Tree::default(),
             ))
             .id();
         commands.spawn((

@@ -1,8 +1,9 @@
 //! Nothing hides the hero (iso-forest-demo): in play every cuttable crown and bough opens in
-//! a dithered hole about him from a hand's breadth before him, and fades near the lens, so
-//! no bough sweeps over the camera as he runs under the oaks. Diablo IV and Path of Exile 2
-//! do the same: occluders between the camera and the player dither out in a circle about him
-//! (Diablo IV's "fade cylinder"), and canopy near the camera is not drawn.
+//! a dithered hole about him from a hand's breadth before him, and a tree any part of which
+//! nears the lens fades out whole (foliage.rs `Tree`), so no bough sweeps over the camera as
+//! he runs under the oaks. Diablo IV and Path of Exile 2 do the same: occluders between the
+//! camera and the player dither out in a circle about him (Diablo IV's "fade cylinder"), and
+//! canopy near the camera is not drawn.
 //!
 //! The check: each frame rays go from the camera to his body from knee to crown (`body`);
 //! a surface met before him that the cut does not drop (`foliage::fade`, the shader's twin)
@@ -23,8 +24,9 @@ use bevy::picking::mesh_picking::ray_cast::{
 };
 use bevy::prelude::*;
 
-/// Play's near fade (m from the camera): the camera stands about 17 m over the hero and the
-/// oaks are 12 to 16 m tall, so their crowns came within a few metres of the lens.
+/// Play's near band (m from the camera): the camera stands about 17 m over the hero and the
+/// oaks are 12 to 16 m tall, so their crowns came within a few metres of the lens; a tree any
+/// part of which comes nearer fades out whole.
 pub const NEAR: f32 = 10.0;
 /// How open a cut surface over him must be to count as not hiding him (the dither's share).
 const OPEN: f32 = 0.75;
@@ -172,6 +174,17 @@ pub fn hidden(
                 })
         })
         .collect()
+}
+
+/// Whether a foliage material opens about the party (its hole is cut).
+fn cuttable(mats: &Assets<FoliageMaterial>, m: &MeshMaterial3d<FoliageMaterial>) -> bool {
+    mats.get(&m.0)
+        .is_some_and(|m| m.extension.foliage.leaf.y > 0.5)
+}
+
+/// Whether a mesh's tag says its tree is faded out whole (foliage.rs `Tree`) at least `OPEN`.
+pub fn faded(tag: Option<&bevy::mesh::MeshTag>) -> bool {
+    tag.is_some_and(|t| t.value as f32 >= OPEN * foliage::TAG as f32)
 }
 
 /// How far along `ray` it first meets the upright capsule from `a` to `b` of radius `r`, from
@@ -327,7 +340,10 @@ fn check(
     mut ray: MeshRayCast,
     hero: Query<(Entity, &GlobalTransform), With<Hero>>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
-    leaves: Query<&MeshMaterial3d<FoliageMaterial>>,
+    leaves: Query<(
+        &MeshMaterial3d<FoliageMaterial>,
+        Option<&bevy::mesh::MeshTag>,
+    )>,
     shaded: Query<
         (),
         Or<(
@@ -383,19 +399,18 @@ fn check(
     // His own body is no occluder; the wood, its props and the foes' bodies are.
     let up = |e: Entity| std::iter::once(e).chain(parents.iter_ancestors(e));
     let body = |e: Entity| up(e).any(|a| fighters.contains(a));
-    // A foe's meshes are left to its capsule (`capsule`).
+    // A foe's meshes are left to its capsule (`capsule`); a tree faded out whole (foliage.rs
+    // `Tree`) at least `OPEN` hides nothing.
+    let gone = |e: Entity| leaves.get(e).is_ok_and(|(_, t)| faded(t));
     let occluder = |e: Entity| {
-        (leaves.contains(e) || shaded.contains(e)) && !up(e).any(|a| heroes.contains(a)) && !body(e)
+        (leaves.contains(e) || shaded.contains(e))
+            && !gone(e)
+            && !up(e).any(|a| heroes.contains(a))
+            && !body(e)
     };
     let uprights = uprights(&standing, &kids, &bounds);
     let laid = shown(&tells, &tell_mats);
-    let cut = |e: Entity| {
-        leaves
-            .get(e)
-            .ok()
-            .and_then(|m| mats.get(&m.0))
-            .is_some_and(|m| m.extension.foliage.leaf.y > 0.5)
-    };
+    let cut = |e: Entity| leaves.get(e).is_ok_and(|(m, _)| cuttable(&mats, m));
     let settings = MeshRayCastSettings::default()
         .with_visibility(RayCastVisibility::VisibleInView)
         .with_filter(&occluder)
@@ -681,17 +696,55 @@ mod tests {
         assert!(fault.iter().all(|p| !p.3), "no silhouette through a tell");
     }
 
-    /// Near the lens every cuttable surface fades, wherever it is on the screen: a bough
-    /// 5 m from the camera at the frame's top is gone; one 15 m off and away from him stays.
+    /// A tree whose crown nears the lens fades out whole over `FADE` and rests gone, never
+    /// part-way; one that stays back stays whole; one at the band's edge does not flicker,
+    /// and one that leaves it comes back whole. The crown's nearest point is found by
+    /// `box_distance` on a turned, scaled box, as the eye taken into its frame.
     #[test]
-    fn boughs_near_the_lens_fade_and_far_ones_stay() {
+    fn a_tree_near_the_lens_fades_whole_and_rests_whole() {
+        use crate::foliage::{FADE, HYSTERESIS, Tree, box_distance};
+        use bevy::camera::primitives::Aabb;
         let feet = Vec3::ZERO;
         let (eye, axes) = view(feet, NEAR);
-        let middle = feet + Vec3::Y * MIDDLE;
-        let top = eye.xyz() + axes[2] * 5.0 + axes[1] * 1.0;
-        assert!(foliage::fade(top, &[middle], axes, eye) > 0.99);
-        let far = feet + Vec3::new(6.0, 4.0, -4.0);
-        assert!(eye.xyz().distance(far) > NEAR);
-        assert!(foliage::fade(far, &[middle], axes, eye) < 0.01);
+        // A 4 m crown box scaled 1.5, its middle 5 m before the lens, a face turned to it and
+        // spun about the line of sight: that face 5 - 3 = 2 m off.
+        let aabb = Aabb::from_min_max(Vec3::splat(-2.0), Vec3::splat(2.0));
+        let middle = eye.xyz() + axes[2] * 5.0;
+        let mut t = Transform::from_translation(middle).looking_to(axes[2], axes[1]);
+        t.rotate_axis(Dir3::new(axes[2]).unwrap(), 0.7);
+        let at = GlobalTransform::from(t.with_scale(Vec3::splat(1.5)));
+        let d = box_distance(eye.xyz(), &aabb, &at);
+        assert!((d - 2.0).abs() < 1e-3, "{d}");
+        let (dt, mut tree, mut seen) = (1.0 / 30.0, Tree::default(), Vec::new());
+        for _ in 0..30 {
+            tree.step(d, NEAR, dt);
+            seen.push(tree.fade);
+        }
+        let full = seen
+            .iter()
+            .position(|f| *f >= 1.0)
+            .expect("gone within a second");
+        assert!((full as f32 + 1.0) * dt <= FADE + dt, "gone in {FADE} s");
+        assert!(
+            seen.windows(2).all(|w| w[1] >= w[0]),
+            "it never comes back mid-fade"
+        );
+        assert!(
+            seen[full..].iter().all(|f| *f == 1.0),
+            "at rest it is gone, no screen door"
+        );
+        // At the band's edge it stays gone; past it, back whole.
+        tree.step(NEAR + HYSTERESIS * 0.5, NEAR, dt);
+        assert_eq!(tree.fade, 1.0);
+        for _ in 0..30 {
+            tree.step(NEAR + HYSTERESIS * 2.0, NEAR, dt);
+        }
+        assert_eq!(tree.fade, 0.0);
+        // One a tree far off: 15 m from the lens, never faded.
+        let mut far = Tree::default();
+        for _ in 0..30 {
+            far.step(15.0, NEAR, dt);
+        }
+        assert_eq!(far.tag(), 0);
     }
 }

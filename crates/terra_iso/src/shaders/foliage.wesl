@@ -37,7 +37,7 @@ struct Foliage {
     // x: how far each texel of the card goes to its own grey before the vertex colour tints
     // it (a plant set's `grey`, 0 leaves the card as it is).
     tone: vec4<f32>,
-    // xyz: the camera; w: play's near fade (m), 0 off (foliage.rs `Near`).
+    // xyz: the camera; w: play's near band (m), 0 off (foliage.rs `Near`): over 0, play.
     eye: vec4<f32>,
 }
 
@@ -85,17 +85,21 @@ fn sway(world: vec3<f32>, root: vec3<f32>, w: vec2<f32>) -> vec3<f32> {
 /// gradient noise (Jimenez 2014, Bevy's `utils::interleaved_gradient_noise`) turned each
 /// frame (`leaf.w`), as Unreal's DitherTemporalAA: TAA averages it to a smooth fade, where a
 /// fixed 4 by 4 Bayer matrix showed as a checker at 1:1 (the forest's roots, iso-art j39).
-fn cut(world: vec3<f32>, frag: vec2<f32>) {
+/// In play a tree near the lens fades whole (foliage.rs `Tree`): its share gone rides in the
+/// mesh's tag, 0 to `TAG`, so at rest it is drawn whole or not at all, never a screen door.
+const TAG: f32 = 1000.0;
+
+fn cut(world: vec3<f32>, frag: vec2<f32>, instance: u32) {
     if foliage.leaf.y < 0.5 {
         return;
     }
     let r = foliage.leaf.z;
     // Play (foliage.rs `fade`, its twin, and `PLAY_BEFORE`): open from a hand's breadth
-    // before the hero, and everything near the lens faded.
+    // before the hero.
     let play = foliage.eye.w > 0.0;
     let lo = select(0.4, 0.05, play);
     let hi = select(1.4, 0.45, play);
-    var fade = 0.0;
+    var fade = min(f32(mesh_functions::get_tag(instance)) / TAG, 1.0);
     for (var i = 0u; i < 6u; i++) {
         let m = foliage.party[i];
         if m.w < 0.5 {
@@ -106,10 +110,6 @@ fn cut(world: vec3<f32>, frag: vec2<f32>) {
         let before = -dot(d, foliage.forward.xyz);
         let f = (1.0 - smoothstep(r * 0.72, r, s)) * smoothstep(lo, hi, before);
         fade = max(fade, f);
-    }
-    if play {
-        let near = distance(world, foliage.eye.xyz);
-        fade = max(fade, 1.0 - smoothstep(foliage.eye.w * 0.7, foliage.eye.w, near));
     }
     if fade > interleaved_gradient_noise(frag, u32(foliage.leaf.w)) {
         discard;
@@ -177,7 +177,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
 @if(NORMAL_PREPASS)
-    cut(in.world_position.xyz, in.position.xy);
+    cut(in.world_position.xyz, in.position.xy, in.instance_index);
     prepass_sample_color_and_alpha_discard(in);
     var out: FragmentOutput;
 @if(NORMAL_PREPASS) {
@@ -202,7 +202,7 @@ fn fragment(in: VertexOutput) {
 @else
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
-    cut(in.world_position.xyz, in.position.xy);
+    cut(in.world_position.xyz, in.position.xy, in.instance_index);
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     // The card's texel taken toward its own grey, then tinted again: the base colour is the
     // texel times the vertex colour, so the texel is that over the colour. A multiplied
