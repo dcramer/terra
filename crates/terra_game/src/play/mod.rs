@@ -20,6 +20,7 @@ pub mod music;
 mod noises;
 pub mod portal;
 mod probe;
+pub mod props_net;
 pub mod realm_parts;
 pub use props::{
     Look as PropLook, Making as PropMaking, glowing as prop_glowing, lit as prop_lit,
@@ -156,6 +157,7 @@ impl Plugin for GameplayPlugin {
         held::plugin(app);
         terra_survival::hands_net::plugin(app);
         base_net::plugin(app);
+        props_net::plugin(app);
         worn::plugin(app);
         save::plugin(app);
         title::plugin(app);

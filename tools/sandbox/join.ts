@@ -203,14 +203,31 @@ try {
   type Base = { parts: { kind: string; cubes: number }[] };
   const base = (port: number) => (JSON.parse(remote(port, "call", "build.state")) as Base).parts.map((part) => `${part.kind}:${part.cubes}`).join(" ");
   remote(host, "give", "stone:4");
-  remote(host, "press", "b@20", "2@30", "enter@40", "e@70:80");
-  remote(host, "wait", "Placed a Claim stone", "--timeout", "60");
+  // By the hammer's menu, as a player does; where the host happens to aim on a world of
+  // any seed, the stone is sometimes refused, so it is tried again a pace on.
+  let claimed = false;
+  for (let tries = 0; tries < 3 && !claimed; tries++) {
+    remote(host, "press", "b@20", "2@30", "enter@40", "e@70:80");
+    try {
+      remote(host, "wait", "Placed a Claim stone", "--timeout", "20");
+      claimed = true;
+    } catch {
+      remote(host, "press", "escape", "w:40");
+      await sleep(2);
+    }
+  }
+  if (!claimed) throw new Error("the host could not set down a claim stone in three tries (the hammer's menu: b, 2, enter, e held): what it was told is in its log");
+  // What stands in a base stands in both games: the host's claim stone is in the friend's.
+  const stones = (port: number) => (JSON.parse(remote(port, "call", "sandbox.find", JSON.stringify({ name: "Claim stone" }))) as { at: Place }[]).map((stone) => stone.at);
+  const theirs = stones(host);
+  if (theirs.length !== 1) throw new Error(`the host set down a claim stone and has ${theirs.length} of them`);
+  await until(`the host's claim stone stands at ${theirs[0].map((x) => x.toFixed(1)).join(", ")} and the friend's game has ${JSON.stringify(stones(friend))}: the host orders each prop where it stands and a joined game sets it down (play::props_net)`, () => stones(friend).length === 1 && apart(stones(friend)[0], theirs[0]) < 0.3, 30);
   const laid = JSON.parse(remote(host, "call", "build.lay", JSON.stringify({ what: "room", min: [0, 0, 0], max: [4, 0, 4], kind: "logs", floor: "stone" }))) as { done: boolean; refused?: string };
   if (!laid.done) throw new Error(`the host's room was refused: ${laid.refused}`);
   const built = base(host);
   if (!built) throw new Error("the host laid a room and its base has no parts");
   await until(`the host's base is ${built} and the friend's game has ${base(friend) || "none of it"}: the host orders every act done to the base where it stands, and a joined game makes them (play::base_net); the host said: ${remote(host, "said", "--all", "--containing", "Base:").trim().split("\n").slice(-3).join(" / ")}`, () => base(friend) === built, 30);
-  console.log(`✓ the base is the same in both games: the host's room (${built}) stands in the friend's game too`);
+  console.log(`✓ the base is the same in both games: the host's room (${built}) stands in the friend's game too, and its claim stone beside it`);
 
   // Creatures are the host's (netcode.md, step 5): the friend's game puts out none of its
   // own and shows the host's, each where the host has it.

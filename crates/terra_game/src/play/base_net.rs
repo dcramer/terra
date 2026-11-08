@@ -67,7 +67,7 @@ fn placed(frame: Frame) -> Transform {
 /// What of the base this game has told or been told: how many of its operations, where it
 /// stood, whether the session has begun, and a joined game's own acts not yet come back.
 #[derive(Resource, Default)]
-struct Shared {
+pub(super) struct Shared {
     seen: usize,
     frame: Option<Frame>,
     begun: bool,
@@ -160,7 +160,7 @@ fn host(mut host: ResMut<Host>, mut shared: ResMut<Shared>, mut building: Buildi
 
 /// On a joined game, at the tick's end: the host's words of the base are made, but its own
 /// acts come back; and its own new acts are asked of the host.
-fn joined(
+pub(super) fn joined(
     mut link: ResMut<Link>,
     mut shared: ResMut<Shared>,
     mut building: Building,
