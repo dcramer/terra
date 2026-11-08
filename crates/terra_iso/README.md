@@ -25,6 +25,8 @@ A biome is a data file on the shared kit (src/kit/, D634, experiment iso-kit): `
 
 Playing a biome (src/play.rs): `cargo iso --biome neon-street` (or `ruin`, `forest`, `marsh`) opens a window with the hero as the player. WASD runs him relative to the screen (W up it), Shift walks; a left click on the ground turns him to it and swings (moving held for the swing), and the creatures in its arc within 3 m fall; the camera follows him at its fixed angle. A `--shot`/`--film` run stays the staged fight unless `--play`, scripted by `--press wd@50-85` (keys held over those frames) and `--click 700,800@95` (a click at those pixels on that frame): `cargo iso --biome neon-street --play --film 100 --frames 40 --shot target/job/play/neon.jpg --press d@50-85 --click 700,800@95`.
 
+A scripted fight kept for films is a route, `routes/NAME.txt`: the same flags in a file, `#` notes allowed, read in place of `--route NAME` (flags after it win). The forest's is one command, its tally and occlusion gates checked at its end: `cargo iso --route forest --shot target/job/film/f.jpg` films it (1170 frames from 60), `cargo iso --route forest --frames 1230 --film 0 --shot target/job/g/end.jpg` plays it through for its gates alone.
+
 ## What it is
 
 - One fixed orthographic camera, 42° down and turned 28°, never rotated, as the Infinity Engine's painted backgrounds are; drawn live in 3D instead (PBR, cascaded and point-light shadows, SSAO, TAA, bloom, distance haze). Day, dusk (the blue hour) and night (`T`); AgX by day, Tony McMapface at dusk and night, which keeps a fire orange.

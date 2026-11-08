@@ -72,7 +72,8 @@ pub struct Args {
     pub clicks: Vec<(Vec2, u32)>,
     /// `--do NAME[:X,Z]@FROM[-TO]`: one of the hero's abilities (hero/abilities.rs, `Ability`:
     /// light, heavy, block, roll, walk, sprint) pressed at FROM, or held to TO, aimed at the
-    /// ground point X,Z.
+    /// ground point X,Z. `--route NAME` reads a scripted fight's flags from
+    /// `routes/NAME.txt` (`routes`).
     pub abilities: Vec<(String, Option<Vec2>, u32, u32)>,
 }
 
@@ -121,6 +122,46 @@ fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
     (a, loaded)
 }
 
+/// The flags with each `--route NAME` replaced by its file's: `routes/NAME.txt` beside this
+/// crate (a path ending `.txt` is read as it is), the flags `cargo iso` takes, whitespace
+/// apart, `#` to the line's end a note. So a scripted fight is a file in the repository, one
+/// command to play or film, not a copied line (D249); flags after it override its own.
+fn routes(flags: impl Iterator<Item = String>) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut it = flags;
+    while let Some(flag) = it.next() {
+        if flag != "--route" {
+            out.push(flag);
+            continue;
+        }
+        let name = it.next().expect("--route NAME (routes/NAME.txt)");
+        let path = if name.ends_with(".txt") {
+            PathBuf::from(&name)
+        } else {
+            PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/routes"))
+                .join(format!("{name}.txt"))
+        };
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+            eprintln!(
+                "--route {name}: {}: {e}. A route is crates/terra_iso/routes/<name>.txt, the \
+                 flags cargo iso takes (forest.txt is one): check the name or write the file",
+                path.display()
+            );
+            std::process::exit(2)
+        });
+        out.extend(route_flags(&text));
+    }
+    out
+}
+
+/// A route file's flags: its words, with `#` notes left out.
+fn route_flags(text: &str) -> impl Iterator<Item = String> + '_ {
+    text.lines()
+        .map(|l| l.split_once('#').map_or(l, |(f, _)| f))
+        .flat_map(str::split_whitespace)
+        .map(String::from)
+}
+
 /// The flags as given, and the `--hour` if one was.
 fn parse(flags: impl Iterator<Item = String>) -> (Args, Option<scene::Hour>) {
     let mut a = Args {
@@ -142,7 +183,7 @@ fn parse(flags: impl Iterator<Item = String>) -> (Args, Option<scene::Hour>) {
         abilities: Vec::new(),
     };
     let mut hour = None;
-    let mut it = flags;
+    let mut it = routes(flags).into_iter();
     while let Some(flag) = it.next() {
         let mut val = || it.next().expect("a value after the flag");
         match flag.as_str() {
@@ -427,5 +468,46 @@ mod tests {
             None,
             "the fault: a film left as before"
         );
+    }
+
+    /// `--route forest` reads routes/forest.txt: its notes left out, its flags parsed as if
+    /// given (the biome, the film, the presses and the aimed roll), and a flag after it wins.
+    #[test]
+    fn a_route_file_is_its_flags() {
+        let text = "--biome forest # the place\n# a note --do heavy@9\n--press w@60-95\n\
+                    --do roll:11.5,19.8@1024 --frames 60";
+        let words: Vec<_> = route_flags(text).collect();
+        assert_eq!(
+            words,
+            [
+                "--biome",
+                "forest",
+                "--press",
+                "w@60-95",
+                "--do",
+                "roll:11.5,19.8@1024",
+                "--frames",
+                "60"
+            ]
+        );
+        let (forest, _) = parse(
+            "--route forest --frames 1230 --film 0"
+                .split(' ')
+                .map(String::from),
+        );
+        assert_eq!(forest.biome.as_deref(), Some("forest"));
+        assert!(forest.play);
+        assert_eq!(
+            (forest.frames, forest.film),
+            (1230, 0),
+            "flags after it win"
+        );
+        assert!(forest.press.contains(&("w".into(), 60, 95)));
+        let roll = forest.abilities.iter().find(|a| a.0 == "roll");
+        assert_eq!(
+            roll.map(|r| (r.1, r.2)),
+            Some((Some(Vec2::new(11.5, 19.8)), 1024))
+        );
+        assert!(forest.abilities.len() > 30, "the route's every --do");
     }
 }
