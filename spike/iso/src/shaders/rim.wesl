@@ -94,8 +94,29 @@ fn dress(base: vec3<f32>, world: vec3<f32>, n: vec3<f32>, relief: vec3<f32>) -> 
     let patches = noise(world.xz * 2.6 + world.y * 1.3) * 0.65 + noise(world.xz * 0.8 + 7.0) * 0.35;
     let ny = mix(n.y, relief.y, 0.75);
     let up = smoothstep(0.2, 0.8, ny);
-    let cover = smoothstep(0.45, 0.62, up * moss.a + (patches - 0.5) * 0.7 + (grain - 0.25) * 0.6);
-    var c = mix(own, m * moss.rgb * mix(0.75, 1.0, cavity), cover);
+    // Cushions, not a felt cap (uc-gaps j3's gap 1, the fight boulder "an even felt-green
+    // cap with a clean rim"): at a cover of 0.75 a stone's whole top passed the threshold
+    // but where the patches dipped under a seventh. As Megascans' moss blend does, the edge
+    // is height-blended: the moss scan's own grain and a finger-width tuft noise pull it
+    // into ragged fingers, a fingernail stipple frays them, and a hand-wide noise leaves a
+    // few bare islands on the tops.
+    let tufts = noise(world.xz * 16.0 + world.y * 9.0);
+    let stipple = noise(world.xz * 45.0 - world.y * 23.0);
+    let islands = noise(world.xz * 5.5 - world.y * 3.0 + 3.0);
+    let grow = up * moss.a + (patches - 0.5) * 0.7 + (islands - 0.5) * 0.2 + (grain - 0.25) * 0.9
+        + (tufts - 0.5) * 0.3 + (stipple - 0.5) * 0.2;
+    let cover = smoothstep(0.4, 0.68, grow);
+    // A cushion is darker in its hollows and paler, yellower at its growing tips, the old
+    // core olive-brown: tone from the same noises, so no two cushions read one colour.
+    let tone = mix(vec3<f32>(0.66, 0.62, 0.5), vec3<f32>(1.1, 1.08, 0.86), smoothstep(0.2, 0.8, tufts * 0.6 + islands * 0.4));
+    // Its thin edge, where the cover is barely made, is browner and darker (dried and
+    // soiled), so the cushion's rim reads as a margin, not a cut.
+    let margin = 1.0 - smoothstep(0.5, 0.8, grow);
+    let mossed = m * moss.rgb * tone * mix(0.75, 1.0, cavity) * mix(vec3<f32>(1.0), vec3<f32>(0.6, 0.52, 0.4), margin);
+    // The bare stone about a cushion is stained by it (humus, dead moss, the damp it
+    // holds), a hand's breadth out: pale rock beside green felt was the cut.
+    let stain = smoothstep(0.15, 0.45, grow) * up;
+    var c = mix(own * mix(vec3<f32>(1.0), vec3<f32>(0.58, 0.55, 0.45), stain), mossed, cover);
     // Lichen: grey-green blotches a hand across on the sides and shoulders, paler than the
     // stone by about twice, not a fixed pale grey: at (0.34, 0.36, 0.29) they stood six to
     // eight times the scans' 0.04-0.06 and read as white stickers in the sun.
