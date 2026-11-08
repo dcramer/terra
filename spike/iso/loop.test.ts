@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { blindOrder, delta, type History, isChanged, newerKept, outcome, type Pair, parseBiome, pixelShare, refRanges, reserveRound, type Round, runNotes, shotAgainst, type Side, staleAgainst, statsLine, testResult, updateHistory, verdict, winnerOf } from "./loop.ts";
+import { barOf, blindOrder, delta, EPS, type History, isChanged, newerKept, noiseOf, outcome, type Pair, parseBiome, PIXEL_SHARE, PLAIN, pixelShare, refRanges, reserveRound, type Round, runNotes, script, shotAgainst, type Side, staleAgainst, statsLine, testResult, updateHistory, verdict, winnerOf } from "./loop.ts";
 
 const pair = (a: Side, winner?: Side | "same", margin?: Pair["margin"]): Pair => ({ folder: "f", brief: "b", a, winner, margin });
 const changed = (...pairs: Pair[]) => ({ changed: true, pairs });
@@ -233,4 +233,42 @@ test("a round shot against a kept still since replaced keeps none of its ties an
   assert.equal(shotAgainst(h, "grime", "marsh"), "base", "inferred from the last keep before it was shot");
   assert.deepEqual(staleAgainst(h, "grime"), { ties: ["marsh"], changed: [] }, "grime's marsh tied base's still, not wet's; ruin's kept moved to wet only as a tie, the same look");
   assert.deepEqual(staleAgainst(h, "late"), { ties: [], changed: ["marsh"] });
-  assert.deepEqual(staleAgainst(h, "wet"), { ties: [], changed: [] }, "the kept round itself is current");});
+  assert.deepEqual(staleAgainst(h, "wet"), { ties: [], changed: [] }, "the kept round itself is current");
+});
+
+test("a biome's own noise lifts its bars: a plain re-shoot within it is the same, a change past it is not", () => {
+  const im = (v: number, n = 0) => {
+    const data = new Uint8Array(300).fill(v);
+    data.fill(v + 40, 0, n * 3);
+    return { width: 10, height: 10, data };
+  };
+  // Three shots of one commit: two pixels of a hundred differ between the first two, one more
+  // with the third (the neon street's rain and probe, in small).
+  const n = noiseOf([im(10), im(10, 2), im(10, 3)], "abc", "t");
+  assert.equal(n.share, 0.03);
+  assert.equal(n.shots, 3);
+  const bar = barOf(n);
+  assert.equal(bar.share, 0.045, "the most two shots differ by, times the margin");
+  assert.equal(isChanged({}, 0.04, bar), false, "a re-shoot within the noise is the same");
+  assert.equal(isChanged({}, 0.04), true, "the plain bar would have asked for judges");
+  assert.equal(isChanged({}, 0.06, bar), true);
+  // A measure's spread lifts only that measure's bar; the plain one stays the floor.
+  const spread = barOf({ ...n, spread: { dark_share: 0.004, saturation: 0.0001 }, share: 0.001 });
+  assert.equal(spread.share, PIXEL_SHARE);
+  assert.equal(spread.eps.dark_share, 0.006);
+  assert.equal(spread.eps.saturation, EPS);
+  assert.equal(isChanged({ dark_share: 0.005 }, 0, spread), false);
+  assert.equal(isChanged({ dark_share: 0.007 }, 0, spread), true);
+  assert.equal(isChanged({ luma_p95: 0.002 }, 0, spread), true, "a measure with no spread keeps the plain bar");
+  assert.equal(barOf(undefined), PLAIN);
+  assert.throws(() => noiseOf([im(1)], "abc", "t"), /two shots/);
+  const line = statsLine("neon-street", S, null, { round: "k", delta: {}, share: 0.04, bar });
+  assert.match(line, /same as kept k \(its noise: 4\.50% px\)$/);
+});
+
+test("the noise script shoots each biome N times and no film", () => {
+  const sh = script(["ruin", "marsh"], true, 3);
+  for (const b of ["ruin", "marsh"]) for (const n of [1, 2, 3]) assert.ok(sh.includes(`--shot $d/${b}-${n}.png`), `${b} ${n}`);
+  assert.ok(!sh.includes("--film"));
+  assert.ok(script(["ruin"], false).includes("--shot $d/ruin.png"));
+});

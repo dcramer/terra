@@ -41,6 +41,46 @@ export const LEVELS = 2;
  * the forest up to 0.33% in specks on its fight's effects, iso-kit j5); a look change moves
  * several percent. */
 export const PIXEL_SHARE = 0.005;
+/** A biome's own noise (uc-infra): `noise` shoots it N times on one commit and keeps, in
+ * spike/iso/noise.json, the most pixels any two shots differ by and each measure's spread;
+ * a still changed only past this many times that, so a plain re-shoot is "same" (the forest's
+ * wind and clips differ 1.2-2.4% between shots, the neon street's probe up to 9%). */
+export const NOISE_MARGIN = 1.5;
+const NOISE = join(ROOT, "spike/iso/noise.json");
+
+/** What a biome's shots of one commit differ by: the most pixels of any two, each measure's
+ * spread (high less low), over `shots` stills of commit `rev`. */
+export type Noise = { share: number; spread: Partial<Stats>; shots: number; rev: string; at: string };
+/** The bars a still must pass to have changed: a share of pixels, and a measure's move. */
+export type Bar = { share: number; eps: Partial<Stats> };
+export const PLAIN: Bar = { share: PIXEL_SHARE, eps: {} };
+
+/** A biome's bars: its noise times `NOISE_MARGIN`, never under the plain ones. */
+export function barOf(noise: Noise | undefined): Bar {
+  if (!noise) return PLAIN;
+  const eps: Partial<Stats> = {};
+  for (const [k] of SHOWN) eps[k] = Math.max(EPS, Math.round((noise.spread[k] ?? 0) * NOISE_MARGIN * 1e4) / 1e4);
+  return { share: Math.max(PIXEL_SHARE, noise.share * NOISE_MARGIN), eps };
+}
+
+/** The noise of N stills of one commit: the most pixels any two differ by, each measure's
+ * spread. */
+export function noiseOf(ims: Rgb[], rev: string, at: string): Noise {
+  if (ims.length < 2) throw new Error(`noise needs two shots or more of one commit, not ${ims.length}`);
+  let share = 0;
+  for (let i = 0; i < ims.length; i++) for (let j = i + 1; j < ims.length; j++) share = Math.max(share, pixelShare(ims[i], ims[j]));
+  const stats = ims.map(measure);
+  const spread: Partial<Stats> = {};
+  for (const [k] of SHOWN) {
+    const v = stats.map((s) => s[k]);
+    spread[k] = Math.round((Math.max(...v) - Math.min(...v)) * 1e4) / 1e4;
+  }
+  return { share: Math.round(share * 1e5) / 1e5, spread, shots: ims.length, rev, at };
+}
+
+function loadNoise(): Record<string, Noise> {
+  return existsSync(NOISE) ? JSON.parse(readFileSync(NOISE, "utf8")) : {};
+}
 
 export type Margin = "slight" | "clear" | "strong";
 export type Side = "new" | "kept";
@@ -108,8 +148,8 @@ export function pixelShare(a: Rgb, b: Rgb): number {
   return n / (a.width * a.height);
 }
 
-export function isChanged(d: Partial<Stats>, share: number): boolean {
-  return Object.values(d).some((v) => Math.abs(v ?? 0) > EPS) || share > PIXEL_SHARE;
+export function isChanged(d: Partial<Stats>, share: number, bar: Bar = PLAIN): boolean {
+  return Object.entries(d).some(([k, v]) => Math.abs(v ?? 0) > (bar.eps[k as keyof Stats] ?? EPS)) || share > bar.share;
 }
 
 const f4 = (v: number) => v.toFixed(4);
@@ -117,7 +157,7 @@ const signed = (v: number) => (v >= 0 ? "+" : "") + v.toFixed(4);
 
 /** One biome's line: each measure beside the refs' range (↑ above it, ↓ below), then what
  * moved from the kept still. */
-export function statsLine(biome: string, s: Stats, ranges: Record<string, [number, number]> | null, kept: { round: string; delta: Partial<Stats>; share: number } | null): string {
+export function statsLine(biome: string, s: Stats, ranges: Record<string, [number, number]> | null, kept: { round: string; delta: Partial<Stats>; share: number; bar?: Bar } | null): string {
   const parts = SHOWN.map(([k, name]) => {
     const r = ranges?.[k];
     if (!r) return `${name} ${f4(s[k])}`;
@@ -127,9 +167,11 @@ export function statsLine(biome: string, s: Stats, ranges: Record<string, [numbe
   let tail: string;
   if (!kept) tail = "no kept still: new";
   else {
-    const moved = SHOWN.filter(([k]) => Math.abs(kept.delta[k] ?? 0) > EPS).map(([k, n]) => `${n} ${signed(kept.delta[k] ?? 0)}`);
+    const bar = kept.bar ?? PLAIN;
+    const moved = SHOWN.filter(([k]) => Math.abs(kept.delta[k] ?? 0) > (bar.eps[k] ?? EPS)).map(([k, n]) => `${n} ${signed(kept.delta[k] ?? 0)}`);
     const px = `${(kept.share * 100).toFixed(2)}% px`;
-    tail = isChanged(kept.delta, kept.share) ? `vs kept ${kept.round}: ${moved.join(" ") || "measures within " + EPS}, ${px} differ` : `same as kept ${kept.round}`;
+    const noise = bar === PLAIN ? "" : ` (its noise: ${(bar.share * 100).toFixed(2)}% px)`;
+    tail = isChanged(kept.delta, kept.share, bar) ? `vs kept ${kept.round}: ${moved.join(" ") || "measures within its noise"}, ${px} differ${noise}` : `same as kept ${kept.round}${noise}`;
   }
   return `${biome}: ${parts.join(" ")}${ranges ? "" : " (no refs yet)"} | ${tail}`;
 }
@@ -347,11 +389,16 @@ const fail = (msg: string): never => {
   throw new Stop(msg);
 };
 
-/** The worker's script: the spike's tests, then each biome's still (and film). */
-function script(biomes: string[], film: boolean): string {
+/** The worker's script: the spike's tests, then each biome's still (and film); with `shots`
+ * over 1, that many stills a biome, `<biome>-<n>.png`, and no film. */
+export function script(biomes: string[], film: boolean, shots = 1): string {
   const run = "cargo run --release --manifest-path spike/iso/Cargo.toml --";
   const lines = [`d=${OUT}; rm -rf $d; mkdir -p $d`, `cargo test --release --manifest-path spike/iso/Cargo.toml > $d/test.txt 2>&1`];
   for (const b of biomes) {
+    if (shots > 1) {
+      for (let n = 1; n <= shots; n++) lines.push(`${run} --biome ${b} --shot $d/${b}-${n}.png > $d/run-${b}-${n}.txt 2>&1`);
+      continue;
+    }
     lines.push(`${run} --biome ${b} --shot $d/${b}.png > $d/run-${b}.txt 2>&1`);
     // scene.md's film: 480 frames at a fixed 30 a game second from frame 300, 16 s, at the
     // still's 1920x1080 so the desk's 1600-wide encode scales down, never up.
@@ -360,21 +407,21 @@ function script(biomes: string[], film: boolean): string {
   return lines.join("; ") + "; true";
 }
 
-function shoot(argv: string[], say: (l: string) => void) {
-  const film = argv.includes("--film");
-  const dirty = argv.includes("--dirty");
+/** The biomes `--biomes a,b` names, all of them when it is left out. */
+function biomesArg(argv: string[]): string[] {
   const all = biomeNames();
   const bi = argv.indexOf("--biomes");
   const biomes = bi >= 0 ? (argv[bi + 1] ?? "").split(",").filter(Boolean) : all;
   const unknown = biomes.filter((b) => !all.includes(b));
   if (unknown.length || biomes.length === 0) fail(`no biome file for ${unknown.join(", ") || "--biomes (empty)"}: the biomes are spike/iso/biomes/*.ron (${all.join(", ")}); name them with --biomes a,b or leave it out for all`);
-  const h = loadHistory(say);
-  const round = reserveRound(KIT, stamp(new Date()), (n) => !!h.rounds[n]);
-  const dir = join(KIT, "rounds", round);
-  const log = join(dir, "shoot.log");
-  say(`round ${round}: shooting ${biomes.join(", ")}${film ? " with films" : ""} on the worker${dirty ? " (uncommitted changes as a patch)" : ""}; log ${log}`);
+  return biomes;
+}
+
+/** Runs a script on the worker (its GPU), its output in `log`; the collected folder, the job's
+ * name and the spike's test count, or a stop naming why. */
+function onWorker(sh: string, dirty: boolean, minutes: number, log: string, say: (l: string) => void) {
   const fd = openSync(log, "w");
-  const args = ["xtask", "remote-render", "--gpu", ...(dirty ? ["--dirty"] : []), "--minutes", film ? "90" : "45", "--collect", OUT, "--", "sh", "-c", script(biomes, film)];
+  const args = ["xtask", "remote-render", "--gpu", ...(dirty ? ["--dirty"] : []), "--minutes", String(minutes), "--collect", OUT, "--", "sh", "-c", sh];
   const r = spawnSync("cargo", args, { cwd: ROOT, stdio: ["ignore", fd, fd] });
   closeSync(fd);
   const text = readFileSync(log, "utf8");
@@ -386,6 +433,48 @@ function shoot(argv: string[], say: (l: string) => void) {
   if (tests.failed) fail(`the spike's tests failed on the worker (${tests.passed} passed): read ${join(out, "test.txt")}; a round is shot on passing tests, fix them first`);
   say(`✓ worker job ${job}: spike tests ${tests.passed} pass`);
   const rev = spawnSync("git", ["rev-parse", "--short=9", "HEAD"], { cwd: ROOT, encoding: "utf8" }).stdout.trim();
+  return { out, job, rev };
+}
+
+/** Shoots each biome N times on one commit and keeps its noise in spike/iso/noise.json. */
+function noise(argv: string[], say: (l: string) => void) {
+  const dirty = argv.includes("--dirty");
+  const biomes = biomesArg(argv);
+  const si = argv.indexOf("--shots");
+  const shots = si >= 0 ? Number(argv[si + 1]) : 3;
+  if (!(Number.isInteger(shots) && shots >= 2)) fail(`--shots is a whole number of two or more, not "${argv[si + 1]}": noise --shots 3`);
+  const dir = join(KIT, "noise", stamp(new Date()));
+  mkdirSync(dir, { recursive: true });
+  const log = join(dir, "shoot.log");
+  say(`noise: ${shots} shots each of ${biomes.join(", ")} on the worker${dirty ? " (uncommitted changes as a patch)" : ""}; log ${log}`);
+  const { out, rev } = onWorker(script(biomes, false, shots), dirty, 30 + 10 * shots, log, say);
+  const all = loadNoise();
+  for (const b of biomes) {
+    const files = Array.from({ length: shots }, (_, i) => join(out, `${b}-${i + 1}.png`)).filter(existsSync);
+    if (files.length < 2) {
+      say(`✗ ${b}: ${files.length} of its ${shots} stills came back; its run logs ${join(out, `run-${b}-*.txt`)} say why (grep panicked|ERROR)`);
+      continue;
+    }
+    for (const f of files) copyFileSync(f, join(dir, basename(f)));
+    const n = noiseOf(files.map(decodeAny), `${rev}${dirty ? "+dirty" : ""}`, new Date().toISOString());
+    all[b] = n;
+    const moved = SHOWN.filter(([k]) => (n.spread[k] ?? 0) > EPS).map(([k, s]) => `${s} ${f4(n.spread[k] ?? 0)}`);
+    say(`${b}: ${(n.share * 100).toFixed(2)}% px between two shots at most, measures ${moved.join(" ") || `within ${EPS}`}; its bar ${(barOf(n).share * 100).toFixed(2)}% px`);
+  }
+  writeFileSync(NOISE, JSON.stringify(all, null, 1) + "\n");
+  say(`wrote ${NOISE}: land it so the next shoot uses it${dirty ? " (measured on uncommitted changes: land them first)" : ""}`);
+}
+
+function shoot(argv: string[], say: (l: string) => void) {
+  const film = argv.includes("--film");
+  const dirty = argv.includes("--dirty");
+  const biomes = biomesArg(argv);
+  const h = loadHistory(say);
+  const round = reserveRound(KIT, stamp(new Date()), (n) => !!h.rounds[n]);
+  const dir = join(KIT, "rounds", round);
+  const log = join(dir, "shoot.log");
+  say(`round ${round}: shooting ${biomes.join(", ")}${film ? " with films" : ""} on the worker${dirty ? " (uncommitted changes as a patch)" : ""}; log ${log}`);
+  const { out, job, rev } = onWorker(script(biomes, film), dirty, film ? 90 : 45, log, say);
   const rnd: Round = { at: new Date().toISOString(), rev, dirty, job, biomes: {} };
   let judges = 0;
   for (const b of biomes) {
@@ -430,8 +519,9 @@ function fileBiome(round: string, b: string, out: string, film: boolean, kept: K
   if (kept) {
     const d = delta(stats, kept.stats);
     const share = pixelShare(im, decodeAny(kept.still));
-    e = { ...e, delta: d, share, changed: isChanged(d, share), against: kept.round };
-    keptInfo = { round: kept.round, delta: d, share };
+    const bar = barOf(loadNoise()[b]);
+    e = { ...e, delta: d, share, changed: isChanged(d, share, bar), against: kept.round };
+    keptInfo = { round: kept.round, delta: d, share, bar };
   }
   const line = statsLine(b, stats, refs.ranges, keptInfo);
   say(line + (refs.missing.length ? ` [${refs.missing.length} refs not in stats.json]` : ""));
@@ -629,6 +719,7 @@ function history(say: (l: string) => void) {
 
 const USAGE = `usage: node spike/iso/loop.ts
   shoot [--biomes a,b] [--film] [--dirty]   every biome's still on the worker, measured and judged against its kept one
+  noise [--biomes a,b] [--shots 3] [--dirty] each biome shot N times on one commit: its noise in spike/iso/noise.json, the bar a shoot's "same" passes
   record <round> <biome> pair <A|B|same> <slight|clear|strong>
   record <round> <biome> score <overall> "<gaps>"
   verdict <round> [--revert]                KEEP if no biome lost and a changed one won, REVERT if one lost; a round whose changes only tied is refused unless --revert
@@ -639,6 +730,7 @@ export function main(argv: string[], say = (l: string) => console.log(l)): numbe
   const [cmd, ...rest] = argv;
   try {
     if (cmd === "shoot") shoot(rest, say);
+    else if (cmd === "noise") noise(rest, say);
     else if (cmd === "record") record(rest, say);
     else if (cmd === "verdict") judgeVerdict(rest, say);
     else if (cmd === "rebase") rebase(rest, say);
