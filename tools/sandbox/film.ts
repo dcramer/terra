@@ -35,6 +35,8 @@ const arg = (name: string, fallback: string) => {
   const at = own.indexOf(name);
   return at >= 0 ? own[at + 1] : fallback;
 };
+/// Whether an option was given to the film itself, before any `--`.
+const given = (name: string) => (dash >= 0 ? args.slice(0, dash) : args).includes(name);
 const hour = arg("--time", "15");
 // A day of the year to film, as the sandbox's --date takes it (docs/climate.md).
 const date = arg("--date", "");
@@ -50,7 +52,9 @@ const extra = dash >= 0 ? args.slice(dash + 1) : [];
 const sandbox = walked
   ? [...walked, ...extra]
   : dash >= 0
-    ? extra
+    ? // The whole run is what follows `--`; an hour or a date asked of the film itself is
+      // still the run's, unless the run names its own (they were dropped without a word).
+      [...(given("--time") && !extra.includes("--time") ? ["--time", hour] : []), ...(extra.includes("--date") ? [] : dated), ...extra]
     : ["--experiment", "walk", "--experiment", "lush", "--level", "yard", "--time", hour, ...dated, ...ROUTE, ...LOOK];
 const [first, last] = arg("--frames", "300-2700").split("-").map(Number);
 const out = resolve(ROOT, arg("--out", "shots/film.mp4"));
