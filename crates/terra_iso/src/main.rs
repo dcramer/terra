@@ -86,7 +86,43 @@ impl Args {
 /// A film's frame rate in game time, whatever the machine draws.
 pub const FILM_FPS: f64 = 30.0;
 
+/// Where a film without `--shot` saves its frames.
+const FILM_DIR: &str = "target/film";
+
+impl Args {
+    /// A film always runs offscreen and ends: given no `--shot`, its frames go to
+    /// `FILM_DIR/f-NNNN.jpg`; without one it opened a window and never exited (a worker job
+    /// held its slot for two hours, iso-forest-demo j1).
+    fn film_saves(&mut self) {
+        if self.film > 0 && self.shot.is_none() && self.asset.is_none() {
+            self.shot = Some(PathBuf::from(FILM_DIR).join("f.jpg"));
+        }
+    }
+
+    /// The frame a run with no window exits on: its still's or last film frame's, and 30
+    /// more for the saves to land. `None` for a window, which runs until it is closed.
+    pub fn last_frame(&self) -> Option<u32> {
+        self.shot.as_ref().map(|_| self.frames + self.film + 30)
+    }
+}
+
 fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
+    let (mut a, hour) = parse(std::env::args().skip(1));
+    let loaded = biome(&mut a);
+    a.hour = hour.unwrap_or(a.hour);
+    a.play = loaded.is_some() && (a.play || a.shot.is_none());
+    a.film_saves();
+    if let Some(dir) = a.shot.as_ref().and_then(|s| s.parent())
+        && dir == std::path::Path::new(FILM_DIR)
+    {
+        std::fs::create_dir_all(dir).expect("making the film's folder");
+        eprintln!("--film without --shot: frames go to {FILM_DIR}/f-NNNN.jpg");
+    }
+    (a, loaded)
+}
+
+/// The flags as given, and the `--hour` if one was.
+fn parse(flags: impl Iterator<Item = String>) -> (Args, Option<scene::Hour>) {
     let mut a = Args {
         shot: None,
         frames: 300,
@@ -106,7 +142,7 @@ fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
         abilities: Vec::new(),
     };
     let mut hour = None;
-    let mut it = std::env::args().skip(1);
+    let mut it = flags;
     while let Some(flag) = it.next() {
         let mut val = || it.next().expect("a value after the flag");
         match flag.as_str() {
@@ -176,10 +212,7 @@ fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
             other => panic!("unknown flag {other}: see the Args doc in main.rs"),
         }
     }
-    let loaded = biome(&mut a);
-    a.hour = hour.unwrap_or(a.hour);
-    a.play = loaded.is_some() && (a.play || a.shot.is_none());
-    (a, loaded)
+    (a, hour)
 }
 
 /// The biome `--biome` names and its light, setting the run's layout and hour (the light's);
@@ -360,7 +393,39 @@ fn shoot(
             .spawn(Screenshot::image(image.0.clone()))
             .observe(save_to_disk(path.clone()));
     }
-    if frame.0 == args.frames + args.film + 30 {
+    if Some(frame.0) == args.last_frame() {
         exit.write(AppExit::Success);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn flags(s: &str) -> Args {
+        let (mut a, _) = parse(s.split(' ').map(String::from));
+        a.film_saves();
+        a
+    }
+
+    /// A film without `--shot` runs offscreen (no window: `shot` set) and exits after its
+    /// frames, as one with `--shot` does; a still exits after its frame, a window never.
+    /// Its fault, the film left without a shot as before, has no last frame: it ran forever.
+    #[test]
+    fn a_film_ends_after_its_frames() {
+        let film = flags("--biome forest --play --film 12 --frames 40");
+        assert!(film.shot.is_some(), "a film opens no window");
+        assert_eq!(film.last_frame(), Some(40 + 12 + 30));
+        let shot = flags("--film 12 --frames 40 --shot target/job/x/f.jpg");
+        assert_eq!(shot.last_frame(), film.last_frame());
+        assert_eq!(shot.shot, Some(PathBuf::from("target/job/x/f.jpg")));
+        assert_eq!(flags("--shot s.png").last_frame(), Some(300 + 30));
+        assert_eq!(flags("--biome forest").last_frame(), None);
+        let (unsaved, _) = parse("--film 12".split(' ').map(String::from));
+        assert_eq!(
+            unsaved.last_frame(),
+            None,
+            "the fault: a film left as before"
+        );
     }
 }

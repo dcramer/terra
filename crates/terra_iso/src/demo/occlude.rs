@@ -65,37 +65,39 @@ pub fn body(feet: Vec3, right: Vec3) -> Vec<Vec3> {
     p
 }
 
-/// A surface a ray from the camera met: where, how far along, and whether play's cut drops it.
+/// A surface a ray from the camera met: what (if known), where, how far along, and whether
+/// play's cut drops it.
 pub struct Hit {
+    pub what: Option<Entity>,
     pub at: Vec3,
     pub distance: f32,
     pub cut: bool,
 }
 
-/// How many of `points` are hidden: `cast` gives what a ray from the eye meets, nearest first;
-/// a surface more than a hand's breadth before a point hides it unless it is cuttable and the
-/// cut about `middle` (with `eye`'s near fade) leaves it at least `OPEN` open.
+/// The points of `points` hidden, each with the surface that hides it (`(point, what, at)`):
+/// `cast` gives what a ray from the eye meets, nearest first; a surface more than a hand's
+/// breadth before a point hides it unless it is cuttable and the cut about `middle` (with
+/// `eye`'s near fade) leaves it at least `OPEN` open.
 pub fn hidden(
     eye: Vec4,
     axes: [Vec3; 3],
     middle: Vec3,
     points: &[Vec3],
     mut cast: impl FnMut(Ray3d) -> Vec<Hit>,
-) -> usize {
+) -> Vec<(Vec3, Option<Entity>, Vec3)> {
     let from = eye.xyz();
     points
         .iter()
-        .filter(|p| {
-            let Ok(dir) = Dir3::new(**p - from) else {
-                return false;
-            };
-            let reach = from.distance(**p) - 0.1;
+        .filter_map(|p| {
+            let dir = Dir3::new(*p - from).ok()?;
+            let reach = from.distance(*p) - 0.1;
             cast(Ray3d::new(from, dir))
-                .iter()
+                .into_iter()
                 .take_while(|h| h.distance < reach)
-                .any(|h| !h.cut || foliage::fade(h.at, &[middle], axes, eye) < OPEN)
+                .find(|h| !h.cut || foliage::fade(h.at, &[middle], axes, eye) < OPEN)
+                .map(|h| (*p, h.what, h.at))
         })
-        .count()
+        .collect()
 }
 
 /// Each frame of play: rays to his body; what hides him logged by name.
@@ -112,11 +114,12 @@ fn check(
             With<MeshMaterial3d<StandardMaterial>>,
         )>,
     >,
-    (mats, parents, names, fighters): (
+    (mats, parents, names, fighters, meshes): (
         Res<Assets<FoliageMaterial>>,
         Query<&ChildOf>,
         Query<&Name>,
         Query<(), Or<(With<Hero>, With<crate::rim::Fighter>)>>,
+        Query<&Mesh3d>,
     ),
     (frame, near, mut seen): (Res<bevy::diagnostic::FrameCount>, Res<Near>, ResMut<Hidden>),
 ) {
@@ -148,18 +151,16 @@ fn check(
         .with_visibility(RayCastVisibility::VisibleInView)
         .with_filter(&occluder)
         .never_early_exit();
-    let mut by = None;
-    let n = hidden(
+    let points = hidden(
         eye,
         axes,
         feet + Vec3::Y * MIDDLE,
         &body(feet, axes[0]),
         |r| {
-            let found = ray.cast_ray(r, &settings);
-            by = by.or(found.first().map(|(e, _)| *e));
-            found
+            ray.cast_ray(r, &settings)
                 .iter()
                 .map(|(e, hit)| Hit {
+                    what: Some(*e),
                     at: hit.point,
                     distance: hit.distance,
                     cut: cut(*e),
@@ -167,20 +168,43 @@ fn check(
                 .collect()
         },
     );
-    if n > 0 {
-        seen.frames += 1;
-        let name = by
-            .and_then(|e| {
-                std::iter::once(e)
-                    .chain(parents.iter_ancestors(e))
-                    .find_map(|a| names.get(a).ok())
-            })
-            .map_or("?".to_string(), |n| n.to_string());
-        info!(
-            "hero hidden at frame {} by {name} ({n} points, {} frames so far)",
-            frame.0, seen.frames
-        );
-    }
+    let Some((point, what, at)) = points.first() else {
+        return;
+    };
+    seen.frames += 1;
+    // The surface by its own or an ancestor's name, else its mesh's file and its material's
+    // kind (a scattered card or rock has no name).
+    let name = what
+        .and_then(|e| {
+            std::iter::once(e)
+                .chain(parents.iter_ancestors(e))
+                .find_map(|a| names.get(a).ok())
+                .map(|n| n.to_string())
+                .or_else(|| {
+                    let mesh = meshes.get(e).ok().and_then(|m| m.0.path());
+                    let kind = if leaves.contains(e) {
+                        "foliage"
+                    } else {
+                        "rim or standard"
+                    };
+                    Some(format!(
+                        "{kind} mesh {}",
+                        mesh.map_or("(made in code)".into(), |p| p.to_string())
+                    ))
+                })
+        })
+        .unwrap_or_else(|| "?".into());
+    info!(
+        "hero hidden at frame {} by {name} ({} points; the first {:.1} m up, met at {:.1},{:.1},{:.1} {:.1} m before it; {} frames so far)",
+        frame.0,
+        points.len(),
+        point.y - feet.y,
+        at.x,
+        at.y,
+        at.z,
+        at.distance(*point),
+        seen.frames
+    );
 }
 
 #[cfg(test)]
@@ -209,6 +233,7 @@ mod tests {
             }
             let t = -b - disc.sqrt();
             vec![Hit {
+                what: None,
                 at: ray.get_point(t),
                 distance: t,
                 cut,
@@ -235,7 +260,7 @@ mod tests {
                 if along < r + 0.3 {
                     continue;
                 }
-                let n = hidden(eye, axes, middle, &points, ball(c, r, true));
+                let n = hidden(eye, axes, middle, &points, ball(c, r, true)).len();
                 assert_eq!(
                     n, 0,
                     "a bough {along:.2} m before him (r {r}) hides {n} points"
@@ -243,12 +268,12 @@ mod tests {
             }
         }
         let c = chest + (eye.xyz() - chest).normalize() * 1.5;
-        assert!(hidden(eye, axes, middle, &points, ball(c, 0.6, false)) > 0);
+        assert!(!hidden(eye, axes, middle, &points, ball(c, 0.6, false)).is_empty());
         let (still, _) = view(feet, 0.0);
         // Its near side 0.65 m before his chest: open in play, two-thirds kept by the stills'.
         let c = chest + (eye.xyz() - chest).normalize() * 0.35;
-        assert_eq!(hidden(eye, axes, middle, &points, ball(c, 0.3, true)), 0);
-        assert!(hidden(still, axes, middle, &points, ball(c, 0.3, true)) > 0);
+        assert!(hidden(eye, axes, middle, &points, ball(c, 0.3, true)).is_empty());
+        assert!(!hidden(still, axes, middle, &points, ball(c, 0.3, true)).is_empty());
     }
 
     /// Near the lens every cuttable surface fades, wherever it is on the screen: a bough
