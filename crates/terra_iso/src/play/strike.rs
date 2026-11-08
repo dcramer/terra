@@ -47,6 +47,52 @@ pub struct Struck {
     own: Option<AnimationNodeIndex>,
     hit: Option<AnimationNodeIndex>,
     death: Option<AnimationNodeIndex>,
+    /// Its gaits on the same graph, by name (`GAITS`): a steered mob still changes gait once
+    /// struck (demo/mobs.rs, `Struck::gait`).
+    gaits: Vec<(&'static str, AnimationNodeIndex)>,
+}
+
+/// The clips a struck body keeps beside its hit and death, so it can still stand, walk and
+/// swing on its own graph.
+pub const GAITS: [&str; 3] = ["idle", "walk", "attack"];
+
+impl Struck {
+    /// The player its clips are on.
+    pub fn player(&self) -> Entity {
+        self.player
+    }
+
+    /// Its gait `name`'s node on its graph, if it has the clip.
+    pub fn node(&self, name: &str) -> Option<AnimationNodeIndex> {
+        self.gaits.iter().find(|g| g.0 == name).map(|g| g.1)
+    }
+
+    /// Plays its gait `name` as its own clip from now on (what a hit gives way to, `recover`),
+    /// looped or once, blended in over `blend`; unless it is fallen or mid-hit, when the
+    /// reaction plays on and only its own clip changes. Whether it has the clip.
+    pub fn gait(
+        &mut self,
+        name: &str,
+        looped: bool,
+        blend: Duration,
+        p: &mut AnimationPlayer,
+        tx: &mut AnimationTransitions,
+    ) -> bool {
+        let Some(n) = self.node(name) else {
+            return false;
+        };
+        self.own = Some(n);
+        let reacting = tx
+            .get_main_animation()
+            .is_some_and(|m| Some(m) == self.death || Some(m) == self.hit);
+        if !reacting {
+            let a = tx.play(p, n, blend);
+            if looped {
+                a.repeat();
+            }
+        }
+        true
+    }
 }
 
 /// What a body does on its `n`th blow (from 1).
@@ -238,14 +284,7 @@ fn take_over(
 ) -> Option<Struck> {
     let gltf = gltfs.get(&pose.gltf)?;
     let player = player_of(body, children, players)?;
-    let mut graph = AnimationGraph::new();
-    let root = graph.root;
-    let mut node = |n: &str| {
-        gltf.named_animations
-            .get(n)
-            .map(|c| graph.add_clip(c.clone(), 1.0, root))
-    };
-    let (own, hit, death) = (node(pose.clip), node("hit"), node("death"));
+    let (graph, nodes) = graph_of(|n| gltf.named_animations.get(n).cloned(), pose.clip);
     commands
         .entity(player)
         .insert(AnimationGraphHandle(graphs.add(graph)));
@@ -276,10 +315,48 @@ fn take_over(
         away: Vec3::X,
         skin: copies.into_iter().map(|c| c.1).collect(),
         player,
+        own: nodes.own,
+        hit: nodes.hit,
+        death: nodes.death,
+        gaits: nodes.gaits,
+    })
+}
+
+/// A struck body's graph's nodes: its own clip, hit, death and gaits.
+struct Nodes {
+    own: Option<AnimationNodeIndex>,
+    hit: Option<AnimationNodeIndex>,
+    death: Option<AnimationNodeIndex>,
+    gaits: Vec<(&'static str, AnimationNodeIndex)>,
+}
+
+/// A struck body's graph from its clips by name (`clip`): its own clip, its hit and death,
+/// and its gaits (`GAITS`), each once, its own one of them when it is a gait. Keeping only
+/// own, hit and death left a steered mob walking in place once struck (iso-forest-demo j3).
+fn graph_of(
+    clip: impl Fn(&str) -> Option<Handle<AnimationClip>>,
+    own: &str,
+) -> (AnimationGraph, Nodes) {
+    let mut graph = AnimationGraph::new();
+    let root = graph.root;
+    let mut gaits = Vec::new();
+    for g in GAITS {
+        if let Some(c) = clip(g) {
+            gaits.push((g, graph.add_clip(c, 1.0, root)));
+        }
+    }
+    let mut node = |n: &str| match gaits.iter().find(|g| g.0 == n) {
+        Some(g) => Some(g.1),
+        None => clip(n).map(|c| graph.add_clip(c, 1.0, root)),
+    };
+    let (own, hit, death) = (node(own), node("hit"), node("death"));
+    let nodes = Nodes {
         own,
         hit,
         death,
-    })
+        gaits,
+    };
+    (graph, nodes)
 }
 
 /// A body back on its own clip once its hit has played.
@@ -339,6 +416,7 @@ fn settle(mut bodies: Query<(&mut Struck, &mut Transform)>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::animation::graph::AnimationNodeType;
 
     /// Two hits, then the death on the third blow; a body without a hit clip only flinches
     /// until it dies, and one without a death never falls.
@@ -363,7 +441,56 @@ mod tests {
             own: node(own),
             hit: node(hit),
             death: node(death),
+            gaits: Vec::new(),
         }
+    }
+
+    /// A struck body keeps its idle, walk and attack on its own graph beside its hit and
+    /// death, each the clip of that name, its own clip one of them, and plays one by name as
+    /// its own from then on: a steered mob walks, stops and swings after its first blow. A
+    /// hit plays on through a change of gait. The planted fault (only own, hit and death on
+    /// the graph, as before) has no walk to play: the mob walks in place.
+    #[test]
+    fn a_struck_body_keeps_its_gaits() {
+        let mut clips = Assets::<AnimationClip>::default();
+        let names = ["idle", "walk", "attack", "hit", "death"];
+        let handles: Vec<_> = names
+            .iter()
+            .map(|_| clips.add(AnimationClip::default()))
+            .collect();
+        let clip = |n: &str| {
+            names
+                .iter()
+                .position(|m| *m == n)
+                .map(|i| handles[i].clone())
+        };
+        let (graph, nodes) = graph_of(clip, "idle");
+        let holds = |n: AnimationNodeIndex, name: &str| {
+            matches!(&graph.get(n).unwrap().node_type,
+                AnimationNodeType::Clip(h) if Some(h.clone()) == clip(name))
+        };
+        let mut s = struck(None, None, None);
+        (s.own, s.hit, s.death, s.gaits) = (nodes.own, nodes.hit, nodes.death, nodes.gaits);
+        for g in GAITS {
+            assert!(holds(s.node(g).unwrap(), g), "{g}");
+        }
+        assert_eq!(s.own, s.node("idle"), "its own clip is its idle, once");
+        assert!(holds(s.hit.unwrap(), "hit") && holds(s.death.unwrap(), "death"));
+        let (mut p, mut tx) = (AnimationPlayer::default(), AnimationTransitions::new());
+        // Back on its own idle after its hit (`recover`).
+        tx.play(&mut p, s.own.unwrap(), Duration::ZERO).repeat();
+        assert!(s.gait("walk", true, Duration::ZERO, &mut p, &mut tx));
+        let walk = s.node("walk").unwrap();
+        assert!(p.is_playing_animation(walk) && tx.get_main_animation() == Some(walk));
+        assert_eq!(s.own, Some(walk), "a hit gives way to its walk now");
+        tx.play(&mut p, s.hit.unwrap(), Duration::ZERO);
+        assert!(s.gait("idle", true, Duration::ZERO, &mut p, &mut tx));
+        assert_eq!(tx.get_main_animation(), s.hit, "the hit plays on");
+        assert_eq!(s.own, s.node("idle"));
+        let mut fault = struck(Some(1), Some(2), Some(3));
+        let mut p = AnimationPlayer::default();
+        assert!(!fault.gait("walk", true, Duration::ZERO, &mut p, &mut tx));
+        assert_eq!(p.playing_animations().count(), 0, "the fault: no walk");
     }
 
     /// A body with no hit clip (a treant) keeps playing its own clip through its first
