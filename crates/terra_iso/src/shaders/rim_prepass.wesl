@@ -28,9 +28,11 @@ fn cut(world: vec3<f32>, frag: vec2<f32>) {
         return;
     }
     let d = world - near.xyz;
-    let s = length(vec2<f32>(dot(d, view.world_from_view[0].xyz), dot(d, view.world_from_view[1].xyz)));
-    let before = dot(d, view.world_from_view[2].xyz);
-    let fade = (1.0 - smoothstep(near.w * 0.72, near.w, s)) * smoothstep(0.05, 0.45, before);
+    let up = view.world_from_view[1].xyz;
+    let s = length(vec2<f32>(dot(d, view.world_from_view[0].xyz), dot(d, up)));
+    let t = clamp(dot(d, up) / max(up.y, 0.05), -0.8, 0.9);
+    let before = dot(d - vec3<f32>(0.0, t, 0.0), view.world_from_view[2].xyz);
+    let fade = (1.0 - smoothstep(near.w * 0.72, near.w, s)) * smoothstep(0.0, 0.2, before);
     if fade > interleaved_gradient_noise(frag, u32(hole.x)) {
         discard;
     }

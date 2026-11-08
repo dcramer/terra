@@ -141,16 +141,19 @@ fn dress(base: vec3<f32>, world: vec3<f32>, n: vec3<f32>, relief: vec3<f32>) -> 
 }
 
 // Ground cover's cut before the hero (rim.rs `Cut`), rim_prepass.wesl's twin: a fern, rock
-// or log fragment from a hand's breadth before his middle, near him on the screen, drops
+// or log fragment from a hand's breadth before his axis at its own screen height (knee to
+// crown, foliage.rs `AXIS`, `cover_fade` the twin), near his middle on the screen, drops
 // through interleaved gradient noise turned each frame, as foliage.wesl's `cut`.
 fn cut(world: vec3<f32>, frag: vec2<f32>) {
     if near.w <= 0.0 {
         return;
     }
     let d = world - near.xyz;
-    let s = length(vec2<f32>(dot(d, view.world_from_view[0].xyz), dot(d, view.world_from_view[1].xyz)));
-    let before = dot(d, view.world_from_view[2].xyz);
-    let fade = (1.0 - smoothstep(near.w * 0.72, near.w, s)) * smoothstep(0.05, 0.45, before);
+    let up = view.world_from_view[1].xyz;
+    let s = length(vec2<f32>(dot(d, view.world_from_view[0].xyz), dot(d, up)));
+    let t = clamp(dot(d, up) / max(up.y, 0.05), -0.8, 0.9);
+    let before = dot(d - vec3<f32>(0.0, t, 0.0), view.world_from_view[2].xyz);
+    let fade = (1.0 - smoothstep(near.w * 0.72, near.w, s)) * smoothstep(0.0, 0.2, before);
     if fade > interleaved_gradient_noise(frag, u32(hole.x)) {
         discard;
     }

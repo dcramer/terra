@@ -186,6 +186,36 @@ pub fn fade(world: Vec3, party: &[Vec3], r: f32, axes: [Vec3; 3], eye: Vec4) -> 
     f
 }
 
+/// How much of ground cover at `world` its hole about the hero's `middle` drops (0 kept, 1
+/// gone), the twin of foliage.wesl's cover branch and rim.wesl's `cut`: near him on the
+/// screen as `fade`, but measured along the view from his axis at the fragment's own screen
+/// height (`AXIS`), not from his middle, so a frond on the ray to his knee is cut though it
+/// stands behind the plane through his middle (j28: at the route's pitch nothing lapping
+/// his legs was ever cut).
+pub fn cover_fade(world: Vec3, middle: Vec3, r: f32, axes: [Vec3; 3]) -> f32 {
+    let smooth = |e0: f32, e1: f32, x: f32| {
+        let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let d = world - middle;
+    let s = Vec2::new(d.dot(axes[0]), d.dot(axes[1])).length();
+    let up = axes[1].y.max(0.05);
+    let a = middle + Vec3::Y * (d.dot(axes[1]) / up).clamp(AXIS.0, AXIS.1);
+    let before = -(world - a).dot(axes[2]);
+    (1.0 - smooth(r * 0.72, r, s)) * smooth(COVER_BEFORE.0, COVER_BEFORE.1, before)
+}
+
+/// The stretch of his axis the cover's cut measures from (m about his middle, 0.9 m up):
+/// his ankles, 0.1 m up, to the top of his head, 1.8 m (shaders: foliage.wesl, rim.wesl and
+/// rim_prepass.wesl `cut`): with j29's first try's knee (0.45 m) nothing before his shins
+/// was cut, and at f-0490 his legs stayed buried.
+pub const AXIS: (f32, f32) = (-0.8, 0.9);
+/// The cover's ramp along the view (m before his axis): wholly gone from 0.2, about the
+/// front of his leg, so what stands before his body on the ray to it is cut and what stands
+/// beside or behind him kept (j29's first try, 0.05 to 0.35, left fronds 0.1 to 0.3 m
+/// before him two-thirds drawn).
+pub const COVER_BEFORE: (f32, f32) = (0.0, 0.2);
+
 /// Play's whole-tree fade: each tree's nearest part to the camera, its `Tree` stepped, and
 /// its meshes' tags set where they changed.
 fn fade_trees(
@@ -414,5 +444,30 @@ mod tests {
         assert!(fade(aside, &[middle], COVER, axes, eye) < 0.01);
         assert!(fade(aside, &[middle], HOLE, axes, eye) > 0.5);
         assert!(fade(behind, &[middle], COVER, axes, eye) < 0.01);
+    }
+
+    /// The cover's cut is measured from his axis at the fragment's height: at the route's
+    /// pitch (55 degrees down) a frond 0.3 m before his knee on the ray to it is cut, one
+    /// 0.3 m behind it kept, though both stand behind the plane through his middle.
+    #[test]
+    fn the_cover_cut_opens_before_his_knee_from_his_axis() {
+        let feet = Vec3::new(2.0, 0.0, -1.0);
+        let middle = feet + Vec3::Y * 0.9;
+        let pitch = 55f32.to_radians();
+        let forward = Vec3::new(0.0, -libm::sinf(pitch), -libm::cosf(pitch));
+        let right = Vec3::X;
+        let axes = [right, right.cross(forward), forward];
+        let knee = feet + Vec3::Y * 0.45;
+        let before = knee - forward * 0.3;
+        let behind = knee + forward * 0.3;
+        // Both behind the plane through his middle: the middle's ramp cuts neither.
+        let eye = Vec4::new(0.0, 0.0, 0.0, 1.0);
+        assert!(fade(before, &[middle], COVER, axes, eye) < 0.01);
+        assert!(cover_fade(before, middle, COVER, axes) > 0.9);
+        assert!(cover_fade(behind, middle, COVER, axes) < 0.01);
+        // His head, too, and nothing beside him on the screen.
+        let head = feet + Vec3::Y * 1.7 - forward * 0.3;
+        assert!(cover_fade(head, middle, COVER, axes) > 0.9);
+        assert!(cover_fade(before + right * 2.0, middle, COVER, axes) < 0.01);
     }
 }

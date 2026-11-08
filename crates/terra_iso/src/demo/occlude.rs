@@ -144,6 +144,9 @@ pub struct Hit {
     pub distance: f32,
     /// The radius of the hole play's cut opens through it about him (m), 0 for none.
     pub cut: f32,
+    /// Ground cover (foliage.rs `Hole::Cover`), its cut measured from his axis
+    /// (`foliage::cover_fade`), not his middle.
+    pub cover: bool,
     /// A body (a foe's), which his silhouette is drawn through (silhouette.rs).
     pub body: bool,
 }
@@ -183,7 +186,12 @@ pub fn hidden(
                 .find(|h| {
                     h.body
                         || h.cut <= 0.0
-                        || foliage::fade(h.at, &[middle], h.cut, axes, eye) < OPEN
+                        || if h.cover {
+                            // Only play cuts the cover (rim.rs `Cut`, demo `aim`).
+                            eye.w <= 0.0 || foliage::cover_fade(h.at, middle, h.cut, axes) < OPEN
+                        } else {
+                            foliage::fade(h.at, &[middle], h.cut, axes, eye) < OPEN
+                        }
                 })
                 .map(|h| {
                     let drawn = h.body
@@ -205,6 +213,12 @@ fn cuttable(mats: &Assets<FoliageMaterial>, m: &MeshMaterial3d<FoliageMaterial>)
             _ => leaf.z,
         }
     })
+}
+
+/// Whether a foliage material is ground cover's (foliage.rs `Hole::Cover`).
+fn is_cover(mats: &Assets<FoliageMaterial>, m: &MeshMaterial3d<FoliageMaterial>) -> bool {
+    mats.get(&m.0)
+        .is_some_and(|m| foliage::Hole::of(m.extension.foliage.leaf) == foliage::Hole::Cover)
 }
 
 /// Whether a mesh's tag says its tree is faded out whole (foliage.rs `Tree`) at least `OPEN`.
@@ -337,6 +351,7 @@ pub fn fans(ray: Ray3d, laid: &[Laid]) -> Vec<Hit> {
                 at: ray.get_point(t),
                 distance: if *over { 0.0 } else { t },
                 cut: 0.0,
+                cover: false,
                 body: false,
             })
         })
@@ -353,6 +368,7 @@ pub fn met(ray: Ray3d, uprights: &[Upright]) -> Vec<Hit> {
                 at: ray.get_point(t),
                 distance: t,
                 cut: 0.0,
+                cover: false,
                 body: true,
             })
         })
@@ -436,6 +452,7 @@ fn check(
     let uprights = uprights(&standing, &kids, &bounds);
     let laid = shown(&tells, &tell_mats);
     let cut = |e: Entity| leaves.get(e).map_or(0.0, |(m, _)| cuttable(&mats, m));
+    let cover = |e: Entity| leaves.get(e).is_ok_and(|(m, _)| is_cover(&mats, m));
     let settings = MeshRayCastSettings::default()
         .with_visibility(RayCastVisibility::VisibleInView)
         .with_filter(&occluder)
@@ -455,6 +472,7 @@ fn check(
                     at: hit.point,
                     distance: hit.distance,
                     cut: cut(*e),
+                    cover: cover(*e),
                     body: false,
                 })
                 .collect();
@@ -556,6 +574,7 @@ mod tests {
                 at: ray.get_point(t),
                 distance: t,
                 cut: 0.0,
+                cover: false,
                 body,
             }]
         }
