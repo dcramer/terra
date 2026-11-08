@@ -1,5 +1,5 @@
 # The forest's fight route (iso-forest-demo, v6 from j13): `cargo iso --route forest` plays it
-# and films it (f-N is frame 60+N at FILM_FPS 30); add `--shot target/job/film/f.jpg` for the
+# and films it (f-N is frame N, as the logs number it, at FILM_FPS 30); add `--shot target/job/film/f.jpg` for the
 # frames' folder, or `--frames 1230 --film 0 --shot target/job/g/end.jpg` to play it through
 # for its gates alone (demo/tally.rs: every foe falls; demo/occlude.rs: nothing hides him).
 # A route is the flags `cargo iso` takes, whitespace apart, `#` to the line's end a note

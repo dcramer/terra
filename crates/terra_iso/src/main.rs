@@ -58,7 +58,7 @@ pub struct Args {
     /// The biome's layout, once its file is read (`None`: the glade).
     pub layout: Option<kit::biome::Layout>,
     /// `--film N` with `--shot dir/f.jpg`: N frames from `--frames` on, at a fixed 30 per
-    /// second of game time, saved as dir/f-0000.jpg on; clips play rather than hold.
+    /// second of game time, saved as dir/f-NNNN.jpg, NNNN the logged frame; clips play rather than hold.
     pub film: u32,
     /// `--asset NAME` with `--shot dir/NAME.png`: the asset view (view.rs), one asset alone;
     /// with `--film N`, N frames of its walk and run as the game plays them, dir/NAME-f0000.jpg on.
@@ -75,6 +75,11 @@ pub struct Args {
     /// ground point X,Z. `--route NAME` reads a scripted fight's flags from
     /// `routes/NAME.txt` (`routes`).
     pub abilities: Vec<(String, Option<Vec2>, u32, u32)>,
+    /// `--goto X,Z@FROM-TO`: from FROM he walks to the ground point X,Z and stops on it
+    /// (hero/abilities.rs, a route's walk between packs closed-loop, not keys held for
+    /// frames); gotos whose windows overlap are waypoints, each taken once the one before
+    /// arrived. One not reached by TO is warned of.
+    pub goto: Vec<(Vec2, u32, u32)>,
     /// The packs a route's run must clear (demo/tally.rs `cleared`): its file's `expect`
     /// line, else all of them; a run without a route is asked nothing. Not a flag: route data.
     pub expect: demo::tally::Expect,
@@ -130,9 +135,12 @@ fn args() -> (Args, Option<(kit::biome::Biome, kit::light::Light)>) {
 /// apart, `#` to the line's end a note. So a scripted fight is a file in the repository, one
 /// command to play or film, not a copied line (D249); flags after it override its own. And
 /// the packs its run must clear: its `expect` line, else all (no route: nothing).
-fn routes(flags: impl Iterator<Item = String>) -> (Vec<String>, demo::tally::Expect) {
+fn routes(
+    flags: impl Iterator<Item = String>,
+) -> (Vec<String>, demo::tally::Expect, Option<usize>) {
     let mut out = Vec::new();
     let mut expect = demo::tally::Expect::Nothing;
+    let mut end = None;
     let mut it = flags;
     while let Some(flag) = it.next() {
         if flag != "--route" {
@@ -155,6 +163,7 @@ fn routes(flags: impl Iterator<Item = String>) -> (Vec<String>, demo::tally::Exp
             std::process::exit(2)
         });
         out.extend(route_flags(&text));
+        end = Some(out.len());
         expect = route_expect(&text).unwrap_or_else(|e| {
             eprintln!(
                 "--route {name}: {}: {e}. Its `expect` line says which packs its run must \
@@ -165,7 +174,7 @@ fn routes(flags: impl Iterator<Item = String>) -> (Vec<String>, demo::tally::Exp
             std::process::exit(2)
         });
     }
-    (out, expect)
+    (out, expect, end)
 }
 
 /// A route file's lines, `#` notes left out, as words.
@@ -212,18 +221,33 @@ fn parse(flags: impl Iterator<Item = String>) -> (Args, Option<scene::Hour>) {
         press: Vec::new(),
         clicks: Vec::new(),
         abilities: Vec::new(),
+        goto: Vec::new(),
         expect: demo::tally::Expect::Nothing,
     };
     let mut hour = None;
-    let (flags, expect) = routes(flags);
+    let (flags, expect, route_end) = routes(flags);
     a.expect = expect;
+    // A `--frames N` after a route starts its film at N and keeps the route's last frame
+    // (j23: it wrote all 1170 frames from N on, past the route's end), unless `--film` says.
+    let after_route = flags.len() - route_end.unwrap_or(flags.len());
+    let (mut route_film, mut own_frames, mut own_film) = (None, false, false);
     let mut it = flags.into_iter();
     while let Some(flag) = it.next() {
+        let after = it.len() < after_route;
+        if after && route_film.is_none() {
+            route_film = Some(a.frames + a.film);
+        }
         let mut val = || it.next().expect("a value after the flag");
         match flag.as_str() {
             "--shot" => a.shot = Some(val().into()),
-            "--frames" => a.frames = val().parse().unwrap(),
-            "--film" => a.film = val().parse().unwrap(),
+            "--frames" => {
+                a.frames = val().parse().unwrap();
+                own_frames |= after;
+            }
+            "--film" => {
+                a.film = val().parse().unwrap();
+                own_film |= after;
+            }
             "--asset" => a.asset = Some(val()),
             "--demo" => a.demo = true,
             "--biome" => a.biome = Some(val()),
@@ -267,6 +291,17 @@ fn parse(flags: impl Iterator<Item = String>) -> (Args, Option<scene::Hour>) {
                 };
                 a.abilities.push((name.into(), at, from, to));
             }
+            "--goto" => {
+                let v = val();
+                let bad = || format!("--goto {v}: wants X,Z@FROM-TO (a ground point, frames)");
+                let (xz, span) = v.split_once('@').unwrap_or_else(|| panic!("{}", bad()));
+                let p: Vec<f32> = xz.split(',').filter_map(|s| s.parse().ok()).collect();
+                let (from, to) = span.split_once('-').unwrap_or_else(|| panic!("{}", bad()));
+                let (Ok(from), Ok(to), &[x, z]) = (from.parse(), to.parse(), &p[..]) else {
+                    panic!("{}", bad());
+                };
+                a.goto.push((Vec2::new(x, z), from, to));
+            }
             "--demo-at" => a.demo_at = val().parse().unwrap(),
             "--zoom" => a.zoom = val().parse().unwrap(),
             "--hour" => {
@@ -286,6 +321,13 @@ fn parse(flags: impl Iterator<Item = String>) -> (Args, Option<scene::Hour>) {
             }
             other => panic!("unknown flag {other}: see the Args doc in main.rs"),
         }
+    }
+    if let Some(last) = route_film
+        && own_frames
+        && !own_film
+        && a.film > 0
+    {
+        a.film = last.saturating_sub(a.frames);
     }
     (a, hour)
 }
@@ -459,7 +501,8 @@ fn shoot(
     if args.film > 0 && n < args.film {
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("f");
         let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("jpg");
-        let file = path.with_file_name(format!("{stem}-{n:04}.{ext}"));
+        // Named by the logged frame (FrameCount), so a crop names the moment the logs do.
+        let file = path.with_file_name(format!("{stem}-{:04}.{ext}", frame.0));
         commands
             .spawn(Screenshot::image(image.0.clone()))
             .observe(save_to_disk(file));
@@ -547,6 +590,21 @@ mod tests {
             forest.expect,
             demo::tally::Expect::All,
             "the forest clears every pack"
+        );
+        let goto = parse("--goto 2.8,22.1@770-919".split(' ').map(String::from)).0;
+        assert_eq!(goto.goto, [(Vec2::new(2.8, 22.1), 770, 919)]);
+        let route = |s: &str| parse(s.split(' ').map(String::from)).0;
+        let late = route("--route forest --frames 600");
+        assert_eq!(
+            (late.frames, late.film),
+            (600, 630),
+            "--frames keeps the route's end"
+        );
+        let own = route("--route forest --frames 600 --film 90");
+        assert_eq!(
+            (own.frames, own.film),
+            (600, 90),
+            "--film after it says its own"
         );
         let (plain, _) = parse("--biome forest --play".split(' ').map(String::from));
         assert_eq!(

@@ -136,9 +136,10 @@ fn read(
         Query<&Window>,
     ),
     camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
-    mut hero: Query<(&Transform, &mut HeroIntent), With<Hero>>,
+    mut hero: Query<(&Transform, &mut HeroIntent, Option<&super::Doing>), With<Hero>>,
+    mut arrived: Local<Vec<bool>>,
 ) {
-    let Ok((tr, mut intent)) = hero.single_mut() else {
+    let Ok((tr, mut intent, doing)) = hero.single_mut() else {
         return;
     };
     let key = |k: KeyCode| keys.pressed(k);
@@ -180,6 +181,7 @@ fn read(
         let at = ground_at(&camera, *px, tr.translation.y);
         intent.ask(Ability::Light, at);
     }
+    goto(&args.goto, frame.0, tr, doing, &mut intent, &mut arrived);
     for (name, at, from, to) in &args.abilities {
         let Some(ability) = Ability::named(name) else {
             continue;
@@ -192,6 +194,57 @@ fn read(
         if now {
             intent.ask(ability, *at);
         }
+    }
+}
+
+/// The script's walks (`--goto X,Z@FROM-TO`, main.rs): the first in the route's order whose
+/// window holds `frame` and which has not arrived steers him (moves.rs `toward`); each says
+/// once when it arrived, or that it was not reached by its window's end.
+fn goto(
+    gotos: &[(Vec2, u32, u32)],
+    frame: u32,
+    tr: &Transform,
+    doing: Option<&super::Doing>,
+    intent: &mut HeroIntent,
+    arrived: &mut Vec<bool>,
+) {
+    arrived.resize(gotos.len(), false);
+    let here = tr.translation.xz();
+    let speed = doing.map_or(0.0, |d| d.speed);
+    let mut steering = false;
+    for (i, &(to, from, until)) in gotos.iter().enumerate() {
+        if arrived[i] || !(from..until).contains(&frame) {
+            if !arrived[i] && frame == until {
+                arrived[i] = true;
+                warn!(
+                    "✗ goto ({:.1}, {:.1}) from frame {from} not reached by {until}: he stands \
+                     {:.1} m off at ({:.1}, {:.1}); a body or prop in his way, or too short a \
+                     window: move the point or widen it (routes/*.txt)",
+                    to.x,
+                    to.y,
+                    here.distance(to),
+                    here.x,
+                    here.y
+                );
+            }
+            continue;
+        }
+        if steering {
+            continue;
+        }
+        let way = super::moves::toward(here, to, speed);
+        if here.distance(to) <= super::moves::ARRIVE || (way == Vec2::ZERO && speed == 0.0) {
+            arrived[i] = true;
+            info!(
+                "goto ({:.1}, {:.1}) from frame {from}: arrived at frame {frame}, {:.2} m off",
+                to.x,
+                to.y,
+                here.distance(to)
+            );
+            continue;
+        }
+        intent.way = way;
+        steering = true;
     }
 }
 

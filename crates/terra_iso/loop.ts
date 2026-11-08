@@ -555,7 +555,7 @@ function fileBiome(round: string, b: string, out: string, film: boolean, kept: K
 function makeFilm(b: string, out: string, dir: string, say: (l: string) => void): string | undefined {
   const mp4 = join(dir, `${b}.mp4`);
   const enc = ["-c:v", "libx264", "-crf", "28", "-preset", "slow", "-g", "480", "-vf", "scale=1600:-2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"];
-  const r = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-framerate", "30", "-i", join(out, `film-${b}`, "f-%04d.jpg"), "-an", ...enc, mp4], { encoding: "utf8" });
+  const r = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-framerate", "30", "-pattern_type", "glob", "-i", join(out, `film-${b}`, "f-*.jpg"), "-an", ...enc, mp4], { encoding: "utf8" });
   if (r.status !== 0) {
     say(`✗ ${b}: its film's frames did not make a film (${r.stderr.trim().split("\n").pop()}); its run log ${join(out, `film-${b}.txt`)}`);
     return;

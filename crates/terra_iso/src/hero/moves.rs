@@ -65,6 +65,22 @@ pub fn wished(intent: &HeroIntent) -> f32 {
     }
 }
 
+/// A scripted walk's arrival (m, a route's `--goto`): he stops once this near its point.
+pub const ARRIVE: f32 = 0.3;
+
+/// The way a scripted walk asks from `here` to `to` at `speed` (a route's `--goto`, as an
+/// ARPG's click-to-move): the unit way to it, or none once he is within `ARRIVE` of it or
+/// near enough to coast there on his brakes (`BRAKE`), so he stops on it, not past it.
+pub fn toward(here: Vec2, to: Vec2, speed: f32) -> Vec2 {
+    let off = to - here;
+    let d = off.length();
+    if d <= ARRIVE || d <= speed * speed / (2.0 * BRAKE) {
+        Vec2::ZERO
+    } else {
+        off / d
+    }
+}
+
 /// `speed` eased toward `wish` over `dt`: gained at `ACCEL`, shed at `BRAKE`.
 pub fn ease(speed: f32, wish: f32, dt: f32) -> f32 {
     if wish > speed {
@@ -383,6 +399,65 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A route's `--goto` brings him to its point and stops him there (j24): walked as `act`
+    /// walks him (his speed eased, his heading kept while he coasts, `step_to` round a body
+    /// on his line), from far and near, at 30 and 60 frames a second, he stands still within
+    /// 0.5 m of it. Its fault, a held key's fixed way (the open-loop route), slides round
+    /// the body and passes the point.
+    #[test]
+    fn a_goto_arrives() {
+        let ground = Ground {
+            floor: Box::new(|_| 0.0),
+            open: Box::new(|_| true),
+        };
+        let body = [(Vec2::new(4.0, 0.2), 0.8)];
+        let walk = |from: Vec2, to: Vec2, dt: f32, way_to: &dyn Fn(Vec2, Vec2, f32) -> Vec2| {
+            let (mut at, mut speed, mut heading) = (from, 0.0, Vec2::ZERO);
+            for _ in 0..(12.0 / dt) as usize {
+                let way = way_to(at, to, speed);
+                if way != Vec2::ZERO {
+                    heading = way;
+                }
+                speed = ease(speed, if way == Vec2::ZERO { 0.0 } else { JOG }, dt);
+                if let Some(q) = step_to(&ground, None, &body, at, heading * speed * dt) {
+                    at = q;
+                } else {
+                    speed = 0.0;
+                }
+                assert!(at.distance(body[0].0) >= body[0].1 + footprint::BODY - 1e-3);
+            }
+            (at.distance(to), speed)
+        };
+        for dt in [1.0 / 30.0, 1.0 / 60.0] {
+            for (from, to) in [
+                (Vec2::ZERO, Vec2::new(9.0, 0.0)),
+                (Vec2::new(-3.0, 5.0), Vec2::new(8.0, -2.0)),
+                (Vec2::new(8.0, 0.4), Vec2::new(8.6, 0.0)),
+                (Vec2::new(1.0, 1.0), Vec2::new(1.2, 1.0)),
+            ] {
+                let (off, speed) = walk(from, to, dt, &toward);
+                assert!(
+                    off < 0.5,
+                    "from {from} to {to} at {dt:.3}: stood {off:.2} m off it"
+                );
+                assert_eq!(speed, 0.0, "from {from} to {to}: still moving");
+            }
+        }
+        // The fault: a held key's way, the start's, not steered to the point after the body.
+        let held = |h: Vec2, t: Vec2, _: f32| {
+            if h.distance(t) <= ARRIVE {
+                Vec2::ZERO
+            } else {
+                Vec2::X
+            }
+        };
+        let (off, _) = walk(Vec2::ZERO, Vec2::new(9.0, 0.0), 1.0 / 30.0, &held);
+        assert!(
+            off > 0.5,
+            "the fault: a held way slid round the body ends {off:.2} m off"
+        );
     }
 
     /// The set's buttons ask for the light chain, heavy, block and roll: each ability that is a
