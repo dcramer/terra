@@ -50,7 +50,7 @@ pub struct RimExt {
     /// x: the share of a metal texel's base colour taken to its own grey, by its metal
     /// (`Fighter::steel`); y: the share of the sky's reflection it is denied, its specular
     /// occlusion (`Fighter::with_sky`); z: its fill's strength (`Fighter::with_fill`); w
-    /// unused.
+    /// its fill's lift above the view (`Fighter::with_key`), 0 frontal.
     #[uniform(108)]
     pub metal: Vec4,
     /// Ground cover's cut before the hero (`Cut`, a `Shade`'s or `Stone`'s only): xyz his
@@ -126,6 +126,7 @@ pub struct Fighter {
     steel: f32,
     sky: f32,
     fill: f32,
+    key: f32,
 }
 
 impl Default for Fighter {
@@ -144,6 +145,7 @@ impl Fighter {
             steel: 0.0,
             sky: 1.0,
             fill: 0.0,
+            key: 0.0,
         }
     }
 
@@ -155,6 +157,14 @@ impl Fighter {
     /// ground about them, and their albedo barely moved them (iso-forest-demo j12, j14).
     pub fn with_fill(mut self, fill: f32) -> Self {
         self.fill = fill.max(0.0);
+        self
+    }
+
+    /// Its fill's direction: from above the camera by `up` of the view's up to one of its
+    /// depth (1 is 45 degrees), half-Lambert so it models his form, and taken by his metal as
+    /// a highlight, not paint (rim.wesl); 0, the default, is the frontal fill as it was.
+    pub fn with_key(mut self, up: f32) -> Self {
+        self.key = up.max(0.0);
         self
     }
 
@@ -185,12 +195,14 @@ impl Fighter {
     /// A fighter as a biome's data stands it off its ground (kit/biome.rs `Tone`): its
     /// value, rim and fill.
     pub fn toned(tone: crate::kit::biome::Tone) -> Self {
-        Self::valued(tone.value, tone.rim).with_fill(tone.fill)
+        Self::valued(tone.value, tone.rim)
+            .with_fill(tone.fill)
+            .with_key(tone.key)
     }
 
     /// Its swapped materials' kind: one material a steel and sky share and fill.
     fn kind(&self) -> Kind {
-        Kind::Fighter([self.steel, self.sky, self.fill].map(f32::to_bits))
+        Kind::Fighter([self.steel, self.sky, self.fill, self.key].map(f32::to_bits))
     }
 }
 
@@ -332,7 +344,7 @@ enum Kind {
     Actor,
     Hide,
     /// A fighter, its steel and sky shares' and its fill's bits (`Fighter::kind`).
-    Fighter([u32; 3]),
+    Fighter([u32; 4]),
 }
 
 #[derive(Resource, Default)]
@@ -464,8 +476,8 @@ fn rimmed_as(
     };
     let metal = match kind {
         Kind::Fighter(bits) => {
-            let [steel, sky, fill] = bits.map(f32::from_bits);
-            Vec4::new(steel, 1.0 - sky, fill, 0.0)
+            let [steel, sky, fill, up] = bits.map(f32::from_bits);
+            Vec4::new(steel, 1.0 - sky, fill, up)
         }
         _ => Vec4::ZERO,
     };

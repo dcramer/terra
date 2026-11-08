@@ -104,6 +104,10 @@ pub struct Tone {
     /// Its own fill light's strength, none by default (rim.rs `Fighter::with_fill`).
     #[serde(default)]
     pub fill: f32,
+    /// Its fill's lift above the camera (rim.rs `Fighter::with_key`: 1 is 45 degrees, its
+    /// metal then lit as a highlight), frontal (0) by default.
+    #[serde(default)]
+    pub key: f32,
 }
 
 impl Default for Tone {
@@ -112,6 +116,7 @@ impl Default for Tone {
             value: 1.0,
             rim: 1.0,
             fill: 0.0,
+            key: 0.0,
         }
     }
 }
@@ -831,8 +836,10 @@ mod tests {
         let b: Biome = crate::kit::parse(FULL, "full.ron", "biome.rs").unwrap();
         assert_eq!(b.hero, Tone::default());
         assert_eq!(b.hero.fill, 0.0);
+        assert_eq!(b.hero.key, 0.0, "a fill is frontal unless a biome keys it");
         let forest = Biome::load("forest").unwrap();
         assert!(forest.hero.fill > 0.0, "the forest's hero has no fill");
+        assert!(forest.hero.key > 0.0, "the forest's hero fill is not keyed");
     }
 
     /// A misspelt field fails with the file, its line, the field and the fix.

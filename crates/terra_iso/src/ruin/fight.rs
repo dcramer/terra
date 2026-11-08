@@ -228,6 +228,7 @@ mod tests {
             value: 0.25,
             rim: 2.0,
             fill: 0.0,
+            key: 0.0,
         };
         biome.bodies.insert("models/iso/a.glb".into(), dark);
         assert_eq!(tone_of(None, Some(&biome), "models/iso/a.glb"), dark);
@@ -235,6 +236,7 @@ mod tests {
             value: 0.6,
             rim: 0.5,
             fill: 0.4,
+            key: 0.0,
         });
         assert_eq!(tone_of(Some(&own), Some(&biome), "models/iso/a.glb"), own.0);
         assert_eq!(

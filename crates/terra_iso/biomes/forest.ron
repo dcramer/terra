@@ -152,5 +152,9 @@
     // oaks' shade he was a grey speck on black loam (j29 and j32's judges, f-0920 to f-1120).
     // His median L* over his ring in shade 7 to 8 -> 17 to 19 (f-0920, f-1034), +5 in sun
     // (f-0182); 0.15 gave 15, 0.6 gave 21 to 24 and read his plate a flat white (j33).
-    hero: (fill: 0.3),
+    // Keyed from 45 degrees over the camera (`key`, rim.wesl: half Lambert squared, his metal
+    // a highlight), it halves a frontal fill's value: over his pixels against frontal 0.3,
+    // median L* 0.6 -6 to -9, 0.8 -5 to -7, 1.4 -1 to -4, 1.8 -2 to +2.4 (f-0920, f-1034,
+    // f-1120, f-1058, f-0490, f-0182), spread p90-p10 +6 to +9 L*: his form (j37).
+    hero: (fill: 1.8, key: 1.0),
 )
