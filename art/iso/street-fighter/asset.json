@@ -8,6 +8,18 @@
         "art/iso/street-fighter/concept.png"
       ],
       "note": "look at art/iso/street-fighter/concept.png"
+    },
+    "model": {
+      "at": "2026-11-08T07:36:48.728Z",
+      "credits": 55,
+      "minutes": 1.6222333333333334,
+      "project": "5173b9aa-d617-471f-9436-0f4df8cded9a"
+    },
+    "rig": {
+      "at": "2026-11-08T07:37:08.786Z",
+      "credits": 20,
+      "minutes": 0.32681666666666664,
+      "note": "rigged as biped"
     }
   },
   "name": "street-fighter",
@@ -15,5 +27,7 @@
   "theme": "the street gangs of a near-future city at night, the figure shown alone on a plain light grey studio backdrop, no street, no rain, no signs, no scenery",
   "description": "A bare-knuckle street fighter, a lean, muscular man in his thirties with a shaved head and a short dark beard, wearing a dark charcoal hooded rain jacket of waxed cotton left open over a faded grey cotton vest, grimy cloth tape wrapped round his knuckles and wrists, black canvas cargo trousers with worn knee patches, and scuffed black leather work boots; the jacket creased and worn",
   "body": "biped",
-  "height": 1.8
+  "height": 1.8,
+  "project": "5173b9aa-d617-471f-9436-0f4df8cded9a",
+  "rig": "biped"
 }
