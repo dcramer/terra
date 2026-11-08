@@ -17,6 +17,7 @@ pub mod base_net;
 mod map;
 pub mod marks;
 pub mod music;
+mod net_words;
 mod noises;
 pub mod portal;
 mod probe;
