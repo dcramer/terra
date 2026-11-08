@@ -1,0 +1,81 @@
+{
+  "stages": {
+    "concept": {
+      "at": "2026-11-08T15:41:25.121Z",
+      "credits": 0,
+      "minutes": 0.22148333333333334,
+      "files": [
+        "art/iso/treant-d/concept.png"
+      ],
+      "note": "look at art/iso/treant-d/concept.png"
+    },
+    "model": {
+      "at": "2026-11-08T15:43:48.734Z",
+      "credits": 55,
+      "minutes": 2.2276,
+      "project": "2b66d438-fa47-48a3-ab59-2e772994e4df"
+    },
+    "rig": {
+      "at": "2026-11-08T15:44:15.112Z",
+      "credits": 20,
+      "minutes": 0.4322166666666667,
+      "note": "rigged as biped"
+    },
+    "animate": {
+      "at": "2026-11-08T15:45:02.426Z",
+      "credits": 0,
+      "minutes": 0.7354333333333334,
+      "clips": [
+        "idle=idle",
+        "walk=walk",
+        "run=run",
+        "attack=slash",
+        "death=fall"
+      ],
+      "note": "idle walk run attack death"
+    },
+    "export": {
+      "at": "2026-11-08T15:45:57.855Z",
+      "credits": 0,
+      "minutes": 0.9097666666666666,
+      "files": [
+        "assets/models/iso/treant-d.glb"
+      ],
+      "scale": 2.8611,
+      "turn": -1,
+      "note": "scaled 2.861, turned -1 deg, in place walk run, cut attack, looped run on 0.52-1.10 s (ends 7.3% apart before closing), centred run (body 38% of height off)"
+    },
+    "check": {
+      "at": "2026-11-08T15:45:58.078Z",
+      "credits": 0,
+      "minutes": 0.0018666666666666666,
+      "passed": 29,
+      "of": 30,
+      "failed": [
+        "idle seam"
+      ],
+      "clips": {
+        "walk": 2.33,
+        "death": 3,
+        "attack": 2,
+        "idle": 15.33,
+        "run": 0.58
+      },
+      "speeds": {
+        "walk": 0.71,
+        "run": 2.86
+      },
+      "triangles": 9652,
+      "height": 2.8,
+      "note": "passed 29 of 30"
+    }
+  },
+  "name": "treant-d",
+  "kind": "creature",
+  "theme": "a temperate oak forest",
+  "description": "a walking tree creature made wholly of living oak wood: its body and head one broad old oak trunk, its bark thick and deeply furrowed in deep vertical ridges and cracks, weathered grey-brown with near-black furrows and lighter worn ridges; a gnarled face grown in the upper front of the trunk, deep dark eye hollows under a heavy knotted brow and a wide split for a mouth; two long thick knotted branch arms ending in five twig-like fingers; two stout root legs with splayed root feet; the top of the trunk is never cut flat: above the brow it splits into a broken, ragged crown of five or six thick short branches, snapped and jagged at their ends, reaching up and outward, with dense clumps of green oak leaves on them that cover the top of its head; a few patches of green moss on the shoulders",
+  "body": "other",
+  "height": 2.8,
+  "project": "2b66d438-fa47-48a3-ab59-2e772994e4df",
+  "rig": "biped"
+}
