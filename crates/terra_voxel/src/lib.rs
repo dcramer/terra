@@ -13,6 +13,7 @@
 //!   neighbours (D32).
 //! - [`lod`]: which chunks to draw, and how finely, around the people looking.
 
+pub mod caves;
 pub mod field;
 pub mod lod;
 pub mod mesh;
@@ -21,6 +22,7 @@ pub mod openness;
 pub mod patterned;
 pub mod planet;
 
+pub use caves::Caves;
 pub use field::{Field, GeneratedPlanet, HeightMemo, Sample, material};
 pub use lod::{Detail, below_horizon, chunks_around, may_hold_surface};
 pub use mesh::{CELLS, Sides, VOXEL_M, chunk_at, chunk_origin, chunk_size_m, mesh_chunk};

@@ -488,7 +488,7 @@ fn higher(a: (f32, f32), b: (f32, f32)) -> (f32, f32) {
 
 /// The larger of `a` and `b`, eased over `k` either side of where they meet: Inigo Quilez's
 /// quadratic smooth maximum, which leaves no crease.
-fn smooth_max(a: f32, b: f32, k: f32) -> f32 {
+pub(crate) fn smooth_max(a: f32, b: f32, k: f32) -> f32 {
     let h = (k - (a - b).abs()).max(0.0) / k;
     a.max(b) + h * h * k * 0.25
 }

@@ -25,6 +25,7 @@ mod horns;
 mod massif;
 pub use faces::Faces;
 use faces::RIB_FADE;
+pub(crate) use massif::smooth_max;
 
 /// A world's mountains, as its theme's numbers.
 #[derive(Clone, Copy, Debug, PartialEq)]

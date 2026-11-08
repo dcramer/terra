@@ -9,6 +9,7 @@ use known::{Known, LatticeHasher};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 
+mod carved;
 mod known;
 mod slopes;
 use terra_core::{MaterialId, PlanetSpec};
@@ -258,6 +259,8 @@ pub struct GeneratedPlanet {
     range: Option<Range>,
     /// Its patterned ground where it is frozen at depth, on a world whose climate is known.
     patterned: Option<Patterned>,
+    /// Its caves, carved from its ground (`carved`, D643).
+    caves: Option<crate::Caves>,
     /// The lattice points worked out so far, for every memo asked of it.
     known: Known,
 }
@@ -299,6 +302,7 @@ impl GeneratedPlanet {
             lattice: (quarter_round / Self::LATTICE_M).ceil().max(1.0) as u32,
             range: None,
             patterned: None,
+            caves: None,
             known: Known::default(),
         }
     }
@@ -618,7 +622,8 @@ impl Field for GeneratedPlanet {
         if from_centre < 1e-3 {
             return -self.spec.radius_m;
         }
-        from_centre - (self.spec.radius_m + self.height_in(point / from_centre, memo))
+        let ground = from_centre - (self.spec.radius_m + self.height_in(point / from_centre, memo));
+        self.carved(point, ground, memo)
     }
 
     /// The length and the radius's subtraction in f64; the land's height is still asked in
@@ -630,7 +635,8 @@ impl Field for GeneratedPlanet {
             return -self.spec.radius_m;
         }
         let height = self.height_in((point / from_centre).as_vec3(), memo);
-        (from_centre - (f64::from(self.spec.radius_m) + f64::from(height))) as f32
+        let ground = (from_centre - (f64::from(self.spec.radius_m) + f64::from(height))) as f32;
+        self.carved(point.as_vec3(), ground, memo)
     }
 
     fn sample_in(&self, point: Vec3, memo: &mut HeightMemo) -> Sample {
@@ -667,6 +673,7 @@ impl Field for GeneratedPlanet {
         } else {
             material::STONE
         };
+        let distance = self.carved(point, distance, memo);
         Sample { distance, material }
     }
 }
