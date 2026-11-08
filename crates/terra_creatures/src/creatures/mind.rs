@@ -545,9 +545,9 @@ fn hostile(
 
 /// Of a small bird's choices of what to do next, the share that are standing a moment, and
 /// that or feeding; the rest are flights. And how far a flight over the ground goes, metres.
-const BIRD_IDLES: f32 = 0.15;
-const BIRD_FEEDS: f32 = 0.5;
-const BIRD_FLIGHT_M: (f32, f32) = (8.0, 30.0);
+const BIRD_IDLES: f32 = 0.1;
+const BIRD_FEEDS: f32 = 0.3;
+const BIRD_FLIGHT_M: (f32, f32) = (12.0, 40.0);
 
 /// Of a bird's flights with a player about, the share that go past them; and how far off the
 /// player may be for it, metres.
