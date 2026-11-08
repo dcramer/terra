@@ -67,6 +67,13 @@
       "minutes": 0.0037333333333333333,
       "triangles": 23690,
       "note": "27550 to 23690 triangles (budget 24000), Blender's collapse on the mesh alone, skeleton and clips kept; bounds within 0.02%"
+    },
+    "trim": {
+      "at": "2026-11-08T15:04:23.809Z",
+      "credits": 0,
+      "minutes": 0.00265,
+      "triangles": 17512,
+      "note": "6178 of 23690 triangles leaf in 238 tufts; 0 tufts kept (--keep 0), 23690 to 17512 triangles"
     }
   },
   "name": "treant-b",

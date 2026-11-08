@@ -101,15 +101,18 @@
     // and 1.0 left the meadow's 11 to 15 darker (iso-forest-demo j15). `radius` is each
     // model's standing pose's, 95% of its points from 5 to 95% of its height within it of its
     // middle: treant-a 0.67, treant-b 0.66, tree-monster 0.81 (the 0.45 every creature had
-    // let the hero stand and roll inside their bark, iso-forest-demo j18).
+    // let the hero stand and roll inside their bark, iso-forest-demo j18). Rim 0.15 with
+    // treant-b and the tree monster leaf-trimmed (`iso-art trim --keep 0`): their bark at
+    // 0.35 took white streaks on every fold, and from above their crowns read as bushes
+    // (route frame 200's blind pair won clear and slight over both, iso-forest-art j2).
     foes: [
-        (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 1.06, tone: (value: 0.12, rim: 0.35, fill: 2.0), radius: 0.65),
-        (model: "models/iso/treant-b.glb", at: (-7.0, -3.0), walk: 0.9, tone: (value: 0.12, rim: 0.35, fill: 2.0), radius: 0.65),
-        (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.31, tone: (value: 0.12, rim: 0.35, fill: 2.0), radius: 0.8),
-        (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.31, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 1, radius: 0.8),
-        (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 1.06, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 1, radius: 0.65),
-        (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.9, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 2, radius: 0.65),
-        (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.31, tone: (value: 0.2, rim: 0.35, fill: 2.0), pack: 2, radius: 0.8),
+        (model: "models/iso/treant-a.glb", at: (6.5, -5.0), walk: 1.06, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65),
+        (model: "models/iso/treant-b.glb", at: (-7.0, -3.0), walk: 0.9, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.65),
+        (model: "models/iso/tree-monster.glb", at: (3.0, 7.0), walk: 1.31, tone: (value: 0.12, rim: 0.15, fill: 2.0), radius: 0.8),
+        (model: "models/iso/tree-monster.glb", at: (-13.0, 9.5), walk: 1.31, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.8),
+        (model: "models/iso/treant-a.glb", at: (-11.5, 12.0), walk: 1.06, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 1, radius: 0.65),
+        (model: "models/iso/treant-b.glb", at: (6.5, 18.5), walk: 0.9, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.65),
+        (model: "models/iso/tree-monster.glb", at: (9.0, 17.0), walk: 1.31, tone: (value: 0.2, rim: 0.15, fill: 2.0), pack: 2, radius: 0.8),
     ],
     // The staged fight's effects (biomes/effects/, kit/effects.rs). The hit's spark and the
     // parry's ring grown to read at the route's 10 m camera (iso-forest-demo j26): as the presets

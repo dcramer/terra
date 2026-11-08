@@ -67,6 +67,13 @@
       "minutes": 0.0038166666666666666,
       "triangles": 23694,
       "note": "29040 to 23694 triangles (budget 24000), Blender's collapse on the mesh alone, skeleton and clips kept; bounds within 0.02%"
+    },
+    "trim": {
+      "at": "2026-11-08T15:04:23.238Z",
+      "credits": 0,
+      "minutes": 0.002916666666666667,
+      "triangles": 11681,
+      "note": "12013 of 23694 triangles leaf in 166 tufts; 0 tufts kept (--keep 0), 23694 to 11681 triangles"
     }
   },
   "name": "tree-monster",
