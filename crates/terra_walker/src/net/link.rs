@@ -189,6 +189,32 @@ impl Link {
         self.welcomed.as_deref()
     }
 
+    /// What the server tells of the things of a kind other than players ([`super::Host::put`]):
+    /// each one's id and what is shown of it, as its last two words and how far between
+    /// them to draw it now, two sends back as players are shown.
+    pub fn shown_of(&self, kind: terra_net::proto::Kind) -> Vec<(EntityId, &[u8], &[u8], f32)> {
+        let Some(newest) = self.client.stamp().map(|stamp| stamp.tick) else {
+            return Vec::new();
+        };
+        let at = f64::from(newest.saturating_sub(SHOWN_SENDS_BACK * SEND_EVERY));
+        self.client
+            .entities()
+            .filter(|(_, entity)| entity.kind == kind)
+            .filter_map(|(id, entity)| {
+                let (from, to, share) = entity.part(SHOWN)?.around(at);
+                Some((id, from.bytes.as_slice(), to.bytes.as_slice(), share))
+            })
+            .collect()
+    }
+
+    /// The entity that is this game's own player, once the server has said.
+    pub fn mine(&self) -> Option<EntityId> {
+        self.client
+            .entities()
+            .find(|(_, entity)| entity.mine)
+            .map(|(id, _)| id)
+    }
+
     /// What the host kept of this player from when they were last in its world, as the
     /// greeting gave it (D592), once: the layer that reads it takes it.
     pub fn take_kept(&mut self) -> Option<Vec<u8>> {
@@ -506,7 +532,10 @@ pub fn show(
         return;
     };
     let at = f64::from(newest.saturating_sub(SHOWN_SENDS_BACK * SEND_EVERY));
-    for (id, entity) in client.entities().filter(|(_, entity)| !entity.mine) {
+    let others = |(_, entity): &(EntityId, &terra_net::client::Entity)| {
+        !entity.mine && entity.kind == super::PERSON
+    };
+    for (id, entity) in client.entities().filter(others) {
         let Some((from, to, share)) = entity.part(SHOWN).map(|samples| samples.around(at)) else {
             continue;
         };

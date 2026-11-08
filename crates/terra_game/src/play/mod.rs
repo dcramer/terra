@@ -139,6 +139,7 @@ impl Plugin for GameplayPlugin {
         melee::plugin(app);
         bodies::plugin(app);
         combat::plugin(app);
+        terra_creatures::net::plugin(app);
         shake::plugin(app);
         hits::plugin(app);
         archery::plugin(app);

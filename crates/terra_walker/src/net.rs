@@ -254,6 +254,24 @@ impl Host {
         &self.server
     }
 
+    /// Something in the world other than a player, of a kind the layer that owns it names
+    /// (a creature): told to every game near where it is, as players are. The layer tells
+    /// of it each tick ([`Host::tell_of`]) and takes it away when it is gone ([`Host::gone`]).
+    pub fn put(&mut self, kind: Kind, place: Vec3) -> EntityId {
+        self.server.spawn(ROOM, kind, place.as_dvec3().to_array())
+    }
+
+    /// Where a thing put is now and what is shown of it, in bytes its own layer reads.
+    pub fn tell_of(&mut self, id: EntityId, place: Vec3, shown: &[u8]) {
+        self.server.place(id, place.as_dvec3().to_array());
+        self.server.set(id, SHOWN, shown);
+    }
+
+    /// A thing put is no more.
+    pub fn gone(&mut self, id: EntityId) {
+        self.server.despawn(id);
+    }
+
     /// Keeps a connection's player's record, as the layer that reads it gives it (D592): it
     /// is theirs again in the greeting when they next come. Nothing for a connection that
     /// never said who it is.

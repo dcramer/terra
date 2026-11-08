@@ -139,6 +139,25 @@ try {
   if (title(host).seed !== land || title(friend).seed !== land) throw new Error(`a player crossed out of a shared world: the host on seed ${title(host).seed}, the friend on ${title(friend).seed}`);
   console.log("✓ the gate: shut for both, opened on the host by the mark the friend bears, open in both, and nobody crossed the shared world");
 
+  // Creatures are the host's (netcode.md, step 5): the friend's game puts out none of its
+  // own and shows the host's, each where the host has it.
+  type Animal = { name: string; at: Place };
+  const KINDS = ["Wild boar", "Red squirrel", "Chaffinch", "Brown hare", "Red fox", "Roe deer", "Spider"];
+  const animals = (port: number) => KINDS.flatMap((name) => (JSON.parse(remote(port, "call", "sandbox.find", JSON.stringify({ name }))) as Animal[]).map((found) => ({ name, at: found.at })));
+  await until("the host's world never had an animal of the kinds looked for near its players", () => animals(host).length > 0, 60);
+  let seen = 0;
+  let worst = 0;
+  await until(`the friend's game never showed the host's animals where the host has them: the host has ${animals(host).length}, the friend shows ${animals(friend).length}`, () => {
+    const [theirs, shown] = [animals(host), animals(friend)];
+    if (shown.length === 0) return false;
+    // Each one shown is one the host has, of its kind, near where the host has it (it is
+    // shown a few sends back, and a running animal covers some metres in that).
+    const off = shown.map((one) => Math.min(...theirs.filter((other) => other.name === one.name).map((other) => apart(one.at, other.at)), Infinity));
+    [seen, worst] = [shown.length, Math.max(...off)];
+    return worst < 4;
+  }, 60);
+  console.log(`✓ creatures are the host's: the friend's game shows ${seen} of the host's animals, each within ${worst.toFixed(1)} m of where the host has it`);
+
   // The friend's character is sent to the host to keep (D592), as it is every few seconds.
   remote(friend, "call", "character.keep");
   await sleep(1);

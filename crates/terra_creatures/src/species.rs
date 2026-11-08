@@ -343,6 +343,13 @@ pub struct Carcass {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Species(u8);
 
+impl Species {
+    /// Which of the kinds it is, in the file's order: how a kind is named on the wire.
+    pub fn index(self) -> u8 {
+        self.0
+    }
+}
+
 /// Every kind of creature (`assets/data/creatures.ron`), and what butchering each gives,
 /// by the kinds of item the registry of items knows.
 #[derive(Resource)]

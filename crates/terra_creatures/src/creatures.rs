@@ -10,6 +10,8 @@
 //! Behaviour is a few small states per creature, run in full for every one; at this
 //! scale that is cheap. Detail by distance comes when there are many (creatures.md).
 
+mod clips;
+use clips::{Clips, animated};
 mod appear;
 mod gait;
 mod ground;
@@ -18,7 +20,7 @@ mod steer;
 mod wake;
 
 pub use crate::species::Species;
-use crate::species::{Bestiary, Lives, MOST_BLOWS, Moves, Refuge};
+use crate::species::{Bestiary, Lives, Moves, Refuge};
 pub use appear::{Shown, leave};
 use bevy::{
     prelude::*,
@@ -136,6 +138,9 @@ pub struct Creature {
     /// is roused by, which it does once until it has gone home.
     pub(crate) blow: u8,
     pub(crate) warned: bool,
+    /// On a joined game, the id the host tells it as (`net`): it is the host's, shown here,
+    /// and a blow on it is asked of the host.
+    pub(crate) remote: Option<u32>,
     /// How high up a trunk it is, and which way from the trunk it clings.
     aloft: f32,
     side: Vec3,
@@ -248,6 +253,7 @@ impl Creature {
             quarry: None,
             blow: 0,
             warned: false,
+            remote: None,
             aloft: 0.0,
             side: Vec3::X,
             bolt: Vec3::ZERO,
@@ -281,34 +287,6 @@ impl Kinds {
     }
 }
 
-#[derive(Clone, Copy)]
-struct Clips {
-    idle: AnimationNodeIndex,
-    walk: AnimationNodeIndex,
-    /// Its trot, or its run for a kind that does not trot.
-    trot: AnimationNodeIndex,
-    run: AnimationNodeIndex,
-    eat: AnimationNodeIndex,
-    attack: AnimationNodeIndex,
-    death: AnimationNodeIndex,
-    fly: AnimationNodeIndex,
-    /// Its other blows' clips (`SpeciesDef::blows`), and its warning's.
-    blows: [Option<AnimationNodeIndex>; MOST_BLOWS],
-    warn: Option<AnimationNodeIndex>,
-}
-
-impl Clips {
-    /// The clip of the blow a creature is dealing ([`Creature::blow`]).
-    fn blow(&self, blow: u8) -> AnimationNodeIndex {
-        let other = match blow {
-            0 => None,
-            WARNING => self.warn,
-            other => self.blows.get(other as usize - 1).copied().flatten(),
-        };
-        other.unwrap_or(self.attack)
-    }
-}
-
 /// On a creature's animation player: whose it is, and what it plays.
 #[derive(Component)]
 struct Animates {
@@ -339,8 +317,10 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
+                // A joined game puts out no creatures of its own: the host's are shown (`net`).
                 prepare
                     .run_if(not(resource_exists::<Populated>))
+                    .run_if(not(resource_exists::<terra_walker::net::link::Link>))
                     .run_if(terra_world::instance::in_world),
                 animate,
                 form.run_if(resource_exists::<Populated>),
@@ -348,7 +328,14 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             FixedUpdate,
-            ((think, walk).chain(), butcher).in_set(Sim::World),
+            (
+                // Thought for and walked on the host alone (`net`).
+                (think, walk)
+                    .chain()
+                    .run_if(not(resource_exists::<terra_walker::net::link::Link>)),
+                butcher,
+            )
+                .in_set(Sim::World),
         );
 }
 
@@ -477,68 +464,6 @@ fn prepare(
     commands.insert_resource(Populated);
 }
 
-/// Each kind's scene, its animation graph and the clips in it, or nothing if a model
-/// lacks its scene or a clip its kind asks for.
-fn animated(
-    kinds: &Kinds,
-    gltfs: &Assets<Gltf>,
-    bestiary: &Bestiary,
-    graphs: &mut Assets<AnimationGraph>,
-) -> Option<Vec<(Species, Handle<WorldAsset>, Handle<AnimationGraph>, Clips)>> {
-    let mut ready = Vec::new();
-    for (species, model) in &kinds.models {
-        let gltf = gltfs.get(model)?;
-        let Some(scene) = gltf.default_scene.clone() else {
-            error!("{} has no scene.", bestiary.name(*species));
-            return None;
-        };
-        let def = bestiary.get(*species);
-        let about = &def.clips;
-        let clip = |name: &str| gltf.named_animations.get(name).cloned();
-        let mut names = vec![
-            &about.idle,
-            &about.walk,
-            &about.run,
-            about.eat.as_ref().unwrap_or(&about.idle),
-            &about.attack,
-            &about.death,
-            about.fly.as_ref().unwrap_or(&about.run),
-            about.trot.as_ref().map_or(&about.run, |(trot, _)| trot),
-        ];
-        // Then its other blows' clips, three at most, and its warning's.
-        let others = def.blows.len().min(MOST_BLOWS);
-        names.extend(def.blows.iter().take(MOST_BLOWS).map(|blow| &blow.clip));
-        names.extend(def.warns.as_ref().map(|(warn, _)| warn));
-        let Some(clips) = names
-            .iter()
-            .map(|name| clip(name))
-            .collect::<Option<Vec<_>>>()
-        else {
-            error!("{} is missing an animation.", bestiary.name(*species));
-            return None;
-        };
-        let (graph, nodes) = AnimationGraph::from_clips(clips);
-        ready.push((
-            *species,
-            scene,
-            graphs.add(graph),
-            Clips {
-                idle: nodes[0],
-                walk: nodes[1],
-                run: nodes[2],
-                eat: nodes[3],
-                attack: nodes[4],
-                death: nodes[5],
-                fly: nodes[6],
-                trot: nodes[7],
-                blows: std::array::from_fn(|at| (at < others).then(|| nodes[8 + at])),
-                warn: def.warns.as_ref().map(|_| nodes[8 + others]),
-            },
-        ));
-    }
-    Some(ready)
-}
-
 /// Forms the creatures asked for.
 fn form(
     mut commands: Commands,
@@ -592,6 +517,7 @@ pub fn spawn(
                 quarry: None,
                 blow: 0,
                 warned: false,
+                remote: None,
                 aloft: 0.0,
                 side: Vec3::X,
                 bolt: Vec3::ZERO,

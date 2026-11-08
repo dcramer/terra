@@ -6513,6 +6513,7 @@ dependencies = [
  "terra_gen",
  "terra_items",
  "terra_motion",
+ "terra_net",
  "terra_survival",
  "terra_voxel",
  "terra_walker",

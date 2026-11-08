@@ -28,6 +28,7 @@ terra_motion.workspace = true
 terra_survival.workspace = true
 terra_voxel.workspace = true
 # The walker layer (D198, D407): the player's own components, the figure, camera and pace.
+terra_net.workspace = true
 terra_walker.workspace = true
 terra_world.workspace = true
 

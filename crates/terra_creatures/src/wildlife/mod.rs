@@ -160,7 +160,9 @@ pub fn plugin(app: &mut App) {
                 .chain()
                 .run_if(terra_world::instance::in_world)
                 .run_if(something_grows)
-                .run_if(wild_shown),
+                .run_if(wild_shown)
+                // A joined game puts out no animals of its own: the host's are shown (`net`).
+                .run_if(not(resource_exists::<terra_walker::net::link::Link>)),
         );
 }
 

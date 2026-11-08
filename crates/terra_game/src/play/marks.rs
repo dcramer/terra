@@ -81,7 +81,14 @@ pub fn plugin(app: &mut App) {
     app.insert_resource(Kinds::read())
         .register_required_components::<Player, Marks>();
     shown::plugin(app);
-    app.add_systems(Update, earned.run_if(resource_exists::<Kinds>));
+    app.add_systems(
+        Update,
+        (
+            earned,
+            earned_with_the_host.run_if(resource_exists::<terra_walker::net::link::Link>),
+        )
+            .run_if(resource_exists::<Kinds>),
+    );
     terra_world::remote::method(app, "marks.give", give);
     terra_world::remote::method(app, "marks.state", state);
 }
@@ -104,11 +111,19 @@ fn earned(
     kinds: Res<Kinds>,
     mut players: Query<(Entity, &Transform, &mut Marks), With<Player>>,
     mut told: MessageWriter<terra_survival::told::Told>,
+    mut host: Option<ResMut<terra_walker::net::Host>>,
 ) {
     for fell in struck.read().filter(|blow| blow.killed) {
         let Some(key) = bestiary.get(fell.species).marks.as_deref() else {
             continue;
         };
+        // Hosting, the fall is ordered where it happened, so the joined players by it are
+        // marked in their own games, where their marks are kept for now (D592).
+        if let Some(host) = host.as_mut() {
+            let mut order = vec![MARKED];
+            order.extend(key.bytes().take(MOST_KEY));
+            host.order(fell.at, &order);
+        }
         for (player, at, mut marks) in &mut players {
             if at.translation.distance(fell.at) > BY_M || marks.0.contains(key) {
                 continue;
@@ -123,6 +138,45 @@ fn earned(
                 }
                 Err(problem) => error!("{problem}"),
             }
+        }
+    }
+}
+
+/// The first byte of a mark earned as a host orders it, the mark's key after it, and the
+/// longest a key is read.
+pub const MARKED: u8 = 20;
+const MOST_KEY: usize = 64;
+
+/// On a joined game: a mark the host orders earned where this game's player is near
+/// (an operation is told by area) is imprinted on them, and they are told.
+fn earned_with_the_host(
+    mut link: ResMut<terra_walker::net::link::Link>,
+    kinds: Res<Kinds>,
+    mut player: Query<(Entity, &mut Marks), IsLocalPlayer>,
+    mut told: MessageWriter<terra_survival::told::Told>,
+) {
+    use terra_net::client::Event as Heard;
+    let (orders, rest): (Vec<Heard>, Vec<Heard>) =
+        std::mem::take(&mut link.events).into_iter().partition(
+            |event| matches!(event, Heard::Op { bytes, .. } if bytes.first() == Some(&MARKED)),
+        );
+    link.events = rest;
+    let Ok((entity, mut marks)) = player.single_mut() else {
+        return;
+    };
+    for order in orders {
+        let Heard::Op { bytes, .. } = order else {
+            continue;
+        };
+        let key = String::from_utf8_lossy(&bytes[1..bytes.len().min(1 + MOST_KEY)]).into_owned();
+        if marks.0.contains(&key) {
+            continue;
+        }
+        if let Ok(kind) = kinds.imprint(&mut marks, &key) {
+            told.write(terra_survival::told::Told::new(
+                entity,
+                format!("You bear {}", kind.name),
+            ));
         }
     }
 }

@@ -19,6 +19,7 @@ pub mod creatures;
 pub mod fliers;
 pub mod hits;
 pub mod melee;
+pub mod net;
 pub mod sighted;
 pub mod species;
 pub mod staged;

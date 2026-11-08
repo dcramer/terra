@@ -214,6 +214,24 @@ pub fn strike(
     struck: &mut MessageWriter<Struck>,
     told: &mut MessageWriter<Told>,
 ) -> f32 {
+    // The host's creature, shown here: the blow is asked of the host, which deals it (`net`);
+    // here it only shows that it landed.
+    if let Some(remote) = creature.remote {
+        let ask = crate::net::asked(remote, blow.damage, blow.part);
+        commands.queue(move |world: &mut World| {
+            if let Some(mut link) = world.get_resource_mut::<terra_walker::net::link::Link>() {
+                link.ask(&ask);
+            }
+        });
+        struck.write(Struck {
+            creature: entity,
+            species: creature.species,
+            at: blow.at,
+            critical: blow.part == Part::Head,
+            killed: false,
+        });
+        return 0.0;
+    }
     let ambush = creature.unaware();
     let dealt = blow.damage * counts(blow.part) * if ambush { AMBUSH } else { 1.0 };
     creature.health -= dealt;
