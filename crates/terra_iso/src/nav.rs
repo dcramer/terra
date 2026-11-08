@@ -12,7 +12,7 @@ const N: i32 = (HALF * 2.0 / CELL) as i32;
 /// How far a body keeps from what blocks it.
 const BODY: f32 = 0.3;
 
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct Nav {
     blocked: Vec<bool>,
 }
