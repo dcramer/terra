@@ -13,6 +13,7 @@
 mod clips;
 use clips::{Clips, animated};
 mod appear;
+mod flock;
 mod gait;
 mod ground;
 mod mind;

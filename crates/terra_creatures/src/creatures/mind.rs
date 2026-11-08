@@ -91,7 +91,7 @@ pub fn think(
     mut creatures: Query<(&mut Creature, &Transform, &Detail), Without<Player>>,
     frights: Query<(&Frightful, &GlobalTransform)>,
     mut bitten: MessageWriter<Bitten>,
-    mut awake: Local<SpatialHash<Entity>>,
+    (mut awake, mut flock): (Local<SpatialHash<Entity>>, Local<super::flock::Flock>),
     filming: Option<Res<Cine>>,
 ) {
     terra_gen::stat_scope!("creatures");
@@ -106,6 +106,7 @@ pub fn think(
             .filter(|(_, _, _, filmed)| !(out_of_play && *filmed))
             .map(|(player, at, _, _)| (at.translation, player)),
     );
+    flock.age();
     for (mut creature, at, detail) in &mut creatures {
         // Far from everyone it thinks less often, over the ticks it waited (D145).
         creature.lived += 1;
@@ -161,7 +162,7 @@ pub fn think(
             away,
             passes,
         };
-        let next = decide(
+        let mut next = decide(
             &mut creature,
             about,
             &sense,
@@ -169,6 +170,23 @@ pub fn think(
             &mut dice,
             &mut bitten,
         );
+        // Birds rise together: one on the ground goes with one of its kind that took wing
+        // near it, and one taking wing is followed (`flock`).
+        if matches!(about.moves, Moves::Flies(_)) {
+            let grounded = matches!(next, State::Idle(_) | State::Graze(_) | State::Wander(_));
+            if let (true, Some(to)) = (grounded, flock.joins(creature.species, here, &mut dice)) {
+                next = State::Fly {
+                    from: here,
+                    to,
+                    along: 0.0,
+                };
+            } else if let (State::Fly { from, to, along }, false) =
+                (next, matches!(creature.state, State::Fly { .. }))
+                && along == 0.0
+            {
+                flock.began(creature.species, from, to);
+            }
+        }
         creature.dice = dice;
         if bestiary.hostile(creature.species) && !matches!(next, State::Chase | State::Attack(_)) {
             creature.hurt = false;
