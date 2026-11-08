@@ -76,8 +76,11 @@ try {
 
   const first = await make();
   const stood = feet()!;
-  remote("press", "w:120");
-  await until(`the player of ${first.playing} did not walk a metre in 120 frames`, () => apart(stood, feet()!) > 1, 60);
+  // Held for frames enough on any machine (at 150 a second 120 are under a second, and a
+  // walk begins from a standstill), and let go once they have walked.
+  remote("press", "w:1500");
+  await until(`the player of ${first.playing} did not walk a metre with the walk key held`, () => apart(stood, feet()!) > 1, 60);
+  remote("call", "sandbox.unpress");
   // Standing again: where it is left is where it must be found.
   let walked = feet()!;
   await until("the player never came to rest", () => {
