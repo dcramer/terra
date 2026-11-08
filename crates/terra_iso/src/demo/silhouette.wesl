@@ -34,8 +34,9 @@ fn fragment(in: VertexOutput) -> Out {
     let p = in.world_position.xyz;
     let to_eye = normalize(view.world_position - p);
     let n = normalize(in.world_normal);
-    // Fresnel: the fill at the middle of his figure, the edge toward its outline.
-    let f = pow(1.0 - clamp(abs(dot(n, to_eye)), 0.0, 1.0), 2.0);
+    // Fresnel: the fill at the middle of his figure, the edge toward its outline (cubed, so
+    // only the outline carries it).
+    let f = pow(1.0 - clamp(abs(dot(n, to_eye)), 0.0, 1.0), 3.0);
     var out: Out;
     out.color = mix(fill, edge, f);
     // Reverse Z: the nearer of the two is the larger.

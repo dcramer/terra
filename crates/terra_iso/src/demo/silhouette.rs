@@ -30,9 +30,12 @@ pub const GAP: f32 = 0.35;
 /// half thickness and his armour. His front (`Front`) is that nearest joint less this.
 pub const FLESH: f32 = 0.2;
 /// The fill and the edge as they reach the screen (unlit, before AgX): a cool pale blue
-/// against the wood's greens and the foes' bark, the edge bright enough to read as his outline.
-const FILL: LinearRgba = LinearRgba::new(0.30, 0.52, 0.85, 0.45);
-const EDGE: LinearRgba = LinearRgba::new(0.75, 0.92, 1.3, 0.9);
+/// against the wood's greens and the foes' bark, the edge enough to read as his outline. An
+/// edge, nearly no fill: drawn through a treant's leaf cards, j29's fill of 0.45 and edge of
+/// 0.9 showed as a pale blue screen-door of his legs (route frame 1034), which the judge took
+/// for "a rendering bug, not a hero behind a foe".
+const FILL: LinearRgba = LinearRgba::new(0.22, 0.38, 0.62, 0.1);
+const EDGE: LinearRgba = LinearRgba::new(0.55, 0.75, 1.1, 0.55);
 
 pub fn plugin(app: &mut App) {
     embedded_asset!(app, "silhouette.wesl");
