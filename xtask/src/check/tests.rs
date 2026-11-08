@@ -141,6 +141,13 @@ fn the_clock_and_the_systems_randomness_are_found_by_line() {
         vec![(2, "Instant::now"), (4, "rand::random")]
     );
     assert!(unrepeatable("let seed = Seed(1).rng();").is_empty());
+    // A line marked as timing only, on it or above, is let be; the mark two lines up is not.
+    let marked = "// timing only: reported\nlet t = Instant::now();\nlet u = Instant::now(); // timing only: said\n\nlet v = Instant::now();";
+    assert_eq!(unrepeatable(marked), vec![(5, "Instant::now")]);
+    for tests in ["src/tests.rs", "src/net_tests.rs", "src/tests/soak.rs"] {
+        assert!(only_tests(Path::new(tests)), "{tests}");
+    }
+    assert!(!only_tests(Path::new("src/sheet.rs")) && !only_tests(Path::new("src/contests.rs")));
 }
 
 #[test]

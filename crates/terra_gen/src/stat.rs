@@ -48,7 +48,7 @@ impl Stat {
         }
         Scope {
             stat: self,
-            start: Instant::now(),
+            start: Instant::now(), // timing only: the profiler's scope
         }
     }
 }
@@ -146,7 +146,7 @@ mod tests {
     fn a_scope_costs_well_under_a_microsecond() {
         static COST: Stat = Stat::new("stat-cost");
         let n = 200_000u32;
-        let start = Instant::now();
+        let start = Instant::now(); // timing only: what a scope costs
         for _ in 0..n {
             let _scope = COST.scope();
         }

@@ -33,10 +33,10 @@ pub struct Run {
 /// Generates and measures one seed.
 pub fn run(theme: &Theme, set: &ModuleSet, seed: u64) -> (Run, Option<Dungeon>) {
     let s = Seed(seed);
-    let clock = Instant::now();
+    let clock = Instant::now(); // timing only: a stage's milliseconds, reported
     let graph = graph::generate(theme, s);
     let graph_ms = clock.elapsed().as_secs_f64() * 1e3;
-    let clock = Instant::now();
+    let clock = Instant::now(); // timing only: a stage's milliseconds, reported
     let placed = place::place(&graph, theme, s);
     let place_ms = clock.elapsed().as_secs_f64() * 1e3;
     let mut run = Run {
@@ -58,7 +58,7 @@ pub fn run(theme: &Theme, set: &ModuleSet, seed: u64) -> (Run, Option<Dungeon>) 
     let Ok(layout) = placed else {
         return (run, None);
     };
-    let clock = Instant::now();
+    let clock = Instant::now(); // timing only: a stage's milliseconds, reported
     let dressing = dress::dress(&layout, &graph, theme, set, s);
     run.ms[2] = clock.elapsed().as_secs_f64() * 1e3;
     run.dress_tries = dressing.tries;

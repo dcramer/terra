@@ -428,21 +428,36 @@ const UNREPEATABLE: [&str; 6] = [
     "getrandom",
 ];
 
-/// The lines of a source that use something in [`UNREPEATABLE`], numbered from 1.
+/// The mark a line carries, or the line above it, when it reads the clock only to say how
+/// long something took, the time deciding nothing (a profiler's scope, a sweep's timings).
+const TIMING_ONLY: &str = "// timing only:";
+
+/// The lines of a source that use something in [`UNREPEATABLE`], numbered from 1, but those
+/// marked [`TIMING_ONLY`].
 fn unrepeatable(text: &str) -> Vec<(usize, &'static str)> {
-    text.lines()
-        .enumerate()
+    let lines: Vec<&str> = text.lines().collect();
+    (lines.iter().enumerate())
         .filter_map(|(number, line)| {
             let what = UNREPEATABLE.iter().find(|what| line.contains(*what))?;
-            Some((number + 1, *what))
+            let marked =
+                line.contains(TIMING_ONLY) || number > 0 && lines[number - 1].contains(TIMING_ONLY);
+            (!marked).then_some((number + 1, *what))
         })
         .collect()
+}
+
+/// Whether a source is only tests (`tests.rs`, `*_tests.rs`, a `tests` folder): a test may
+/// time what it runs, as no state comes of it.
+fn only_tests(file: &Path) -> bool {
+    let name = file.file_stem().and_then(|name| name.to_str());
+    name.is_some_and(|name| name == "tests" || name.ends_with("_tests"))
+        || file.components().any(|part| part.as_os_str() == "tests")
 }
 
 fn shared_crates_are_repeatable(out: &mut String) -> bool {
     let _ = writeln!(
         out,
-        "shared-state crates must not read the clock or the system's randomness"
+        "shared-state crates must not read the clock or the system's randomness (D28): take time and seeds as arguments; a line that only times work to report it says `{TIMING_ONLY} <why>`, on it or above"
     );
     let Some(crates) = shared_crates() else {
         let _ = writeln!(out, "  cannot list the crates");
@@ -459,7 +474,9 @@ fn shared_crates_are_repeatable(out: &mut String) -> bool {
         let mut clean = true;
         for file in found {
             // A benchmark's own program may time itself.
-            if file.ends_with("main.rs") || file.components().any(|part| part.as_os_str() == "bin")
+            if file.ends_with("main.rs")
+                || file.components().any(|part| part.as_os_str() == "bin")
+                || only_tests(&file)
             {
                 continue;
             }
