@@ -305,18 +305,32 @@ fn scale_detail(
 /// Pictures still to be given smaller copies of themselves once loaded, and the alpha a
 /// picture cut out by its transparency is cut at.
 #[derive(Resource, Default)]
-struct Unmipped(Vec<(Handle<Image>, Option<f32>)>);
+struct Unmipped(Vec<(Handle<Image>, Option<f32>)>, Vec<Handle<Image>>);
 
 /// Gives each picture its mipmaps as it loads: a chain of copies, each half the size, which
 /// the GPU reads at a distance instead of the full picture. Without them, bark and leaves
 /// far off glitter, and reading the full picture for a few pixels wastes bandwidth.
 /// Bevy makes none for a PNG.
 fn add_mipmaps(mut unmipped: ResMut<Unmipped>, mut images: ResMut<Assets<Image>>) {
-    unmipped.0.retain(|(handle, cut)| {
+    let Unmipped(waiting, kept) = &mut *unmipped;
+    waiting.retain(|(handle, cut)| {
+        // Kept loaded from a world before, its mipmaps made then (D501): left as it is,
+        // not touched, which would send it to the GPU again.
+        match images
+            .get(handle)
+            .map(|image| image.texture_descriptor.mip_level_count)
+        {
+            None => return true,
+            Some(levels) if levels > 1 => return false,
+            Some(_) => {}
+        }
         let Some(mut image) = images.get_mut(handle) else {
             return true;
         };
         with_mipmaps(&mut image, *cut);
+        // Kept for the worlds entered after: a world left drops its handle, and the next
+        // read the file and made its mipmaps again, a quarter of a second a crossing.
+        kept.push(handle.clone());
         false
     });
 }
