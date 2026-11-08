@@ -229,7 +229,8 @@ fn biome(args: &mut Args) -> Option<(kit::biome::Biome, kit::light::Light)> {
     Some((biome, light))
 }
 
-fn main() {
+/// Its exit is the app's: a run's gate (demo/tally.rs) fails it with an error code.
+fn main() -> AppExit {
     let (args, loaded) = args();
     let window = if args.shot.is_some() {
         None
@@ -286,8 +287,7 @@ fn main() {
         ));
     }
     if args.asset.is_some() {
-        app.add_plugins((mipmaps::plugin, view::plugin)).run();
-        return;
+        return app.add_plugins((mipmaps::plugin, view::plugin)).run();
     }
     use kit::biome::Layout;
     if let Some((biome, light)) = loaded {
@@ -299,44 +299,44 @@ fn main() {
         app.add_plugins((play::plugin, demo::plugin));
     }
     if args.layout == Some(Layout::Ruin) {
-        app.add_plugins((mipmaps::plugin, rim::plugin, ruin::plugin))
+        return app
+            .add_plugins((mipmaps::plugin, rim::plugin, ruin::plugin))
             .run();
-        return;
     }
     if args.layout == Some(Layout::Street) {
         // The rim for the street's people (a prop's `rim`).
-        app.add_plugins((mipmaps::plugin, rim::plugin, kit::street::plugin))
+        return app
+            .add_plugins((mipmaps::plugin, rim::plugin, kit::street::plugin))
             .run();
-        return;
     }
     if args.layout == Some(Layout::Marsh) {
         // The glade's ground material, then the marsh's own land over it.
-        app.add_plugins((mipmaps::plugin, terrain::plugin, rim::plugin, marsh::plugin))
+        return app
+            .add_plugins((mipmaps::plugin, terrain::plugin, rim::plugin, marsh::plugin))
             .run();
-        return;
     }
     if args.layout == Some(Layout::Forest) {
         // The glade's land, wood, pond and beasts without its party, camera and orders.
-        app.add_plugins((
-            mipmaps::plugin,
-            terrain::plugin,
-            scene::plugin,
-            forest::plugin,
-            foliage::plugin,
-            party::animate,
-            rim::plugin,
-            water::plugin,
-            wildlife::plugin,
-            // The camp fire's smoke is the ruin's flipbook fire's (wood::smoulder), not the
-            // glade's column (smoke.rs).
-            motes::plugin,
-            wood::plugin,
-        ))
-        .add_systems(PostStartup, |args: Res<Args>, mut commands: Commands| {
-            commands.insert_resource(args.hour);
-        })
-        .run();
-        return;
+        return app
+            .add_plugins((
+                mipmaps::plugin,
+                terrain::plugin,
+                scene::plugin,
+                forest::plugin,
+                foliage::plugin,
+                party::animate,
+                rim::plugin,
+                water::plugin,
+                wildlife::plugin,
+                // The camp fire's smoke is the ruin's flipbook fire's (wood::smoulder), not the
+                // glade's column (smoke.rs).
+                motes::plugin,
+                wood::plugin,
+            ))
+            .add_systems(PostStartup, |args: Res<Args>, mut commands: Commands| {
+                commands.insert_resource(args.hour);
+            })
+            .run();
     }
     app.add_plugins((
         mipmaps::plugin,
@@ -364,7 +364,7 @@ fn main() {
             commands.insert_resource(args.hour);
         },
     )
-    .run();
+    .run()
 }
 
 fn shoot(
