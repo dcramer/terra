@@ -13,6 +13,7 @@
 pub use flora::{FloraSystems, Growth, Obstacles};
 pub use flora_kinds::Flora;
 pub use footprint::Footprint;
+pub mod base_net;
 mod map;
 pub mod marks;
 pub mod music;
@@ -154,6 +155,7 @@ impl Plugin for GameplayPlugin {
         map::plugin(app);
         held::plugin(app);
         terra_survival::hands_net::plugin(app);
+        base_net::plugin(app);
         worn::plugin(app);
         save::plugin(app);
         title::plugin(app);

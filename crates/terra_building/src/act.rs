@@ -25,6 +25,8 @@
 //! the acts' thread, against the base they leave there, so a dozen made in one frame cost
 //! the frame a dozen copies of nothing rather than a dozen waits.
 
+mod told;
+
 use bevy::{ecs::system::SystemParam, prelude::*};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
