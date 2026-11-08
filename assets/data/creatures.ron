@@ -246,6 +246,34 @@
         ],
     ),
     (
+        // Wood pigeons, the big birds of wood and field: feeding on the ground in a loose
+        // party and clattering up together into the crowns; seen across a meadow where a
+        // finch is not (D647).
+        name: "Wood pigeon",
+        model: ("models/creatures/Pigeon.glb", 1.0),
+        clips: (idle: "Idle", walk: "Walk", run: "Walk", eat: "Peck", attack: "Idle", death: "Death", fly: "Fly", paces: (0.207, 0.207)),
+        health: 2.0,
+        walk_mps: 0.3,
+        run_mps: 0.24,
+        body: (radius: 0.06, weight: 0.3),
+        temper: Shy(flees_within_m: 12.0, flees_s: 2.0),
+        refuge: Flies(10.0, 30.0),
+        moves: Flies(10.0),
+        lives: About(per_ha: 5.0, group: (3, 7)),
+        niche: (warmth_c: (5.0, 30.0), haunts: [Woods, Open]),
+        seen_m: 90.0,
+        stride: (0.1, 0.0),
+        feet: Skitter,
+        voice: Silent,
+        blood: Red,
+        lies_s: 60.0,
+        coat: (summer: (0.95, 0.92, 0.8), strays: 0.15, moults: false),
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.03),
+            (joint: "Body", part: Body, radius_m: 0.07),
+        ],
+    ),
+    (
         name: "Brown hare",
         model: ("models/creatures/Hare.glb", 1.0),
         clips: (idle: "Idle", walk: "Walk", run: "Run", eat: "Eat", attack: "Idle", death: "Death", paces: (0.433, 11.0)),
