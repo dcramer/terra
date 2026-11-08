@@ -371,5 +371,7 @@
     // and the shop windows mirror the lamps, signs and fronts, not black. Its diffuse at
     // 0.4 (j2): at the full 1 it lifted all the shade alike, the lamps' pools against the
     // dark between them flattened and the saturation fell 0.08 (round 261107-1545).
-    reflect: (at: (0.0, 1.5, -0.5), diffuse: 0.4),
+    // Boxed to the street (j4): the north fronts' faces at z -6.9, the south shops' at
+    // 6.9, its 70 m length, 24 m up, so the fronts and lamps mirror where they stand.
+    reflect: (at: (0.0, 1.5, -0.5), diffuse: 0.4, bounds: (70.0, 24.0, 15.0)),
 )
