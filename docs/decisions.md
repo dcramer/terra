@@ -105,6 +105,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D559](decisions/D559.md) | The hewn mine is the second dungeon theme built, after the barrow halls | Design | Developers | Decided | The dungeon themes of D527 are built in this order so… |
 | [D591](decisions/D591.md) | Natural caves are part of core world design | Design | Developers | Decided | Natural caves are part of how a world is generated… |
 | [D598](decisions/D598.md) | Tree crowns fuller, of many smaller sprays in layered masses, and warmer in colour | Design | Developers | Decided | Every tree the game grows (the lush forest's Scots pines… |
+| [D641](decisions/D641.md) | A realm's gate is placed from its seed on ground a walk from the start reaches | Tech | Agent | Decided | A world's gate stands where `terra_land::gate::find`… |
 
 ## The player and survival
 

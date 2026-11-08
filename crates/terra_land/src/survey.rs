@@ -236,9 +236,10 @@ impl Grid {
         self.walkable[k]
     }
 
-    /// A walk from the cells round one, where a base may stand (that cell may be a lake's),
-    /// over dry cells no steeper than a walker climbs, kept within `half` cells of it.
-    pub fn walk(&self, (column, row): (usize, usize), half: usize) -> Walk {
+    /// The cells a walk reaches from the cells round one, where a base may stand (that cell
+    /// may be a lake's), over dry cells no steeper than a walker climbs, kept within `half`
+    /// cells of it.
+    pub fn reached(&self, (column, row): (usize, usize), half: usize) -> Vec<bool> {
         let n = self.region.cells;
         let (low_c, high_c) = (column.saturating_sub(half), (column + half).min(n - 1));
         let (low_r, high_r) = (row.saturating_sub(half), (row + half).min(n - 1));
@@ -269,6 +270,15 @@ impl Grid {
                 }
             }
         }
+        reached
+    }
+
+    /// What that walk reaches ([`Grid::reached`]), in square metres by biome.
+    pub fn walk(&self, (column, row): (usize, usize), half: usize) -> Walk {
+        let n = self.region.cells;
+        let (low_c, high_c) = (column.saturating_sub(half), (column + half).min(n - 1));
+        let (low_r, high_r) = (row.saturating_sub(half), (row + half).min(n - 1));
+        let reached = self.reached((column, row), half);
         let cell_m2 = CELL_M * CELL_M;
         let mut walk = Walk {
             land_m2: (0.0, 0.0),

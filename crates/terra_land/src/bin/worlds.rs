@@ -11,7 +11,7 @@ use std::time::Instant;
 use terra_core::{PlanetSpec, Seed};
 use terra_land::fingerprint::{self, Fingerprint};
 use terra_land::survey::{self, Biome, Survey};
-use terra_land::{Land, PLANET_START, ground, spawn, start_climate};
+use terra_land::{Land, PLANET_START, gate, ground, spawn, start_climate};
 
 const USAGE: &str = "cargo xtask worlds [--seeds 1-128] [--radius 30000] [--out target/worlds] [--against <an earlier worlds.tsv>]
   --seeds    the seeds swept, first to last
@@ -85,6 +85,9 @@ struct World {
     /// The start's direction, its bits hashed, for another run to compare.
     start_print: u64,
     survey: Survey,
+    /// What is wrong with the world's gate (`terra_land::gate`): none found from its start,
+    /// or one a walker does not reach.
+    gate_faults: Vec<String>,
 }
 
 fn run() -> Result<bool, String> {
@@ -118,6 +121,14 @@ fn run() -> Result<bool, String> {
                 terra_gen::hash::splitmix64(sum ^ u64::from(x.to_bits()))
             }),
             survey: survey::of(&land, start),
+            gate_faults: match gate::find(&land, start) {
+                Some(gate) => gate::faults(&land, start, gate),
+                None => vec![format!(
+                    "no gate: no ground {} to {} m from the start is level, dry and reached on foot (terra_land::gate)",
+                    gate::NEAR_M,
+                    gate::FARTHEST_M
+                )],
+            },
         }
     });
     let slowest = worlds.iter().map(|w| w.search_s).fold(0.0, f32::max);
@@ -130,7 +141,8 @@ fn run() -> Result<bool, String> {
     let mut ok = true;
     let mut invalid = 0;
     for world in &worlds {
-        let faults = world.survey.faults();
+        let mut faults = world.survey.faults();
+        faults.extend(world.gate_faults.iter().cloned());
         if !faults.is_empty() {
             invalid += 1;
             ok = false;

@@ -11,6 +11,7 @@
 pub mod drift;
 pub mod fingerprint;
 pub mod frame;
+pub mod gate;
 pub mod ground;
 pub mod heath;
 pub mod horizon;
