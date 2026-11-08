@@ -159,6 +159,13 @@
     ],
     light: (preset: "desert-day"),
     weather: (wind: (1.4, 0.3)),
+    // Play's roster (`--play`, play.rs): each foe at (x, z) m from the hero at the focus,
+    // facing him; the first where the ruin's ogre stands from its knight, so the ruin's
+    // scripted click strikes it here too, the second behind him on the road.
+    foes: [
+        (model: "models/iso/ogre.glb", at: (2.0, -1.4)),
+        (model: "models/iso/ogre.glb", at: (-2.2, 1.8)),
+    ],
     ground: (
         // The verges: a dead lot's dirt of broken concrete and brick rubble in dust, sand
         // drifted into it, as the junk lot's and the derelict lot's ground (refs/wasteland).

@@ -54,6 +54,10 @@ pub struct Biome {
     /// None by default: no image-based light.
     #[serde(default)]
     pub reflect: Option<super::reflect::Reflections>,
+    /// Play mode's roster: the foes about the hero (play.rs spawns them on a street; mob AI
+    /// and encounters read them, never a list of their own). None by default.
+    #[serde(default)]
+    pub foes: Vec<Foe>,
 }
 
 /// The kind of a reference and a still.
@@ -626,6 +630,16 @@ pub struct Effect {
 pub struct Life {
     pub kind: String,
     pub count: u32,
+}
+
+/// One of play mode's foes (`--play`): a model of `assets/models/iso/` standing `at` (x, z) m
+/// from the hero's start, facing him (play.rs). A new foe is a line of a biome's file, never
+/// a list in code (D136).
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Foe {
+    pub model: String,
+    pub at: (f32, f32),
 }
 
 fn one() -> f32 {

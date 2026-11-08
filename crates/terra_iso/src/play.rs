@@ -81,22 +81,22 @@ pub fn plugin(app: &mut App) {
     // The street stages no fight, so nothing else hangs the sword on its hero (held.rs) or
     // draws his blows: its stage (the effects aim at it from Startup) and play's effects.
     let layout = app.world().get_resource::<Args>().and_then(|a| a.layout);
-    let street = app
+    let stage = app
         .world()
         .get_resource::<Biome>()
-        .and_then(|b| b.street.clone());
+        .and_then(|b| Some(street_stage(b.street.as_ref()?, &b.foes)));
     if layout == Some(Layout::Street)
-        && let Some(st) = street
+        && let Some(stage) = stage
     {
-        app.insert_resource(street_stage(&st))
+        app.insert_resource(stage)
             .add_plugins((crate::ruin::held::plugin, crate::ruin::effects::played));
     }
 }
 
-/// The street's foes in play (it stages none), from its hero: the ruin's ogre where the
-/// ruin's stands from its knight (so the ruin's scripted click strikes it here too), and a
-/// second behind him on the road.
-const STREET_FOES: [Vec2; 2] = [Vec2::new(2.0, -1.4), Vec2::new(-2.2, 1.8)];
+/// Where a foe of the biome's roster stands from the hero (its `at`, kit/biome.rs `Foe`).
+fn off(foe: &crate::kit::biome::Foe) -> Vec2 {
+    Vec2::new(foe.at.0, foe.at.1)
+}
 
 /// The street's floor at `p`: the pavements the kerb's rise up, the road at 0.
 fn street_floor(st: &crate::kit::street::Street, p: Vec2) -> f32 {
@@ -107,12 +107,16 @@ fn street_floor(st: &crate::kit::street::Street, p: Vec2) -> f32 {
     }
 }
 
-/// The street's stage: its hero at the focus, his first foe the one his blow aims at.
-fn street_stage(st: &crate::kit::street::Street) -> crate::ruin::effects::Stage {
+/// The street's stage: its hero at the focus, the roster's first foe the one his blow aims
+/// at (with none, the way ahead of him).
+fn street_stage(
+    st: &crate::kit::street::Street,
+    foes: &[crate::kit::biome::Foe],
+) -> crate::ruin::effects::Stage {
     let at = Vec2::new(st.focus.0, st.focus.1);
     crate::ruin::effects::Stage {
         knight: at,
-        foe: at + STREET_FOES[0],
+        foe: at + foes.first().map_or(Vec2::Y, off),
         target: at,
         floor: street_floor(st, at),
     }
@@ -206,7 +210,10 @@ fn street_hero(
     biome: Option<Res<Biome>>,
     asset: Res<AssetServer>,
 ) {
-    let Some(st) = biome.and_then(|b| b.street.clone()) else {
+    let Some(biome) = biome else {
+        return;
+    };
+    let Some(st) = biome.street.clone() else {
         return;
     };
     if args.layout != Some(Layout::Street) {
@@ -228,19 +235,26 @@ fn street_hero(
             once: false,
         },
     ));
-    let ogre = "models/iso/ogre.glb";
-    for off in STREET_FOES {
+    for foe in &biome.foes {
+        let (model, off) = (foe.model.as_str(), off(foe));
         let p = at + off;
         let yaw = libm::atan2f((-off).x, (-off).y);
         let floor = street_floor(&st, p);
-        let foe = crate::scene::model(&mut commands, &asset, ogre, p.extend(floor).xzy(), yaw, 1.0);
+        let foe = crate::scene::model(
+            &mut commands,
+            &asset,
+            model,
+            p.extend(floor).xzy(),
+            yaw,
+            1.0,
+        );
         // Darker than the ground about it as the ruin's (fight.rs `value`), a faint rim as
         // the street's people, its contact shadow under its feet (kit/contact.rs).
         commands.entity(foe).insert((
             crate::rim::Fighter::valued(0.5, 0.35),
             crate::kit::contact::Feet { floor },
             Pose {
-                gltf: asset.load(ogre),
+                gltf: asset.load(model.to_owned()),
                 clip: "idle",
                 at: 0.0,
                 once: false,
@@ -539,24 +553,45 @@ mod tests {
         assert_eq!(screen_move(Vec2::ZERO, YAW), Vec2::ZERO);
     }
 
-    /// The street's foes stand in reach of the hero, each on its own floor (the road or the
-    /// pavement), and its stage aims his blow at the first.
+    /// Each street's roster (its file's `foes`) is models that exist, standing about the
+    /// hero clear of his body and the first within his blow's reach, which its stage aims at.
     #[test]
     fn the_streets_foes_stand_in_reach() {
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        for name in ["neon-street", "wasteland"] {
+            let biome = crate::kit::biome::Biome::load(name).unwrap();
+            let st = biome.street.clone().unwrap();
+            assert!(!biome.foes.is_empty(), "{name}: play's roster is empty");
+            let stage = street_stage(&st, &biome.foes);
+            assert_eq!(stage.knight, Vec2::new(st.focus.0, st.focus.1));
+            assert_eq!(stage.floor, street_floor(&st, stage.knight));
+            for foe in &biome.foes {
+                assert!(
+                    assets.join(&foe.model).is_file(),
+                    "{name}: no {}",
+                    foe.model
+                );
+                assert!(
+                    off(foe).length() > 1.5,
+                    "{name} {foe:?}: too close to swing at"
+                );
+            }
+            let first = off(&biome.foes[0]);
+            assert!(
+                first.length() <= REACH,
+                "{name}: the first foe out of reach"
+            );
+            assert_eq!(stage.foe, stage.knight + first);
+        }
         let st = crate::kit::biome::Biome::load("neon-street")
             .unwrap()
             .street
             .unwrap();
-        let stage = street_stage(&st);
-        assert_eq!(stage.knight, Vec2::new(st.focus.0, st.focus.1));
-        assert_eq!(stage.floor, street_floor(&st, stage.knight));
-        for off in STREET_FOES {
-            let foe = stage.knight + off;
-            assert!(in_arc(stage.knight, off.normalize(), foe), "{off}");
-            assert!(off.length() > 1.5, "{off}: too close to swing at");
-        }
-        assert_eq!(stage.foe, stage.knight + STREET_FOES[0]);
         assert_eq!(street_floor(&st, Vec2::ZERO), 0.0, "the road");
+        assert_eq!(
+            street_stage(&st, &[]).foe,
+            Vec2::new(st.focus.0, st.focus.1) + Vec2::Y
+        );
     }
 
     /// The swing faces the click: the model's +z turned onto the way to it, and only what

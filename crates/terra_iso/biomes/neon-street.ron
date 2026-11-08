@@ -294,6 +294,13 @@
     // The city's own glow off the low cloud a little up from the preset's 1.5 nits (iso-kit
     // j51), so the bins, the car and the fronts' foot read as forms between the pools.
     light: (preset: "city-night-rain", overrides: (nits: 2.0)),
+    // Play's roster (`--play`, play.rs): each foe at (x, z) m from the hero at the focus,
+    // facing him; the first where the ruin's ogre stands from its knight, so the ruin's
+    // scripted click strikes it here too, the second behind him on the road.
+    foes: [
+        (model: "models/iso/ogre.glb", at: (2.0, -1.4)),
+        (model: "models/iso/ogre.glb", at: (-2.2, 1.8)),
+    ],
     // The kit's water (kit/water.rs) standing in the street's `puddled` patches, a few
     // millimetres over the road and the pavements: a clear film on the dark wet floor that
     // mirrors the lamps, signs and fronts (at the marsh's lift), each light's streak long
