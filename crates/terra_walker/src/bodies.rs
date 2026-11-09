@@ -68,6 +68,11 @@ pub struct Solid {
     pub half: Vec3,
 }
 
+/// Within this of a player a body is kept out of what stands every tick; further off, one
+/// tick in so many.
+const NEAR_M: f32 = 30.0;
+const FAR_EVERY: u32 = 4;
+
 pub fn plugin(app: &mut App) {
     app.add_systems(FixedUpdate, keep_apart.in_set(Sim::Resolve));
 }
@@ -96,17 +101,20 @@ pub(crate) fn keep_apart(
     obstacles: Res<Obstacles>,
     movers: Option<Res<Movers>>,
     players: Query<&Transform, With<Player>>,
-    mut bodies: Query<(&Body, &mut Transform), Without<Player>>,
+    mut bodies: Query<(Entity, &Body, &mut Transform), Without<Player>>,
     mut filed: Local<SpatialHash<usize>>,
     mut standing: Local<SpatialHash<()>>,
+    mut settled: Local<Settled>,
+    mut tick: Local<u32>,
 ) {
+    *tick = tick.wrapping_add(1);
     let mut all: Vec<_> = bodies.iter_mut().collect();
-    let widest = all.iter().map(|(body, _)| body.radius).fold(0.0, f32::max);
+    let widest = (all.iter().map(|(_, body, _)| body.radius)).fold(0.0, f32::max);
     filed.clear();
     filed.extend(
         all.iter()
             .enumerate()
-            .map(|(index, (_, transform))| (transform.translation, index)),
+            .map(|(index, (_, _, transform))| (transform.translation, index)),
     );
     // A soft pair parts by this share of its overlap a tick (a man's kind's time, as the
     // mover's soft pairs); with no walk, at once.
@@ -118,13 +126,13 @@ pub(crate) fn keep_apart(
     };
     let mut moved = vec![Vec3::ZERO; all.len()];
     for i in 0..all.len() {
-        let (a, here) = (*all[i].0, all[i].1.translation);
+        let (a, here) = (*all[i].1, all[i].2.translation);
         let up = here.normalize();
         for &(there, j) in filed.near(here, a.radius + widest) {
             if j <= i {
                 continue;
             }
-            let b = *all[j].0;
+            let b = *all[j].1;
             let apart = (here - there).reject_from(up);
             let reach = a.radius + b.radius;
             if apart.length_squared() >= reach * reach {
@@ -144,8 +152,29 @@ pub(crate) fn keep_apart(
     let walker = Walker::default().radius;
     standing.clear();
     standing.extend(players.iter().map(|player| (player.translation, ())));
-    for (index, (body, transform)) in all.iter_mut().enumerate() {
+    settled.forget_the_gone(all.len());
+    for (index, (entity, body, transform)) in all.iter_mut().enumerate() {
         if body.weight == 0.0 {
+            continue;
+        }
+        // One at rest where it was last settled, with nobody pushing it and no player in
+        // reach, is where it belongs still: most of a land's animals at any moment, and
+        // asking the trees and rocks about each of them every tick was most of this step
+        // (1.9 ms a frame with 170 about).
+        let pushed = moved[index] != Vec3::ZERO;
+        let reach = body.radius + walker;
+        let by_player = standing.near(transform.translation, reach).next().is_some();
+        if !pushed && !by_player && settled.at(*entity) == Some(transform.translation) {
+            continue;
+        }
+        // Far from every player, what stands is asked of one tick in four, each body on its
+        // own: an animal steers round trunks itself (its mind's), this is what catches it
+        // when it does not, and a sixteenth of a second inside a trunk a field away is
+        // not seen.
+        let far = !players.iter().any(|player| {
+            player.translation.distance_squared(transform.translation) < NEAR_M * NEAR_M
+        });
+        if far && !pushed && (*tick).wrapping_add(entity.index_u32()) % FAR_EVERY != 0 {
             continue;
         }
         let start = transform.translation + moved[index];
@@ -166,6 +195,29 @@ pub(crate) fn keep_apart(
         at = obstacles.push_out(at, body.radius, Walker::default().step_up);
         if at != transform.translation {
             transform.translation = planet.ground_at(at);
+        }
+        settled.keep(*entity, transform.translation);
+    }
+}
+
+/// Where each body was when it was last looked at against what stands, so one that has not
+/// moved since is not looked at again.
+#[derive(Default)]
+pub(crate) struct Settled(bevy::platform::collections::HashMap<Entity, Vec3>);
+
+impl Settled {
+    fn at(&self, body: Entity) -> Option<Vec3> {
+        self.0.get(&body).copied()
+    }
+
+    fn keep(&mut self, body: Entity, at: Vec3) {
+        self.0.insert(body, at);
+    }
+
+    /// Bodies gone leave their places behind: dropped once they outnumber those here.
+    fn forget_the_gone(&mut self, here: usize) {
+        if self.0.len() > here * 2 + 64 {
+            self.0.clear();
         }
     }
 }
@@ -267,5 +319,73 @@ mod tests {
         let (bound, spider) = (Body::fixed(0.4), Body::new(0.5, 1.0));
         assert_eq!(shares(bound, spider), (0.0, 1.0));
         assert_eq!(shares(bound, bound), (0.0, 0.0));
+    }
+
+    /// A body at rest is left alone tick after tick, and is still moved the tick something
+    /// comes on it: a player stepping into it, or another body put on top of it. Skipped
+    /// while it rests, it must not stay skipped then.
+    #[test]
+    fn a_settled_body_is_left_until_something_comes_on_it() {
+        let (mut world, ground) = world();
+        // One system kept from tick to tick, so what it remembers of each body is kept.
+        let mut tick = Schedule::default();
+        tick.add_systems(keep_apart);
+        let hare = world
+            .spawn((Body::new(0.3, 1.0), Transform::from_translation(ground)))
+            .id();
+        let at = |world: &World| world.get::<Transform>(hare).unwrap().translation;
+        for _ in 0..3 {
+            tick.run(&mut world);
+        }
+        let rested = at(&world);
+        // A player steps onto it: it gives way.
+        let player = world
+            .spawn((Player, Transform::from_translation(rested + Vec3::X * 0.1)))
+            .id();
+        tick.run(&mut world);
+        let gave = at(&world);
+        assert!(
+            gave.distance(rested) > 0.05,
+            "it did not give way to the player"
+        );
+        world.despawn(player);
+        // Settled again where it now is, then another body is put on it: both part.
+        for _ in 0..2 {
+            tick.run(&mut world);
+        }
+        let boar = world
+            .spawn((
+                Body::new(0.4, 1.0),
+                Transform::from_translation(at(&world) + Vec3::Z * 0.1),
+            ))
+            .id();
+        let before = apart(&world, hare, boar);
+        tick.run(&mut world);
+        assert!(apart(&world, hare, boar) > before + 0.05);
+    }
+
+    /// Far from every player a body is asked about what stands one tick in four, so one that
+    /// walks into a trunk is out of it within four ticks, not left there.
+    #[test]
+    fn a_far_body_in_a_trunk_is_out_of_it_within_four_ticks() {
+        let (mut world, ground) = world();
+        world.resource_mut::<Obstacles>().add(ground, 0.5);
+        let boar = world
+            .spawn((
+                Body::new(0.4, 1.0),
+                Transform::from_translation(ground + Vec3::X * 0.2),
+            ))
+            .id();
+        let mut tick = Schedule::default();
+        tick.add_systems(keep_apart);
+        for _ in 0..FAR_EVERY {
+            tick.run(&mut world);
+        }
+        let at = world.get::<Transform>(boar).unwrap().translation;
+        let off = (at - ground).reject_from(ground.normalize()).length();
+        assert!(
+            off >= 0.85,
+            "it stands {off} m from the trunk's middle, inside it"
+        );
     }
 }
