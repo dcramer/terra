@@ -21,7 +21,7 @@ Not the first realm's trees in another colour. What stands where trees would is 
 
 Which of these, and how strange, is the developers' to say; the first to make is the cap tree, as it is the least like a tree.
 
-**What it costs** (a reading, not a bench: the high preset on the Radeon 8060S, a full-size world, standing where the player arrives): the first realm at its start 41 frames a second; this realm 62, its cap trees its forest (1,500 a square kilometre, drawn to 450 m, some 950 in view) and one in sixteen of the first realm's trees (`trees`, a share of its own beside `plants`). The cap forest first ran at 16: each tree spawned a crown, far crown and shadow stand-ins of empty meshes, six parts in nine; a leafless tree is now its wood alone (`grown::drawn`), and drawn only to 150 m it ran no faster.
+**What it costs** (a reading, not a bench: the high preset on the Radeon 8060S, a full-size world, standing where the player arrives): the first realm at its start 41 frames a second; this realm 57, its forest its own: cap trees 900 a square kilometre drawn to 450 m, frond spires 500 to 320 m and fan trees 300 to 280 m, rows of `flora.ron` that grow `Stood` (the two last the existing grower's habits in the realm's fern and rush cards, data alone), one part a 20 m cell and one in sixteen of the first realm's trees (`trees`, a share of its own beside `plants`). The cap forest first ran at 16: each tree spawned a crown, far crown and shadow stand-ins of empty meshes, six parts in nine; a leafless tree is now its wood alone (`grown::drawn`), and drawn only to 150 m it ran no faster.
 
 ## Its parts, each by an existing pipeline
 

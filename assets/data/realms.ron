@@ -51,7 +51,9 @@
         // Cap trees through the forest with small great fungi under them, crystal here and there, a monolith now and then,
         // and the few machines of an older making that still stand.
         parts: [
-            (grown: Some("Cap tree"), tall_m: Some((9.0, 22.0)), a_km2: 1500.0, seen_m: Some(450.0)),
+            (grown: Some("Cap tree"), tall_m: Some((9.0, 22.0)), a_km2: 900.0, seen_m: Some(450.0)),
+            (grown: Some("Frond spire"), tall_m: Some((7.0, 15.0)), a_km2: 500.0, seen_m: Some(320.0)),
+            (grown: Some("Fan tree"), tall_m: Some((5.0, 10.0)), a_km2: 300.0, seen_m: Some(280.0)),
             (file: "FarGiantFungus", a_km2: 70.0, seen_m: Some(190.0)),
             (file: "FarCrystalSpire", a_km2: 50.0, seen_m: Some(230.0)),
             (file: "FarMonolith", a_km2: 12.0, seen_m: Some(280.0)),

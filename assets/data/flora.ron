@@ -84,6 +84,43 @@
             size: (9.0, 22.0),
         ),
         (
+            // The far realm's frond spire (docs/realm-two.md): a tall narrow stem in whorls
+            // of great fronds, stood by the realm's rules as its cap trees are.
+            name: "Frond spire",
+            grown: Tree((
+                habit: Upright,
+                bark: "bark_brown_02",
+                bark_m: 2.0,
+                bark_tint: (1.3, 1.35, 1.5),
+                leaves: "fern",
+                tint: (1.1, 1.2, 1.25),
+                clump_m: 2.8,
+                trunk: 0.02,
+            )),
+            variants: 5,
+            sway: Tree,
+            grows: Stood,
+            size: (7.0, 15.0),
+        ),
+        (
+            // Its fan tree: a short thick bole under a wide low crown of rush blades.
+            name: "Fan tree",
+            grown: Tree((
+                habit: Spreading,
+                bark: "bark_brown_02",
+                bark_m: 2.5,
+                bark_tint: (1.4, 1.3, 1.5),
+                leaves: "rush",
+                tint: (1.15, 1.2, 1.3),
+                clump_m: 3.2,
+                trunk: 0.05,
+            )),
+            variants: 5,
+            sway: Tree,
+            grows: Stood,
+            size: (5.0, 10.0),
+        ),
+        (
             name: "Pine",
             grown: Tree((
                 habit: Conical,

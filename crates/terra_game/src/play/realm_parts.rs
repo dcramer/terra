@@ -26,9 +26,11 @@ use terra_world::realm::Realms;
 use terra_world::start::Start;
 
 /// The side of a cell, which holds one part at most, in metres, and how many cells round the
-/// player's the parts stand in: 510 m, past where the haze takes a part this size.
-const CELL_M: f32 = 30.0;
-const REACH_CELLS: i32 = 17;
+/// player's the parts stand in: 520 m, past where the haze takes a part this size. A realm's
+/// parts are at most 2,500 a square kilometre in all, one a cell: at 30 m a cell a forest of
+/// 1,500 stood 1,100.
+const CELL_M: f32 = 20.0;
+const REACH_CELLS: i32 = 26;
 /// A cell is let go this many cells past the reach, so a player pacing a cell's edge does
 /// not stand and fell the same ring.
 const SLACK_CELLS: i32 = 2;
