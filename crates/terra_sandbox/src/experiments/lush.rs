@@ -1189,7 +1189,10 @@ fn plant(
     mut mossy_scans: ResMut<floor::MossyScans>,
     mut far_forest: ResMut<Assets<far::FarForest>>,
     mut trunks: ResMut<terra_world::flora::Trunks>,
-    parting: Option<Res<terra_world::parting::Parting>>,
+    (parting, spec): (
+        Option<Res<terra_world::parting::Parting>>,
+        Option<Res<terra_world::instance::WorldSpec>>,
+    ),
     // Where the sun stands as the floor is laid, for what grows in its patches.
     sky: (
         Option<Res<terra_world::daylight::SkyPath>>,
@@ -1238,7 +1241,8 @@ fn plant(
     // sRGB 88, as the first of `BARKS` (D221, D264). Fallen logs are of it too.
     // The crowns' leaves, oak and conifer alike, are cards of the atlas grown plants use, so
     // all of them are drawn in one material (D222); the trees' materials are `Looks`.
-    let cards = Cards::read();
+    // Of the realm's own atlas, where it has one.
+    let cards = spec.map_or_else(Cards::read, |spec| Cards::of(&spec.kind));
     let looks = Looks::new(&assets, &mut materials, &mut plain, &cards, &wind);
     let FloorLooks {
         bark,

@@ -1,0 +1,33 @@
+{
+  "scan": "LeafSet016",
+  "form": "spray",
+  "leaves": 64,
+  "length": [
+    0.14,
+    0.19
+  ],
+  "shoots": 8,
+  "twig": [
+    0.38,
+    0.33,
+    0.27
+  ],
+  "thickness": 0.01,
+  "tone": 0.36,
+  "young": 0.15,
+  "old": 0.35,
+  "underside": 0.12,
+  "albedo": [
+    0.36,
+    0.47,
+    0.25
+  ],
+  "contrast": 1.5,
+  "roughness": 0.5,
+  "fold": 0.35,
+  "curl": 0.35,
+  "yellowed": 0.0,
+  "holes": 0.08,
+  "hues": 0.14,
+  "seed": 5
+}

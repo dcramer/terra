@@ -11,6 +11,7 @@
 //                 horizon, the zenith, the shade), multiplied in, linear, red green blue
 //   ground_low, ground_high, ground_steep, grass_dry, grass_lush, sand
 //                 the land's colours, sRGB red green blue; left out, the land's own
+//   foliage       its plants' leaves: a card atlas among the data, the first realm's cards' names
 //   ground_cover  how much of the grass and sand the ground could have is shown, 0 to 1
 //   plants        the share of the first realm's trees and undergrowth that grow, 0 to 1
 //   parts         what stands on its land by rule, each a catalogue item's model file
@@ -34,7 +35,11 @@
         grass_lush: Some((0.6, 0.22, 0.5)),
         sand: Some((0.62, 0.54, 0.72)),
         ground_cover: Some(1.0),
-        // Its leaves are not green: turned round the hue circle to teal and blue-green.
+        // Its leaves are its own: an atlas of teal and blue-green broadleaves, violet
+        // needles and plum bushes (assets/data/foliage_far.ron, art/textures/cards_far).
+        foliage: Some("foliage_far"),
+        // And every leaf and blade is turned a fifth of the way round the hue circle: its
+        // greens are teal, and the atlas's blue-violet bushes come out magenta and plum.
         plants_hue: Some(1.25),
         // A stand-in until the realm has creatures of its own (D642: the developers').
         animals: Some(["Red fox", "Brown hare"]),

@@ -6,6 +6,19 @@ Status: **a first slice built, 2026-11-08; its theme is the developers' (D642, L
 
 **A fantasy and science-fiction world, where the first realm is real and medieval** (D642, the developers, 2026-11-08: "great, and different than the first world"). Another world at a glance: a violet sky and a cool rose sun, a forest of teal leaves over rose and plum grass, plants of its own that glow at night, a land of its own shape, and the standing remains of an older, stranger making. Seen on 2026-11-08 it was the first realm's forest in another colour: its trees, its land's shapes and its grass were the first realm's. That is what is to change, in this order: its look by data (built: sky, sun, leaves, grass, soil), its own plants (grown kinds with their own habits, bark and leaf cards, D222), its night light, its land recipe, its parts (crystal, stone, machines: models, which cost credits), its small life, monsters and sound.
 
+## What grows in it (proposed, 2026-11-08; the developers: "we might not want regular looking trees", the trees' way of making being how to get whatever is chosen detailed)
+
+Not the first realm's trees in another colour. What stands where trees would is its own, each grown by rule as the forest's trees are (a skeleton by its kind, cards on it, a scanned or made surface, levels of detail and a far form: `terra_sandbox::experiments::lush`), so it is as detailed near and as cheap far:
+
+| Kind | What it is | Made as |
+|---|---|---|
+| Cap trees | Great fungi 8 to 25 m tall: a ribbed stalk, one or several wide caps in tiers, gills that glow at night | A grown skeleton (stalk and cap ribs) with cap and gill surfaces; the modelled FarGiantFungus is its small form |
+| Frond spires | A tall bare stem with whorls of long drooping fronds, lit at their tips | The conifer's skeleton with its whorls kept and its needles replaced by frond cards |
+| Fan trees | A low, wide, forking tree whose branches end in flat translucent fans | The oak's forking skeleton with fan cards at its tips |
+| Undergrowth | Plum and magenta bushes, cyan ferns, glowing tufts | The first realm's grown bushes, rosettes and tufts on the realm's own leaf atlas (`foliage_far`, built) |
+
+Which of these, and how strange, is the developers' to say; the first to make is the cap tree, as it is the least like a tree.
+
 ## Its parts, each by an existing pipeline
 
 | Part | In the first realm | In this one | By |

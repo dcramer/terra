@@ -16,12 +16,12 @@
 //! a material from the same tool.
 
 pub mod build;
+mod cards;
 mod climate;
 pub mod pivots;
 pub mod plants;
 pub mod tree;
 
-use crate::data;
 use bevy::{
     camera::visibility::{RenderLayers, VisibilityRange},
     image::ImageLoaderSettings,
@@ -32,6 +32,7 @@ use bevy::{
     render::{render_resource::AsBindGroup, storage::ShaderBuffer},
     shader::ShaderRef,
 };
+pub use cards::{Card, Cards};
 use serde::Deserialize;
 use terra_core::cooked;
 use terra_gen::Seed;
@@ -150,102 +151,6 @@ impl Grown {
             Grown::Rosette(def) => vec![def.card.as_str()],
             Grown::Tuft(def) => def.cards.iter().map(String::as_str).collect(),
         }
-    }
-}
-
-/// One card in the atlas: the top-left of its cell and how far across the cell is, the
-/// outline round its leaves in the atlas's coordinates, their average colour, linear, and,
-/// for a composed card, how long a leaf or needle on it is as a share of its width, so a
-/// plant can be grown with its leaves at their real size (D276).
-#[derive(Clone, Debug)]
-pub struct Card {
-    pub cell: Vec2,
-    pub across: f32,
-    pub outline: Vec<(f32, f32)>,
-    pub colour: Vec3,
-    pub leaf: Option<f32>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CardFile {
-    atlas: String,
-    normals: String,
-    cut: f32,
-    across: f32,
-    cards: HashMap<String, CardEntry>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CardEntry {
-    cell: (f32, f32),
-    outline: Vec<(f32, f32)>,
-    colour: (f32, f32, f32),
-    /// How long its leaves are as a share of its width; 0, or left out, for a picture.
-    #[serde(default)]
-    leaf: f32,
-}
-
-/// The cards there are (`assets/data/foliage.ron`), the atlas they are in, and its normal
-/// map: each leaf's relief and tilt, in OpenGL's convention, flat for cards drawn from pictures.
-#[derive(Resource)]
-pub struct Cards {
-    pub atlas: String,
-    pub normals: String,
-    pub cut: f32,
-    cards: HashMap<String, Card>,
-    file: &'static str,
-}
-
-impl Cards {
-    pub const FILE: &str = "foliage.ron";
-
-    pub fn read() -> Self {
-        Self::read_file(Self::FILE)
-    }
-
-    /// The cards of another atlas made the same way, such as the forest floor's litter
-    /// (`litter.ron`).
-    pub fn read_file(name: &'static str) -> Self {
-        let file: CardFile = data::read(name);
-        let cards = file
-            .cards
-            .into_iter()
-            .map(|(name, entry)| {
-                let colour = Color::srgb(entry.colour.0, entry.colour.1, entry.colour.2)
-                    .to_linear()
-                    .to_vec3();
-                (
-                    name,
-                    Card {
-                        cell: Vec2::new(entry.cell.0, entry.cell.1),
-                        across: file.across,
-                        outline: entry.outline,
-                        colour,
-                        leaf: (entry.leaf > 0.0).then_some(entry.leaf),
-                    },
-                )
-            })
-            .collect();
-        Self {
-            atlas: file.atlas,
-            normals: file.normals,
-            cut: file.cut,
-            cards,
-            file: name,
-        }
-    }
-
-    /// A card by name. A name the file lacks is a mistake in the data, caught by a test.
-    pub fn get(&self, name: &str) -> &Card {
-        self.cards
-            .get(name)
-            .unwrap_or_else(|| panic!("no card {name} in {}", self.file))
-    }
-
-    pub fn has(&self, name: &str) -> bool {
-        self.cards.contains_key(name)
     }
 }
 
@@ -865,11 +770,21 @@ fn draw_children(plant: &mut ChildSpawnerCommands, variant: &Variant, height: f3
     }
 }
 
+/// The cards of the world entered: its realm's (`Cards::of`).
+fn realm_cards(mut commands: Commands, spec: Res<crate::instance::WorldSpec>) {
+    commands.insert_resource(Cards::of(&spec.kind));
+}
+
 /// Grown plants' material, its climate and its relief at the quality preset's depth (a
 /// bark's furrows, D218).
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<Foliage>::default())
         .insert_resource(Cards::read())
+        // A world's plants grow from its realm's own cards.
+        .add_systems(
+            OnEnter(crate::instance::InWorld),
+            realm_cards.in_set(crate::instance::Building::Stage),
+        )
         .add_systems(Update, crate::timed!("flora", climate::follow_climate))
         .add_systems(
             PostUpdate,
@@ -910,7 +825,7 @@ mod tests {
     #[test]
     fn a_card_is_known_as_the_kind_whose_year_names_it() {
         let cards = Cards::read();
-        let years: Vec<terra_climate::LeafYear> = data::read(crate::climate::YEARS_FILE);
+        let years: Vec<terra_climate::LeafYear> = crate::data::read(crate::climate::YEARS_FILE);
         let fields = crate::climate::ClimateFields::for_tests(years.clone());
         let maps = crate::climate::ClimateMaps::default();
         let climate = FoliageClimate::from_maps(&maps, Some(&fields), Some(&cards));

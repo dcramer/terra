@@ -54,6 +54,11 @@ pub struct Realm {
     /// given.
     #[serde(default)]
     pub ground: Option<String>,
+    /// Its plants' leaves: a card atlas among the data (`assets/data/<name>.ron`, made by
+    /// `tools/textures`' cards step with the first realm's cards' names); the first realm's
+    /// if not given.
+    #[serde(default)]
+    pub foliage: Option<String>,
     /// The kinds of creature that live in it, by name (`data/creatures.ron`): every kind
     /// where it says nothing, as the first realm does.
     #[serde(default)]
@@ -193,9 +198,17 @@ mod tests {
         let realms = Realms::read();
         assert_eq!(realms.beyond("world"), "industrial");
         assert_eq!(realms.beyond("industrial"), "world");
-        // The first realm's plants keep their own colours; the industrial one's are turned.
-        assert_eq!(realms.of("world").unwrap().plants_hue, None);
-        assert!(realms.of("industrial").unwrap().plants_hue.is_some());
+        // The first realm's plants keep their own leaves; the far one has its own atlas,
+        // which is there with its normal map.
+        assert_eq!(realms.of("world").unwrap().foliage, None);
+        let leaves = realms.of("industrial").unwrap().foliage.as_deref().unwrap();
+        let cards = crate::grown::Cards::read_file(&format!("{leaves}.ron"));
+        for picture in [&cards.atlas, &cards.normals] {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../assets")
+                .join(picture);
+            assert!(path.exists(), "{} is missing", path.display());
+        }
         // Every kind lives in the first realm; the industrial one names its few.
         assert!(realms.lives("world", "Troll") && realms.lives("world", "Chaffinch"));
         assert!(realms.lives("industrial", "Red fox") && !realms.lives("industrial", "Troll"));
