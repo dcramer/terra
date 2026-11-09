@@ -221,8 +221,13 @@ try {
       remote(host, "wait", "Placed a Claim stone", "--timeout", "20");
       claimed = true;
     } catch {
-      // Two seconds' walk on, and the walk ended before the menu is opened again.
-      remote(host, "press", "esc", `w:${at(120)}`);
+      // Refused where it stood (on some worlds the start is by the village, and a claim
+      // keeps clear of it): moved twenty metres off, another way each try, since walking
+      // on went straight ahead and sometimes into the village.
+      remote(host, "press", "esc");
+      const here = (JSON.parse(remote(host, "call", "play.state")) as { at: [number, number] }).at;
+      const [east, south] = [[20, 0], [0, 20], [-20, -20]][tries % 3];
+      remote(host, "call", "play.warp", JSON.stringify({ at: [here[0] + east, here[1] + south] }));
       await sleep(3);
     }
   }
