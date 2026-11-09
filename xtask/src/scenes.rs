@@ -77,6 +77,32 @@ pub(crate) const SCENES: &[Scene] = &[
         frames: "3600",
     },
     Scene {
+        name: "far-walk",
+        about: "the far realm (D642) walked from where a world begins in it, out and round through its cap forest, its frond spires and fan trees, its small life and its animals about: the whole game in a realm that is not the first",
+        args: &[
+            "--experiment",
+            "play",
+            "--radius",
+            SCALE_RADIUS,
+            "--seed",
+            "3",
+            "--realm",
+            "industrial",
+            "--date",
+            "07-10",
+            "--time",
+            "13",
+            "--route",
+            "0,-90",
+            "--route",
+            "90,-90",
+            "--route",
+            "90,0",
+        ],
+        // 45 s at the scripted 1/60 s a frame.
+        frames: "2700",
+    },
+    Scene {
         name: "forest",
         about: "the lush forest spike: thousands of trees of leaf cards, grass, bushes",
         args: &[
