@@ -234,6 +234,14 @@ const DRAWS: &[Draw] = &[
         ..DRAW
     },
     Draw {
+        material: "FishMaterial (terra_creatures fish/look.rs), on a fish's model: NotShadowCaster",
+        vertex: Some("fish"),
+        prepass_vertex: Some("fish"),
+        alpha: &[Opaque, Mask],
+        meshes: &[&[Normals, Uvs, Tangents], &[Normals, Uvs]],
+        ..DRAW
+    },
+    Draw {
         material: "Glow (fire/glow.rs), on the props' models",
         fragment: Some("fire_glow"),
         alpha: &[Opaque, Mask],
