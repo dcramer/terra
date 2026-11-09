@@ -97,6 +97,10 @@ export type Prop = {
   match?: Record<string, [number, number, number]>;
   // Degrees about the up axis that turn its front toward the viewer; 0 if not given.
   turn?: number;
+  // Stood by its own shape, not on its widest side (a fish comes lying on its flank): its
+  // longest axis front to back, its thinnest across. 0 as it comes, 1 turned end for end, 2
+  // upside down, 3 both: chosen by looking at its sheet.
+  upright?: number;
   // Tripo's face limit for the generated model, before it is cut to the budget.
   faces?: number;
   // A building kit's piece laid along its length, such as a log or a board, which the game
@@ -183,6 +187,7 @@ export function refineArgs(prop: Prop, model: string, out: string, sheet: string
     String(prop.budget),
     String(prop.turn ?? 0),
     ...roles,
+    ...(prop.upright !== undefined ? [`--upright=${prop.upright}`] : []),
     ...(prop.flat ? ["--flat"] : []),
     ...(prop.along ? ["--along"] : []),
     ...(prop.palette ? [] : ["--textured"]),

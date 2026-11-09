@@ -85,8 +85,14 @@ src, out, sheet, size, budget, turn, *given = [
     a
     for a in args
     if a not in ("--flat", "--along", "--textured", "--block", "--mirror", "--grime")
-    and not a.startswith(("--grade=", "--dims=", "--anchor=", "--socket=", "--haft=", "--light="))
+    and not a.startswith(("--grade=", "--dims=", "--anchor=", "--socket=", "--haft=", "--light=", "--upright="))
 ]
+# --upright=N: stood by its own shape before it is placed, for what does not rest on its
+# widest side (a fish, made from its profile, comes lying on its flank): its longest axis
+# its front-to-back, its thinnest its side-to-side, the other up. Which end is its front and
+# which side up a shape does not say: N's first bit turns it end for end, its second upside
+# down, chosen by looking at the sheet.
+upright = next((int(a.split("=", 1)[1]) for a in args if a.startswith("--upright=")), None)
 size, budget, turn = float(size), int(budget), float(turn)
 # Below this longest side, in metres, a prop is small and its textures 1K (TEXTURE_PX).
 SMALL_M = 1.5
@@ -595,6 +601,23 @@ def level(me):
     return lean
 
 
+def stand_upright(me, flips):
+    """Stood by its own shape: its axis of most spread along the front-to-back line
+    (Blender's Y), of least spread across (X), the third up; turned end for end and upside
+    down as `flips` says."""
+    pts = np.array([v.co for v in me.vertices])
+    centre = pts.mean(axis=0)
+    _, _, axes = np.linalg.svd(pts - centre, full_matrices=False)
+    length, tall, thin = (Vector(axis) for axis in axes)
+    if flips & 1:
+        length = -length
+    if flips & 2:
+        tall = -tall
+    # A right-handed frame: across is what front and up leave.
+    across = length.cross(tall)
+    me.transform(Matrix((across, length, tall)).to_4x4() @ Matrix.Translation(-Vector(centre)))
+
+
 def lay_along(me):
     """A kit piece laid along its length: its axes of most and least spread turned to X and
     up, so a log lies straight along X however it was generated, then its middle on the
@@ -615,7 +638,11 @@ def place(ob):
     """Squared up, facing the standard way (Studio's +X front to glTF's +Z, Blender's -Y),
     turned by TURN, its longest side SIZE, standing on the origin."""
     me = ob.data
-    me.transform(Matrix.Rotation(math.radians(squaring(me) - 90.0 + turn), 4, "Z"))
+    if upright is None:
+        me.transform(Matrix.Rotation(math.radians(squaring(me) - 90.0 + turn), 4, "Z"))
+    else:
+        # Stood by its shape already (`stand_upright`): only its own turn is left.
+        me.transform(Matrix.Rotation(math.radians(turn), 4, "Z"))
     if mirror:
         # Hinged on its right: mirrored across, its faces turned back outward.
         me.transform(Matrix.Diagonal((-1, 1, 1, 1)))
@@ -782,6 +809,9 @@ elif along:
     leaned = 0.0
 elif block:
     leaned = square(ob.data)
+elif upright is not None:
+    stand_upright(ob.data, upright)
+    leaned = 0.0
 else:
     leaned = level(ob.data)
 if along:
