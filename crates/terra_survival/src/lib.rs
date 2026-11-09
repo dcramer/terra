@@ -17,6 +17,7 @@ pub mod bag;
 pub mod breath;
 pub mod catalogue;
 pub mod claim;
+pub mod claim_net;
 pub mod contract;
 pub mod crafting;
 pub mod death;

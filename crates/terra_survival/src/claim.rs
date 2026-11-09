@@ -66,7 +66,38 @@ pub struct Claim {
     across_m: f32,
 }
 
+/// The claims of players this game does not hold a `Claim` for: in a shared world, the other
+/// games' players', as the network tells them (`claim_net`). Anyone builds in any claim
+/// (D645), so these are asked with the players' own ([`builds_in`]).
+#[derive(Resource, Default)]
+pub struct Others(pub Vec<Claim>);
+
 impl Claim {
+    /// A claim told of from another game: where its stone stands and how far it has grown.
+    pub fn shown(centre: Vec3, step: usize, rule: &ClaimRule) -> Claim {
+        let mut claim = Claim {
+            stone: Some((Entity::PLACEHOLDER, centre)),
+            ..default()
+        };
+        claim.set_step(step, rule);
+        claim
+    }
+
+    /// The claim its player builds in where they stand, among the claims of this game's
+    /// players and the other games' (D645, [`builds_in`]); its own where it is not known
+    /// where they stand.
+    pub fn shared<'a>(
+        &'a self,
+        players: impl IntoIterator<Item = &'a Claim>,
+        others: Option<&'a Others>,
+        stands: Option<&Transform>,
+    ) -> &'a Claim {
+        let others = others.into_iter().flat_map(|others| others.0.iter());
+        stands.map_or(self, |stands| {
+            builds_in(self, players.into_iter().chain(others), stands.translation)
+        })
+    }
+
     pub fn across_m(&self) -> f32 {
         self.across_m
     }

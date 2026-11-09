@@ -641,7 +641,10 @@ pub(super) fn afford(
     look: Res<terra_bases::BuildLook>,
     props: Query<&Prop>,
     mut building: Building,
-    village: Option<Res<terra_survival::claim::Village>>,
+    (village, others): (
+        Option<Res<terra_survival::claim::Village>>,
+        Option<Res<terra_survival::claim::Others>>,
+    ),
     mut players: Query<
         (
             Entity,
@@ -665,9 +668,8 @@ pub(super) fn afford(
         .collect();
     let first_across = builds.claim.across_m[0];
     // Anyone builds in any claim (D645): each builds in the claim they stand in.
-    let every: Vec<Claim> = players
-        .iter()
-        .map(|(_, _, claim, ..)| claim.clone())
+    let every: Vec<Claim> = (players.iter().map(|(_, _, claim, ..)| claim.clone()))
+        .chain(others.iter().flat_map(|others| others.0.iter().cloned()))
         .collect();
     for (player, at, claim, mut builder, local) in &mut players {
         if builder.work.is_some() {

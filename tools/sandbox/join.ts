@@ -239,6 +239,22 @@ try {
   await until(`the host's base is ${built} and the friend's game has ${base(friend) || "none of it"}: the host orders every act done to the base where it stands, and a joined game makes them (play::base_net); the host said: ${remote(host, "said", "--all", "--containing", "Base:").trim().split("\n").slice(-3).join(" / ")}`, () => base(friend) === built, 30);
   console.log(`✓ the base is the same in both games: the host's room (${built}) stands in the friend's game too, and its claim stone beside it`);
 
+  // Anyone builds in any claim (D645): the friend, with no claim of its own, stands in the
+  // host's and lays a floor beside the room; it is done, and stands in both games. The friend's
+  // game is told how far the host's claim reaches (claim_net); before, it refused the friend
+  // there as outside any claim.
+  const spot = (JSON.parse(remote(host, "call", "play.state")) as { at: [number, number] }).at;
+  remote(host, "call", "net.place_guests", JSON.stringify({ at: [spot[0] + 1.5, spot[1]] }));
+  let floored = { done: false, refused: "not asked yet" } as { done: boolean; refused?: string };
+  await until(
+    () => `in its host's claim the friend's floor was refused: ${floored.refused} (anyone builds in any claim, D645: terra_survival::claim_net tells a claim's reach, claim::builds_in takes the claim a builder stands in)`,
+    () => (floored = JSON.parse(remote(friend, "call", "build.lay", JSON.stringify({ what: "floor", min: [5, 0, 0], max: [7, 0, 2], kind: "logs" }))) as typeof floored).done,
+    30,
+  );
+  const raised = base(friend);
+  await until(`the friend built in its host's claim and has ${raised}, the host ${base(host)}: a joined game's acts are asked of the host and ordered back (play::base_net)`, () => base(host) === raised, 30);
+  console.log(`✓ the friend built in its host's claim: its floor stands in both games (${raised})`);
+
   // What storage holds is the same in both games (netcode.md, step 5): the host sets down a
   // chest and leaves stone in it, which the friend's game shows in it; the friend leaves wood
   // in it, and the host's chest holds both.
