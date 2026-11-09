@@ -207,17 +207,26 @@ try {
   // By the hammer's menu, as a player does; where the host happens to aim on a world of
   // any seed, the stone is sometimes refused, so it is tried again a pace on.
   let claimed = false;
-  for (let tries = 0; tries < 3 && !claimed; tries++) {
-    remote(host, "press", "b@20", "2@30", "enter@40", "e@70:80");
+  // Keys are timed in frames, written here for 60 a second and paced to the rate the game
+  // runs at: at twice the rate the menu's steps came 80 ms apart and the pace on between
+  // tries was half as long, which left the host too near the village three times running.
+  const frame = () => (JSON.parse(remote(host, "call", "sandbox.status")) as { frame: number }).frame;
+  const [before, began] = [frame(), Date.now()];
+  await sleep(0.5);
+  const pace = Math.max(1, (frame() - before) / ((Date.now() - began) / 1000) / 60);
+  const at = (frames: number) => Math.round(frames * pace);
+  for (let tries = 0; tries < 4 && !claimed; tries++) {
+    remote(host, "press", `b@${at(20)}`, `2@${at(30)}`, `enter@${at(40)}`, `e@${at(70)}:${at(80)}`);
     try {
       remote(host, "wait", "Placed a Claim stone", "--timeout", "20");
       claimed = true;
     } catch {
-      remote(host, "press", "esc", "w:40");
-      await sleep(2);
+      // Two seconds' walk on, and the walk ended before the menu is opened again.
+      remote(host, "press", "esc", `w:${at(120)}`);
+      await sleep(3);
     }
   }
-  if (!claimed) throw new Error(`the host could not set down a claim stone in three tries (the hammer's menu: b, 2, enter, e held); it was told: ${remote(host, "said", "--all", "--containing", "Notice:").trim().split("\n").slice(-4).join(" / ") || "nothing"}`);
+  if (!claimed) throw new Error(`the host could not set down a claim stone in four tries (the hammer's menu: b, 2, enter, e held); it was told: ${remote(host, "said", "--all", "--containing", "Notice:").trim().split("\n").slice(-4).join(" / ") || "nothing"}`);
   // What stands in a base stands in both games: the host's claim stone is in the friend's.
   const stones = (port: number) => (JSON.parse(remote(port, "call", "sandbox.find", JSON.stringify({ name: "Claim stone" }))) as { at: Place }[]).map((stone) => stone.at);
   const theirs = stones(host);
