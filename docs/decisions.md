@@ -360,7 +360,7 @@ How structures are planned, built, drawn and coded.
 | [D494](decisions/D494.md) | Creative and survival | Design | Developers | Decided | A world is played in one of two modes. |
 | [D550](decisions/D550.md) | Three timber joints: the post between a window and a door, the end board on a door's head, the eave board at a roof's step | Design | Developers | Decided | How three joints in timber read, judged from stills on… |
 | [D557](decisions/D557.md) | A window or door where another wall crosses or meets its wall | Design | — | Open | Whether an opening may be cut in the cube where another… |
-| [D645](decisions/D645.md) | Who may build in a claim in a shared world | Design | — | Open | In a hosted world the host's base and what stands in it… |
+| [D645](decisions/D645.md) | Anyone may build in any claim | Design | Developers | Decided | **Anyone may build in any claim.** A claim says where… |
 
 ## Art, characters and sound
 

@@ -1277,3 +1277,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - 2026-11-08: D642's theme turned (the developers'): realm two is a fantasy and science-fiction world, great and plainly different from the real, medieval first.
 - 2026-11-08: D649 decided (the developers'): players cross realms one by one and may be in both at once; a shared world runs both realms while anyone is in each (D640).
 - **2026-11-09**: D650 opened (by the agent): where the Drillhog (D250) is met in v0: rigged and put about the far realm as a working assumption; its decided home is dungeons and underground.
+- **2026-11-09**: D645 Decided (the developers: "for claims, anyone can build in any claim"): a claim says where building is allowed, not whose it is; not built yet.
