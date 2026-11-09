@@ -34,6 +34,9 @@ const REACH_CELLS: i32 = 26;
 /// A cell is let go this many cells past the reach, so a player pacing a cell's edge does
 /// not stand and fell the same ring.
 const SLACK_CELLS: i32 = 2;
+/// A part is stood this far past where it is first drawn from, so it is there before it
+/// fades in.
+const STOOD_PAST_M: f32 = 40.0;
 /// No part within this of the start, where a player arrives.
 const CLEAR_OF_START_M: f32 = 25.0;
 /// The ground may rise or fall this much across a part's footing, in metres.
@@ -256,6 +259,13 @@ fn stand(
             continue;
         };
         let (what, _, seen_m) = &items[part];
+        // Not stood until within its own sight and a little: a part drawn from 300 m, stood
+        // at 520 and hidden, was half the realm's entities for nothing (its cell is looked at
+        // again as the player's cell changes).
+        if at.distance(here.xz()) > *seen_m + STOOD_PAST_M {
+            stood.cells.remove(&at_cell);
+            continue;
+        }
         let ground = on_ground(at);
         // How tall a grown one stands, by the seed; and half the footing either keeps.
         let (c, r) = (at_cell.x as u32, at_cell.y as u32);
