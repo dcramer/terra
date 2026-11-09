@@ -1259,6 +1259,42 @@
             0.038
           ],
           "upperarm_r": [
+            -0.33,
+            -0.94,
+            -0.08
+          ],
+          "lowerarm_r": [
+            -0.2,
+            -0.9,
+            0.39
+          ],
+          "hand_r": [
+            -0.19,
+            -0.97,
+            0.0
+          ]
+        },
+        "roll": {
+          "hand_r": 12,
+          "lowerarm_twist_01_r": 9
+        }
+      }
+    ]
+  },
+  "Carry_Sword": {
+    "of": "Idle_Loop",
+    "swing": 0.5,
+    "hold": [
+      {
+        "clip": "Idle_Loop",
+        "bone": "clavicle_r",
+        "aim": {
+          "clavicle_r": [
+            -0.999,
+            -0.021,
+            0.038
+          ],
+          "upperarm_r": [
             -0.389,
             -0.919,
             -0.07
@@ -1277,6 +1313,42 @@
         "roll": {
           "hand_r": 6.2,
           "lowerarm_twist_01_r": 6.9
+        }
+      }
+    ]
+  },
+  "Carry_Knife": {
+    "of": "Idle_Loop",
+    "swing": 0.5,
+    "hold": [
+      {
+        "clip": "Idle_Loop",
+        "bone": "clavicle_r",
+        "aim": {
+          "clavicle_r": [
+            -0.999,
+            -0.021,
+            0.038
+          ],
+          "upperarm_r": [
+            -0.27,
+            -0.96,
+            -0.06
+          ],
+          "lowerarm_r": [
+            -0.17,
+            -0.97,
+            0.17
+          ],
+          "hand_r": [
+            -0.13,
+            -0.93,
+            -0.33
+          ]
+        },
+        "roll": {
+          "hand_r": 12,
+          "lowerarm_twist_01_r": 8
         }
       }
     ]
