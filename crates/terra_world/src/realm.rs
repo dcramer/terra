@@ -68,11 +68,16 @@ pub struct Realm {
     pub parts: Vec<Part>,
 }
 
-/// A part of a realm: a catalogue item's model file and how many a square kilometre holds.
+/// A part of a realm: a catalogue item's model file, how many a square kilometre holds, and
+/// from how far it is drawn.
 #[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct Part {
     pub file: String,
     pub a_km2: f32,
+    /// From how far off it is drawn, in metres: by its size, as what cannot be made out is
+    /// not worth its triangles or its shadow. As far as the parts stand, if not given.
+    #[serde(default)]
+    pub seen_m: Option<f32>,
 }
 
 /// Every realm there is.

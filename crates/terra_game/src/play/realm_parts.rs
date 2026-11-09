@@ -37,6 +37,15 @@ const CLEAR_OF_START_M: f32 = 25.0;
 /// The ground may rise or fall this much across a part's footing, in metres.
 const LEVEL_M: f32 = 0.6;
 
+/// How often the parts' showing is looked at, in frames.
+const SHOWN_EVERY: u32 = 20;
+
+/// How far off a part is drawn from, metres: its row's `seen_m` (`data/realms.ron`), or as
+/// far as the parts stand. Some two hundred parts drawn and shadowed to 510 m, whatever
+/// their size, were a cost nobody saw.
+#[derive(Component)]
+struct SeenFrom(f32);
+
 /// A part stood: its entity, and the ground it keeps clear of plants while it stands.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Part {
@@ -86,10 +95,32 @@ impl Stood {
 pub fn plugin(app: &mut App) {
     app.init_world_resource::<Stood>().add_systems(
         Update,
-        stand
-            .run_if(terra_world::instance::in_world)
-            .run_if(resource_exists::<Site>),
+        (stand.run_if(resource_exists::<Site>), show).run_if(terra_world::instance::in_world),
     );
+}
+
+/// Hides each part past where it is drawn from and shows it within, a look every few frames.
+fn show(
+    mut since: Local<u32>,
+    player: Query<&GlobalTransform, With<Player>>,
+    mut parts: Query<(&SeenFrom, &GlobalTransform, &mut Visibility)>,
+) {
+    *since += 1;
+    if *since < SHOWN_EVERY {
+        return;
+    }
+    *since = 0;
+    let Some(eye) = player.iter().next().map(GlobalTransform::translation) else {
+        return;
+    };
+    for (seen, at, mut visibility) in &mut parts {
+        let shown = if at.translation().distance(eye) <= seen.0 {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        visibility.set_if_neq(shown);
+    }
 }
 
 /// What a cell of the ground holds, by the seed: which part (an index into `shares`), where
@@ -167,10 +198,11 @@ fn stand(
                     realm.name, part.file
                 );
             }
-            Some((item?, part.a_km2))
+            let seen_m = part.seen_m.unwrap_or(REACH_CELLS as f32 * CELL_M);
+            Some((item?, part.a_km2, seen_m))
         })
         .collect();
-    let shares: Vec<f32> = items.iter().map(|(_, share)| *share).collect();
+    let shares: Vec<f32> = items.iter().map(|(_, share, _)| *share).collect();
     let seed = planet.seed().derive("realm parts").0 as u32;
     let to_site = site.frame.compute_affine().inverse();
     let on_ground = |at: Vec2| planet.ground_at(start.at(at.x, at.y));
@@ -179,7 +211,7 @@ fn stand(
         let Some((part, at, turn)) = cell(seed, &shares, at_cell) else {
             continue;
         };
-        let (item, _) = &items[part];
+        let (item, _, seen_m) = &items[part];
         let ground = on_ground(at);
         // Dry, level under its footing, and clear of the gate: by the land alone, never by
         // what else stands, so a cell come back to holds what it held.
@@ -208,7 +240,7 @@ fn stand(
         ) else {
             continue;
         };
-        commands.entity(entity).insert(Theirs);
+        commands.entity(entity).insert((Theirs, SeenFrom(*seen_m)));
         let clear_m = footing + 0.8;
         clear.write(ClearAround(ground, clear_m));
         let part = Part {

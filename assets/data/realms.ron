@@ -15,7 +15,8 @@
 //   ground_cover  how much of the grass and sand the ground could have is shown, 0 to 1
 //   plants        the share of the first realm's trees and undergrowth that grow, 0 to 1
 //   parts         what stands on its land by rule, each a catalogue item's model file
-//                 (data/builds.ron) and how many of it a square kilometre holds
+//                 (data/builds.ron), how many of it a square kilometre holds, and from how
+//                 many metres off it is drawn (seen_m, by its size)
 [
     (kind: "world", name: "the first realm", beyond: "industrial"),
     (
@@ -49,11 +50,11 @@
         // Great fungi through the forest, crystal here and there, a monolith now and then,
         // and the few machines of an older making that still stand.
         parts: [
-            (file: "FarGiantFungus", a_km2: 220.0),
-            (file: "FarCrystalSpire", a_km2: 50.0),
-            (file: "FarMonolith", a_km2: 12.0),
-            (file: "IndustrialPylon", a_km2: 5.0),
-            (file: "IndustrialSign", a_km2: 6.0),
+            (file: "FarGiantFungus", a_km2: 220.0, seen_m: Some(190.0)),
+            (file: "FarCrystalSpire", a_km2: 50.0, seen_m: Some(230.0)),
+            (file: "FarMonolith", a_km2: 12.0, seen_m: Some(280.0)),
+            (file: "IndustrialPylon", a_km2: 5.0, seen_m: Some(420.0)),
+            (file: "IndustrialSign", a_km2: 6.0, seen_m: Some(250.0)),
         ],
     ),
 ]
