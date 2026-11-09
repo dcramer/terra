@@ -120,35 +120,43 @@ const LAYERS: [(Sound, u64); 7] = [
     (Sound::Chimes, 7),
 ];
 
-/// The listener's place, read from the world round the player.
+/// The listener's place, read from the world round the player: nothing where there is no
+/// world yet (the title screen, a run's first frames), which a system asking for the
+/// world's own resources outright would stop the game at.
 #[derive(bevy::ecs::system::SystemParam)]
 struct Place<'w, 's> {
-    planet: Res<'w, Planet>,
+    planet: Option<Res<'w, Planet>>,
     lair: Option<Res<'w, Lair>>,
-    trunks: Res<'w, Trunks>,
-    obstacles: Res<'w, Obstacles>,
+    trunks: Option<Res<'w, Trunks>>,
+    obstacles: Option<Res<'w, Obstacles>>,
     climate: Option<Res<'w, ClimateFields>>,
-    realms: Res<'w, terra_world::realm::Realms>,
-    spec: Res<'w, terra_world::instance::WorldSpec>,
+    realms: Option<Res<'w, terra_world::realm::Realms>>,
+    spec: Option<Res<'w, terra_world::instance::WorldSpec>>,
     player: Query<'w, 's, (&'static Motion, &'static GlobalTransform), IsLocalPlayer>,
 }
 
 impl Place<'_, '_> {
     fn here(&self) -> Option<Here> {
         let (motion, at) = self.player.iter().next()?;
+        let (planet, trunks, obstacles) = (
+            self.planet.as_ref()?,
+            self.trunks.as_ref()?,
+            self.obstacles.as_ref()?,
+        );
         let here = at.translation();
-        let ground = self.planet.ground_at(here);
-        let standing = self.trunks.near(ground, WOODED.1, &self.obstacles).count();
+        let ground = planet.ground_at(here);
+        let standing = trunks.near(ground, WOODED.1, obstacles).count();
         let season_c = self.climate.as_ref().map_or(12.0, |climate| {
             climate.fields.season(climate.place(ground)).growing_mean_c
         });
-        let realm = self.realms.of(&self.spec.kind);
+        let realm = (self.realms.as_ref().zip(self.spec.as_ref()))
+            .and_then(|(realms, spec)| realms.of(&spec.kind));
         Some(Here {
             birdsong: realm.and_then(|realm| realm.birdsong).unwrap_or(1.0),
             chimes: realm.and_then(|realm| realm.chimes).unwrap_or(0.0),
             outdoors: !motion.indoors,
             lair_m: (self.lair.as_ref()).map_or(f32::MAX, |lair| lair.0.distance(here)),
-            shore_m: shore_distance(&self.planet, here),
+            shore_m: shore_distance(planet, here),
             wooded: (standing as f32 / WOODED.0).min(1.0),
             fells: ((FELLS_C - season_c) / 3.0).clamp(0.0, 1.0),
         })
@@ -610,5 +618,18 @@ mod tests {
             "{among} {open} {indoors}"
         );
         assert!(place_level(Sound::Wind, &far) > 0.0);
+    }
+
+    /// With no world yet (the title screen, a run's first frames) the place is nothing and
+    /// asking it stops nothing: read outright, the world's resources stopped the game at its
+    /// start whenever sound was on, which every muted check missed.
+    #[test]
+    fn the_place_is_asked_safely_where_there_is_no_world() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let said = world.run_system_once_with(state, None).unwrap().unwrap();
+        let layers = said["layers"].as_object().unwrap();
+        assert_eq!(layers.len(), LAYERS.len());
+        assert!(layers.values().all(|level| level.as_f64() == Some(0.0)));
     }
 }
