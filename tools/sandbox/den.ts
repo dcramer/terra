@@ -60,7 +60,10 @@ try {
   };
   // Forward, a second at a time, until the chamber or the clock.
   while ((off(at)[0] > NEAR_M || off(at)[1] > LEVEL_M) && Date.now() - began < MOST_S * 1000) {
-    await holdKey("w", 1);
+    // Held a little longer than a turn of this loop takes, and never pressed over (holdKey
+    // waits for its last hold's end): held a second with a second of looks between, the
+    // player walked half the time, less on a busy machine, and ran out the minute.
+    await holdKey("w", 1.6);
     for (let look = 0; look < 4; look++) {
       await waitSeconds(0.25);
       await eye();
