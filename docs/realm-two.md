@@ -19,6 +19,8 @@ Not the first realm's trees in another colour. What stands where trees would is 
 
 Which of these, and how strange, is the developers' to say; the first to make is the cap tree, as it is the least like a tree.
 
+**What it costs** (a reading, not a bench: the high preset on the Radeon 8060S, a full-size world, standing): the first realm at its start 41 frames a second; this realm 39 at its gate and 35 two hundred metres on. The crystal's and the monolith's lamps are the likely tenth: some forty point lights within reach.
+
 ## Its parts, each by an existing pipeline
 
 | Part | In the first realm | In this one | By |
