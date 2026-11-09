@@ -14,6 +14,7 @@
 mod asked;
 mod census;
 mod perches;
+mod put;
 mod safe;
 pub use census::own_to_each;
 pub use perches::Perches;
@@ -150,6 +151,7 @@ const PICTURE_EDGE: f32 = 1.15;
 
 pub fn plugin(app: &mut App) {
     terra_world::remote::method(app, "wildlife.state", census::state);
+    terra_world::remote::method(app, "wildlife.put", put::put);
     // What is about, where birds sit, what hides them and how warm the land is are the
     // world's: made afresh on entering each, so the cells round the arrival are looked at
     // and put out again from their seeds, as when a player walks back into their reach

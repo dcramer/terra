@@ -37,6 +37,9 @@ pub struct Vitals {
     /// Seconds since the body was last in danger from the cold or the heat; it heals only
     /// once out of it (`warmth`).
     since_exposed: f32,
+    /// Takes no harm: no blow, hunger, cold or heat costs it health. For testing (the debug
+    /// menu, D81); never kept with a character.
+    unharmed: bool,
 }
 
 impl Default for Vitals {
@@ -45,6 +48,7 @@ impl Default for Vitals {
             health: FULL,
             fed: 70.0,
             since_exposed: 10.0,
+            unharmed: false,
         }
     }
 }
@@ -101,7 +105,7 @@ impl Vitals {
         self.fed = (self.fed - (HUNGER + if hard { HUNGER_HARD } else { 0.0 }) * dt).max(0.0);
         self.since_exposed += dt;
         if self.fed <= 0.0 {
-            self.health -= STARVING * dt;
+            self.lose(STARVING * dt);
         } else if self.fed > HUNGRY && self.since_exposed > 1.0 {
             self.health = (self.health + HEALING * dt).min(FULL);
         }
@@ -112,15 +116,31 @@ impl Vitals {
     /// (`terra_climate::body::danger`): health, and no healing while it lasts.
     pub fn expose(&mut self, dt: f32, danger_c: f32) {
         if danger_c != 0.0 {
-            self.health -= EXPOSED * danger_c.abs() * dt;
+            self.lose(EXPOSED * danger_c.abs() * dt);
             self.since_exposed = 0.0;
         }
     }
 
     /// Takes a blow. Returns whether it killed.
     pub fn hurt(&mut self, amount: f32) -> bool {
-        self.health -= amount;
+        self.lose(amount);
         self.health <= 0.0
+    }
+
+    /// Loses so much health, unless it takes no harm.
+    fn lose(&mut self, amount: f32) {
+        if !self.unharmed {
+            self.health -= amount;
+        }
+    }
+
+    /// Whether it takes no harm, and setting that (testing only, D81).
+    pub fn unharmed(&self) -> bool {
+        self.unharmed
+    }
+
+    pub fn set_unharmed(&mut self, on: bool) {
+        self.unharmed = on;
     }
 
     /// Eats something that fills you so much, out of [`FULL`] (its kind's `food`).
@@ -384,5 +404,20 @@ mod tests {
             }
         }
         assert!(fed.1.left > hungry.1.left);
+    }
+
+    /// A body that takes no harm loses no health to a blow, to starving or to the cold, and
+    /// loses it again once it is set back.
+    #[test]
+    fn a_body_that_takes_no_harm_loses_no_health() {
+        let mut vitals = Vitals::default();
+        vitals.set_unharmed(true);
+        vitals.fed = 0.0;
+        assert!(!vitals.hurt(500.0));
+        vitals.expose(10.0, 4.0);
+        assert!(!vitals.tick(&mut Stamina::default(), 10.0, Effort::Resting));
+        assert_eq!(vitals.health, FULL);
+        vitals.set_unharmed(false);
+        assert!(vitals.hurt(500.0));
     }
 }

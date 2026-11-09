@@ -1,6 +1,7 @@
 //! The debug menu's page for someone playing (D81; the backtick key, its "Play" tab): going
 //! to the places a game is tested at (the start, the gate, the den, the village), the gate
-//! (bearing a mark, opening it, stepping through), the hour of the day, and giving items.
+//! (bearing a mark, opening it, stepping through), the hour of the day, taking no harm,
+//! putting a creature ahead, and giving items.
 //! Every button makes a remote method's call (`terra_world::remote::call`), the one a
 //! scripted check makes, so the menu and the agents' tools are one list; the page keeps only
 //! what was typed and what the last call answered.
@@ -8,6 +9,7 @@
 use super::claim::Village;
 use super::inventory::Items;
 use super::marks::Kinds;
+use super::species::Bestiary;
 use crate::remote::call;
 use crate::start::Start;
 use bevy::prelude::*;
@@ -135,13 +137,47 @@ fn show(ui: &mut egui::Ui, world: &mut World) {
         }
     });
     ui.separator();
-    ui.heading("Give");
+    ui.heading("The player");
+    let unharmed = world.resource::<super::probe::Unharmed>().0;
+    let harm = if unharmed {
+        "Takes no harm (press to take harm again)"
+    } else {
+        "Take no harm"
+    };
+    if ui.button(harm).clicked() {
+        press(world, "play.unharmed", json!({}));
+    }
+    ui.separator();
     let mut find = std::mem::take(&mut world.resource_mut::<PlayPage>().find);
     ui.horizontal(|ui| {
-        ui.label("Find");
+        ui.label("Find a creature or an item");
         ui.text_edit_singleline(&mut find);
     });
     let wanted = find.to_lowercase();
+    world.resource_mut::<PlayPage>().find = find;
+    ui.heading("Put a creature ahead");
+    let kinds: Vec<String> = (world.get_resource::<Bestiary>())
+        .map(|bestiary| {
+            (bestiary.all().map(|kind| bestiary.name(kind).to_string()))
+                .filter(|name| name.to_lowercase().contains(&wanted))
+                .collect()
+        })
+        .unwrap_or_default();
+    ui.horizontal_wrapped(|ui| {
+        for kind in kinds.iter().take(LISTED) {
+            if ui.button(kind).clicked() {
+                press(world, "wildlife.put", json!({ "kind": kind }));
+            }
+        }
+    });
+    if kinds.len() > LISTED {
+        ui.label(format!(
+            "and {} more: type to find one",
+            kinds.len() - LISTED
+        ));
+    }
+    ui.separator();
+    ui.heading("Give");
     let names: Vec<String> = (world.get_resource::<Items>())
         .map(|items| {
             (items.kinds().map(|kind| items.name(kind).to_string()))
@@ -149,7 +185,6 @@ fn show(ui: &mut egui::Ui, world: &mut World) {
                 .collect()
         })
         .unwrap_or_default();
-    world.resource_mut::<PlayPage>().find = find;
     for name in names.iter().take(LISTED) {
         ui.horizontal(|ui| {
             for count in [1, 10] {

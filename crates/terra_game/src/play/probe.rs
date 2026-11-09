@@ -59,6 +59,9 @@ pub fn plugin(app: &mut App) {
     method(app, "play.state", state);
     method(app, "play.warp", warp);
     method(app, "play.hour", hour);
+    method(app, "play.unharmed", unharmed);
+    app.init_resource::<Unharmed>()
+        .add_systems(Update, keep_unharmed);
     method(app, "play.give", ask_give);
     method(app, "play.take", ask_take);
     method(app, "play.aim", ask_aim);
@@ -103,6 +106,40 @@ fn hour(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         .ok_or_else(|| refused("No world is made yet, so there is no clock."))?;
     clock.hour = hour.rem_euclid(24.0);
     Ok(json!({ "hour": clock.hour }))
+}
+
+/// Whether this machine's player takes no harm (the debug menu's, D81): kept here, not with
+/// the body, so it holds across a death or a crossing, which make the body anew.
+#[derive(Resource, Default)]
+pub(super) struct Unharmed(pub bool);
+
+#[derive(Deserialize, Default)]
+struct Harm {
+    on: Option<bool>,
+}
+
+/// `play.unharmed {on?}`: this machine's player takes no harm, or does again; with nothing
+/// said it changes from one to the other. Says which it now is.
+fn unharmed(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Harm { on } = params
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(refused)?
+        .unwrap_or_default();
+    let mut unharmed = world.resource_mut::<Unharmed>();
+    unharmed.0 = on.unwrap_or(!unharmed.0);
+    Ok(json!({ "unharmed": unharmed.0 }))
+}
+
+fn keep_unharmed(
+    unharmed: Res<Unharmed>,
+    mut players: Query<&mut Vitals, (With<super::Player>, terra_walker::IsLocalPlayer)>,
+) {
+    for mut vitals in &mut players {
+        if vitals.unharmed() != unharmed.0 {
+            vitals.set_unharmed(unharmed.0);
+        }
+    }
 }
 
 #[derive(Deserialize)]

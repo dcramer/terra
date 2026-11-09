@@ -216,6 +216,8 @@ const COMMANDS: Record<string, Command> = {
       console.log(`debug menu ${menu.open ? "open" : "closed"}, on ${menu.page} (pages: ${menu.pages.join(", ")})${menu.search ? `, searching "${menu.search}"` : ""}`);
       const shown = menu.shown;
       if (!shown) return;
+      // A page that is not the tunables says what it shows in its own words.
+      if (!Array.isArray(shown.groups)) return print(shown);
       if (shown.note) console.log(shown.note);
       for (const group of shown.groups) {
         console.log(`${group.prefix}.* (${group.shown}): reset at ${at(group.reset)}`);
