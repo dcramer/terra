@@ -87,6 +87,10 @@ pub struct DriftKind {
     /// about is the world's to say, not the machine's (D647); dust and snow are thinned.
     #[serde(default)]
     pub whole: bool,
+    /// The realms it drifts in, by their kinds (`data/realms.ron`); every realm if none: a
+    /// realm's own small life is its alone, and the first realm's butterflies are not it.
+    #[serde(default)]
+    pub realms: Option<Vec<String>>,
 }
 
 /// A kind the weather brings: rain or snow, all of its cards seen at so many millimetres an hour
@@ -249,6 +253,11 @@ impl DriftKind {
         let low = self.box_m.1 + 1.0;
         let high = self.box_m.1 * 2.0 + 4.0;
         1.0 - ((above_m - low) / (high - low)).clamp(0.0, 1.0)
+    }
+
+    /// Whether it drifts in a realm of this kind.
+    pub fn lives_in(&self, realm: &str) -> bool {
+        (self.realms.as_ref()).is_none_or(|realms| realms.iter().any(|one| one == realm))
     }
 
     /// How much of this kind is seen at a place, 0 to 1.
@@ -531,7 +540,10 @@ fn sense(
     mut materials: ResMut<Assets<DriftMaterial>>,
     mut since: Local<f32>,
     mut wind: Local<Vec3>,
-    weather: Option<Res<crate::weather::Weather>>,
+    (weather, spec): (
+        Option<Res<crate::weather::Weather>>,
+        Option<Res<crate::instance::WorldSpec>>,
+    ),
 ) {
     let (Some(planet), Some(eye)) = (
         planet,
@@ -558,7 +570,14 @@ fn sense(
             round.snow_mm_h = weather.snow_mm_h();
         }
         for (mut field, _) in &mut fields {
-            field.wanted = drifts.kinds[field.kind].amount(&round);
+            let kind = &drifts.kinds[field.kind];
+            // A run with no world named is the first realm's.
+            let realm = spec.as_ref().map_or("world", |spec| spec.kind.as_str());
+            field.wanted = if kind.lives_in(realm) {
+                kind.amount(&round)
+            } else {
+                0.0
+            };
         }
         *wind = match &climate {
             Some(climate) => {
@@ -788,5 +807,42 @@ mod tests {
         winter.woods = 0.0;
         winter.open = 1.0;
         assert_eq!(flakes.amount(&winter), heavy);
+    }
+
+    /// A realm's own small life is its alone: every kind that names realms names ones the
+    /// realms' data has, the first realm's butterflies do not fly in the far one, and the
+    /// far one has small life of its own by day and by night.
+    #[test]
+    fn a_realms_small_life_is_its_own() {
+        let drifts = drifts();
+        let realms = crate::realm::Realms::read();
+        for kind in &drifts.kinds {
+            for realm in kind.realms.iter().flatten() {
+                assert!(
+                    realm == "world" || realms.of(realm).is_some(),
+                    "{}: no realm {realm}",
+                    kind.name
+                );
+            }
+        }
+        let named = |name: &str| drifts.kinds.iter().find(|kind| kind.name == name).unwrap();
+        assert!(named("White butterflies").lives_in("world"));
+        assert!(!named("White butterflies").lives_in("industrial"));
+        assert!(named("Dust motes").lives_in("industrial"));
+        let own: Vec<&DriftKind> = (drifts.kinds.iter())
+            .filter(|kind| kind.realms.is_some() && kind.lives_in("industrial"))
+            .collect();
+        assert!(own.iter().all(|kind| !kind.lives_in("world")));
+        let about = |hour: f32| {
+            own.iter().any(|kind| {
+                kind.hours
+                    .iter()
+                    .any(|(from, to)| (*from..=*to).contains(&hour))
+            })
+        };
+        assert!(
+            about(13.0) && about(23.0),
+            "the far realm's own small life, by day and night"
+        );
     }
 }

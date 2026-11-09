@@ -20,6 +20,8 @@
 //   hours     the spans of the clock it is about, faded over half an hour at each end
 //   whole     as many at every quality preset (a living kind: how much life is about is the
 //             world's to say, D647)
+//   realms    the realms it drifts in, by kind (data/realms.ron; "world" the first); every
+//             realm if not given
 //   lit       a light of its own, for what is seen by it in the dark: (how bright, blinks a
 //             second, each at its own beat)
 (
@@ -60,6 +62,7 @@
             season_c: (6.0, 40.0),
             air_c: 8.0,
             hours: [(5.0, 11.0), (16.5, 21.5)],
+            realms: Some(["world"]),
         ),
         (
             // A few dry leaves coming down under broadleaf and mixed crowns, turning over; in a
@@ -99,6 +102,7 @@
             season_c: (-10.0, 40.0),
             hours: [(5.0, 20.0)],
             whole: true,
+            realms: Some(["world"]),
         ),
         (
             // Whites over the meadow and the wood's edge on a warm day (the small white, the
@@ -120,6 +124,7 @@
             hours: [(8.0, 18.5)],
             flap_hz: 9.0,
             whole: true,
+            realms: Some(["world"]),
         ),
         (
             // Tortoiseshells, commas and fritillaries: the orange-browns of rides, glades and
@@ -141,6 +146,7 @@
             hours: [(9.0, 18.0)],
             flap_hz: 8.0,
             whole: true,
+            realms: Some(["world"]),
         ),
         (
             // Bees and hoverflies working the flowers: dark specks low over the grass, each
@@ -161,6 +167,7 @@
             air_c: 12.0,
             hours: [(7.5, 19.0)],
             whole: true,
+            realms: Some(["world"]),
         ),
         (
             // Dragonflies and damselflies hawking low over the water's edge on a warm day,
@@ -181,6 +188,7 @@
             air_c: 15.0,
             hours: [(9.0, 18.5)],
             whole: true,
+            realms: Some(["world"]),
         ),
         (
             // Fireflies and glow-worms on a warm night, by the water and under the wood's
@@ -202,6 +210,73 @@
             hours: [(20.5, 24.0), (0.0, 2.0)],
             lit: Some((6000000.0, 0.45)),
             whole: true,
+            realms: Some(["world"]),
+        ),
+        (
+            // The far realm's spores (docs/realm-two.md): shed by its cap trees, rising
+            // slowly on the still air under them, each a small blue-green light.
+            name: "Glow spores",
+            count: 700,
+            look: Speck,
+            size_m: 0.035,
+            colour: (0.35, 0.9, 0.95),
+            glow: 30.0,
+            opacity: 0.9,
+            motion: Hover(wander_m: 1.6, sink_mps: -0.05, carried: 0.1),
+            box_m: (14.0, 5.0),
+            woods: 1.0,
+            open: 0.6,
+            water: 0.6,
+            season_c: (-10.0, 40.0),
+            air_c: -5.0,
+            hours: [(0.0, 24.0)],
+            lit: Some((3000000.0, 0.15)),
+            whole: true,
+            realms: Some(["industrial"]),
+        ),
+        (
+            // Its lantern moths: broad pale wings lit violet from within, out from dusk to
+            // dawn among the caps.
+            name: "Lantern moths",
+            count: 160,
+            look: Butterfly,
+            size_m: 0.16,
+            colour: (0.75, 0.55, 1.0),
+            glow: 0.0,
+            opacity: 1.0,
+            motion: Hover(wander_m: 3.0, sink_mps: 0.0, carried: 0.2),
+            box_m: (13.0, 3.0),
+            woods: 1.0,
+            open: 0.7,
+            water: 0.5,
+            season_c: (0.0, 40.0),
+            air_c: 5.0,
+            hours: [(18.5, 24.0), (0.0, 6.0)],
+            flap_hz: 5.0,
+            lit: Some((1200000.0, 0.0)),
+            whole: true,
+            realms: Some(["industrial"]),
+        ),
+        (
+            // Its day fliers: slow teal-winged gliders over the rose grass.
+            name: "Glass wings",
+            count: 150,
+            look: Butterfly,
+            size_m: 0.14,
+            colour: (0.3, 0.85, 0.8),
+            glow: 2.0,
+            opacity: 1.0,
+            motion: Hover(wander_m: 3.4, sink_mps: 0.0, carried: 0.3),
+            box_m: (12.0, 2.0),
+            woods: 0.5,
+            open: 1.0,
+            water: 0.6,
+            season_c: (0.0, 40.0),
+            air_c: 8.0,
+            hours: [(6.5, 19.0)],
+            flap_hz: 6.0,
+            whole: true,
+            realms: Some(["industrial"]),
         ),
         (
             // Cotton grass and willow down blown over the heath in late summer.
