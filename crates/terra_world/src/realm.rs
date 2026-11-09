@@ -114,12 +114,17 @@ impl Realms {
         self.0.iter().find(|realm| realm.kind == kind)
     }
 
-    /// Whether a kind of creature lives in worlds of a kind: any does where the realm does
-    /// not say which.
+    /// Whether a kind of creature lives in worlds of a kind: those a realm names live in it;
+    /// where it says nothing, any does but another realm's own, one some realm names.
     pub fn lives(&self, kind: &str, animal: &str) -> bool {
-        self.of(kind)
-            .and_then(|realm| realm.animals.as_ref())
-            .is_none_or(|animals| animals.iter().any(|name| name == animal))
+        let names = |realm: &Realm| {
+            (realm.animals.as_ref())
+                .is_some_and(|animals| animals.iter().any(|name| name == animal))
+        };
+        match self.of(kind).map(|realm| (realm, realm.animals.is_some())) {
+            Some((realm, true)) => names(realm),
+            _ => !self.0.iter().any(names),
+        }
     }
 
     /// The kind of the realm beyond a world's gate: its own row's, or its own kind where the
@@ -228,7 +233,7 @@ mod tests {
         }
         // Every kind lives in the first realm; the industrial one names its few.
         assert!(realms.lives("world", "Troll") && realms.lives("world", "Chaffinch"));
-        assert!(realms.lives("industrial", "Red fox") && !realms.lives("industrial", "Troll"));
+        assert!(realms.lives("industrial", "Glimmerhorn") && !realms.lives("industrial", "Troll"));
         assert!(realms.lives("a realm not in the data", "Troll"));
         // A realm's own ground, where it names one, is a stack among the materials, both
         // its maps there.
@@ -252,5 +257,26 @@ mod tests {
         let light = industrial.light().expect("it has its own light");
         // Not the first realm's light: its sun is not white.
         assert!(light.sun != Vec3::ONE, "{light:?}");
+    }
+
+    /// A realm's own creatures are its alone: the far realm's deer are not met in the first
+    /// realm, which names none and has every kind no realm names; nor the first's in the far.
+    #[test]
+    fn a_realms_own_creatures_live_in_it_alone() {
+        let realms = Realms::read();
+        let own = realms.of("industrial").unwrap().animals.clone().unwrap();
+        assert!(!own.is_empty());
+        for animal in &own {
+            assert!(realms.lives("industrial", animal), "{animal}");
+            assert!(
+                !realms.lives("world", animal),
+                "{animal} in the first realm"
+            );
+            assert!(
+                !realms.lives("a test level", animal),
+                "{animal} where no realm is"
+            );
+        }
+        assert!(realms.lives("world", "Red fox") && !realms.lives("industrial", "Red fox"));
     }
 }
