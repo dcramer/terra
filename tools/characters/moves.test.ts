@@ -84,7 +84,7 @@ test("a --template that names no body template is an error naming it and the one
   // `--template base` ran no body, so every depth was -Infinity and the check passed.
   const dir = mkdtempSync(join(tmpdir(), "moves-template-"));
   const json = join(dir, "rows.json");
-  const run = spawnSync(process.execPath, [MOVES, "--set", "none", "--also", "Walk_Loop", "--template", "male,base", "--json", json], { cwd: ROOT, encoding: "utf8" });
+  const run = spawnSync(process.execPath, [MOVES, "--set", "none", "--also", "Walk_Loop", "--template", "male,nobody", "--json", json], { cwd: ROOT, encoding: "utf8" });
   const wrote = (() => {
     try {
       return readFileSync(json, "utf8");
@@ -96,7 +96,7 @@ test("a --template that names no body template is an error naming it and the one
   assert.equal(run.status, 2, run.stdout + run.stderr);
   assert.equal(wrote, undefined, "rows were written for a run on no such body");
   assert.doesNotMatch(run.stdout, /✓/);
-  assert.match(run.stderr, /no body template "base"/);
+  assert.match(run.stderr, /no body template "nobody"/);
   assert.doesNotMatch(run.stderr, /"male"/);
   for (const name of Object.keys(JSON.parse(readFileSync(TEMPLATES, "utf8")))) assert.ok(run.stderr.includes(name), `does not name ${name}: ${run.stderr}`);
   // fit.ts shows the line of a failed run that says "error" (runMoves).

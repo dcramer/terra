@@ -38,6 +38,11 @@ export const TRUNK = /^(pelvis|spine_0\d|neck_01|Head|thigh_[lr]|thigh_twist_01_
  * (clash.ts). */
 export const BODY = /^(pelvis|spine_0\d|neck_01|Head|thigh_[lr]|thigh_twist_01_[lr]|calf_[lr]|calf_twist_01_[lr]|foot_[lr]|ball_[lr]|ball_leaf_[lr])$/;
 
+/** The unmorphed body's name among the templates (`Appearance::default()`, what the workbench
+ * shows): a body of its own, measured only when a caller names it, so every other caller's
+ * templates and their ratcheted numbers stay as they were. */
+export const BASE = "base";
+
 /** The body's templates (all, or `only` these) and the skin of its `parts` (joints by name) at a
  * pose. A name in `only` that is no template is an error: with none left no body is measured and
  * every depth read -Infinity, a pass (`moves.ts --template base`). */
@@ -66,11 +71,12 @@ export function skinOf(body: Glb, templatesFile: string, only: string[] = [], pa
   const rigNode = body.gltf.nodes.find((n) => (n as { extras?: { morphs?: string } }).extras?.morphs) as { extras: { morphs: string } } | undefined;
   const offsets: Record<string, Record<string, V3>> = rigNode ? JSON.parse(rigNode.extras.morphs) : {};
   const templates: Record<string, { morphs: Record<string, number> }> = JSON.parse(readFileSync(templatesFile, "utf8"));
+  if (only.includes(BASE)) templates[BASE] ??= { morphs: {} };
   const unknown = only.filter((name) => !(name in templates));
   if (unknown.length)
     throw new Error(
       `no body template ${unknown.map((n) => `"${n}"`).join(", ")} in ${templatesFile}: a check on no body measures nothing and would pass (D556, D632). ` +
-        `Name one or more of ${Object.keys(templates).join(", ")}, comma-separated, or none for all of them; the unmorphed base body is not a template.`,
+        `Name one or more of ${Object.keys(templates).join(", ")}, comma-separated, or none for all of them; "${BASE}" is the unmorphed body.`,
     );
 
   const shapes: Shape[] = Object.entries(templates).filter(([name]) => only.length === 0 || only.includes(name)).map(([name, t]) => {

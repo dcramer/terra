@@ -44,7 +44,7 @@ import { nockOf } from "./nock.ts";
 const OUT = join(ROOT, "tools", "characters", "out");
 const CHARS = join(ROOT, "tools", "characters");
 /** A held look through the body, cm (moves.ts's HELD_CM). */
-const HELD_CM = 1;
+export const HELD_CM = 1;
 /** A bow's nock off its string's middle as made, m (nock.ts). */
 const NOCK_M = 0.005;
 /** The walker's clips that use what is in hand (terra_walker::figure's Doing::clip), played
@@ -52,7 +52,7 @@ const NOCK_M = 0.005;
 const USED = ["Interact", "Sword_Attack", "Sword_Idle"];
 const walkerClips = () => [...carriedClips(), ...USED];
 /** moves.ts's own hands: the fighter's sword and shield, a set's partners. */
-const PARTNER = { R: "assets/models/held/arming_sword.glb", L: "assets/models/held/heater_shield.glb" };
+export const PARTNER = { R: "assets/models/held/arming_sword.glb", L: "assets/models/held/heater_shield.glb" };
 const rel = (f: string) => (f.startsWith(ROOT) ? f.slice(ROOT.length + 1) : f);
 
 type Item = { name: string; worn: boolean; file: string; data: Record<string, unknown>; look: string };

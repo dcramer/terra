@@ -69,6 +69,7 @@ import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
 import { type Holding, keptOff, reach } from "./arms.ts";
 import { carryArm } from "./carry_arm.ts";
+import { type WristRest, HoldWorst, holdPose, wristRest } from "./hold_pose.ts";
 import { sharesIn, swung as armSwung } from "./additive.ts";
 import { fitter } from "./shield_arm.ts";
 import { FIST_CM, WRAP_DEG, close, fistOff, handRest, lookGrip, seated } from "./grip.ts";
@@ -818,15 +819,37 @@ if (trips.length) {
   const worst = trips.reduce((a, b) => (b.m > a.m ? b : a));
   row("chain, the shield's round trip", trips.map((x) => `${x.pair} ${x.m.toFixed(2)} m (${x.where})`), [], { clip: "chain", measured: { shield_round_trip_m: worst.m } });
 }
+// How each hand holds its look through a clip (hold_pose.ts, `hold_<measure>.<look>`: the wrist
+// off the forearm, the handle's line, the elbow, the look over the ground), the worst on every
+// template and where. Numbers for the hold report (holds.ts), not bars here.
+const holdRests = new Map<string, WristRest>();
+function holdBy(clip: Clip) {
+  const [measured, where]: [Record<string, number>, Record<string, string>] = [{}, {}];
+  for (const h of held.filter((h) => h.socket === h.hand)) {
+    const s = h.hand.endsWith(".L") ? "l" : "r";
+    const worst = new HoldWorst();
+    for (const shape of shapes) {
+      const k = `${shape.name} ${s}`;
+      if (!holdRests.has(k)) holdRests.set(k, wristRest(shaped(body, shape, restClip, 0), at, s));
+      for (let t = 0; t <= clip.end + 1e-6; t += 1 / fps) {
+        const pose = poseOf(shape, clip, t);
+        worst.see(holdPose(pose, at, s, holdRests.get(k)!, frame(h, pose), h.points), `${clip.name} at ${t.toFixed(2)} s, ${shape.name}`);
+      }
+    }
+    for (const [key, w] of worst.worst) [measured[`hold_${key}.${h.name}`], where[`hold_${key}.${h.name}`]] = [w.v, w.where];
+  }
+  return { measured, where };
+}
 for (const name of opt.also!.split(",").filter(Boolean)) {
   const clip = clipOf(name);
   const pen = penetration(clip, 0, clip.end);
+  const hold = holdBy(clip);
   grips(pen, name);
   const bad: string[] = [];
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
   bad.push(...legsBad(pen, name), ...clashBad(pen));
-  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...heldBy(pen), ...clashed(pen), ...carriedBy(pen) }, where: heldWhere(pen) });
+  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...heldBy(pen), ...clashed(pen), ...carriedBy(pen), ...hold.measured }, where: { ...heldWhere(pen), ...hold.where } });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
 // The fists on what they hold (grip.ts fistOff): each finger bone's gap to the handle's surface,

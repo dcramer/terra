@@ -166,6 +166,8 @@ Materials are named by role (Wood, Metal, Leather, Trim), so a tint recolours on
 
 ## The check
 
+How a look is held is judged by `node tools/characters/holds.ts [item...]` (the hold report, `tools/characters/scripts.md`): its size, grip, carried wrist, ground and clearances in numbers on every body, with no GPU. A still is needed only for what no number there covers: the silhouette, the materials, and how the fingers look on it.
+
 `node tools/characters/attach_contract.ts` reads every committed look in `assets/models/held` and `gear`, their data and `base.glb`, and holds each to its kind's rules above (its kind named, its mount's origin, axes, facing and extras, its life size, its grip across and along the handle), and the body's sockets to the table; its test runs in `cargo xtask check`. It also catches what a new item gets wrong on its way in:
 
 - **Inside out**: over a quarter of its surface wound against its own normals (vertices mirrored by a script without flipping the faces).

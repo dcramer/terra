@@ -68,8 +68,12 @@ test("the middle of a shin and of a foot are inside the body's skin, and outside
 test("a template that is not one is an error naming it and the ones there are", () => {
   const body = new Glb(resolve(ROOT, "assets/models/character/base.glb"));
   const templates = resolve(ROOT, "assets/models/character/templates.json");
-  assert.throws(() => skinOf(body, templates, ["female", "base"]), /no body template "base" in .*templates\.json.*male, female, heavy, thin, strong/);
+  assert.throws(() => skinOf(body, templates, ["female", "nobody"]), /no body template "nobody" in .*templates\.json.*male, female, heavy, thin, strong/);
   assert.equal(skinOf(body, templates, ["female"]).shapes.length, 1);
+  // The unmorphed body is one only when named, and nothing of it is moved.
+  assert.equal(skinOf(body, templates).shapes.some((s) => s.name === "base"), false);
+  const base = skinOf(body, templates, ["base"]).shapes[0];
+  assert.deepEqual([base.name, base.moved.size], ["base", 0]);
 });
 
 test("the fast surface answers as its reference does, to the bit, on the body's poses", () => {
