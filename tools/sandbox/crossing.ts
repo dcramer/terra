@@ -10,8 +10,11 @@
 //
 // Node 22.18 or later; no dependencies.
 
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const PORT = 47000 + (process.pid % 2000);
@@ -66,7 +69,11 @@ host.stderr.on("data", (chunk) => (err += chunk));
 let started = false;
 try {
   await until(() => `the host never listened: ${err || "it said nothing"}`, () => out.includes("listening"), 120);
-  remote("start", "--real-time", "--", "--experiment", "play", "--offscreen", "--title");
+  // Its own folder for its worlds and its player, new each run: who the player is, and the
+  // address they last joined, are kept there, and one left by another run was in the address
+  // field when this typed its own ("127.0.0.1:48283127.0.0.1:47305", refused as no address).
+  const worlds = mkdtempSync(join(tmpdir(), "terra-crossing-"));
+  remote("start", "--real-time", "--", "--experiment", "play", "--offscreen", "--title", `--worlds=${worlds}`);
   started = true;
   await until(() => "the game's title screen never came up", () => title().screen === "Title", 240);
   await pick("Join");
