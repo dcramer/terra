@@ -141,7 +141,8 @@ pub fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32, bark_m: f32
         for j in 0..sides {
             let a = start + i * ring + j;
             let b = a + ring;
-            build.indices.extend([a, b, a + 1, a + 1, b, b + 1]);
+            // Wound so its outside is its front.
+            build.indices.extend([a, a + 1, b, a + 1, b + 1, b]);
         }
     }
 }

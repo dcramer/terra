@@ -192,4 +192,21 @@ mod tests {
         // Skin, by its texture coordinates.
         assert!(build.uvs.iter().all(|uv| uv[1] <= -1.0));
     }
+
+    /// A tube's outside is its front, as a cap's is: wound the other way, bark drawn one
+    /// sided (a grown tree's, a cap tree's stalk) showed its far wall from within.
+    #[test]
+    fn a_tubes_outside_is_its_front() {
+        let limb = stalk(Vec3::ZERO, Vec3::X, 10.0, 0.5, 0);
+        let pivots = crate::grown::pivots::Pivots::default();
+        let mut build = crate::grown::build::Build::levelled(&pivots);
+        crate::grown::build::tube(&mut build, &limb, 8, 12.0, 2.0, Vec3::ONE);
+        let at = |i: u32| Vec3::from(build.positions[i as usize]);
+        let normal = |i: u32| Vec3::from(build.normals[i as usize]);
+        for corners in build.indices.chunks(3) {
+            let (a, b, c) = (corners[0], corners[1], corners[2]);
+            let face = (at(b) - at(a)).cross(at(c) - at(a));
+            assert!(face.dot(normal(a) + normal(b) + normal(c)) > 0.0);
+        }
+    }
 }
