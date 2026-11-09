@@ -40,6 +40,19 @@ async function about(date: string, hour: number): Promise<{ seen: Map<string, nu
       if (found.length > 0) small.push(`${found.length} ${name}`);
     }
     const wild = (await call("wildlife.state")) as { birds: number; flying: number; in_view: number; birds_in_view: number };
+    // The picture over twenty seconds, twice a second, not at one instant: a bird crossing
+    // it is seen for a second or two. Its most at once, and the share of looks with any.
+    if (hour > 6 && hour < 20) {
+      let [most, looks, withBird] = [0, 0, 0];
+      for (; looks < 40; looks++) {
+        const now = (await call("wildlife.state")) as { birds_in_view: number };
+        most = Math.max(most, now.birds_in_view);
+        if (now.birds_in_view > 0) withBird++;
+        await waitSeconds(0.5);
+      }
+      wild.birds_in_view = most;
+      (wild as { seen_share?: number }).seen_share = withBird / looks;
+    }
     return { seen: new Map(drift.kinds.map((kind) => [kind.name, kind.seen])), small, wild };
   } finally {
     await stop().catch(() => undefined);
@@ -94,7 +107,7 @@ try {
 
   const swims = await fish();
 
-  console.log(`✓ ambience: ${swims}; on a July day ${said(day.seen, ["White butterflies", "Brown butterflies", "Bees", ...BIRDS])}, with ${day.small.join(", ")} near, ${day.wild.birds} birds in all and ${day.wild.flying} on the wing (in the picture, 6 pixels tall or more: ${day.wild.in_view} creatures, ${day.wild.birds_in_view} of them birds: a reading, the bar being dozens); that night Fireflies ${night.seen.get("Fireflies")} and the day's gone; on a January day no insect flies`);
+  console.log(`✓ ambience: ${swims}; on a July day ${said(day.seen, ["White butterflies", "Brown butterflies", "Bees", ...BIRDS])}, with ${day.small.join(", ")} near, ${day.wild.birds} birds in all and ${day.wild.flying} on the wing (in the picture, 6 pixels tall or more: ${day.wild.in_view} creatures at a look; over twenty seconds at most ${day.wild.birds_in_view} birds at once and a bird in ${Math.round(((day.wild as { seen_share?: number }).seen_share ?? 0) * 100)}% of looks: a reading, the bar being dozens); that night Fireflies ${night.seen.get("Fireflies")} and the day's gone; on a January day no insect flies`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 }

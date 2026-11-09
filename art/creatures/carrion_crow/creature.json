@@ -1,0 +1,62 @@
+{
+  "subject": "carrion crow of woods and open ground: glossy black with a faint blue-purple sheen, a stout black bill; the chaffinch's model textured again, walking and flapping steadily as the pigeon does",
+  "like": "chaffinch",
+  "file": "Crow",
+  "tripo_project": "7719ab09-18e1-4cde-9cb3-3a4533377af0",
+  "generator": "the chaffinch's model (its export imported), textured from concept.png at 2K",
+  "credits": {
+    "concept": 2,
+    "texture": 10
+  },
+  "scale": 0.47,
+  "clips": {
+    "Idle": {
+      "kind": "idle",
+      "seconds": 3
+    },
+    "Walk": {
+      "kind": "gait",
+      "cycle": 0.5,
+      "stride": 0.2,
+      "lift": 0.04,
+      "duty": 0.6,
+      "bob": 0.01,
+      "peel": 15,
+      "fold": 20,
+      "nod": 14,
+      "phases": {
+        "Leg.L": 0,
+        "Leg.R": 0.5
+      }
+    },
+    "Peck": {
+      "kind": "graze",
+      "seconds": 1.5,
+      "neck": 40,
+      "head": -20,
+      "body": 35
+    },
+    "Fly": {
+      "kind": "fly",
+      "cycle": 0.33,
+      "beats": 3,
+      "flapping": 1,
+      "bound": false,
+      "up": -15,
+      "down": 70,
+      "body": 50,
+      "neck": -30,
+      "head": -10,
+      "tuck": [
+        -40,
+        100,
+        -60
+      ]
+    },
+    "Death": {
+      "kind": "death",
+      "seconds": 0.8,
+      "lie": 0.3
+    }
+  }
+}

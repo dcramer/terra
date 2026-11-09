@@ -274,6 +274,33 @@
         ],
     ),
     (
+        // The big black bird of woods and fields: the bird a walker sees first, in twos and
+        // fives on open ground and in the tops of trees, loud in the air (D647: birds are
+        // models, and seen).
+        name: "Carrion crow",
+        model: ("models/creatures/Crow.glb", 1.0),
+        clips: (idle: "Idle", walk: "Walk", run: "Walk", eat: "Peck", attack: "Idle", death: "Death", fly: "Fly", paces: (0.313, 0.313)),
+        health: 2.0,
+        walk_mps: 0.3,
+        run_mps: 0.24,
+        body: (radius: 0.08, weight: 0.3),
+        temper: Shy(flees_within_m: 15.0, flees_s: 2.0),
+        refuge: Flies(10.0, 30.0),
+        moves: Flies(10.0),
+        lives: About(per_ha: 6.0, group: (2, 5)),
+        niche: (warmth_c: (5.0, 30.0), haunts: [Woods, Open]),
+        seen_m: 140.0,
+        stride: (0.1, 0.0),
+        feet: Skitter,
+        voice: Silent,
+        blood: Red,
+        lies_s: 60.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.03),
+            (joint: "Body", part: Body, radius_m: 0.07),
+        ],
+    ),
+    (
         name: "Brown hare",
         model: ("models/creatures/Hare.glb", 1.0),
         clips: (idle: "Idle", walk: "Walk", run: "Run", eat: "Eat", attack: "Idle", death: "Death", paces: (0.433, 11.0)),
