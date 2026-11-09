@@ -437,15 +437,11 @@ fn draw(
     let Some((entity, station)) = screen.at else {
         return;
     };
-    let set = |text: &mut Text, to: String| {
-        if text.0 != to {
-            text.0 = to;
-        }
-    };
+    use terra_walker::button::say as set;
     let recipes = &crafts.recipes;
-    set(&mut texts.p0(), crafts.stations.name(station).to_string());
+    set(&mut *texts.p0(), crafts.stations.name(station).to_string());
     set(
-        &mut texts.p1(),
+        &mut *texts.p1(),
         who(entity, station, &staff, &crafts.stations),
     );
     let running = staff.works(entity, station);
@@ -504,7 +500,7 @@ fn draw(
         }
         text
     });
-    set(&mut texts.p3(), about_text);
+    set(&mut *texts.p3(), about_text);
 
     let Ok(works) = stations.get(entity) else {
         return;
@@ -525,7 +521,7 @@ fn draw(
     } else {
         "Click something in the queue to take it off and get back what it took. F to leave."
     };
-    set(&mut texts.p5(), footer.to_string());
+    set(&mut *texts.p5(), footer.to_string());
 }
 
 #[cfg(test)]

@@ -794,11 +794,14 @@ fn show(
         if detail.0 { "" } else { "   F3 more" },
     );
     let (mut more, mut node) = more.into_inner();
-    node.display = if detail.0 {
+    let display = if detail.0 {
         Display::Flex
     } else {
         Display::None
     };
+    if node.display != display {
+        node.display = display;
+    }
     if detail.0 {
         let mut lines = vec![
             format!(

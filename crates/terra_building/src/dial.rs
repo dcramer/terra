@@ -347,11 +347,7 @@ fn draw(
     };
     // A sword drawn puts the bar's tool away, so the hammer says nothing (D405).
     let drawn = belongings.hands_full();
-    let set = |text: &mut Text, to: String| {
-        if text.0 != to {
-            text.0 = to;
-        }
-    };
+    use terra_walker::button::say as set;
     // A tap should not flash the wheel up, nor should a part with one kind.
     let count = builder.picked(&builds).variants().min(MOST_KINDS);
     let wanted = if dial.open
@@ -413,7 +409,7 @@ fn draw(
     }
     // In the middle: the part, and the kind pointed at.
     set(
-        &mut texts.p0(),
+        &mut *texts.p0(),
         match dial.pointed.and_then(|kind| part.variant_name(kind)) {
             Some(kind) => format!("{}\n\n{kind}", part.name),
             None => part.name.clone(),
@@ -423,9 +419,9 @@ fn draw(
     let holding = belongings.holding();
     let items = belongings.items();
     let hammer = belongings.tool_in_hand().is_some_and(|tool| tool.builds);
-    set(&mut texts.p1(), in_hand(&belongings, &builder, &builds));
+    set(&mut *texts.p1(), in_hand(&belongings, &builder, &builds));
     set(
-        &mut texts.p2(),
+        &mut *texts.p2(),
         if tool::waiting(&cursor, &options) && !inventory.open {
             "Click to take control".to_string()
         } else if inventory.at.is_some() {
@@ -486,7 +482,7 @@ fn draw(
         },
     );
     set(
-        &mut texts.p3(),
+        &mut *texts.p3(),
         if dial.open || inventory.open || !hammer {
             String::new()
         } else {

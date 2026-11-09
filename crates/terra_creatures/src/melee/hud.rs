@@ -191,7 +191,11 @@ fn show(
     }
     for (fill, mut node) in &mut fills {
         let health = if fill.0 { fighter } else { theirs };
-        node.width = percent(100.0 * health.unwrap_or(HEALTH) / HEALTH);
+        // Written only as it changes: a node written is laid out again, with all under it.
+        let width = percent(100.0 * health.unwrap_or(HEALTH) / HEALTH);
+        if node.width != width {
+            node.width = width;
+        }
     }
     glare.0 = (glare.0 - time.delta_secs() * GLARE_FADE).max(0.0);
     for mut color in &mut whiteout {

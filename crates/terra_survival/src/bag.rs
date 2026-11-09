@@ -675,6 +675,17 @@ pub fn lay_grid<B: Bundle>(
     });
 }
 
+/// A slot's border, lit where the pointer is on it, written only where it differs.
+fn outline<T: bevy::ecs::change_detection::DetectChangesMut<Inner = BorderColor>>(
+    border: &mut T,
+    pointed: bool,
+) {
+    terra_walker::button::put(
+        border,
+        BorderColor::all(if pointed { POINTED } else { Color::NONE }),
+    );
+}
+
 /// The size of an icon `cells` across and down, as big as fits in `room`.
 fn fit(cells: (u8, u8), room: Vec2) -> Vec2 {
     let aspect = f32::from(cells.0.max(1)) / f32::from(cells.1.max(1));
@@ -720,30 +731,11 @@ fn draw(
     let Some(belongings) = belongings.mine() else {
         return;
     };
-    let set = |text: &mut Text, to: String| {
-        if text.0 != to {
-            text.0 = to;
-        }
-    };
-    let show = |visibility: &mut Visibility, shown: bool| {
-        let wanted = if shown {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-        if *visibility != wanted {
-            *visibility = wanted;
-        }
-    };
-    let outline = |border: &mut BorderColor, pointed: bool| {
-        let wanted = BorderColor::all(if pointed { POINTED } else { Color::NONE });
-        if *border != wanted {
-            *border = wanted;
-        }
-    };
+    use terra_walker::button::say as set;
+    use terra_walker::button::show;
     let items = belongings.items();
     let (backpack, bar, gear) = (belongings.backpack(), belongings.bar(), belongings.gear());
-    show(&mut panel, screen.open);
+    show(&mut *panel, screen.open);
     for mut hud in &mut hud {
         show(&mut hud, options.shows_interface());
     }
@@ -849,7 +841,7 @@ fn draw(
             about = format!("{}.  Click to take it off.", items.name(item.kind));
         }
     }
-    set(&mut texts.p1(), about);
+    set(&mut *texts.p1(), about);
 
     let size = backpack.size();
     let cells = size.w as usize * size.h as usize;
@@ -858,7 +850,7 @@ fn draw(
         .map(|placed| placed.size.w as usize * placed.size.h as usize)
         .sum();
     set(
-        &mut texts.p2(),
+        &mut *texts.p2(),
         format!(
             "{} by {}, {} of {} cells free.",
             size.w,
