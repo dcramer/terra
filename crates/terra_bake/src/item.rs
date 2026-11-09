@@ -40,6 +40,12 @@ pub fn write(
         "recipe".into(),
         serde_json::to_value(&item.recipe).map_err(|e| e.to_string())?,
     );
+    // The kind's carry pose, as fit_held.py writes a fitted look's from its data: the walker
+    // poses the arm by it (terra_walker::character::held).
+    let kind = lib.kinds.get(&item.recipe.kind);
+    if let Some(clip) = kind.and_then(|k| k.carried.clip.as_ref()) {
+        extras.insert("carry_hold".into(), json!(clip));
+    }
     if let Some(s) = item.second {
         extras.insert("second".into(), json!(s[1]));
     }
@@ -525,6 +531,8 @@ mod tests {
         assert_eq!(nodes[0]["name"], "test_haft");
         assert_eq!(g.json["materials"][0]["name"], "Wood");
         assert_eq!(nodes[0]["extras"]["recipe"]["kind"], "axe");
+        // The kind says how it is carried (the axe's kind file: the one-handed tool's pose).
+        assert_eq!(nodes[0]["extras"]["carry_hold"], "Carry_Tool");
         // The haft runs from its butt, the grip below the origin, to its top, +Y.
         let pos = &g.json["accessors"][nodes[0]["mesh"].as_u64().unwrap() as usize];
         assert!((pos["min"][1].as_f64().unwrap() + 0.08).abs() < 1e-6);

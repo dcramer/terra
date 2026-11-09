@@ -415,6 +415,13 @@ function madeFrom(look: Look, body: Body, data: Record<string, unknown>, root: s
     was("height", hi[1] - lo[1], (data.size as number) * body.height, 0.03 * (data.size as number) * body.height);
     was("hanging point, as a share of its height from its foot,", -lo[1] / (hi[1] - lo[1]), data.hangs_at as number, 0.02, "");
   }
+  // An assembled look (D565) is its data's recipe: the kind, parts and material its extras carry.
+  if (data.assembled !== undefined) {
+    const r = look.extras.recipe as { kind?: string; parts?: string[]; material?: string } | undefined;
+    const want = { kind: data.assembled, parts: data.parts, material: data.material };
+    const got = r && { kind: r.kind, parts: r.parts, material: r.material };
+    if (JSON.stringify(got) !== JSON.stringify(want)) f("stale", `its extras' recipe ${JSON.stringify(got)} is not its data's ${JSON.stringify(want)}: made again since?`);
+  }
   const swing = data.swing as Record<string, unknown> | undefined;
   const made = look.extras.swing as Record<string, unknown> | undefined;
   if (swing && (!made || ["stiffness", "drag", "gravity"].some((k) => swing[k] !== made[k]))) f("stale", `its extras' swing ${JSON.stringify(made)} is not its data's ${JSON.stringify(swing)}`);

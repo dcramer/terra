@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { allItems, deepest, lookDiff, makeInputs, movesReads, nockFault, remedy, runMoves, setOf } from "./fit.ts";
+import { allItems, deepest, lookDiff, makeInputs, movesReads, nockFault, recipeArgs, recipeFault, remedy, runMoves, setOf } from "./fit.ts";
 import { closure } from "./fit_cache.ts";
 
 /** A GLB of one node with these extras over this binary chunk. */
@@ -89,6 +89,18 @@ test("a make is keyed on every script its maker reaches and the item's data and 
   // A worn item's maker runs build.ts, whose steps name the Python scripts they run.
   const worn = rel(makeInputs({ name: "quiver", worn: true, file: join(ROOT, "art", "gear", "quiver", "fit.json"), data: {} }));
   for (const f of ["tools/characters/build_item.sh", "tools/characters/build.ts", "tools/characters/fit_gear.py", "tools/characters/gear_check.py", "art/gear/quiver/fit.json", "art/gear/small_pack/fit.json"]) assert.ok(worn.includes(f), f);
+});
+
+test("an assembled look is made by the item writer from its recipe, keyed on its parts, and gives no fitted look's numbers", () => {
+  const file = join(ROOT, "art", "held", "iron_axe.json");
+  const data = JSON.parse(readFileSync(file, "utf8"));
+  assert.equal(recipeFault(data), undefined);
+  assert.match(recipeFault({ ...data, length: 0.68 })!, /length comes from its parts and kind \(D565\): delete it/);
+  assert.match(recipeFault({ assembled: "axe", parts: [] })!, /"parts" \(part ids\) and "material"/);
+  assert.deepEqual(recipeArgs({ assembled: "axe", parts: ["h", "s"], material: "iron" }, "o.glb").slice(4), ["--bin", "item", "--", "axe", "h", "s", "--material", "iron", "--out", "o.glb"]);
+  const reads = rel(makeInputs({ name: "iron_axe", worn: false, file, data }));
+  for (const f of ["art/held/iron_axe.json", "crates/terra_items/src/assembly/meet.rs", "crates/terra_bake/src/item.rs", "assets/data/kinds/axe.json", "assets/data/parts/ash_haft.json", "assets/models/parts/bearded_axe_head.glb"]) assert.ok(reads.includes(f), f);
+  assert.ok(!reads.includes("tools/characters/fit_held.py"), "no Blender in an assembly");
 });
 
 test("a move check is keyed on the files its scripts read, not only on its scripts", () => {

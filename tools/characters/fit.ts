@@ -109,6 +109,29 @@ export function allItems(root = ROOT): string[] {
   return [...held, ...worn].sort();
 }
 
+/** An assembled look's data (D565): "assembled" its kind (assets/data/kinds), "parts" its
+ * recipe's part ids, "material" its working part's; why it is not one, or nothing. Its grip,
+ * length and facing are its parts' points, so it gives none of a fitted look's (source, fit,
+ * length, grip_from_end, turn), and its carry pose is its kind's. */
+export function recipeFault(d: Record<string, unknown>): string | undefined {
+  const parts = d.parts;
+  if (typeof d.assembled !== "string" || !Array.isArray(parts) || !parts.length || parts.some((p) => typeof p !== "string") || typeof d.material !== "string")
+    return `an assembled look gives "assembled" (its kind), "parts" (part ids) and "material"`;
+  const fitted = ["source", "fit", "length", "grip_from_end", "turn", "carry_hold"].filter((k) => k in d);
+  if (fitted.length) return `an assembled look's ${fitted.join(", ")} come${fitted.length > 1 ? "" : "s"} from its parts and kind (D565): delete ${fitted.length > 1 ? "them" : "it"}`;
+}
+
+/** The item writer's words for an assembled look's data: `cargo run -p terra_bake --bin item -- …`. */
+export function recipeArgs(d: Record<string, unknown>, out: string): string[] {
+  return ["run", "-q", "-p", "terra_bake", "--bin", "item", "--", d.assembled as string, ...(d.parts as string[]), "--material", d.material as string, "--out", out];
+}
+
+/** Every file under a folder, sorted. */
+const under = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .flatMap((e) => (e.isDirectory() ? under(join(dir, e.name)) : [join(dir, e.name)]));
+
 function read(name: string): Item | string {
   const held = join(ROOT, "art", "held", `${name}.json`);
   const worn = join(ROOT, "art", "gear", name, "fit.json");
@@ -117,8 +140,13 @@ function read(name: string): Item | string {
   const file = worn_ ? worn : held;
   const data = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
   if (!data.kind) return `${rel(file)} names no kind`;
-  const source = worn_ ? join(ROOT, "art", "gear", name, "model.glb") : join(ROOT, "assets", "models", data.source as string);
-  if (!worn_ && !existsSync(source)) return `its source ${rel(source)} is not there`;
+  if (!worn_ && data.assembled !== undefined) {
+    const bad = recipeFault(data);
+    if (bad) return `${rel(file)}: ${bad}`;
+  } else {
+    const source = worn_ ? join(ROOT, "art", "gear", name, "model.glb") : join(ROOT, "assets", "models", data.source as string);
+    if (!worn_ && !existsSync(source)) return `its source ${rel(source)} is not there`;
+  }
   const look = join(ROOT, "assets", "models", worn_ ? "gear" : "held", `${name}.glb`);
   return { name, worn: worn_, file, data, look };
 }
@@ -127,6 +155,7 @@ function read(name: string): Item | string {
 function detectStage(ctx: Ctx, it: Item, turn?: number): boolean {
   const d = it.data;
   if (it.worn) return line(ctx, true, it.name, "detect", `a ${d.kind} is fitted on the body by its data`);
+  if (d.assembled !== undefined) return line(ctx, true, it.name, "detect", `an assembled ${d.assembled}: its grip and facing are its parts' points (D565), nothing to find`);
   if (turn !== undefined) {
     d.turn = turn;
     writeData(it.file, d);
@@ -168,6 +197,16 @@ export function lookDiff(a: Buffer, b: Buffer): string {
 export function makeInputs(it: Pick<Item, "name" | "worn" | "file" | "data">, root = ROOT): string[] {
   const chars = join(root, "tools", "characters");
   const blender = join(root, "tools", "blender", "version");
+  // An assembled look: the assembler and the writer, the kinds and parts as data, the parts' models.
+  if (!it.worn && it.data.assembled !== undefined)
+    return [
+      it.file,
+      ...under(join(root, "crates", "terra_items", "src", "assembly")),
+      ...["item.rs", "glb.rs", join("bin", "item.rs")].map((f) => join(root, "crates", "terra_bake", "src", f)),
+      ...under(join(root, "assets", "data", "kinds")),
+      ...under(join(root, "assets", "data", "parts")),
+      ...under(join(root, "assets", "models", "parts")),
+    ];
   if (!it.worn) return [...closure(join(chars, "fit_held.py"), root), blender, it.file, join(root, "assets", "models", it.data.source as string)];
   const gear = join(root, "art", "gear");
   const out = join(chars, "out");
@@ -191,11 +230,18 @@ async function makeStage(ctx: Ctx, it: Item): Promise<[boolean, boolean]> {
   const k = key("make", ROOT, makeInputs(it));
   const kept = ctx.fresh ? undefined : ctx.cache.get(k, ROOT);
   if (!kept) {
-    const [cmd, args] = it.worn ? [join(CHARS, "build_item.sh"), [it.name]] : [join(ROOT, "tools", "blender", "run.sh"), [join(CHARS, "fit_held.py"), it.name]];
+    const assembled = !it.worn && it.data.assembled !== undefined;
+    const [cmd, args] = it.worn
+      ? [join(CHARS, "build_item.sh"), [it.name]]
+      : assembled
+        ? ["cargo", recipeArgs(it.data, it.look)]
+        : [join(ROOT, "tools", "blender", "run.sh"), [join(CHARS, "fit_held.py"), it.name]];
     const run = await exec(cmd, args);
     appendFileSync(ctx.log, `$ ${cmd} ${args.join(" ")}\n${run.stdout}${run.stderr}\n`);
+    // The assembler's refusal is the line to read (a recipe outside its kind's envelope, a part that fits no slot).
+    if (assembled && run.status !== 0) return [line(ctx, false, it.name, "make", `${run.stderr.trim().split("\n").at(-1)}; change "parts" in ${rel(it.file)}`, t0), false];
     // build_item.sh's last line: "✓ ITEM pass: made, carried onto N bodies and checked, ...".
-    const made = it.worn ? new RegExp(`^✓ ${it.name} pass\\b`, "m").test(run.stdout) : new RegExp(`^HELD ${it.name}\\b`, "m").test(run.stdout);
+    const made = it.worn ? new RegExp(`^✓ ${it.name} pass\\b`, "m").test(run.stdout) : assembled ? /^✓ item:/m.test(run.stdout) : new RegExp(`^HELD ${it.name}\\b`, "m").test(run.stdout);
     if (run.status !== 0 || !made || !existsSync(it.look)) return [line(ctx, false, it.name, "make", `its maker failed; see ${rel(ctx.log)}`, t0), false];
     ctx.cache.put(k, ROOT, { ok: true, line: "" }, [it.look]);
   }

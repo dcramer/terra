@@ -22,8 +22,9 @@ const off = (a: number, b: number) => Math.abs((((a - b) % 360) + 540) % 360 - 1
 test("every committed hafted, blade and polearm item: the detector finds the turn and grip a person set", () => {
   const items = readdirSync(join(ROOT, "art", "held"))
     .map((f) => f.replace(/\.json$/, ""))
-    .filter((i) => ["hafted", "blade", "polearm"].includes(heldData(i).kind as string));
-  assert.ok(items.length >= 9, `only ${items.length} items`);
+    // An assembled look (D565) has no source to detect on: its grip and facing are its parts' points.
+    .filter((i) => ["hafted", "blade", "polearm"].includes(heldData(i).kind as string) && heldData(i).assembled === undefined);
+  assert.ok(items.length >= 8, `only ${items.length} items`);
   for (const item of items) {
     const d = heldData(item);
     const f = detectItem(item);

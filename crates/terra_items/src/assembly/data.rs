@@ -67,6 +67,15 @@ pub struct Kind {
     pub kind: String,
     pub slots: Vec<Slot>,
     pub envelope: Envelope,
+    pub carried: Carried,
+}
+
+/// How a kind is carried in hand when not in use (assembled-items.md, Kinds): the kind owns it,
+/// never the item.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Carried {
+    /// Its carry pose, a clip of the figure's (D560, D584): a held look's `carry_hold`.
+    pub clip: Option<String>,
 }
 
 /// A part type's template: who makes it, its slot and how it is placed (D566).
