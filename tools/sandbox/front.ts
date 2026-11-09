@@ -40,7 +40,9 @@ export function run(names: string[], dir: string, logs: string, suite = { name: 
       continue;
     }
     failed += 1;
-    const why = all.split("\n").filter((line) => line.startsWith("✗") || line.startsWith("FAIL"));
+    // A check's own failing lines: its ✗, or a line that says FAIL anywhere (portal.ts's
+    // "against trip 1: ...; memory FAIL past 2%", which read as no verdict at all).
+    const why = all.split("\n").filter((line) => line.startsWith("✗") || /\bFAIL\b/.test(line)).map((line) => line.trim());
     said.push(`✗ ${name} (${took})`);
     for (const line of why.length ? why : ["it ended with no verdict"]) said.push(`  ${line.slice(0, 600)}`);
     said.push(`  full log: ${resolve(logs, `${suite.name}-${name}.log`)}; what the game said: shots/remote.log`);

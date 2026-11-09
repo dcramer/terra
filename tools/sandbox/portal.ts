@@ -42,7 +42,7 @@ type Census = {
   world: { key: number; kind: string; seed: number } | null;
   travel: string | null;
   entered: number | null;
-  gpu: { allocated_mib: number; reserved_mib: number } | null;
+  gpu: { allocated_mib: number; reserved_mib: number; pipelines?: number } | null;
   resident_mib: number | null;
   /// What lives on by the clock (creatures), by kind, and the entities it is made of: put out
   /// again by its rules on entering, so not compared exactly (D469).
@@ -82,7 +82,7 @@ async function cross(): Promise<{ census: Census; took: string }> {
 }
 
 const within = (a: number | null | undefined, b: number | null | undefined) => a != null && b != null && Math.abs(b - a) <= MEMORY_SLACK * a;
-const memory = (c: Census) => `gpu ${c.gpu?.allocated_mib ?? "?"} MiB allocated, ${c.gpu?.reserved_mib ?? "?"} reserved; resident ${c.resident_mib ?? "?"} MiB`;
+const memory = (c: Census) => `gpu ${c.gpu?.allocated_mib ?? "?"} MiB allocated, ${c.gpu?.reserved_mib ?? "?"} reserved, ${c.gpu?.pipelines ?? "?"} pipelines; resident ${c.resident_mib ?? "?"} MiB`;
 
 // A crossing's seconds are the machine's as much as the game's: wait for it to be quiet, and
 // say if it was not (D185).

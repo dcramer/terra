@@ -52,6 +52,9 @@ struct Sample {
     allocated: u64,
     reserved: u64,
     blocks: usize,
+    /// How many render pipelines the pipeline cache holds: each is a compiled shader pair the
+    /// driver keeps, in memory no allocator of ours counts.
+    pipelines: usize,
     /// Bytes and how many allocations, by folded label, most first.
     labels: Vec<(String, u64, usize)>,
 }
@@ -316,6 +319,7 @@ fn sample(
     image_changes: Option<Res<ExtractedAssets<GpuImage>>>,
     meshes: Option<Res<RenderAssets<RenderMesh>>>,
     mesh_changes: Option<Res<ExtractedAssets<RenderMesh>>>,
+    pipelines: Option<Res<bevy::render::render_resource::PipelineCache>>,
 ) {
     let mut state = shared
         .0
@@ -346,6 +350,7 @@ fn sample(
         allocated: report.total_allocated_bytes,
         reserved: report.total_reserved_bytes,
         blocks: report.blocks.len(),
+        pipelines: pipelines.map_or(0, |cache| cache.pipelines().count()),
         labels,
     };
     if state.now.reserved < state.peak.reserved {
@@ -477,6 +482,7 @@ fn sample_json(sample: &Sample, top: usize) -> Value {
         "reserved_mib": (sample.reserved as f64 / MIB).round(),
         "allocated_mib": (sample.allocated as f64 / MIB).round(),
         "blocks": sample.blocks,
+        "pipelines": sample.pipelines,
         "labels": lines(&sample.labels, top),
     })
 }
