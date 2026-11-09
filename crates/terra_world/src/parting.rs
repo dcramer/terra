@@ -195,19 +195,116 @@ fn tag_of(gone: f32) -> u32 {
     (gone.clamp(0.0, 1.0) * 255.0).round() as u32
 }
 
+/// A plant can stand between the eye and its subject only within this of the eye: the boom
+/// is a few metres long. Those within it are looked at every frame; every plant, to find
+/// them and to measure the new, this often.
+const NEAR_EYE_M: f32 = 25.0;
+const LOOKED_OVER_EVERY_S: f32 = 0.5;
+
+/// The plants near enough the eye to stand in its way, or still fading back, found afresh
+/// every half second: thousands of bushes stand in a forest, a few of them by the eye, and
+/// asking each every frame was a millisecond of each (a traced walk through the first realm).
+struct NearEye {
+    since: f32,
+    plants: Vec<Entity>,
+}
+
+impl Default for NearEye {
+    /// Looked over on the first frame.
+    fn default() -> Self {
+        NearEye {
+            since: LOOKED_OVER_EVERY_S,
+            plants: Vec::new(),
+        }
+    }
+}
+
+type Plants<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static mut ObstructionFade,
+        Ref<'static, GlobalTransform>,
+        Option<&'static Children>,
+    ),
+>;
+type PlantParts<'w, 's> =
+    Query<'w, 's, (&'static GlobalTransform, Option<&'static Aabb>), With<Mesh3d>>;
+
+/// A plant's own parts: itself, and its children.
+fn parts_of(plant: Entity, children: Option<&Children>) -> impl Iterator<Item = Entity> + '_ {
+    std::iter::once(plant).chain(children.into_iter().flatten().copied())
+}
+
+/// Measures a plant's box, the first time and when it has moved, once its meshes are in.
+fn measure(
+    commands: &mut Commands,
+    plant: Entity,
+    fade: &mut ObstructionFade,
+    place: &Ref<GlobalTransform>,
+    children: Option<&Children>,
+    parts: &PlantParts,
+) {
+    let meshes = || parts_of(plant, children);
+    if fade.bounds.is_none() || place.is_changed() {
+        let to_plant = place.affine().inverse();
+        let mut corners = Vec::new();
+        let mut loaded = true;
+        for (at, aabb) in meshes().filter_map(|part| parts.get(part).ok()) {
+            let Some(aabb) = aabb else {
+                loaded = false;
+                break;
+            };
+            let (middle, half) = (Vec3::from(aabb.center), Vec3::from(aabb.half_extents));
+            for k in 0..8 {
+                let sign = Vec3::new(
+                    if k & 1 == 0 { -1.0 } else { 1.0 },
+                    if k & 2 == 0 { -1.0 } else { 1.0 },
+                    if k & 4 == 0 { -1.0 } else { 1.0 },
+                );
+                let world = at.transform_point(middle + half * sign);
+                corners.push(to_plant.transform_point3(world));
+            }
+        }
+        if !loaded || corners.is_empty() {
+            return;
+        }
+        let (low, high) = corners
+            .iter()
+            .fold((Vec3::MAX, Vec3::MIN), |(l, h), p| (l.min(*p), h.max(*p)));
+        if fade.bounds.is_none() {
+            for part in meshes().filter(|part| parts.contains(*part)) {
+                commands.entity(part).insert(MeshTag::new(0));
+            }
+        }
+        let (middle, half) = ((low + high) * 0.5, (high - low) * 0.5);
+        let m = place.affine().matrix3;
+        let scale = m
+            .x_axis
+            .length()
+            .max(m.y_axis.length())
+            .max(m.z_axis.length());
+        fade.bounds = Some(Bounds {
+            to_plant,
+            middle,
+            half,
+            centre: place.transform_point(middle),
+            reach: half.length() * scale,
+        });
+    }
+}
+
 fn fade_obstructions(
     mut commands: Commands,
     time: Res<Time>,
     camera: Option<Single<(&GlobalTransform, Option<&CameraSubject>), With<MainCamera>>>,
-    mut plants: Query<(
-        Entity,
-        &mut ObstructionFade,
-        Ref<GlobalTransform>,
-        Option<&Children>,
-    )>,
-    parts: Query<(&GlobalTransform, Option<&Aabb>), With<Mesh3d>>,
+    mut plants: Plants,
+    parts: PlantParts,
     mut tags: Query<&mut MeshTag>,
+    mut near: Local<NearEye>,
 ) {
+    let eye = camera.as_ref().map(|camera| camera.0.translation());
     let line = camera.and_then(|camera| {
         let (eye, subject) = *camera;
         subject
@@ -215,54 +312,26 @@ fn fade_obstructions(
             .map(|subject| (eye.translation(), subject))
     });
     let dt = time.delta_secs();
-    for (plant, mut fade, place, children) in &mut plants {
-        let meshes = || std::iter::once(plant).chain(children.into_iter().flatten().copied());
-        if fade.bounds.is_none() || place.is_changed() {
-            let to_plant = place.affine().inverse();
-            let mut corners = Vec::new();
-            let mut loaded = true;
-            for (at, aabb) in meshes().filter_map(|part| parts.get(part).ok()) {
-                let Some(aabb) = aabb else {
-                    loaded = false;
-                    break;
-                };
-                let (middle, half) = (Vec3::from(aabb.center), Vec3::from(aabb.half_extents));
-                for k in 0..8 {
-                    let sign = Vec3::new(
-                        if k & 1 == 0 { -1.0 } else { 1.0 },
-                        if k & 2 == 0 { -1.0 } else { 1.0 },
-                        if k & 4 == 0 { -1.0 } else { 1.0 },
-                    );
-                    let world = at.transform_point(middle + half * sign);
-                    corners.push(to_plant.transform_point3(world));
-                }
-            }
-            if !loaded || corners.is_empty() {
+    near.since += dt;
+    if near.since >= LOOKED_OVER_EVERY_S {
+        near.since = 0.0;
+        near.plants.clear();
+        for (plant, mut fade, place, children) in &mut plants {
+            measure(&mut commands, plant, &mut fade, &place, children, &parts);
+            let Some(bounds) = &fade.bounds else {
                 continue;
+            };
+            let by_eye =
+                eye.is_some_and(|eye| eye.distance(bounds.centre) < NEAR_EYE_M + bounds.reach);
+            if by_eye || fade.gone != 0.0 {
+                near.plants.push(plant);
             }
-            let (low, high) = corners
-                .iter()
-                .fold((Vec3::MAX, Vec3::MIN), |(l, h), p| (l.min(*p), h.max(*p)));
-            if fade.bounds.is_none() {
-                for part in meshes().filter(|part| parts.contains(*part)) {
-                    commands.entity(part).insert(MeshTag::new(0));
-                }
-            }
-            let (middle, half) = ((low + high) * 0.5, (high - low) * 0.5);
-            let m = place.affine().matrix3;
-            let scale = m
-                .x_axis
-                .length()
-                .max(m.y_axis.length())
-                .max(m.z_axis.length());
-            fade.bounds = Some(Bounds {
-                to_plant,
-                middle,
-                half,
-                centre: place.transform_point(middle),
-                reach: half.length() * scale,
-            });
         }
+    }
+    for &plant in &near.plants {
+        let Ok((plant, mut fade, _, children)) = plants.get_mut(plant) else {
+            continue;
+        };
         let Some(bounds) = &fade.bounds else {
             continue;
         };
@@ -284,7 +353,7 @@ fn fade_obstructions(
         }
         fade.gone = faded(fade.gone, toward, dt);
         let tag = tag_of(fade.gone);
-        for part in meshes() {
+        for part in parts_of(plant, children) {
             if let Ok(mut mesh_tag) = tags.get_mut(part) {
                 mesh_tag.set_if_neq(MeshTag::new(tag));
             }
@@ -464,6 +533,36 @@ mod tests {
         assert!(back > 0 && back < tag_of(FADED), "{back}");
         run(&mut app, 30);
         assert_eq!(tag(&app, plant), 0);
+    }
+
+    /// Only the plants by the eye are asked each frame, found afresh every half second: a
+    /// bush the eye and its subject come upon, far off when they were last looked over, is
+    /// fading within that and a few frames.
+    #[test]
+    fn a_bush_the_eye_comes_upon_fades_within_half_a_second() {
+        let (mut app, plant, _) = bush_scene(Vec3::new(0.3, 0.0, 2.5));
+        // The eye and its subject begin a hundred metres off: the bush is nobody's to ask.
+        let far = Vec3::X * 100.0;
+        let mut eyes = app
+            .world_mut()
+            .query::<(&mut GlobalTransform, &mut CameraSubject)>();
+        let (home, subject) = {
+            let (mut at, mut subject) = eyes.single_mut(app.world_mut()).unwrap();
+            let home = (*at, subject.0);
+            *at = GlobalTransform::from_translation(home.0.translation() + far);
+            subject.0 = home.1.map(|subject| subject + far);
+            home
+        };
+        run(&mut app, 40);
+        assert_eq!(tag(&app, plant), 0);
+        // They come to stand either side of it.
+        let (mut at, mut seen) = eyes.single_mut(app.world_mut()).unwrap();
+        (*at, seen.0) = (home, subject);
+        run(&mut app, 34);
+        assert!(
+            tag(&app, plant) > 0,
+            "not fading 34 frames after the eye came upon it"
+        );
     }
 
     #[test]

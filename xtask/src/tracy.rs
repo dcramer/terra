@@ -75,6 +75,25 @@ fn program(folder: &Path, name: &str) -> PathBuf {
     }
 }
 
+/// Marks the unpacked tools as programs: the Linux release's zip keeps no executable bit, so
+/// none of them could be started ("could not start tracy-profiler") and no capture was taken.
+fn executable(folder: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for entry in std::fs::read_dir(folder).into_iter().flatten().flatten() {
+            let named_tracy = entry.file_name().to_string_lossy().starts_with("tracy-");
+            if let (true, Ok(about)) = (named_tracy, entry.metadata()) {
+                let mut permissions = about.permissions();
+                permissions.set_mode(permissions.mode() | 0o755);
+                let _ = std::fs::set_permissions(entry.path(), permissions);
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = folder;
+}
+
 /// The release's archive for this machine.
 fn archive() -> &'static str {
     if on_wsl() {
@@ -132,6 +151,9 @@ pub(crate) fn fetch() -> Option<PathBuf> {
             .status()
             .is_ok_and(|s| s.success());
     let _ = std::fs::remove_file(&zip);
+    if unpacked {
+        executable(&folder);
+    }
     if fetched && sum != want {
         let _ = std::fs::remove_dir_all(&folder);
         eprintln!(
