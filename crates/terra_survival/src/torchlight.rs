@@ -1,6 +1,7 @@
-//! A torch in hand burns: a small flame at its head and a warm, wavering light around
-//! whoever holds it, which is what lets them see at night (D134). The torch's look is shown in
-//! hand as any held thing's is (`held`); this only sets it alight.
+//! A torch in hand burns: the world's own torch fire at its head (`terra_world::fire`, the
+//! flames, smoke and wavering pitch light a standing torch has, D377), which is what lets
+//! whoever holds it see at night (D134). The torch's look is shown in hand as any held thing's
+//! is (`held`); this only sets it alight.
 
 use crate::held::InHand;
 use crate::inventory::{self, Backpack, Bar, Gear, Items, OFF_HAND};
@@ -8,57 +9,44 @@ use bevy::{light::NotShadowCaster, platform::collections::HashSet, prelude::*};
 use terra_walker::Player;
 use terra_walker::character::Held;
 use terra_walker::figure::{Grip, Hand};
+use terra_world::fire::{Body, Kindled, Logs, Rig, TORCH_LIGHT};
+use terra_world::footprint::Footprint;
 
-/// How bright a torch is, in lumens, and how far its light reaches.
-const TORCH_LUMENS: f32 = 160_000.0;
-const TORCH_RANGE_M: f32 = 14.0;
-/// Where its head is along its look, from where it is held, in metres.
-const HEAD_M: f32 = 0.47;
+/// Where its flames stand from along its look, from where it is held, in metres: its head, as
+/// the dungeon's wall torch has it (0.47 m over the foot, the grip 0.1 m up, art/held/torch.json).
+const HEAD_M: f32 = 0.37;
+/// A hand torch's flames: a hand's width and a forearm tall, two thirds a wall torch's
+/// (the dungeon's `TORCH_FIRE`, 0.45 m), drawn and lit as it is: the marched torch field
+/// (D466), pitch's light, a torch's rig.
+const FIRE: Kindled = Kindled {
+    tall: 0.3,
+    wide: 0.1,
+    heat: 0.6,
+    logs: Logs::NONE,
+    body: Body::Marched,
+    light: TORCH_LIGHT,
+    rig: Rig::Torch,
+};
 
 /// A torch's flame, with its light.
 #[derive(Component)]
 struct Flame;
 
-/// The flame's look, made once.
-#[derive(Resource)]
-struct FlameLook {
-    mesh: Handle<Mesh>,
-    material: Handle<StandardMaterial>,
-}
-
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, setup)
-        .add_systems(Update, (light, flicker).chain());
-}
-
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    commands.insert_resource(FlameLook {
-        mesh: meshes.add(Cone::new(0.04, 0.14)),
-        material: materials.add(StandardMaterial {
-            base_color: Color::srgb(1.0, 0.6, 0.2),
-            emissive: LinearRgba::rgb(14.0, 5.0, 1.2),
-            unlit: true,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        }),
-    });
+    app.add_systems(Update, (light, unshadow).chain());
 }
 
 /// Sets a torch in either of a player's hands alight, and puts it out when it is put away or
 /// burnt out. The flame goes on the look in hand, so it moves with it.
 fn light(
     mut commands: Commands,
-    look: Res<FlameLook>,
     items: Res<Items>,
     players: Query<(&Backpack, &Bar, &Gear), With<Player>>,
     grips: Query<(Entity, &Grip, &InHand)>,
     children: Query<&Children>,
     held: Query<(), With<Held>>,
     flames: Query<(Entity, &ChildOf), With<Flame>>,
+    meshes: Query<(), With<Mesh3d>>,
 ) {
     // What is alight now: the look in each hand holding a torch.
     let mut alight = HashSet::new();
@@ -96,36 +84,43 @@ fn light(
         }
     }
     for torch in alight.into_iter().filter(|torch| !lit.contains(torch)) {
-        light_torch(&mut commands, &look, torch);
+        // The fire burns up from the head however the torch is tipped: a kept fire is drawn
+        // from where it stands, up. An empty footprint, so it clears no ground as a campfire
+        // does (`fire::scorch`).
+        commands.entity(torch).with_child((
+            Name::new("Flame"),
+            Flame,
+            FIRE,
+            Footprint::default(),
+            Transform::from_xyz(0.0, HEAD_M, 0.0),
+        ));
+        for part in children.iter_descendants(torch) {
+            if meshes.contains(part) {
+                commands.entity(part).insert(NotShadowCaster);
+            }
+        }
     }
 }
 
-/// Puts a flame, with its light, on a torch's head.
-fn light_torch(commands: &mut Commands, look: &FlameLook, torch: Entity) {
-    commands.entity(torch).with_child((
-        Name::new("Flame"),
-        Flame,
-        Mesh3d(look.mesh.clone()),
-        MeshMaterial3d(look.material.clone()),
-        NotShadowCaster,
-        PointLight {
-            color: Color::srgb(1.0, 0.62, 0.3),
-            intensity: TORCH_LUMENS,
-            range: TORCH_RANGE_M,
-            radius: 0.05,
-            shadow_maps_enabled: false,
-            ..default()
-        },
-        Transform::from_xyz(0.0, HEAD_M + 0.07, 0.0),
-    ));
-}
-
-/// A flame wavers: its light, and the flame itself.
-fn flicker(time: Res<Time>, mut flames: Query<(&mut PointLight, &mut Transform), With<Flame>>) {
-    let t = time.elapsed_secs();
-    let waver = 0.85 + 0.09 * libm::sinf(t * 13.0) + 0.06 * libm::sinf(t * 29.0 + 0.7);
-    for (mut light, mut transform) in &mut flames {
-        light.intensity = TORCH_LUMENS * waver;
-        transform.scale = Vec3::new(1.0, 0.85 + 0.3 * (waver - 0.7), 1.0);
+/// A burning torch casts no shadow, as a game's torch is left out of its own light's shadows:
+/// its light hangs a hand's breadth over its head, so the head would shadow the ground round
+/// whoever holds it (as the staged torch's did, `terra_creatures::staged::quench::unshadow`).
+/// Its parts already there are told when it is lit (`light`); this tells those loaded after.
+fn unshadow(
+    parts: Query<Entity, Added<Mesh3d>>,
+    parents: Query<&ChildOf>,
+    children: Query<&Children>,
+    flames: Query<(), With<Flame>>,
+    mut commands: Commands,
+) {
+    for part in &parts {
+        let burning = parents.iter_ancestors(part).any(|up| {
+            children
+                .get(up)
+                .is_ok_and(|under| under.iter().any(|each| flames.contains(each)))
+        });
+        if burning {
+            commands.entity(part).insert(NotShadowCaster);
+        }
     }
 }

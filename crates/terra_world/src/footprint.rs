@@ -39,6 +39,10 @@ impl Footprint {
         if !local.is_finite() || local.abs().max_element() > FAR_M {
             return false;
         }
+        // An empty one covers nothing, whatever its cells' size (the default's is nought).
+        if self.ground.is_empty() && self.standing.is_empty() {
+            return false;
+        }
         let at = (local / self.cell_m).floor().as_ivec3();
         let reach = (margin / self.cell_m).ceil() as i32;
         self.ground.contains(&IVec2::new(at.x, at.z))
@@ -99,6 +103,16 @@ impl Footprint {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fire carried in the hand has an empty footprint, so it clears no ground
+    /// (`terra_survival::torchlight`): the default's cells are nought wide, and a point
+    /// tested against it once overflowed.
+    #[test]
+    fn an_empty_footprint_covers_nothing() {
+        let empty = Footprint::default();
+        assert!(!empty.covers(Vec3::new(0.2, 0.0, 0.1), 2.0));
+        assert!(!empty.covers(Vec3::ZERO, 0.0));
+    }
 
     #[test]
     fn a_footprint_covers_its_rooms_and_the_reach_of_what_stands() {
