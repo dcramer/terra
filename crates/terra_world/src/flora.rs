@@ -23,6 +23,7 @@ mod fell;
 mod model;
 mod piece;
 mod stock;
+pub mod trees;
 pub use stock::Stock;
 mod under;
 use super::scene::SUN_DIRECTION;
@@ -676,25 +677,12 @@ fn plant(
         _ => false,
     };
     let woods = Noise::new(seed.derive("woods"));
-    let species = Noise::new(seed.derive("species"));
     let blooms = Noise::new(seed.derive("blooms"));
     let pick = |rng: &mut Rng, kind: usize| {
         let model = rng.below(models[kind].len() as u32) as usize;
         (model, &models[kind][model])
     };
-    // Standing on the ground at a point, turned at random, leaning at most a little.
-    let standing = |rng: &mut Rng, point: Vec3, lean: f32, scale: f32, sunk: f32| {
-        let up = point.normalize();
-        let lean_axis = up.any_orthonormal_vector();
-        let rotation = Quat::from_axis_angle(up, rng.range(0.0, std::f32::consts::TAU))
-            * Quat::from_axis_angle(lean_axis, rng.range(0.0, lean))
-            * Quat::from_rotation_arc(Vec3::Y, up);
-        Transform {
-            translation: point - up * sunk,
-            rotation,
-            scale: Vec3::splat(scale),
-        }
-    };
+    let standing = trees::standing;
     let mut planted = 0;
     let mut solid_things: Vec<(Vec3, f32)> = Vec::new();
     let mut put = |model: &Model,
@@ -756,43 +744,16 @@ fn plant(
         }
     };
 
-    // Trees: woods with clearings, thinning to nothing around the base and at the shore. On a
-    // world with mountains the woods grow them, by the land's rules (`woods`).
-    let trees_m = if planet.has_mountains() { 0.0 } else { 340.0 };
-    let trees = scatter(seed.derive("trees"), trees_m, 6.5, |rng, x, z, out| {
-        let point = ground.ground(&planet, x, z);
-        let normal = planet.normal(point);
-        let from_base = Vec2::new(x, z).length();
-        if point.length() - planet.water_near_m(point) < 1.4 || normal.dot(point.normalize()) < 0.86
-        {
-            return;
-        }
-        // Keep the view from the door to the water open.
-        let from_door = to_base.transform_point3(point) - Vec3::new(7.5, 0.0, 0.0);
-        if (0.0..120.0).contains(&from_door.z) && from_door.x.abs() < 10.0 + 0.3 * from_door.z {
-            return;
-        }
-        if rng.unit() > wooded(&woods, point, from_base) {
-            return;
-        }
-        let which = species.fbm(point / 150.0 + 9.0, 2, 2.0, 0.5) + rng.range(-0.12, 0.12);
-        let Some(kind) = flora.choose(Grows::Trees, which, 0.0, 0.0, &season, rng) else {
-            return;
-        };
-        let tall = size(rng, kind);
-        let (index, model) = pick(rng, kind);
-        let scale = tall / model.height;
-        let trunk = (point, (model.spread * scale).clamp(0.25, 0.6));
-        out.push(Placing {
-            kind,
-            model: index,
-            transform: standing(rng, point, 0.06, scale, 0.1),
-            room: 5.0,
-            // The tallest are great trees, which only an iron axe will fell (D96).
-            cut: flora.kinds()[kind].cuttable(tall),
-            stops: Some(trunk),
-        });
-    });
+    // Trees: woods with clearings, thinning to nothing round the base and at the shore, by
+    // the world's own rule (`trees`), which a world that draws nothing asks too (D640).
+    let sizes: trees::Sizes = (models.iter())
+        .map(|kind| {
+            kind.iter()
+                .map(|model| (model.height, model.spread))
+                .collect()
+        })
+        .collect();
+    let trees = trees::trees((&planet, &start.0), seed, &flora, &sizes, &season);
     for tree in &trees {
         let (foot, radius_m) = tree.stops.unwrap_or_default();
         trunks.add(Trunk {

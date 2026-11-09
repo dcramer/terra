@@ -403,6 +403,12 @@ impl Flora {
 }
 
 impl FloraDef {
+    /// Whether it dies back in its season (its year among the plants' years), so that where
+    /// it stands turns on the season.
+    pub fn dies_back(&self) -> bool {
+        self.dies_back.is_some()
+    }
+
     /// Our colour for a part of one of its models, by the material the part names, as it
     /// should look on screen, and whether it is foliage, which catches the wind.
     /// How the part of a model with a material of this name is drawn: the first of the
