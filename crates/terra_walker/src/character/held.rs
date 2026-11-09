@@ -36,8 +36,8 @@ pub struct CarryHold {
     pub clip: String,
     /// Whether the pose must stay upright however the chest leans (its file's `carry_upright`,
     /// from the pose's `upright` in art/animation/sets/fight.json: the torch's flame held up),
-    /// its arm then held in the body's frame (`carry_arm`); else the arm leans with the chest,
-    /// as the hold layer lays it (a hanging tool's Carry_Tool).
+    /// its arm then held in the body's frame and no more (`carry_arm`); else the arm, held so
+    /// too, gives as the legs fold (a hanging tool's Carry_Tool).
     pub upright: bool,
 }
 

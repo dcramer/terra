@@ -91,3 +91,14 @@ test("a look in the shin or sunk in the thigh fails from moves.ts's numbers, the
   const clear = lineFor("axe", judged("axe", "heavy", [{ clip: "Walk_Loop", measured: { "held_cm.axe": -6.7 } }], ["Walk_Loop"]));
   assert.deepEqual([clear.ok, clear.line], [true, "✓ axe: carry.trunk -6.7 cm; 1 bodies"]);
 });
+
+// The ground is where the game stands the body, the model's y = 0 (held-carry j3): planted,
+// both feet 10 cm up in a stride's flight leave it there, and a foot 3 cm under takes it down.
+test("the ground under a pose is the model's zero, lower only by a foot under it, never higher", async () => {
+  const { groundUnder } = await import("./hold_pose.ts");
+  const at = (...ys: number[]) => ys.map((y) => ({ t: [0, y, 0], r: [0, 0, 0, 1], s: [1, 1, 1] }) as Pose);
+  const feet: [number, number][] = [[0, 0.1], [1, 0.1]];
+  assert.equal(groundUnder(at(0.1, 0.1), feet), 0);
+  assert.equal(groundUnder(at(0.2, 0.2), feet), 0, "both feet in the air raised the ground");
+  assert.ok(Math.abs(groundUnder(at(0.07, 0.3), feet) + 0.03) < 1e-9);
+});

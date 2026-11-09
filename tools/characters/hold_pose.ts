@@ -18,11 +18,13 @@ const clamp = (x: number) => Math.max(-1, Math.min(1, x));
 /** A hand's axes and its bend at rest, which every bend is measured from (wrist.ts). */
 export type WristRest = { axes: HandAxes; rest: { flex: number; dev: number }; feet: [number, number][] };
 
-/** The joints the soles are read from, and the ground under a pose: the lowest any of them is
- * below where it stands at rest (a clip's jump or crouch moves the body off the model's y = 0;
- * a planted foot is on the ground, and in the air the ground is no higher than the feet). */
+/** The joints the soles are read from, and the ground under a pose: the model's y = 0, where
+ * the game stands the body, or lower by as far as a foot goes below where it stands at rest.
+ * Never higher: both feet off the ground in a sprint's stride or a jump lift nothing, the
+ * ground stays where it was (read off the lowest foot alone, a sprint's flight raised it 7 cm
+ * and failed looks that were clear). */
 const FEET = ["foot_l", "foot_r", "ball_l", "ball_r"];
-export const groundUnder = (pose: Pose[], feet: [number, number][]) => Math.min(...feet.map(([i, y]) => pose[i].t[1] - y));
+export const groundUnder = (pose: Pose[], feet: [number, number][]) => Math.min(0, ...feet.map(([i, y]) => pose[i].t[1] - y));
 
 /** The wrist's rest on a body at its rest pose: `s` the side, `at` a bone's index. */
 export function wristRest(rest: Pose[], at: (n: string) => number, s: "l" | "r"): WristRest {
