@@ -9,6 +9,7 @@
 //
 // Node 22.18 or later; no dependencies.
 
+import { cpus, loadavg } from "node:os";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -21,6 +22,9 @@ const ALL = ["title", "join", "creator"];
 /// failed and where the rest is. Each check's whole output is kept in `logs`.
 /// `suite` names the run and says what all its checks passing means (Front's by default;
 /// `realms.ts` runs its own through this).
+/// A machine whose load is this share of its cores or more is busy (tools/sandbox/load.ts's bar).
+const BUSY_LOAD_PCT = 50;
+
 export function run(names: string[], dir: string, logs: string, suite = { name: "front", passed: "the title's worlds, Host and Join, and the creator all pass" }): { said: string[]; failed: number } {
   mkdirSync(logs, { recursive: true });
   const said: string[] = [];
@@ -40,6 +44,10 @@ export function run(names: string[], dir: string, logs: string, suite = { name: 
     said.push(`✗ ${name} (${took})`);
     for (const line of why.length ? why : ["it ended with no verdict"]) said.push(`  ${line.slice(0, 600)}`);
     said.push(`  full log: ${resolve(logs, `${suite.name}-${name}.log`)}; what the game said: shots/remote.log`);
+    // A check that plays the game by the clock fails on a machine doing other work: said, so
+    // its failure is not taken for the game's (D185, D556).
+    const load = Math.round((loadavg()[0] / cpus().length) * 100);
+    if (load >= BUSY_LOAD_PCT) said.push(`  the machine was busy as it ended (its load ${load}% of its cores): run it again alone when the machine is quiet before taking this for a fault`);
   }
   said.push(failed ? `✗ ${suite.name}: ${failed} of its checks failed` : `✓ ${suite.name}: ${suite.passed}`);
   return { said, failed };
