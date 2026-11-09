@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { Glb, type V3 } from "./glb.ts";
-import { armPoints, shaped, skinOf } from "./skin.ts";
+import { BODY, armPoints, shaped, skinOf } from "./skin.ts";
 import { reference } from "./surface.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -37,6 +37,39 @@ test("a hand point stepped outward by the hip changes depth by no more than the 
       }
   }
   assert.deepEqual(bad.slice(0, 5), [], `${bad.length} steps jump`);
+});
+
+test("the middle of a shin and of a foot are inside the body's skin, and outside the trunk's", () => {
+  // Known another way: a bone runs inside its limb, so the point halfway down the shin and the
+  // one halfway along the foot are under the skin, named for the part and side they are in. The
+  // trunk (torso, head, thighs) has no skin there, which is how a tool's head in the shin passed.
+  const body = new Glb(resolve(ROOT, "assets/models/character/base.glb"));
+  const clip = new Glb(resolve(ROOT, "assets/models/character/fight.glb")).clip("Walk_Loop")!;
+  const templates = resolve(ROOT, "assets/models/character/templates.json");
+  const [whole, trunk] = [skinOf(body, templates, [], BODY), skinOf(body, templates)];
+  const bad: string[] = [];
+  whole.shapes.forEach((shape, i) => {
+    for (const t of [0, clip.end / 3, (2 * clip.end) / 3]) {
+      const pose = shaped(body, shape, clip, t);
+      const at = (n: string) => pose[body.named(n)].t;
+      const mid = (a: V3, b: V3): V3 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+      const [inBody, inTrunk] = [whole.skinned(shape, pose), trunk.skinned(trunk.shapes[i], pose)];
+      for (const s of ["l", "r"])
+        for (const [part, p] of [[`calf_${s}`, mid(at(`calf_${s}`), at(`foot_${s}`))], [`foot_${s}`, mid(at(`foot_${s}`), at(`ball_${s}`))]] as [string, V3][]) {
+          const [b, k] = [inBody(p), inTrunk(p)];
+          if (!(b.depth > 0.005) || b.part !== part) bad.push(`${part} at ${t.toFixed(2)} s, ${shape.name}: ${(b.depth * 100).toFixed(1)} cm in ${b.part} of the body`);
+          if (k.depth > 0) bad.push(`${part} at ${t.toFixed(2)} s, ${shape.name}: ${(k.depth * 100).toFixed(1)} cm in ${k.part} of the trunk`);
+        }
+    }
+  });
+  assert.deepEqual(bad.slice(0, 5), [], `${bad.length} wrong`);
+});
+
+test("a template that is not one is an error naming it and the ones there are", () => {
+  const body = new Glb(resolve(ROOT, "assets/models/character/base.glb"));
+  const templates = resolve(ROOT, "assets/models/character/templates.json");
+  assert.throws(() => skinOf(body, templates, ["female", "base"]), /no body template "base" in .*templates\.json.*male, female, heavy, thin, strong/);
+  assert.equal(skinOf(body, templates, ["female"]).shapes.length, 1);
 });
 
 test("the fast surface answers as its reference does, to the bit, on the body's poses", () => {

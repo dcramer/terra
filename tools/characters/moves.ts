@@ -6,7 +6,8 @@
 //
 //   hands   how deep a hand, forearm, elbow or upper arm goes into the body (torso, head,
 //           thighs), skinned
-//   held    how deep a held look (sword, shield) goes into it
+//   held    how deep a held look (sword, shield) goes into it; into a calf or foot read apart
+//           (held_legs_cm.<look>) and over the bar only under --legs
 //   clash   held look against held look (clash.ts, D481): how deep the sword (blade, guard,
 //           hilt) goes through the shield's board, and the board through the sword arm (right
 //           hand and forearm); a bar for every move and clip, scored (tools/combat) for every
@@ -62,7 +63,7 @@ import { type Ball, type Board, through } from "./clash.ts";
 import { type Held, carriedClips, carryHold, carryUpright, frameOf, hang } from "./held.ts";
 import { TARGETS, boardPlace, readTargets, worstOff } from "./shield_place.ts";
 import { PACE_FRAMES } from "./phases.ts";
-import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
+import { type Shape, BODY, armPoints, shaped, skinOf } from "./skin.ts";
 import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shield_path.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
@@ -112,6 +113,10 @@ const { values: opt } = parseArgs({
     // The fists closed on what the hands hold, as terra_walker::grip closes them (grip.ts);
     // `--no-grip` leaves the clips' fingers.
     grip: { type: "boolean", default: true },
+    // A held look through a calf or foot is over the bar too (HELD_CM), not only read
+    // (held_legs_cm.<look>). Off until the committed looks that fail it are refitted (held-check
+    // j1: the basket in Jump_Start, the axes and pickaxes in Jump_Land); then it is the default.
+    legs: { type: "boolean", default: false },
   },
   allowNegative: true,
 });
@@ -119,6 +124,7 @@ const { values: opt } = parseArgs({
 // The bars: what a person sees as wrong.
 const HAND_CM = 2; // a hand or arm through the skin
 const HELD_CM = 1; // a sword or shield through the body
+const LEG = /^(calf|foot)_/; // skin.ts's parts below the knee
 const CLASH_CM = 0; // a move's or clip's sword through its own shield, or the shield through the sword arm (D481)
 const ARC_DEG = 35; // a blow's contact off ahead
 const AHEAD_M = 0.5; // a blow's contact this far in front of the hips at least
@@ -216,9 +222,17 @@ const clipOf = (name: string): Clip => {
   return clips.get(name)!;
 };
 
-// The body: its skin, which of its vertices are torso, head or thigh (by their heaviest joint),
-// and each template's morph mix and joint offsets (skin.ts).
-const { shapes, skinned } = skinOf(body, opt.templates!, opt.template!.split(",").filter(Boolean));
+// The body: its skin, which of its vertices are torso, head or leg down to the foot (by their
+// heaviest joint), and each template's morph mix and joint offsets (skin.ts). A `--template`
+// that names no template stops here, saying which there are: it ran no body and passed.
+const { shapes, skinned } = (() => {
+  try {
+    return skinOf(body, opt.templates!, opt.template!.split(",").filter(Boolean), BODY);
+  } catch (e) {
+    console.error(`✗ error: --template: ${(e as Error).message}`);
+    process.exit(2);
+  }
+})();
 
 // The pose as the game composes it: the hanging hands kept off the hips (`--arms`), then the shield
 // arm fitted to the body (shield_arm.ts, D554), each as the game does after the clips.
@@ -354,6 +368,9 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
   let heldW: Worst = { cm: -Infinity, where: "" };
   // Each look's own, so a fit judges its item and not its partner (fit.ts).
   const byLook = new Map<string, Worst>(held.map((h) => [h.name, { cm: -Infinity, where: "" }]));
+  // The held looks into the calves and feet, and each look's own (`held_legs_cm.<look>`).
+  let legsW: Worst = { cm: -Infinity, where: "" };
+  const legsBy = new Map<string, Worst>(held.map((h) => [h.name, { cm: -Infinity, where: "" }]));
   // A look carried in a pose in its hand (D560, a torch's flame up): degrees its handle (+Y) is
   // off the world's up, the worst while carried.
   const upBy = new Map<string, Worst>(held.filter((h) => h.socket === h.hand && carriedPoses.has(h.name)).map((h) => [h.name, { cm: -Infinity, where: "" }]));
@@ -375,6 +392,8 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
         const pts = armPoints(P, s);
         for (const [q, pad, what] of pts) {
           const { depth, part } = inside(q);
+          // The hands' number is against the trunk, as its bar and the scorecards' were set.
+          if (LEG.test(part)) continue;
           hands = worse(hands, (depth - pad) * 100, `${what} in ${part} at ${t.toFixed(2)} s, ${shape.name}`);
         }
       }
@@ -388,11 +407,15 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
         h.points.forEach((q, i) => {
           const { depth, part } = inside(place(socket, q));
           const where = `${h.name} in ${part} at ${t.toFixed(2)} s, ${shape.name}`;
-          heldW = worse(heldW, depth * 100, where);
+          // A point nearest a calf or foot is the legs' (`held_legs_cm`), the rest the trunk's.
+          const leg = LEG.test(part);
+          if (leg) legsW = worse(legsW, depth * 100, where);
+          else heldW = worse(heldW, depth * 100, where);
           // Which of its points, in its own frame (cm from the grip, its handle +Y): fit.ts names it.
-          if (depth * 100 > byLook.get(h.name)!.cm) {
+          const by = leg ? legsBy : byLook;
+          if (depth * 100 > by.get(h.name)!.cm) {
             const [x, y, z] = h.own[i].map((v) => Math.round(v * 100));
-            byLook.set(h.name, { cm: depth * 100, where: `its point (${x}, ${y}, ${z}) cm in ${part} in ${clip.name} at ${t.toFixed(2)} s, ${shape.name}` });
+            by.set(h.name, { cm: depth * 100, where: `its point (${x}, ${y}, ${z}) cm in ${part} in ${clip.name} at ${t.toFixed(2)} s, ${shape.name}` });
           }
         });
       }
@@ -416,7 +439,7 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
       }
     }
   }
-  return { hands, held: heldW, byLook, upBy, sword: swordW, arm: armW, carry: { high, elbow: { cm: -elbow.cm, where: elbow.where }, face }, grip: { cm: gripCm, deg: gripDeg } };
+  return { hands, held: heldW, byLook, legs: legsW, legsBy, upBy, sword: swordW, arm: armW, carry: { high, elbow: { cm: -elbow.cm, where: elbow.where }, face }, grip: { cm: gripCm, deg: gripDeg } };
 }
 
 // Points that say where a pose is, relative to the hips: hands, forearms, head, blade tip.
@@ -556,10 +579,23 @@ const heldBy = (pen: Pen) => ({
   ...Object.fromEntries([...pen.byLook].map(([name, w]) => [`held_cm.${name}`, w.cm])),
   // `held_up_deg.<look>`: a look carried in a pose, its handle off up (a carried clip's rows).
   ...Object.fromEntries([...pen.upBy].filter(([, w]) => w.cm > -Infinity).map(([name, w]) => [`held_up_deg.${name}`, w.cm])),
+  // `held_legs_cm.<look>`: its depth into the calves and feet; absent with no point of it near them.
+  ...Object.fromEntries(legsOf(pen).map(([name, w]) => [`held_legs_cm.${name}`, w.cm])),
 });
-/** Where each held look goes deepest, by its `held_cm.<look>`: which of its points (its own frame,
- * cm), into what, in which clip, when and on which body (fit.ts shows it on a failure). */
-const heldWhere = (pen: Pen) => Object.fromEntries([...pen.byLook].map(([name, w]) => [`held_cm.${name}`, w.where]));
+const legsOf = (pen: Pen) => [...pen.legsBy].filter(([, w]) => w.cm > -Infinity);
+/** Where each held look goes deepest, by its `held_cm.<look>` and `held_legs_cm.<look>`: which of
+ * its points (its own frame, cm), into what, in which clip, when and on which body (fit.ts shows
+ * it on a failure). */
+const heldWhere = (pen: Pen) =>
+  Object.fromEntries([...[...pen.byLook].map(([name, w]) => [`held_cm.${name}`, w.where]), ...legsOf(pen).map(([name, w]) => [`held_legs_cm.${name}`, w.where])]);
+// A held look through a calf or foot: over the bar under `--legs`, otherwise counted and said in
+// one line at the end.
+const legsOver: Worst[] = [];
+const legsBad = (pen: Pen, what: string): string[] => {
+  if (pen.legs.cm <= HELD_CM) return [];
+  legsOver.push({ cm: pen.legs.cm, where: `${what}, ${pen.legs.where}` });
+  return opt.legs ? [`held ${cm(pen.legs.cm)} deep in a leg, ${pen.legs.where}`] : [];
+};
 const byName = new Map(moves.map((m) => [m.name, m]));
 const smooth = (lo: number, hi: number, t: number) => {
   const x = Math.max(0, Math.min(1, (t - lo) / (hi - lo)));
@@ -620,6 +656,7 @@ for (const move of checked) {
   parts.push(`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen));
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
+  bad.push(...legsBad(pen, move.name));
   const blow = specs[move.clip.split("#")[0]];
   bad.push(...clashBad(pen));
   if (move.active && sword && shield) {
@@ -788,7 +825,7 @@ for (const name of opt.also!.split(",").filter(Boolean)) {
   const bad: string[] = [];
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
-  bad.push(...clashBad(pen));
+  bad.push(...legsBad(pen, name), ...clashBad(pen));
   row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...heldBy(pen), ...clashed(pen), ...carriedBy(pen) }, where: heldWhere(pen) });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
@@ -853,6 +890,10 @@ if (shield && gripped.cm.cm > -Infinity) {
   );
 }
 if (opt.json) writeFileSync(opt.json, JSON.stringify(rows, null, 1) + "\n");
+if (legsOver.length && !opt.legs) {
+  const worst = legsOver.reduce((a, b) => (b.cm > a.cm ? b : a));
+  console.log(`  legs: a held look over ${HELD_CM} cm into a calf or foot in ${legsOver.length} rows, read and not barred (--legs bars it): ${cm(worst.cm)} in ${worst.where}`);
+}
 if (failures.length) {
   console.log(`✗ ${failures.length} over the bars:`);
   for (const f of failures) console.log(`  ${f}`);

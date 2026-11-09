@@ -27,10 +27,23 @@ export function armPoints(P: (bone: string) => V3, s: string): [V3, number, stri
   ];
 }
 
-/** The body's templates (all, or `only` these) and its skin at a pose. */
-export function skinOf(body: Glb, templatesFile: string, only: string[] = []): { shapes: Shape[]; skinned: (shape: Shape, pose: Pose[], how?: typeof surface) => Inside } {
-  // The body: its skin, which of its vertices are torso, head or thigh (by their heaviest joint),
-  // and each template's morph mix and joint offsets.
+/** The joints whose skin is the torso, head and thighs: what a hanging arm goes into, and what
+ * the checks that came first measure against (their numbers are held to it). */
+export const TRUNK = /^(pelvis|spine_0\d|neck_01|Head|thigh_[lr]|thigh_twist_01_[lr])$/;
+/** The trunk with the calves and feet: what a held look can go into (the move check's `held`).
+ * A tool's head carried low swung into the shin with only the trunk measured and nothing failed
+ * (held-carry j1). The hands and forearms stay out: a look is held in the fist and strapped to
+ * the forearm, so its handle is always in them, and the upper arms with them, as the arm holding
+ * a look in its carry pose lies along it; a look through the other arm is the clash's to judge
+ * (clash.ts). */
+export const BODY = /^(pelvis|spine_0\d|neck_01|Head|thigh_[lr]|thigh_twist_01_[lr]|calf_[lr]|calf_twist_01_[lr]|foot_[lr]|ball_[lr]|ball_leaf_[lr])$/;
+
+/** The body's templates (all, or `only` these) and the skin of its `parts` (joints by name) at a
+ * pose. A name in `only` that is no template is an error: with none left no body is measured and
+ * every depth read -Infinity, a pass (`moves.ts --template base`). */
+export function skinOf(body: Glb, templatesFile: string, only: string[] = [], parts: RegExp = TRUNK): { shapes: Shape[]; skinned: (shape: Shape, pose: Pose[], how?: typeof surface) => Inside } {
+  // The body: its skin, which of its vertices are these parts' (by their heaviest joint), and
+  // each template's morph mix and joint offsets.
   const skin = body.gltf.skins![0];
   const prim = body.gltf.meshes![0].primitives[0];
   const positions = body.read(prim.attributes.POSITION);
@@ -38,21 +51,27 @@ export function skinOf(body: Glb, templatesFile: string, only: string[] = []): {
   const weights = body.read(prim.attributes.WEIGHTS_0);
   const ibm = body.read(skin.inverseBindMatrices);
   const targetNames = body.gltf.meshes![0].extras?.targetNames ?? [];
-  const TARGET = /^(pelvis|spine_0\d|neck_01|Head|thigh_[lr]|thigh_twist_01_[lr])$/;
   const hit: number[] = [];
   const partOf: string[] = [];
   for (let v = 0; v < positions.length / 3; v++) {
     let best = 0;
     for (let k = 1; k < 4; k++) if (weights[v * 4 + k] > weights[v * 4 + best]) best = k;
     const name = body.gltf.nodes[skin.joints[joints[v * 4 + best]]].name ?? "";
-    if (TARGET.test(name)) {
+    if (parts.test(name)) {
       hit.push(v);
-      partOf[v] = name.replace(/_0\d|_twist_01/g, "");
+      // A part a person would name, with its side: the toes are the foot's.
+      partOf[v] = name.replace(/_0\d|_twist_01/g, "").replace(/^ball(_leaf)?_/, "foot_");
     }
   }
   const rigNode = body.gltf.nodes.find((n) => (n as { extras?: { morphs?: string } }).extras?.morphs) as { extras: { morphs: string } } | undefined;
   const offsets: Record<string, Record<string, V3>> = rigNode ? JSON.parse(rigNode.extras.morphs) : {};
   const templates: Record<string, { morphs: Record<string, number> }> = JSON.parse(readFileSync(templatesFile, "utf8"));
+  const unknown = only.filter((name) => !(name in templates));
+  if (unknown.length)
+    throw new Error(
+      `no body template ${unknown.map((n) => `"${n}"`).join(", ")} in ${templatesFile}: a check on no body measures nothing and would pass (D556, D632). ` +
+        `Name one or more of ${Object.keys(templates).join(", ")}, comma-separated, or none for all of them; the unmorphed base body is not a template.`,
+    );
 
   const shapes: Shape[] = Object.entries(templates).filter(([name]) => only.length === 0 || only.includes(name)).map(([name, t]) => {
     const pos = Float64Array.from(positions);
