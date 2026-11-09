@@ -42,6 +42,7 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
             "terra_building",
             "terra_game",
             "terra_sandbox",
+            "terra_iso",
         ],
     ),
     // The texture bake (D188): every model's and material's pictures and the fire's
@@ -555,6 +556,7 @@ mod tests {
             "terra_building",
             "terra_game",
             "terra_sandbox",
+            "terra_iso",
         ];
         let scope = classify(&files(&["assets/data/kits/log.ron"]), &crates());
         assert!(scope.assets);
