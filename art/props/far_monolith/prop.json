@@ -1,0 +1,38 @@
+{
+  "subject": "ancient standing monolith of smooth dark stone, six metres tall and slightly tapered, half sunk and leaning a little, thin glowing teal geometric lines inlaid down its front face, weathered chipped edges, a ring of small half-buried stones at its foot",
+  "file": "FarMonolith",
+  "dims": [
+    1.8,
+    6.0,
+    1.4
+  ],
+  "budget": 1500,
+  "roles": [
+    "Light",
+    "Rock"
+  ],
+  "light": [
+    0.2,
+    0.9,
+    0.8
+  ],
+  "sockets": {
+    "light": [
+      0,
+      3.0,
+      0.5
+    ]
+  },
+  "match": {
+    "Light": [
+      0.3,
+      0.75,
+      0.65
+    ],
+    "Rock": [
+      0.3,
+      0.3,
+      0.28
+    ]
+  }
+}

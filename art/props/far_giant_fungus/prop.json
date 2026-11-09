@@ -1,0 +1,38 @@
+{
+  "subject": "giant mushroom the size of a small tree, four metres tall: a thick pale ribbed stalk widening at the foot, a broad domed cap of deep plum above with softly glowing pale blue gills beneath it, two smaller mushrooms of the same kind at its foot",
+  "file": "FarGiantFungus",
+  "dims": [
+    3.6,
+    4.2,
+    3.6
+  ],
+  "budget": 2000,
+  "roles": [
+    "Light",
+    "Wood"
+  ],
+  "light": [
+    0.45,
+    0.75,
+    1.0
+  ],
+  "sockets": {
+    "light": [
+      0,
+      3.0,
+      0
+    ]
+  },
+  "match": {
+    "Light": [
+      0.45,
+      0.7,
+      0.95
+    ],
+    "Wood": [
+      0.8,
+      0.74,
+      0.62
+    ]
+  }
+}

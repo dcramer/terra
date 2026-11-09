@@ -1,10 +1,10 @@
-# Realm two: the industrial realm
+# Realm two: the far realm
 
 Status: **a first slice built, 2026-11-08; its theme is the developers' (D642, Leaning)**: the realm is a row of `assets/data/realms.ron` (`terra_world::realm`): its light, sky, ground colours, the share of plants that grow (one in ten) and the turn of their hue (toward ochre), and five built parts scattered by the seed, standing round the player as they walk (`terra_game::play::realm_parts`); the first realm's gate leads to it. Only the animals its row names live in it (foxes and hares, a stand-in; nothing keeps its den). Its sign shines teal and lights the ground round it by night (a `Light` part and a catalogue `Lamp`). Its ground has its own layers (`assets/materials/ground_industrial`: gravel, asphalt and cracked concrete for the first realm's grass and leaf litter). Not built: lights on its other parts, wildlife, monsters, sound; no still has been shown to the developers. The realm beyond the first world's gate (D641): the proof that a realm is data ([v0-tracks.md](v0-tracks.md), Realm two; [art-style.md](art-style.md), "What every realm shares"). It needs enough of each part to show a stranger another world of the same game, not a full realm's worth.
 
 ## What it is
 
-A worked-out, built-over land: concrete and rusting steel under a hazed sky, a few lights still burning (D642). Industrial, a little futuristic, cyberpunk-like; hand-made things are replaced by fabricated ones, timber and thatch by "panels and cables".
+**A fantasy and science-fiction world, where the first realm is real and medieval** (D642, the developers, 2026-11-08: "great, and different than the first world"). Another world at a glance: a violet sky and a cool rose sun, a forest of teal leaves over rose and plum grass, plants of its own that glow at night, a land of its own shape, and the standing remains of an older, stranger making. Seen on 2026-11-08 it was the first realm's forest in another colour: its trees, its land's shapes and its grass were the first realm's. That is what is to change, in this order: its look by data (built: sky, sun, leaves, grass, soil), its own plants (grown kinds with their own habits, bark and leaf cards, D222), its night light, its land recipe, its parts (crystal, stone, machines: models, which cost credits), its small life, monsters and sound.
 
 ## Its parts, each by an existing pipeline
 

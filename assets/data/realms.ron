@@ -19,35 +19,36 @@
     (kind: "world", name: "the first realm", beyond: "industrial"),
     (
         kind: "industrial",
-        name: "the industrial realm",
+        name: "the far realm",
         beyond: "world",
-        // A hazed amber day: the sun dulled and warmed, the sky greyed toward ochre.
-        sun: Some((1.0, 0.8, 0.6)),
-        sky: Some((0.82, 0.78, 0.74)),
-        // Hardpan, stained gravel and slag: greys and rust, little that grows.
-        ground_low: Some((0.36, 0.34, 0.32)),
-        ground_high: Some((0.3, 0.29, 0.28)),
-        ground_steep: Some((0.24, 0.22, 0.21)),
-        grass_dry: Some((0.42, 0.36, 0.27)),
-        grass_lush: Some((0.33, 0.34, 0.26)),
-        sand: Some((0.45, 0.36, 0.3)),
-        ground_cover: Some(0.25),
-        // Its ground's own layers: gravel where the first realm has grass, asphalt and
-        // cracked concrete where it has leaf litter (assets/materials/ground_industrial).
-        ground: Some("ground_industrial"),
-        // What does grow is parched: its greens turned toward ochre.
-        plants_hue: Some(-0.4),
-        // Little lives on a worked-out land: scavengers, and nothing in its den yet. A
-        // stand-in until the realm has creatures of its own (D642: the developers').
+        // Another world's day: the sun a little cold and rose, the sky deepened toward
+        // violet (the developers, 2026-11-08: fantasy and science fiction, where the first
+        // realm is real and medieval).
+        sun: Some((1.05, 0.95, 1.1)),
+        sky: Some((0.95, 0.85, 1.3)),
+        // Dark violet soil and pale lilac sand under grass that is rose and plum.
+        ground_low: Some((0.2, 0.17, 0.29)),
+        ground_high: Some((0.24, 0.2, 0.33)),
+        ground_steep: Some((0.17, 0.15, 0.24)),
+        grass_dry: Some((0.56, 0.36, 0.6)),
+        grass_lush: Some((0.6, 0.22, 0.5)),
+        sand: Some((0.62, 0.54, 0.72)),
+        ground_cover: Some(1.0),
+        // Its leaves are not green: turned round the hue circle to teal and blue-green.
+        plants_hue: Some(1.25),
+        // A stand-in until the realm has creatures of its own (D642: the developers').
         animals: Some(["Red fox", "Brown hare"]),
-        // A worked-out land: one tree in ten.
-        plants: Some(0.1),
+        // Half as wooded as the first realm: glades between the trees, where its great
+        // fungi and crystal stand in the light.
+        plants: Some(0.5),
+        // Great fungi through the forest, crystal here and there, a monolith now and then,
+        // and the few machines of an older making that still stand.
         parts: [
-            (file: "IndustrialPylon", a_km2: 20.0),
-            (file: "IndustrialVentStack", a_km2: 25.0),
-            (file: "IndustrialTank", a_km2: 25.0),
-            (file: "IndustrialGenerator", a_km2: 30.0),
-            (file: "IndustrialSign", a_km2: 20.0),
+            (file: "FarGiantFungus", a_km2: 220.0),
+            (file: "FarCrystalSpire", a_km2: 50.0),
+            (file: "FarMonolith", a_km2: 12.0),
+            (file: "IndustrialPylon", a_km2: 5.0),
+            (file: "IndustrialSign", a_km2: 6.0),
         ],
     ),
 ]

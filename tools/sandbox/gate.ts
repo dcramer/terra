@@ -83,7 +83,7 @@ try {
   // Its parts follow the player (D127): far from the start they stand round them, and the
   // start's are there again on coming back, as many as before.
   const partsNear = async () => {
-    const [found, at] = [(await call("sandbox.find", { name: "Industrial" })) as Found, await stands("Player")];
+    const [found, at] = [(await call("sandbox.find", { name: "Far crystal spire" })) as Found, await stands("Player")];
     return { count: found.length, farthest: Math.max(0, ...found.map((part) => apart([part.from_start[0], part.from_start[2]], at))) };
   };
   const first = await partsNear();

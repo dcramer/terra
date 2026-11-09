@@ -1,0 +1,38 @@
+{
+  "subject": "cluster of tall faceted crystal spires growing from a rough dark rock base, the tallest about five metres, leaning a little apart, pale violet-blue and translucent with a soft inner glow, a scatter of small broken shards round the foot",
+  "file": "FarCrystalSpire",
+  "dims": [
+    3.0,
+    5.0,
+    3.0
+  ],
+  "budget": 2000,
+  "roles": [
+    "Light",
+    "Rock"
+  ],
+  "light": [
+    0.55,
+    0.5,
+    1.0
+  ],
+  "sockets": {
+    "light": [
+      0,
+      2.4,
+      0
+    ]
+  },
+  "match": {
+    "Light": [
+      0.62,
+      0.62,
+      0.95
+    ],
+    "Rock": [
+      0.25,
+      0.25,
+      0.27
+    ]
+  }
+}

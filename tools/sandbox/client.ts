@@ -140,7 +140,9 @@ export async function start(sandboxArgs: string[], { windows, realTime, foregrou
   const profile = release ? ["--release", ...(systems ? ["--features", "hitch-log"] : [])] : ["--features", "track_location"];
   const command = windows
     ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", ...(release ? ["--release"] : []), "--copy", own(copy ?? `remote-${port}`), "--", ...args]]
-    : ["cargo", ["run", "-q", ...profile, "-p", "terra_sandbox", "--", ...args]];
+    : // TERRA_FEATURES builds the copy with cargo features of the sandbox's: `dhat-heap` runs
+      // any scripted check under the heap profile (crates/terra_sandbox/src/heap.rs).
+      ["cargo", ["run", "-q", ...profile, "-p", "terra_sandbox", ...(process.env.TERRA_FEATURES ? ["--features", process.env.TERRA_FEATURES] : []), "--", ...args]];
   // Windows will not replace a program that is still closing, such as the last run of this
   // one, so a start that ends at once for that reason is tried again.
   const logPath = resolve(ROOT, "shots/remote.log");

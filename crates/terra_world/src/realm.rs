@@ -200,14 +200,16 @@ mod tests {
         assert!(realms.lives("world", "Troll") && realms.lives("world", "Chaffinch"));
         assert!(realms.lives("industrial", "Red fox") && !realms.lives("industrial", "Troll"));
         assert!(realms.lives("a realm not in the data", "Troll"));
-        // A realm's own ground is a stack among the materials, both its maps there.
-        let ground = realms.of("industrial").unwrap().ground.as_deref().unwrap();
-        for map in ["color.jpg", "normal.jpg"] {
-            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../assets/materials")
-                .join(ground)
-                .join(map);
-            assert!(path.exists(), "{} is missing", path.display());
+        // A realm's own ground, where it names one, is a stack among the materials, both
+        // its maps there.
+        for ground in realms.0.iter().filter_map(|realm| realm.ground.as_deref()) {
+            for map in ["color.jpg", "normal.jpg"] {
+                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../assets/materials")
+                    .join(ground)
+                    .join(map);
+                assert!(path.exists(), "{} is missing", path.display());
+            }
         }
         // A kind the data does not have leads to its own kind, and sets nothing.
         assert_eq!(realms.beyond("yard"), "yard");
@@ -218,7 +220,7 @@ mod tests {
             .of("industrial")
             .expect("the industrial realm is in the data");
         let light = industrial.light().expect("it has its own light");
-        // Warmer and duller than the first realm's: less blue than red in its sun.
-        assert!(light.sun.z < light.sun.x, "{light:?}");
+        // Not the first realm's light: its sun is not white.
+        assert!(light.sun != Vec3::ONE, "{light:?}");
     }
 }
