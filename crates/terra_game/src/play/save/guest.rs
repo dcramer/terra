@@ -143,7 +143,17 @@ fn take(
     mut items: ResMut<Items>,
     mut view: Single<&mut View, IsLocalPlayer>,
     player: Single<Parts, IsLocalPlayer>,
+    spec: Res<terra_world::instance::WorldSpec>,
 ) {
+    // Not until this game is in the host's world: taken up a frame before the crossing
+    // into it, the marks went with the land left (they are the world's), and a friend
+    // come back bore none.
+    let there = (link.realm())
+        .and_then(terra_walker::net::session::realm_from)
+        .is_some_and(|(seed, _)| seed == spec.seed);
+    if !there {
+        return;
+    }
     let Some(record) = link.take_kept() else {
         return;
     };

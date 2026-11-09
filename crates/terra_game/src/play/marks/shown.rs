@@ -125,7 +125,15 @@ fn show(
                         bevy::light::NotShadowCaster,
                     ))
                     .id();
-                commands.entity(forearm).add_child(patch);
+                // The body may be gone by the time this is done (its world left this
+                // frame: a joining game crashed here): then the patch goes with it.
+                commands.queue(move |world: &mut World| {
+                    if world.get_entity(forearm).is_ok() {
+                        world.entity_mut(forearm).add_child(patch);
+                    } else if let Ok(patch) = world.get_entity_mut(patch) {
+                        patch.despawn();
+                    }
+                });
             }
         }
     }
