@@ -16,6 +16,7 @@ pub mod archery;
 pub mod coats;
 pub mod combat;
 pub mod creatures;
+pub mod fish;
 pub mod fliers;
 pub mod hits;
 pub mod melee;

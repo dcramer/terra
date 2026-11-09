@@ -428,7 +428,7 @@ fn coloured(parts: &[&Part], meshes: &mut Assets<Mesh>) -> Option<Handle<Mesh>> 
 
 /// A textured part's mesh, with its places on its textures and, for its normal map, its
 /// tangents: the file's, as `tools/props` exports them, or made here if it has none.
-fn textured_mesh(part: &Part, textures: &Textures) -> Mesh {
+pub fn textured_mesh(part: &Part, textures: &Textures) -> Mesh {
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
@@ -477,7 +477,7 @@ fn glow_of(part: &Part, textures: &Textures) -> LinearRgba {
 /// textures are wanted here: Bevy loads a file once for every request made while it loads,
 /// as the first asked, so a staged campfire asked for then (the fire sheet's, frame 2) was
 /// given this load's model, and with its meshes left out it stood with nothing to draw.
-fn textured_material(
+pub fn textured_material(
     path: &str,
     textures: &Textures,
     glows: Option<LinearRgba>,

@@ -26,13 +26,13 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 | Sparrows, pigeons, mallards, herons, ptarmigan | Models, built | By their haunts | Not looked at |
 | Wood pigeons | Model (the pigeon's), built; 5 a hectare in woods and open ground | 13 within 150 m | One on the ground by the player in six frames |
 | Birds far overhead | Shader cards (D379), kept as the far form until a model stands in for them | A few flocks | A few, small. The swallows and pipits, cards flying near, are taken out: a bird is a model |
-| Fish | Nothing | None | None |
+| Fish | Trout, pike and minnows in schools where the water suits each, near whoever looks; they swim a path of their own and dart from a swimmer | Models (`art/props/fish_*`), swum by a bend in the shader | `assets/data/fish.ron`, `terra_creatures::fish` |
 
 ## What to build, in order
 
 1. **Birds seen.** Built so far: small birds fly a quarter of the time (a tenth before) and 8 to 30 m at a flight, and `wildlife.state` counts them and those on the wing. It is not enough: a 12 cm bird is not seen past some 15 m, and one feeding on the ground of a meadow is under the grass, which stands higher than it: stood 9 m from a finch and 15 m from a wood pigeon and aimed at each, neither is seen. So numbers alone do not show: what shows is a bird in the air, or on a perch clear of the grass (a fence, a ridge, a rock, a bare branch, short turf). A small bird is seen when it flies near. Flocks that cross the view between perches every few seconds, rise from the grass as a player comes near and settle again further off; perches chosen in sight (fence, roof ridge, bare branch, rock) over ones hidden in a crown. The models and the fly, hop and peck clips exist; the minds have roost, perch and fly. Needs: the flock's rule, and a measure of the cost of 100 birds (120 is the most allowed now, apart from the 48 other animals).
 2. **Far birds as models.** The swallows, pipits and far birds drawn as cards become the same models drawn small, or go. A low-detail model of each is needed; no swallow, crow or buzzard model exists.
-3. **Fish.** Models, in schools in the shallows and singly in deep water, seen from the bank and when swimming; moved by a bend along the body in the shader, as shipped games move schools, with no skeleton. Needs: two or three fish models (a small schooling fish, a trout, a pike), each about 50 Tripo credits, and the school's rule. The mallards and herons are the water's birds already.
+3. **Fish.** Built for the eye (2026-11-08): each kind a row of `assets/data/fish.ron` (its model, how long, how many swim together, how deep its water, how far under the surface, schools to a hectare, from how far it is drawn, its speed and its tail's beat) put by rule in cells of water round the eye (`terra_creatures::fish`), a school one entity and its fish instances of one mesh, swum by a wave down the body in the vertex shader (`assets/shaders/fish.wesl`), with no skeleton, as shipped games move schools; at most 400 at once. Seen from above and when swimming: trout in a line under the surface, bending as they go, gone in a dart when the swimmer nears. Not yet: minnows were not seen (the mountain lake's shallows are too narrow a band for their path; the rule is tested), nothing rises or jumps, the sea holds the same fish as a lake, and none may be caught. The mallards and herons are the water's birds already.
 4. **Small ground life**: frogs at the water's edge, lizards on warm rock, mice: models, not yet made.
 5. **Their sound**: birdsong by hour and place, insects' hum, a splash: with the ambient beds of [audio.md](audio.md).
 6. **Each realm its own**: the industrial realm's small life is not chosen (D642).
@@ -42,7 +42,7 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 - A small bird is drawn 1.6 times life size (finch, sparrow), as a butterfly is drawn at 10 cm: at life size neither is seen past a few metres.
 - Half of a bird's flights go past a player who is about; larger kinds (the wood pigeon) carry the middle distance.
 - The far birds overhead stay cards until a model stands in for them; no card bird flies near.
-- Fish, when made: a small schooling fish, a trout and a pike, for the eye only in v0. Not made: each model is some 50 credits, the developers' to spend.
+- Fish: a minnow, a brown trout and a northern pike, for the eye only in v0 (made, 162 credits).
 
 ## Open, for the developers
 

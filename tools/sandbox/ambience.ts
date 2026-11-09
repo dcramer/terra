@@ -4,13 +4,15 @@
 // small creatures stand near (`sandbox.find`). A new small world is started three times:
 // on a July day butterflies, bees and birds on the wing are about and small animals stand
 // near; that night the day's insects are gone and fireflies are out; on a January day no
-// insect flies. How much of each kind is seen is said.
+// insect flies. How much of each kind is seen is said. And at a mountain lake fish swim
+// (`fish.state`, data/fish.ron): schools stand in its water, they swim on, and one a
+// swimmer comes on darts.
 //
 //   node tools/sandbox/ambience.ts [--seed 3]
 //
-// Node 22.18 or later; no dependencies. About three minutes.
+// Node 22.18 or later; no dependencies. About four minutes.
 
-import { call, start, stop, waitSeconds, waitUntil } from "./client.ts";
+import { call, start, stop, waitSeconds, waitUntil, warp } from "./client.ts";
 
 const args = process.argv.slice(2);
 const SEED = args.includes("--seed") ? args[args.indexOf("--seed") + 1] : "3";
@@ -44,6 +46,31 @@ async function about(date: string, hour: number): Promise<{ seen: Map<string, nu
   }
 }
 
+type Fish = { models: number; schools: number; fish: number; kinds: Record<string, number>; nearest: { kind: string; from_start: number[]; darting: boolean; swum_s: number } | null };
+
+/// The fish of a mountain lake on a July day: what swims near its shore, said in a line.
+async function fish(): Promise<string> {
+  try {
+    await start(["--experiment", "play", "--fresh", "--save", "shots/ambience.ron", "--radius", "30000", "--seed", SEED, "--site", "lake", "--date", "7-10", "--time", "13", "--offscreen", "--mute"], { realTime: true, release: true });
+    await waitUntil("the world to be played", async () => (await call("title.state")) as { screen: string }, (now) => now.screen === "Playing", 600);
+    const state = async () => (await call("fish.state")) as Fish;
+    const swimming = await waitUntil("a school of fish in the lake", state, (now) => now.schools > 0 && now.nearest !== null, 60).catch(async () => {
+      throw new Error(`no fish swim at the lake's shore (${JSON.stringify(await state())}): a school stands where the water suits a kind of assets/data/fish.ron (its deep_m, a_ha) within its seen_m of the eye; models says how many kinds' models were read`);
+    });
+    const before = swimming.nearest!;
+    await waitSeconds(3);
+    const after = (await state()).nearest!;
+    if (!(after.swum_s - before.swum_s > 1)) throw new Error(`the nearest school has swum ${(after.swum_s - before.swum_s).toFixed(1)} s of its path in three seconds: terra_creatures::fish's swim moves each school every frame`);
+    await warp([before.from_start[0], before.from_start[2]]);
+    await waitUntil("the school to dart from the swimmer", state, (now) => now.nearest?.darting === true, 20).catch(() => {
+      throw new Error("a school a swimmer came on does not dart: fish::swim darts a school with a player within three metres of its water");
+    });
+    return `${swimming.fish} fish in ${swimming.schools} schools at a lake's shore (${Object.entries(swimming.kinds).map(([name, count]) => `${count} ${name}`).join(", ")}), swimming, and darting from a swimmer`;
+  } finally {
+    await stop().catch(() => undefined);
+  }
+}
+
 const said = (seen: Map<string, number>, names: string[]) => names.map((name) => `${name} ${seen.get(name) ?? "none"}`).join(", ");
 let failed = "";
 try {
@@ -65,7 +92,9 @@ try {
   const hardy = INSECTS.filter((name) => (winter.seen.get(name) ?? 0) > GONE);
   if (hardy.length > 0) throw new Error(`on a January day ${hardy.join(" and ")} fly (${said(winter.seen, INSECTS)}): an insect needs its air_c of warmth`);
 
-  console.log(`✓ ambience: on a July day ${said(day.seen, ["White butterflies", "Brown butterflies", "Bees", ...BIRDS])}, with ${day.small.join(", ")} near, ${day.wild.birds} birds in all and ${day.wild.flying} on the wing (in the picture, 6 pixels tall or more: ${day.wild.in_view} creatures, ${day.wild.birds_in_view} of them birds: a reading, the bar being dozens); that night Fireflies ${night.seen.get("Fireflies")} and the day's gone; on a January day no insect flies`);
+  const swims = await fish();
+
+  console.log(`✓ ambience: ${swims}; on a July day ${said(day.seen, ["White butterflies", "Brown butterflies", "Bees", ...BIRDS])}, with ${day.small.join(", ")} near, ${day.wild.birds} birds in all and ${day.wild.flying} on the wing (in the picture, 6 pixels tall or more: ${day.wild.in_view} creatures, ${day.wild.birds_in_view} of them birds: a reading, the bar being dozens); that night Fireflies ${night.seen.get("Fireflies")} and the day's gone; on a January day no insect flies`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 }

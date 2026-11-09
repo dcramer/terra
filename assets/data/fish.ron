@@ -1,0 +1,63 @@
+// The fish of the waters (docs/ambient-life.md item 3, D647): for the eye only in v0.
+// Each kind is a model (assets/models/<model>, made through tools/props) in schools put by
+// rule where the water suits it, near the player (terra_creatures::fish):
+//   long_m     how long a fish is, least and most, metres
+//   school     how many swim together, least and most
+//   deep_m     how deep the water it keeps to is (it swims near the surface whatever lies
+//              under it: a trout over sixty metres of lake is still seen from a boat)
+//   under_m    how far under the surface it swims
+//   a_ha       schools to a hectare of water that suits it
+//   seen_m     from how far it is drawn (its level of detail: a fish is a few hundred
+//              triangles, and past this it is not drawn at all)
+//   speed      metres a second, unhurried; it darts at four times this from a wader
+//   keeps      how far a fish keeps from the next, in its own lengths
+//   path_m     how wide the figure of eight its school swims is, least and most
+//   stroke_hz  its tail's beats a second
+//   bend       how far its tail swings, as a share of its length
+[
+    (
+        name: "Minnow",
+        model: "props/FishMinnow.glb",
+        long_m: (0.06, 0.09),
+        school: (14, 30),
+        deep_m: (0.3, 4.0),
+        under_m: (0.08, 0.3),
+        a_ha: 45.0,
+        seen_m: 28.0,
+        speed: 0.45,
+        keeps: 2.2,
+        path_m: (1.5, 3.5),
+        stroke_hz: 4.0,
+        bend: 0.1,
+    ),
+    (
+        name: "Brown trout",
+        model: "props/FishTrout.glb",
+        long_m: (0.3, 0.5),
+        school: (1, 3),
+        deep_m: (0.7, 60.0),
+        under_m: (0.25, 0.9),
+        a_ha: 14.0,
+        seen_m: 40.0,
+        speed: 0.35,
+        keeps: 2.5,
+        path_m: (3.0, 6.0),
+        stroke_hz: 2.0,
+        bend: 0.08,
+    ),
+    (
+        name: "Northern pike",
+        model: "props/FishPike.glb",
+        long_m: (0.6, 0.95),
+        school: (1, 1),
+        deep_m: (0.9, 30.0),
+        under_m: (0.4, 1.2),
+        a_ha: 4.0,
+        seen_m: 45.0,
+        speed: 0.12,
+        keeps: 2.0,
+        path_m: (2.0, 5.0),
+        stroke_hz: 1.0,
+        bend: 0.06,
+    ),
+]
