@@ -30,7 +30,7 @@
     "state": "built",
     "mechanism": "carry_pose",
     "decisions": ["D560", "D584"],
-    "clip": "Carry_Tool",
+    "clip": "Carry_Knife",
     "how": "in the one-handed tool's carry pose, its point forward and down (attachment.md Carried)"
   },
   "stowed": {

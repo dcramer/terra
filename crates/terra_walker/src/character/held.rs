@@ -144,7 +144,7 @@ mod tests {
                 has("carry_hold") || has("hold") || has("strap"),
                 "{file}: a look in the fist names no carry pose; give its art/held/<item>.json a \
                  \"carry_hold\" (a pose of art/animation/sets/fight.json: Carry_Tool for a \
-                 one-handed tool) and fit it again (node tools/characters/fit.ts <item>)"
+                 hafted tool, Carry_Sword, Carry_Knife) and fit it again (node tools/characters/fit.ts <item>)"
             );
         }
     }
