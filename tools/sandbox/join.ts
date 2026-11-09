@@ -255,6 +255,17 @@ try {
   await until(`the friend built in its host's claim and has ${raised}, the host ${base(host)}: a joined game's acts are asked of the host and ordered back (play::base_net)`, () => base(host) === raised, 30);
   console.log(`✓ what the friend built stands in both games: its floor beside the host's room (${raised})`);
 
+  // Anyone builds in any claim (D645): the friend, with no claim stone of its own and standing
+  // in its host's claim, asks to set a chest down there, and is not refused for the claim (it
+  // may be for want of what a chest costs, which is asked after). A reading, not a proof of
+  // the claims' telling (D632): with terra_survival::claim_net taken out it still passes,
+  // because a joined game takes a claim stone it is shown for a claim it may build in
+  // (terra_survival::claim, its log's "Claimed the land around"); it fails only if a friend
+  // comes to be refused in its host's claim.
+  const asked = JSON.parse(remote(friend, "call", "storage.place", JSON.stringify({ item: "Chest", at: [2.5, 0, 6.5] }))) as { done: boolean; refused?: string };
+  if (/claim/i.test(asked.refused ?? "")) throw new Error(`in its host's claim the friend's chest was refused: ${asked.refused} (anyone builds in any claim, D645: claim_net tells a claim's reach and claim::builds_in takes the claim a builder stands in)`);
+  console.log(`✓ the friend is let build in its host's claim: its chest was ${asked.done ? "set down" : `not refused for the claim (${asked.refused})`}`);
+
   // What storage holds is the same in both games (netcode.md, step 5): the host sets down a
   // chest and leaves stone in it, which the friend's game shows in it; the friend leaves wood
   // in it, and the host's chest holds both.

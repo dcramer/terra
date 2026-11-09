@@ -46,18 +46,21 @@ fn place(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         Building,
         Commands,
         Res<Models>,
-        Query<(Entity, &Claim), (With<Player>, With<LocalPlayer>)>,
+        Query<(Entity, &Claim, &Transform), (With<Player>, With<LocalPlayer>)>,
         Query<&Claim>,
-        Option<Res<claim::Village>>,
+        (Option<Res<claim::Village>>, Option<Res<claim::Others>>),
         Res<catalogue::Builds>,
     )>::new(world);
     let answer = {
-        let (mut building, mut commands, models, players, claims, village, builds) = state
-            .get_mut(world)
-            .map_err(|problem| refused(format!("cannot build now: {problem}")))?;
-        let (player, claim) = players
+        let (mut building, mut commands, models, players, claims, (village, others), builds) =
+            state
+                .get_mut(world)
+                .map_err(|problem| refused(format!("cannot build now: {problem}")))?;
+        let (player, claim, stands) = players
             .single()
             .map_err(|_| refused("there is no player to build as"))?;
+        // Anyone builds in any claim (D645): the one the builder stands in.
+        let builds_in = claim.shared(claims.iter(), others.as_deref(), Some(stands));
         let at = Vec3::from_array(at);
         let on_planet = building.site.frame.transform_point(at);
         let too_near = || {
@@ -70,7 +73,7 @@ fn place(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             json!({ "done": false, "refused": "You already have a claim" })
         } else if let Some(why) = claiming.then(too_near).flatten() {
             json!({ "done": false, "refused": why })
-        } else if !claiming && !building.free() && !claim.covers(on_planet) {
+        } else if !claiming && !building.free() && !builds_in.covers(on_planet) {
             json!({ "done": false, "refused": "That is outside the claim" })
         } else if !building.pay(player, &item.cost, 1) {
             json!({ "done": false, "refused": format!("Not enough to build a {name}") })
