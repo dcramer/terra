@@ -1275,3 +1275,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - 2026-11-08: D647 amended (the developers'): water has its fish; docs/ambient-life.md proposes the ambient life in order.
 - 2026-11-08: D648 decided (the developers'): a creature has no health bar; how hurt it is shows on the creature, later.
 - 2026-11-08: D642's theme turned (the developers'): realm two is a fantasy and science-fiction world, great and plainly different from the real, medieval first.
+- 2026-11-08: D649 decided (the developers'): players cross realms one by one and may be in both at once; a shared world runs both realms while anyone is in each (D640).
