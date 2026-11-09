@@ -146,6 +146,52 @@ pub fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32, bark_m: f32
     }
 }
 
+/// A limb turned on a lathe: a shape round a straight axis whose outline is its radii (a cap
+/// tree's cap), in a skin of its own, not bark. Its normals are its outline's, so its top
+/// faces the sky and its underside the ground; its texture coordinates say it is skin by
+/// their second being below zero: how far round it, 0 to 1, and minus one less how far
+/// along its outline, in metres (`cap_skin.wesl`).
+pub fn lathe(build: &mut Build, limb: &Limb, sides: u32, height: f32, tint: Vec3) {
+    let start = build.positions.len() as u32;
+    let last = limb.points.len() - 1;
+    let axis = (limb.points[last] - limb.points[0]).normalize();
+    let side = axis.any_orthonormal_vector();
+    let other = axis.cross(side);
+    let mut along = 0.0;
+    for (i, (&point, &radius)) in limb.points.iter().zip(&limb.radii).enumerate() {
+        let (before, after) = (i.saturating_sub(1), (i + 1).min(last));
+        let rise = (limb.points[after] - limb.points[before]).dot(axis);
+        let widens = limb.radii[after] - limb.radii[before];
+        if i > 0 {
+            let step = (point - limb.points[i - 1]).dot(axis);
+            along += libm::hypotf(step, radius - limb.radii[i - 1]);
+        }
+        let bend = (point.y / height).clamp(0.0, 1.0);
+        for j in 0..=sides {
+            let round = j as f32 / sides as f32;
+            let out = side * libm::cosf(round * TAU) + other * libm::sinf(round * TAU);
+            let normal = (out * rise - axis * widens).normalize_or(out);
+            let uv = Vec2::new(round, -1.0 - along);
+            build.vertex(
+                point + out * radius,
+                normal,
+                uv,
+                Vec2::new(bend * bend, 0.0),
+                tint,
+            );
+        }
+    }
+    let ring = sides + 1;
+    for i in 0..last as u32 {
+        for j in 0..sides {
+            let a = start + i * ring + j;
+            let b = a + ring;
+            // Wound so its outside is its front: its top from above, its gills from below.
+            build.indices.extend([a, a + 1, b, a + 1, b + 1, b]);
+        }
+    }
+}
+
 /// A rough ball: rings of six round, four rings high, in a colour, its surface pushed in
 /// and out a little so it reads as a mass of leaves rather than a ball. Its normals lean
 /// out from `crown`, the middle of the crown it is part of, so a crown of many lumps

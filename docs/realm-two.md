@@ -12,7 +12,7 @@ Not the first realm's trees in another colour. What stands where trees would is 
 
 | Kind | What it is | Made as |
 |---|---|---|
-| Cap trees | Great fungi 8 to 25 m tall: a ribbed stalk, one or several wide caps in tiers, gills that glow at night | A grown skeleton (stalk and cap ribs) with cap and gill surfaces; the modelled FarGiantFungus is its small form |
+| Cap trees | Great fungi 8 to 25 m tall: a ribbed stalk, one or several wide caps in tiers, gills that glow at night | A grown skeleton (stalk and cap ribs) with cap and gill surfaces; the modelled FarGiantFungus is its small form. Built: `Habit::Cap` (`grown/caps.rs`), its caps lathed in a skin of their own (`build::lathe`, `cap_skin.wesl`: the cap's colour mottled and spotted pale, gills under it in their own colour that shine by night, all its row's: `cap: (tint, gills, glow)`), its stalk in bark with no moss |
 | Frond spires | A tall bare stem with whorls of long drooping fronds, lit at their tips | The conifer's skeleton with its whorls kept and its needles replaced by frond cards |
 | Fan trees | A low, wide, forking tree whose branches end in flat translucent fans | The oak's forking skeleton with fan cards at its tips |
 | Undergrowth | Plum and magenta bushes, cyan ferns, glowing tufts | The first realm's grown bushes, rosettes and tufts on the realm's own leaf atlas (`foliage_far`, built) |

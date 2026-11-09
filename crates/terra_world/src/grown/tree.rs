@@ -4,7 +4,7 @@
 //! stand-in for its shadow. Ported from the lush forest spike's oak (research/lush-forest-
 //! spike.md), with the conifer's and birch's habits added.
 
-use super::build::{Build, Limb, Placing, card, folded_card, lump, tube};
+use super::build::{Build, Limb, Placing, card, folded_card, lathe, lump, tube};
 use super::pivots::{self, Clump, Line, Pivots};
 use super::{Card, Habit, TreeDef};
 use bevy::prelude::*;
@@ -405,7 +405,7 @@ pub fn wood(tree: &Tree, detail: usize, bark_m: f32, pivots: &Pivots) -> Build {
         ),
         // A cap is round: many sides near, and its young ones gone far off.
         Habit::Cap => (
-            [2, 1, 1][detail],
+            [3, 1, 1][detail],
             [[12, 28, 14, 14], [9, 18, 9, 9], [6, 10, 6, 6]][detail],
         ),
     };
@@ -415,18 +415,13 @@ pub fn wood(tree: &Tree, detail: usize, bark_m: f32, pivots: &Pivots) -> Build {
             continue;
         }
         build.pivot = pivots.limbs.get(i).copied();
-        tube(
-            &mut build,
-            limb,
-            sides[limb.depth.min(3) as usize],
-            tree.height,
-            bark_m,
-            if limb.depth >= 1 {
-                tree.cap_tint
-            } else {
-                Vec3::ONE
-            },
-        );
+        let sides = sides[limb.depth.min(3) as usize];
+        // A cap tree's caps (its odd depths) are skin, its stalks bark.
+        if tree.habit == Habit::Cap && limb.depth % 2 == 1 {
+            lathe(&mut build, limb, sides, tree.height, tree.cap_tint);
+        } else {
+            tube(&mut build, limb, sides, tree.height, bark_m, Vec3::ONE);
+        }
     }
     build
 }

@@ -89,8 +89,9 @@ pub enum Habit {
 }
 
 /// A cap tree's cap (`Habit::Cap`): how wide it is and how deep, as shares of the height;
-/// how many caps stand in tiers on the stalk; how many young ones stand at its foot; and
-/// the cap's colour over the surface the stalk wears.
+/// how many caps stand in tiers on the stalk; how many young ones stand at its foot; the
+/// colour of its skin, which is smooth and spotted pale, not the bark its stalk wears; and
+/// its gills' colour under it and how brightly they shine, which is seen by night.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct CapDef {
@@ -100,6 +101,10 @@ pub struct CapDef {
     pub young: u32,
     #[serde(default = "white")]
     pub tint: (f32, f32, f32),
+    #[serde(default = "white")]
+    pub gills: (f32, f32, f32),
+    #[serde(default)]
+    pub glow: f32,
 }
 
 impl Default for CapDef {
@@ -110,6 +115,8 @@ impl Default for CapDef {
             tiers: 1,
             young: 2,
             tint: white(),
+            gills: white(),
+            glow: 0.0,
         }
     }
 }
@@ -201,7 +208,8 @@ pub struct FoliageExtension {
     #[uniform(100)]
     pub strength: f32,
     /// 1 for bark: each tree's bark is shifted by where it stands, and weathered in patches
-    /// with moss and a wet foot (D218).
+    /// with moss and a wet foot (D218); up to 2, with less moss; [`CAP_WOOD`] for a cap
+    /// tree's, whose caps are skin (`cap_skin.wesl`).
     #[uniform(100)]
     pub bark: f32,
     /// For a crown whose cards drop out with distance: from where, to where, and 1 (D223).
@@ -212,7 +220,8 @@ pub struct FoliageExtension {
     #[uniform(100)]
     pub shrink: Vec4,
     /// For leaves: how much their colour is greyed and darkened, how brightly they glow lit
-    /// through from behind, and how dark the inside of a crown goes (D247); off here.
+    /// through from behind, and how dark the inside of a crown goes (D247); off here. For
+    /// a cap tree's wood, its gills' colour and how brightly they shine.
     #[uniform(100)]
     pub leaf: Vec4,
     /// What its plants make way for: the camera, and bodies walking through them
@@ -244,6 +253,10 @@ pub struct FoliageExtension {
     /// plants at 0 and the far woods at 1. Not the shader's.
     pub prepass_priority: i32,
 }
+
+/// What `FoliageExtension::bark` is for a cap tree's wood: bark with no moss on its stalk,
+/// and skin on its caps.
+const CAP_WOOD: f32 = 3.0;
 
 /// How many cells of the card atlas a shader can tell the kind of: four by four.
 const CELLS: usize = 16;
@@ -495,7 +508,10 @@ impl Looks {
             return Handle::default();
         };
         let tint = Color::srgb(def.bark_tint.0, def.bark_tint.1, def.bark_tint.2);
-        self.bark(&def.bark, tint, assets, foliage)
+        // A cap tree's wood says its gills, for the caps among it.
+        let gills = (def.cap.filter(|_| def.habit == Habit::Cap))
+            .map(|cap| vec3(cap.gills).extend(cap.glow));
+        self.bark(&def.bark, tint, gills, assets, foliage)
     }
 
     /// A bark, `materials/<name>`, tinted: its colour, relief, roughness and crevices.
@@ -503,10 +519,11 @@ impl Looks {
         &mut self,
         name: &str,
         tint: Color,
+        gills: Option<Vec4>,
         assets: &AssetServer,
         foliage: &mut Assets<Foliage>,
     ) -> Handle<Foliage> {
-        let key = format!("{name} {:?}", tint.to_srgba().to_f32_array());
+        let key = format!("{name} {:?} {gills:?}", tint.to_srgba().to_f32_array());
         if let Some(handle) = self.barks.get(&key) {
             return handle.clone();
         }
@@ -541,7 +558,8 @@ impl Looks {
                 ..default()
             },
             extension: FoliageExtension {
-                bark: 1.0,
+                bark: if gills.is_some() { CAP_WOOD } else { 1.0 },
+                leaf: gills.unwrap_or(Vec4::ZERO),
                 ..self.wind.clone()
             },
         });

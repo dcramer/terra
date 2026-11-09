@@ -18,6 +18,7 @@ import bevy_pbr::render::{
     clustered_forward::{view_fragment_cluster_index, unpack_clusterable_object_index_ranges},
 };
 import super::hue::hue_turned;
+import super::cap_skin::{cap_skin, is_cap_skin};
 import super::sight::sight_keep;
 @if(IRRADIANCE_VOLUME) import bevy_pbr::light_probe::irradiance_volume::irradiance_volume_light;
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) import bevy_pbr::render::mesh_view_bindings::{light_probes, environment_map_sampler};
@@ -1303,7 +1304,25 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let a = pbr_input.material.base_color.a;
         pbr_input.material.base_color.a = min(a / max(sky, 0.05), 1.0);
     }
-    if wind.bark > 0.5 {
+    // A cap tree's caps are skin, not bark (`cap_skin.wesl`): smooth, in the cap's colour
+    // (its vertices'), its gills shining under it, turned with the realm's plants.
+    var skin = false;
+@if(VERTEX_UVS_A) {
+    skin = wind.bark > 2.5 && is_cap_skin(in.uv);
+    if skin {
+        let stood = in.world_position.xyz - mesh_functions::get_world_from_local(in.instance_index)[3].xyz;
+        let faces = normalize(in.world_normal);
+        let facing_up = dot(faces, normalize(in.world_position.xyz));
+        let made = cap_skin(in.color.rgb, in.uv, facing_up, clumps(stood * 0.35 + 5.0), clumps(stood * 2.6), wind.leaf);
+        pbr_input.material.base_color = vec4<f32>(made.colour, 1.0);
+        pbr_input.material.perceptual_roughness = made.rough;
+        pbr_input.material.emissive = vec4<f32>(hue_turned(made.glow, parting.look.x), 1.0);
+        pbr_input.world_normal = faces;
+        pbr_input.N = faces;
+        pbr_input.diffuse_occlusion = vec3<f32>(1.0);
+    }
+}
+    if wind.bark > 0.5 && !skin {
         // A grown trunk's band of moss, if it has one, from its mesh's tag (D309): how high
         // it reaches, as a share of the tree's height, in its second byte; its height there
         // from how far up the tree it is, which its sway's bend gives as its square.

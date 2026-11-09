@@ -58,6 +58,7 @@ pub fn grow(dice: &mut Rng, def: &TreeDef, tree: &mut Tree) {
         tiers,
         young,
         tint,
+        ..
     } = def.cap.unwrap_or_default();
     let (height, girth) = (tree.height, tree.trunk_m);
     tree.cap_tint = Vec3::from(tint);
@@ -98,7 +99,7 @@ pub fn grow(dice: &mut Rng, def: &TreeDef, tree: &mut Tree) {
             across * small,
             depth * small,
             girth * 0.3 * STALK[STALK.len() - 1],
-            2,
+            3,
         ));
     }
 }
@@ -134,6 +135,7 @@ mod tests {
             tiers: 3,
             young: 2,
             tint: (0.6, 0.2, 0.4),
+            ..default()
         };
         let tree = crate::grown::tree::grow(&mut Seed(3).rng(), &def(cap), 20.0);
         assert_eq!(tree.limbs.len(), 1 + 3 + 2 * 2);
@@ -161,5 +163,33 @@ mod tests {
             triangles[0] > triangles[1] && triangles[1] > triangles[2] && triangles[2] > 0,
             "{triangles:?}"
         );
+    }
+
+    /// A cap is lathed with its outside its front: every triangle faces as its corners'
+    /// normals do, its dome up and its gills down. Wound as a tube is, its gills were
+    /// culled from below and the dome's inside was seen through them.
+    #[test]
+    fn a_caps_outside_is_its_front_and_its_gills_face_down() {
+        let limb = cap(Vec3::Y * 10.0, 8.0, 2.0, 0.3, 1);
+        let pivots = crate::grown::pivots::Pivots::default();
+        let mut build = crate::grown::build::Build::levelled(&pivots);
+        crate::grown::build::lathe(&mut build, &limb, 12, 12.0, Vec3::ONE);
+        let at = |i: u32| Vec3::from(build.positions[i as usize]);
+        let normal = |i: u32| Vec3::from(build.normals[i as usize]);
+        let (mut down, mut up) = (0, 0);
+        for corners in build.indices.chunks(3) {
+            let (a, b, c) = (corners[0], corners[1], corners[2]);
+            let face = (at(b) - at(a)).cross(at(c) - at(a));
+            if face.length() < 1.0e-6 {
+                continue;
+            }
+            let mean = normal(a) + normal(b) + normal(c);
+            assert!(face.dot(mean) > 0.0, "a triangle faces into the cap");
+            down += usize::from(mean.y < -1.5);
+            up += usize::from(mean.y > 1.5);
+        }
+        assert!(down >= 12 && up >= 12, "{down} down, {up} up");
+        // Skin, by its texture coordinates.
+        assert!(build.uvs.iter().all(|uv| uv[1] <= -1.0));
     }
 }
