@@ -68,7 +68,7 @@ import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shiel
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
 import { type Holding, keptOff, reach } from "./arms.ts";
-import { carryArm } from "./carry_arm.ts";
+import { carryArm, easedThrough, fold } from "./carry_arm.ts";
 import { type WristRest, HoldWorst, holdPose, wristRest } from "./hold_pose.ts";
 import { sharesIn, swung as armSwung } from "./additive.ts";
 import { fitter } from "./shield_arm.ts";
@@ -277,9 +277,18 @@ const carriedRoots = (upright: boolean) =>
   );
 const [uprightRoots, hangingRoots] = [carriedRoots(true), carriedRoots(false)];
 const carryTurns = carryArm(body, rest, uprightRoots, hangingRoots);
+// A hanging arm's give eased in time through each clip on each body, as the game eases it frame
+// by frame (carry_arm.ts `easedThrough`): the legs' fold at each step, kept a body and clip.
+const legBones = ["l", "r"].map((s) => [body.named(`thigh_${s}`), body.named(`calf_${s}`), body.named(`foot_${s}`)] as const);
+const givens = new Map<string, (t: number) => number>();
+function givenAt(shape: Shape, clip: Clip): (t: number) => number {
+  const key = `${shape.name} ${clip.name}`;
+  if (!givens.has(key)) givens.set(key, easedThrough(clip.end, clip.name.endsWith("_Loop"), (t) => fold(shaped(body, shape, clip, t, bends), legBones)));
+  return givens.get(key)!;
+}
 function carriedArms(shape: Shape, clip: Clip, t: number): Map<string, Q> {
   if (!(uprightRoots.length + hangingRoots.length) || !carriedNow(clip) || clip.name.includes("+")) return bends;
-  const turns = carryTurns(shaped(body, shape, clip, t, bends));
+  const turns = carryTurns(shaped(body, shape, clip, t, bends), hangingRoots.length ? givenAt(shape, clip)(t) : undefined);
   for (const [bone, q] of bends) turns.set(bone, turns.has(bone) ? qmul(turns.get(bone)!, q) : q);
   return turns;
 }

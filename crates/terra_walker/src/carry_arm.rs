@@ -38,6 +38,42 @@ pub const GIVE_OUT_DEG: f32 = 25.0;
 /// landing's crouch): how much shorter hip to ankle is than thigh and shin laid end to end.
 pub const FOLD_FROM: f32 = 0.08;
 pub const FOLD_TO: f32 = 0.3;
+/// How fast a give follows the fold, a second: the rate of the critically damped spring that
+/// eases it in time (`ease`), which halves what is left about every 1.68 / rate seconds
+/// (0.047 s). The slowest that keeps every look clear through a jump's second crouch and a
+/// landing, which fold the legs whole inside 0.1 s (`holds.ts`: at 30 the knife is 1.1 cm into
+/// the thigh at Jump_Start 0.27 s, at 20 the sword 3.4 cm into the calf).
+pub const GIVE_RATE: f32 = 36.0;
+
+/// The fastest a give's elbow turns, degrees a second, however the fold steps: a critically
+/// damped spring's greatest speed toward a step of 1 is rate / e.
+pub const ELBOW_MOST_DEG_S: f32 = GIVE_ELBOW_DEG * GIVE_RATE / std::f32::consts::E;
+
+/// A give eased in time: where it is and how fast it moves, in folds (0 to 1).
+#[derive(Clone, Copy, Default, Debug, PartialEq)]
+pub struct Eased {
+    pub at: f32,
+    pub speed: f32,
+}
+
+/// `eased` after `dt` seconds toward `fold`: a critically damped spring of `GIVE_RATE`, solved
+/// exactly, so a step of any length is stable and the give neither jumps with the fold nor
+/// overshoots it. Followed frame by frame, the give popped: Jump_Start opens on a crouch (fold
+/// 0.40) and stands 0.07 s later (0.03), so the elbow bent 40 degrees and let go inside it.
+///
+/// The spring is the one games smooth a value toward a moving target with: Daniel Holden,
+/// "Spring-It-On: The Game Developer's Spring-Roll-Call" (2021), its exact critically damped
+/// spring (`simple_spring_damper_exact`, the half damping here `GIVE_RATE`), the form of
+/// Thomas Lowe's "Critically Damped Ease-In/Ease-Out Smoothing" (Game Programming Gems 4,
+/// 1.10), which Unity's `Mathf.SmoothDamp` approximates. Ported from the article's formula.
+pub fn ease(eased: Eased, fold: f32, dt: f32) -> Eased {
+    let j = eased.speed + (eased.at - fold) * GIVE_RATE;
+    let decay = libm::expf(-GIVE_RATE * dt);
+    Eased {
+        at: fold + decay * (eased.at - fold + j * dt),
+        speed: decay * (eased.speed - j * GIVE_RATE * dt),
+    }
+}
 
 /// How far a body's legs are folded, 0 standing to 1: of the straighter leg (each its hip,
 /// knee and ankle in the body), how much shorter hip to ankle is than thigh and shin laid end
@@ -85,6 +121,9 @@ struct Side {
     /// The upper arm and the forearm, which a hanging pose's give turns, and what was written.
     upper: (Entity, Kept),
     lower: (Entity, Kept),
+    /// A hanging pose's give, eased in time; none while the arm is not carried so, and the
+    /// first frame it is, the give is settled on that frame's fold.
+    given: Option<Eased>,
 }
 
 pub fn plugin(app: &mut App) {
@@ -151,6 +190,7 @@ fn find_arms(
             kept: Kept::default(),
             upper: (upper, Kept::default()),
             lower: (lower, Kept::default()),
+            given: None,
         })
     };
     let (Some(left), Some(right)) = (
@@ -187,22 +227,23 @@ fn turned(
 }
 
 /// Each arm in a carry pose turned at its shoulder blade by the chest's turn from its rest,
-/// undone; a hanging pose's then given by the legs' fold.
+/// undone; a hanging pose's then given by the legs' fold, eased in time.
 pub fn hold_in_body(
+    time: Res<Time>,
     mut bodies: Query<(Entity, &mut CarryArms)>,
     posed: Query<(&CarryPosed, &CarryHold)>,
     parents: Query<&ChildOf>,
     mut transforms: Query<&mut Transform>,
 ) {
+    let dt = time.delta_secs();
     for (root, mut arms) in &mut bodies {
         let legs = arms.legs;
         for (k, side) in arms.sides.iter_mut().enumerate() {
-            let Ok((carried, hold)) = posed.get(side.socket) else {
+            let carried = posed.get(side.socket).ok().filter(|(c, _)| c.0);
+            let Some((_, hold)) = carried else {
+                side.given = None;
                 continue;
             };
-            if !carried.0 {
-                continue;
-            }
             let chest = in_body(side.chest, root, &parents, &transforms)
                 .to_scale_rotation_translation()
                 .1;
@@ -215,11 +256,20 @@ pub fn hold_in_body(
                 t.rotation = written;
             }
             if hold.upright {
+                side.given = None;
                 continue;
             }
             let at = |bone| Vec3::from(in_body(bone, root, &parents, &transforms).translation);
             let folded = fold(legs.map(|leg| leg.map(at)));
-            let (out, elbow) = give(folded, k == 1);
+            let given = match side.given {
+                Some(given) => ease(given, folded, dt),
+                None => Eased {
+                    at: folded,
+                    speed: 0.0,
+                },
+            };
+            side.given = Some(given);
+            let (out, elbow) = give(given.at, k == 1);
             turned(&mut side.upper, out, root, &parents, &mut transforms);
             turned(&mut side.lower, elbow, root, &parents, &mut transforms);
         }
@@ -302,7 +352,9 @@ mod tests {
             kept: Kept::default(),
             upper: (upper, Kept::default()),
             lower: (lower, Kept::default()),
+            given: None,
         };
+        world.init_resource::<Time>();
         let other = world.spawn_empty().id();
         world.entity_mut(root).insert(CarryArms {
             sides: [side(other, other, other), side(socket, upper, lower)],
@@ -425,6 +477,81 @@ mod tests {
         assert!(
             upright.distance(standing) < 1e-4,
             "an upright arm gave: {upright}"
+        );
+    }
+
+    /// The give's pop at a jump's start (held-carry j4): a fold stepping from nothing to whole
+    /// in one frame moves the elbow no faster than `ELBOW_MOST_DEG_S` (529 degrees a second;
+    /// followed frame by frame it was 40 degrees in the frame, 2400), by the spring's own
+    /// answer, 1 - (1 + rate t) e^(-rate t), never past the fold, and is there in half a second.
+    #[test]
+    fn a_step_in_the_fold_moves_the_elbow_no_faster_than_its_rate() {
+        let dt = 1.0 / 60.0;
+        let mut eased = Eased::default();
+        for frame in 1..=30 {
+            let before = eased.at;
+            eased = ease(eased, 1.0, dt);
+            let t = frame as f32 * dt;
+            let known = 1.0 - (1.0 + GIVE_RATE * t) * libm::expf(-GIVE_RATE * t);
+            assert!((eased.at - known).abs() < 1e-4, "frame {frame}: {eased:?}");
+            let speed = (eased.at - before) * GIVE_ELBOW_DEG / dt;
+            assert!(
+                (0.0..=ELBOW_MOST_DEG_S).contains(&speed),
+                "frame {frame}: the elbow at {speed} degrees a second"
+            );
+        }
+        assert!((eased.at - 1.0).abs() < 1e-3, "after 0.5 s: {eased:?}");
+        // One frame crouched, then standing again: the elbow comes 8.7 degrees up, not 40 (the
+        // frame leaves it at 0.122 moving 11.85 a second; from there the spring's answer
+        // toward nothing peaks 0.02 s on at 0.218 of the give), and is down in half a second.
+        let mut pulse = ease(Eased::default(), 1.0, dt);
+        let mut most = pulse.at;
+        for _ in 0..30 {
+            pulse = ease(pulse, 0.0, dt);
+            most = most.max(pulse.at);
+        }
+        let up = most * GIVE_ELBOW_DEG;
+        assert!((8.0..8.8).contains(&up), "the elbow came {up} degrees up");
+        assert!(pulse.at.abs() < 1e-3, "{pulse:?}");
+    }
+
+    /// The same on a body: carried standing, then its legs folded between two frames a 60th
+    /// of a second apart, the forearm has turned some, under the rate; a second on, all of it.
+    #[test]
+    fn a_body_folding_its_legs_in_one_frame_bends_its_elbow_in_time() {
+        let mut world = World::new();
+        let made = body(
+            &mut world,
+            Case {
+                lean: 0.0,
+                folded: false,
+                carried: true,
+                upright: false,
+            },
+        );
+        world.run_system_once(hold_in_body).unwrap();
+        let standing = place_in_body(&mut world, made.root, made.lower).0;
+        let legs = world.get::<CarryArms>(made.root).unwrap().legs;
+        for [_, knee, ankle] in legs {
+            world.get_mut::<Transform>(knee).unwrap().translation = Vec3::new(0.0, -0.225, 0.39);
+            world.get_mut::<Transform>(ankle).unwrap().translation = Vec3::new(0.0, -0.225, -0.39);
+        }
+        let frame = |world: &mut World, seconds: f32| {
+            world
+                .resource_mut::<Time>()
+                .advance_by(std::time::Duration::from_secs_f32(seconds));
+            world.run_system_once(hold_in_body).unwrap();
+            let now = place_in_body(world, made.root, made.lower).0;
+            now.angle_between(standing).to_degrees()
+        };
+        let first = frame(&mut world, 1.0 / 60.0);
+        // The forearm turns by the elbow's give and the arm's out: both under their share.
+        let most = (GIVE_ELBOW_DEG + GIVE_OUT_DEG) * GIVE_RATE / std::f32::consts::E / 60.0;
+        assert!(first > 1.0 && first < most, "{first} degrees in the frame");
+        let settled = frame(&mut world, 1.0);
+        assert!(
+            settled > 35.0,
+            "a second on the forearm is {settled} degrees"
         );
     }
 

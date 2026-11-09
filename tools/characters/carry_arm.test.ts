@@ -27,6 +27,33 @@ test("a carried arm keeps its turn in the body however far the chest leans", () 
   }
 });
 
+// The give's pop at a jump's start (held-carry j4): a fold stepping from nothing to whole in
+// one frame moves the elbow no faster than ELBOW_MOST_DEG_S, by the spring's own answer,
+// 1 - (1 + rate t) e^(-rate t); and through Jump_Start itself, which opens on a crouch and
+// stands 0.07 s later, the eased give's elbow never turns faster, where followed frame by
+// frame it let go of 40 degrees inside those 0.07 s (over 570 degrees a second).
+test("a step in the fold moves the elbow no faster than the give's rate", async () => {
+  const { ELBOW_MOST_DEG_S, GIVE, ease, easedThrough, fold } = await import("./carry_arm.ts");
+  let eased = { at: 0, speed: 0 };
+  for (let frame = 1; frame <= 30; frame++) {
+    const before = eased.at;
+    eased = ease(eased, 1, 1 / 60);
+    const t = frame / 60;
+    assert.ok(Math.abs(eased.at - (1 - (1 + GIVE.rate * t) * Math.exp(-GIVE.rate * t))) < 1e-9, `frame ${frame}: ${eased.at}`);
+    const speed = (eased.at - before) * GIVE.elbow * 60;
+    assert.ok(speed >= 0 && speed <= ELBOW_MOST_DEG_S, `frame ${frame}: ${speed} degrees a second`);
+  }
+  const g = new Glb("assets/models/character/fight.glb");
+  const start = g.clip("Jump_Start")!;
+  const legs = ["l", "r"].map((s) => [g.named(`thigh_${s}`), g.named(`calf_${s}`), g.named(`foot_${s}`)] as const);
+  const raw = (t: number) => fold(posed(g, start, t), legs);
+  assert.ok((raw(0) - raw(1 / 15)) * GIVE.elbow * 15 > 570, "Jump_Start no longer opens on a crouch it leaves in a frame: the planted step is gone");
+  const given = easedThrough(start.end, false, raw);
+  let most = 0;
+  for (let i = 1; i <= start.end * 60; i++) most = Math.max(most, Math.abs(given(i / 60) - given((i - 1) / 60)) * GIVE.elbow * 60);
+  assert.ok(most > 100 && most <= ELBOW_MOST_DEG_S, `through Jump_Start the elbow turns ${most} degrees a second at most, bar ${ELBOW_MOST_DEG_S}`);
+});
+
 // The pickaxe under the ground in a landing (held-carry j3): Carry_Tool, a hanging pose, over
 // Jump_Land's crouch. Its fold is whole there and nothing standing; given, the hand is higher
 // and further out than held in the body's frame alone, and the handle no longer points down.

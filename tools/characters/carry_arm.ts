@@ -28,8 +28,50 @@ export const GIVE = (() => {
     if (!m) throw new Error(`carry_arm.ts: no ${name} in crates/terra_walker/src/carry_arm.rs: the give's numbers are read from it; keep the constant or change both`);
     return Number(m[1]);
   };
-  return { elbow: of("GIVE_ELBOW_DEG"), out: of("GIVE_OUT_DEG"), from: of("FOLD_FROM"), to: of("FOLD_TO") };
+  return { elbow: of("GIVE_ELBOW_DEG"), out: of("GIVE_OUT_DEG"), from: of("FOLD_FROM"), to: of("FOLD_TO"), rate: of("GIVE_RATE") };
 })();
+
+/** The fastest a give's elbow turns, degrees a second, however the fold steps: a critically
+ * damped spring's greatest speed toward a step of 1 is rate / e. */
+export const ELBOW_MOST_DEG_S = (GIVE.elbow * GIVE.rate) / Math.E;
+
+/** A give eased in time: where it is and how fast it moves, in folds (0 to 1). */
+export type Eased = { at: number; speed: number };
+
+/** `eased` after `dt` seconds toward `fold`, by a critically damped spring of `GIVE.rate`, solved
+ * exactly so any step is stable (terra_walker::carry_arm's `ease`, its source named there). */
+export function ease({ at, speed }: Eased, fold: number, dt: number): Eased {
+  const j = speed + (at - fold) * GIVE.rate;
+  const decay = Math.exp(-GIVE.rate * dt);
+  return { at: fold + decay * (at - fold + j * dt), speed: decay * (speed - j * GIVE.rate * dt) };
+}
+
+/** The steps a second a clip's give is eased at here, the game's frame rate. */
+const STEPS = 60;
+
+/** The eased give through a clip `end` seconds long whose fold at a time is `fold`: as the game
+ * eases it frame by frame. A loop (`loops`) is entered as it leaves itself, played once before;
+ * any other clip is entered with its give settled on its first pose (a jump's start opens on a
+ * crouch the game blends into; a landing opens standing, so its give has it all to catch up). */
+export function easedThrough(end: number, loops: boolean, fold: (t: number) => number): (t: number) => number {
+  const count = Math.round(end * STEPS);
+  let state: Eased = { at: fold(0), speed: 0 };
+  const through = (keep?: number[]) => {
+    for (let i = 1; i <= count; i++) {
+      state = ease(state, fold(i / STEPS), 1 / STEPS);
+      if (keep) keep[i] = state.at;
+    }
+  };
+  if (loops) through();
+  const at = [state.at];
+  through(at);
+  // Between two steps, the line between them.
+  return (t) => {
+    const x = Math.max(0, Math.min(count, t * STEPS));
+    const i = Math.min(count - 1, Math.floor(x));
+    return count ? at[i] + (at[i + 1] - at[i]) * (x - i) : at[0];
+  };
+}
 
 /** How far the legs are folded at `pose`, 0 standing to 1: of the straighter leg (each its
  * hip, knee and ankle), how much shorter hip to ankle is than thigh and shin laid end to end,
@@ -46,15 +88,17 @@ export function fold(pose: Pose[], legs: readonly (readonly [number, number, num
  * `hanging` (a carried arm's clavicle, by its carry pose's kind) the chest's turn from its rest
  * (`rest`, the body's rest pose) undone, as hold.py's and posed's bends turn a bone with what
  * is below it; and a hanging arm's give by the legs' fold, at its upper arm and forearm. */
-export function carryArm(body: Glb, rest: Pose[], upright: readonly string[], hanging: readonly string[] = []): (pose: Pose[]) => Map<string, Q> {
+export function carryArm(body: Glb, rest: Pose[], upright: readonly string[], hanging: readonly string[] = []): (pose: Pose[], eased?: number) => Map<string, Q> {
   const parentOf = new Map<number, number>();
   body.gltf.nodes.forEach((n, i) => n.children?.forEach((c) => parentOf.set(c, i)));
   const chests = [...upright, ...hanging].map((root) => [root, parentOf.get(body.named(root))!] as const);
   const legs = hanging.length ? ["l", "r"].map((s) => [body.named(`thigh_${s}`), body.named(`calf_${s}`), body.named(`foot_${s}`)] as const) : [];
-  return (pose) => {
+  return (pose, eased) => {
     const turns = new Map<string, Q>(chests.map(([root, chest]) => [root, qmul(rest[chest].r, qinv(pose[chest].r))]));
     if (!hanging.length) return turns;
-    const g = fold(pose, legs);
+    // The give eased through the clip where the caller plays one (`easedThrough`), else the
+    // pose's own fold, a give long settled.
+    const g = eased ?? fold(pose, legs);
     for (const root of hanging) {
       const s = root.slice(-1);
       // The model faces +Z, +X its left: a right arm goes out from the side turning about -Z.
