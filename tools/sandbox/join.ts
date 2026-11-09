@@ -207,6 +207,7 @@ try {
   // By the hammer's menu, as a player does; where the host happens to aim on a world of
   // any seed, the stone is sometimes refused, so it is tried again a pace on.
   let claimed = false;
+  const tried: string[] = [];
   // Keys are timed in frames, written here for 60 a second and paced to the rate the game
   // runs at: at twice the rate the menu's steps came 80 ms apart and the pace on between
   // tries was half as long, which left the host too near the village three times running.
@@ -222,16 +223,18 @@ try {
       claimed = true;
     } catch {
       // Refused where it stood (on some worlds the start is by the village, and a claim
-      // keeps clear of it): moved twenty metres off, another way each try, since walking
-      // on went straight ahead and sometimes into the village.
+      // keeps clear of it): moved sixty metres further east each try, well clear of a
+      // village, since walking on went straight ahead and sometimes into it, and twenty
+      // metres one way and then another came back to where it began.
       remote(host, "press", "esc");
       const here = (JSON.parse(remote(host, "call", "play.state")) as { at: [number, number] }).at;
-      const [east, south] = [[20, 0], [0, 20], [-20, -20]][tries % 3];
-      remote(host, "call", "play.warp", JSON.stringify({ at: [here[0] + east, here[1] + south] }));
+      const told = remote(host, "said", "--all", "--containing", "Notice:").trim().split("\n");
+      tried.push(`try ${tries + 1} at ${here.map((x) => x.toFixed(0)).join(", ")}: ${told.length} notices, the last "${told.at(-1)?.replace(/^.*Notice: /, "")}"`);
+      remote(host, "call", "play.warp", JSON.stringify({ at: [here[0] + 60, here[1]] }));
       await sleep(3);
     }
   }
-  if (!claimed) throw new Error(`the host could not set down a claim stone in four tries (the hammer's menu: b, 2, enter, e held); it was told: ${remote(host, "said", "--all", "--containing", "Notice:").trim().split("\n").slice(-4).join(" / ") || "nothing"}`);
+  if (!claimed) throw new Error(`the host could not set down a claim stone in four tries (the hammer's menu: b, 2, enter, e held); each try: ${tried.join("; ")}; it was told: ${remote(host, "said", "--all", "--containing", "Notice:").trim().split("\n").slice(-4).join(" / ") || "nothing"}`);
   // What stands in a base stands in both games: the host's claim stone is in the friend's.
   const stones = (port: number) => (JSON.parse(remote(port, "call", "sandbox.find", JSON.stringify({ name: "Claim stone" }))) as { at: Place }[]).map((stone) => stone.at);
   const theirs = stones(host);

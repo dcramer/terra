@@ -180,11 +180,7 @@ pub(super) fn joined(
     if !std::mem::replace(&mut shared.begun, true) {
         shared.seen = building.site.since.len();
     }
-    let (words, rest): (Vec<Heard>, Vec<Heard>) =
-        std::mem::take(&mut link.events).into_iter().partition(
-            |event| matches!(event, Heard::Op { bytes, .. } if bytes.first() == Some(&BASE)),
-        );
-    link.events = rest;
+    let words = in_order(&mut link.events, BASE, super::props_net::PROP);
     // Its own acts since the last look, before the host's are made over them.
     let own = gained(&building.site.since, shared.seen).to_vec();
     if !own.is_empty()
@@ -193,10 +189,7 @@ pub(super) fn joined(
         link.ask(&word);
         shared.pending.push(own);
     }
-    for word in words {
-        let Heard::Op { bytes, .. } = word else {
-            continue;
-        };
+    for bytes in words {
         match Word::heard(&bytes) {
             Some(Word::Whole(frame, snapshot, since)) => {
                 info!(
@@ -232,6 +225,30 @@ pub(super) fn joined(
     shared.seen = building.site.since.len();
 }
 
+/// Takes from what a joined game heard the words of one layer (`mine`, by their first byte)
+/// in the order they came, as far as the first word of a layer it must not run ahead of
+/// (`after`); the rest stay for the next look. The base and what stands in it are told by
+/// two layers, each making all its words at once: a base moved and a prop set down that came
+/// together were made base first, whichever the host said first, and a claim stone said
+/// before the base moved to it was set down in the frame the base moved to, 13 m off.
+pub(super) fn in_order(events: &mut Vec<Heard>, mine: u8, after: u8) -> Vec<Vec<u8>> {
+    let (mut taken, mut held) = (Vec::new(), false);
+    let mut kept = Vec::with_capacity(events.len());
+    for event in std::mem::take(events) {
+        let first = match &event {
+            Heard::Op { bytes, .. } => bytes.first().copied(),
+            _ => None,
+        };
+        held |= first == Some(after);
+        match event {
+            Heard::Op { bytes, .. } if !held && first == Some(mine) => taken.push(bytes),
+            other => kept.push(other),
+        }
+    }
+    *events = kept;
+    taken
+}
+
 /// With no link, what a joined game was told is forgotten; a host's own count stands while
 /// it hosts. (Not by the link being new: it is taken out and put back every tick.)
 fn alone(mut shared: ResMut<Shared>, host: Option<Res<Host>>) {
@@ -264,5 +281,35 @@ mod tests {
             "a snapshot took them in: nothing gained"
         );
         assert!(gained(&[], 0).is_empty());
+    }
+
+    /// The base's words and the props' are made in the order the host said them: each
+    /// layer takes its own as far as the other's next, and what is neither's stays. A
+    /// stone, the base moved, the stone again: the stone first, then the move, then the
+    /// stone, never the move before the first stone.
+    #[test]
+    fn two_layers_words_are_taken_in_the_order_heard() {
+        const PROP: u8 = super::super::props_net::PROP;
+        let op = |tag: u8, n: u8| Heard::Op {
+            region: [0; 3],
+            number: u32::from(n),
+            bytes: vec![tag, n],
+        };
+        let mut heard = vec![
+            op(PROP, 1),
+            op(BASE, 2),
+            Heard::Ready,
+            op(PROP, 3),
+            op(99, 4),
+        ];
+        // A tick: the base first, which must wait for the stone said before its move.
+        assert!(in_order(&mut heard, BASE, PROP).is_empty());
+        assert_eq!(in_order(&mut heard, PROP, BASE), [vec![PROP, 1]]);
+        // The next: the move, then the stone said after it.
+        assert_eq!(in_order(&mut heard, BASE, PROP), [vec![BASE, 2]]);
+        assert_eq!(in_order(&mut heard, PROP, BASE), [vec![PROP, 3]]);
+        // What is neither's is left as it came.
+        assert_eq!(heard.len(), 2);
+        assert!(matches!(&heard[1], Heard::Op { bytes, .. } if bytes[0] == 99));
     }
 }

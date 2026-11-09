@@ -14,7 +14,6 @@ use crate::build::Site;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use terra_net::client::Event as Heard;
 use terra_walker::net::link::Link;
 use terra_walker::net::{Host, tell};
 use terra_world::planet::Planet;
@@ -252,15 +251,10 @@ fn joined(mut link: ResMut<Link>, mut told: ResMut<Told>, mut setting: Setting) 
         }
         told.seen = standing.into_keys().collect();
     }
-    let (words, rest): (Vec<Heard>, Vec<Heard>) =
-        std::mem::take(&mut link.events).into_iter().partition(
-            |event| matches!(event, Heard::Op { bytes, .. } if bytes.first() == Some(&PROP)),
-        );
-    link.events = rest;
-    for word in words {
-        let Heard::Op { bytes, .. } = word else {
-            continue;
-        };
+    // In the host's order with the base's words (`base_net::in_order`): a prop said before
+    // the base moved is set down before it moves.
+    let words = super::base_net::in_order(&mut link.events, PROP, super::base_net::BASE);
+    for bytes in words {
         let Some(word) = Word::heard(&bytes) else {
             continue;
         };
