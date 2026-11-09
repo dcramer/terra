@@ -14,6 +14,7 @@
 mod asked;
 mod census;
 mod perches;
+mod safe;
 pub use census::own_to_each;
 pub use perches::Perches;
 mod groups;
@@ -777,11 +778,15 @@ fn put_kind(
     // wide, which one place in a cell all but never finds, and nothing of the shore's stood
     // by a lake (no heron, no Seawish). In woods or the open the first place does.
     let seen_m = bestiary.get(species).seen_m();
+    let hostile = bestiary.hostile(species);
     let Some(at) = (0..PLACES_TRIED).find_map(|_| {
         let at =
             ground + east * dice.range(-0.5, 0.5) * CELL_M + north * dice.range(-0.5, 0.5) * CELL_M;
         let at = around.ground(at);
-        around.fits_unseen(niche, at, seen_m).then_some(at)
+        // Nothing that goes for a player lives where players arrive: a Worman on the
+        // village's paths killed one standing at the start.
+        let safe = safe::keeps_from_start(hostile, around.start.local(at).length());
+        (safe && around.fits_unseen(niche, at, seen_m)).then_some(at)
     }) else {
         return Vec::new();
     };

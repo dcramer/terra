@@ -96,6 +96,7 @@ pub fn meet(
     moving: &[(Entity, Vec3, Vec3)],
     placed: &Query<(&Transform, &creatures::Creature)>,
 ) {
+    let wild = &super::safe::for_the_eye(wild, bestiary)[..];
     let seed = around.planet.seed().derive("wildlife meetings");
     cells
         .ways
