@@ -67,6 +67,13 @@ pub struct Realm {
     /// where it says nothing, as the first realm does.
     #[serde(default)]
     pub animals: Option<Vec<String>>,
+    /// How much of the first realm's birdsong and calls is heard in it, 0 to 1 (all of it
+    /// if not given), and how loud its own air rings (`audio::synth::Sound::Chimes`; not at
+    /// all if not given): what the place sounds of (`terra_game::play::soundscape`).
+    #[serde(default)]
+    pub birdsong: Option<f32>,
+    #[serde(default)]
+    pub chimes: Option<f32>,
     /// What stands on its land by rule (the game's to stand, `terra_game::play::realm_parts`).
     #[serde(default)]
     pub parts: Vec<Part>,

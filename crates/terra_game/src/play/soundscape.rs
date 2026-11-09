@@ -51,6 +51,7 @@ pub fn plugin(app: &mut App) {
                 ring,
             ),
         );
+    terra_world::remote::method(app, "sound.state", state);
 }
 
 /// A sound that surrounds the listener.
@@ -90,14 +91,7 @@ struct Bell {
 struct Bells(Rng);
 
 fn surround(mut commands: Commands, mut synths: ResMut<Assets<Synth>>, mix: Res<Mix>) {
-    for (sound, seed) in [
-        (Sound::Wind, 1),
-        (Sound::Birds, 2),
-        (Sound::Water, 3),
-        (Sound::Calls(Chorus::Woods), 4),
-        (Sound::Calls(Chorus::Fells), 5),
-        (Sound::Calls(Chorus::Shore), 6),
-    ] {
+    for (sound, seed) in LAYERS {
         let voice = Voice {
             bus: Bus::Ambience,
             level: 0.0,
@@ -115,16 +109,57 @@ fn surround(mut commands: Commands, mut synths: ResMut<Assets<Synth>>, mix: Res<
     }
 }
 
+/// The surrounding layers, each with the seed its sound is made from.
+const LAYERS: [(Sound, u64); 7] = [
+    (Sound::Wind, 1),
+    (Sound::Birds, 2),
+    (Sound::Water, 3),
+    (Sound::Calls(Chorus::Woods), 4),
+    (Sound::Calls(Chorus::Fells), 5),
+    (Sound::Calls(Chorus::Shore), 6),
+    (Sound::Chimes, 7),
+];
+
+/// The listener's place, read from the world round the player.
+#[derive(bevy::ecs::system::SystemParam)]
+struct Place<'w, 's> {
+    planet: Res<'w, Planet>,
+    lair: Option<Res<'w, Lair>>,
+    trunks: Res<'w, Trunks>,
+    obstacles: Res<'w, Obstacles>,
+    climate: Option<Res<'w, ClimateFields>>,
+    realms: Res<'w, terra_world::realm::Realms>,
+    spec: Res<'w, terra_world::instance::WorldSpec>,
+    player: Query<'w, 's, (&'static Motion, &'static GlobalTransform), IsLocalPlayer>,
+}
+
+impl Place<'_, '_> {
+    fn here(&self) -> Option<Here> {
+        let (motion, at) = self.player.iter().next()?;
+        let here = at.translation();
+        let ground = self.planet.ground_at(here);
+        let standing = self.trunks.near(ground, WOODED.1, &self.obstacles).count();
+        let season_c = self.climate.as_ref().map_or(12.0, |climate| {
+            climate.fields.season(climate.place(ground)).growing_mean_c
+        });
+        let realm = self.realms.of(&self.spec.kind);
+        Some(Here {
+            birdsong: realm.and_then(|realm| realm.birdsong).unwrap_or(1.0),
+            chimes: realm.and_then(|realm| realm.chimes).unwrap_or(0.0),
+            outdoors: !motion.indoors,
+            lair_m: (self.lair.as_ref()).map_or(f32::MAX, |lair| lair.0.distance(here)),
+            shore_m: shore_distance(&self.planet, here),
+            wooded: (standing as f32 / WOODED.0).min(1.0),
+            fells: ((FELLS_C - season_c) / 3.0).clamp(0.0, 1.0),
+        })
+    }
+}
+
 /// How loud each surrounding layer should be where the player stands.
 fn follow_place(
     mut commands: Commands,
     time: Res<Time>,
-    planet: Res<Planet>,
-    lair: Option<Res<Lair>>,
-    trunks: Res<Trunks>,
-    obstacles: Res<Obstacles>,
-    climate: Option<Res<ClimateFields>>,
-    player: Single<(&Motion, &GlobalTransform), IsLocalPlayer>,
+    place: Place,
     layers: Query<(Entity, &Layer, &Voice)>,
     mut wait: Local<f32>,
 ) {
@@ -133,20 +168,8 @@ fn follow_place(
         return;
     }
     *wait = LOOK_EVERY_S;
-    let (motion, at) = *player;
-    let here = at.translation();
-    let lair_m = lair.map_or(f32::MAX, |lair| lair.0.distance(here));
-    let ground = planet.ground_at(here);
-    let wooded = (trunks.near(ground, WOODED.1, &obstacles).count() as f32 / WOODED.0).min(1.0);
-    let season_c = climate.as_ref().map_or(12.0, |climate| {
-        climate.fields.season(climate.place(ground)).growing_mean_c
-    });
-    let place = Here {
-        outdoors: !motion.indoors,
-        lair_m,
-        shore_m: shore_distance(&planet, here),
-        wooded,
-        fells: ((FELLS_C - season_c) / 3.0).clamp(0.0, 1.0),
+    let Some(place) = place.here() else {
+        return;
     };
     for (entity, layer, voice) in &layers {
         let wanted = place_level(layer.0, &place);
@@ -158,6 +181,20 @@ fn follow_place(
             });
         }
     }
+}
+
+/// `sound.state`: how loud each surrounding layer is to be where the player stands, by
+/// the place alone, so a muted run can say what a place sounds of (D69).
+fn state(In(_): In<Option<serde_json::Value>>, place: Place) -> bevy::remote::BrpResult {
+    let here = place.here();
+    let layers: serde_json::Map<String, serde_json::Value> = LAYERS
+        .iter()
+        .map(|(sound, _)| {
+            let level = here.as_ref().map_or(0.0, |here| place_level(*sound, here));
+            (format!("{sound:?}"), level.into())
+        })
+        .collect();
+    Ok(serde_json::json!({ "layers": layers }))
 }
 
 /// A wood is so many trunks within so far; fells are where the growing season is colder
@@ -176,6 +213,10 @@ struct Here {
     /// How wooded, 0 open to 1 among trees, and how much it is the cold open fells.
     wooded: f32,
     fells: f32,
+    /// Its realm's share of the first realm's birdsong and calls, and how loud its own air
+    /// rings (`data/realms.ron`).
+    birdsong: f32,
+    chimes: f32,
 }
 
 impl Here {
@@ -188,6 +229,8 @@ impl Here {
             shore_m: None,
             wooded: 0.0,
             fells: 0.0,
+            birdsong: 1.0,
+            chimes: 0.0,
         }
     }
 }
@@ -205,12 +248,18 @@ fn place_level(sound: Sound, here: &Here) -> f32 {
     match sound {
         Sound::Wind => (0.25 + 0.15 * here.fells) * inside,
         Sound::Birds => {
-            0.3 * inside * unspoilt * (0.55 + 0.45 * here.wooded) * (1.0 - 0.8 * here.fells)
+            0.3 * inside
+                * unspoilt
+                * (0.55 + 0.45 * here.wooded)
+                * (1.0 - 0.8 * here.fells)
+                * here.birdsong
         }
+        // Its realm's own air: most among its caps, a little everywhere out of doors.
+        Sound::Chimes => here.chimes * inside * (0.6 + 0.4 * here.wooded),
         Sound::Water => near_water * 0.5 * inside,
-        Sound::Calls(Chorus::Woods) => 0.3 * inside * unspoilt * here.wooded,
-        Sound::Calls(Chorus::Fells) => 0.35 * inside * unspoilt * here.fells,
-        Sound::Calls(Chorus::Shore) => 0.3 * inside * unspoilt * near_water,
+        Sound::Calls(Chorus::Woods) => 0.3 * inside * unspoilt * here.wooded * here.birdsong,
+        Sound::Calls(Chorus::Fells) => 0.35 * inside * unspoilt * here.fells * here.birdsong,
+        Sound::Calls(Chorus::Shore) => 0.3 * inside * unspoilt * near_water * here.birdsong,
         _ => 0.0,
     }
 }
@@ -527,5 +576,39 @@ mod tests {
             let heard = at_ear(active_db(&samples), level, Bus::Ambience);
             within(&format!("{sound:?}"), heard, (-42.0, -30.0));
         }
+    }
+
+    /// A realm sounds as its own place: where its row silences the first realm's birds and
+    /// rings instead, no birdsong or call is heard and its chimes are, most among its trees
+    /// and little indoors; the first realm has no chimes.
+    #[test]
+    fn a_realm_with_its_own_air_rings_and_has_no_birdsong() {
+        let first = Here {
+            wooded: 1.0,
+            ..Here::open()
+        };
+        let far = Here {
+            birdsong: 0.0,
+            chimes: 0.45,
+            ..first
+        };
+        assert!(place_level(Sound::Birds, &first) > 0.2);
+        assert_eq!(place_level(Sound::Chimes, &first), 0.0);
+        assert_eq!(place_level(Sound::Birds, &far), 0.0);
+        assert_eq!(place_level(Sound::Calls(Chorus::Woods), &far), 0.0);
+        let among = place_level(Sound::Chimes, &far);
+        let open = place_level(Sound::Chimes, &Here { wooded: 0.0, ..far });
+        let indoors = place_level(
+            Sound::Chimes,
+            &Here {
+                outdoors: false,
+                ..far
+            },
+        );
+        assert!(
+            among > open && open > indoors && indoors > 0.0,
+            "{among} {open} {indoors}"
+        );
+        assert!(place_level(Sound::Wind, &far) > 0.0);
     }
 }

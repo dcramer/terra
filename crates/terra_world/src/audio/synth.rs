@@ -16,6 +16,10 @@ use std::time::Duration;
 
 /// Samples a second, for everything made here.
 pub const RATE: u32 = 44_100;
+mod chorus;
+mod far;
+pub use chorus::Chorus;
+
 const DT: f32 = 1.0 / RATE as f32;
 
 /// What to generate.
@@ -64,6 +68,8 @@ pub enum Sound {
     Cluck,
     /// A place's own calls now and then, from all round, near and far. Never ends.
     Calls(Chorus),
+    /// The far realm's air (`far::chimes`). Never ends.
+    Chimes,
     /// A phrase of music.
     Music(Phrase),
 }
@@ -79,42 +85,9 @@ impl Sound {
                 | Sound::Fire
                 | Sound::Hum
                 | Sound::Murmur
+                | Sound::Chimes
                 | Sound::Calls(_)
         )
-    }
-}
-
-/// Whose calls a place has, besides the songbirds (`Birds`): what a player hears of the life
-/// there they mostly do not see.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Chorus {
-    /// A wood: woodpeckers drumming and wood pigeons cooing, far off among the trees.
-    Woods,
-    /// Open fells and heath: plovers whistling, now and then a grouse's croak.
-    Fells,
-    /// A lake's shore: ducks quacking out on the water, a heron's croak, fish rising.
-    Shore,
-    /// A town's yards and streets: hens clucking, sparrows, a dog now and then.
-    Yards,
-}
-
-impl Chorus {
-    /// The calls it is made of, each with how often it comes of them all, and its length.
-    fn calls(self) -> &'static [(Sound, f32, f32)] {
-        match self {
-            Chorus::Woods => &[(Sound::Drum, 0.45, 0.8), (Sound::Coo, 0.55, 2.5)],
-            Chorus::Fells => &[(Sound::Whistle, 0.8, 0.6), (Sound::Croak, 0.2, 0.5)],
-            Chorus::Shore => &[
-                (Sound::Quack, 0.5, 0.75),
-                (Sound::Plop, 0.35, 0.3),
-                (Sound::Croak, 0.15, 0.5),
-            ],
-            Chorus::Yards => &[
-                (Sound::Cluck, 0.5, 0.9),
-                (Sound::Chirp, 0.35, 0.45),
-                (Sound::Bark, 0.15, 0.3),
-            ],
-        }
     }
 }
 
@@ -138,6 +111,7 @@ impl Decodable for Synth {
                 Sound::Fire => (Box::new(fire(dice)), 1, None),
                 Sound::Hum => (Box::new(hum(dice)), 1, None),
                 Sound::Murmur => (Box::new(murmur(dice)), 2, None),
+                Sound::Chimes => (Box::new(far::chimes(dice)), 2, None),
                 Sound::Hiss => one_shot(0.55, hiss(&mut dice)),
                 Sound::Snort => one_shot(0.4, snort(&mut dice)),
                 Sound::Chatter => one_shot(0.7, chatter(&mut dice)),
@@ -973,6 +947,7 @@ pub mod tests {
             Sound::Fire,
             Sound::Hum,
             Sound::Murmur,
+            Sound::Chimes,
             Sound::Hiss,
             Sound::Snort,
             Sound::Chatter,
@@ -1019,6 +994,7 @@ pub mod tests {
             Sound::Fire,
             Sound::Hum,
             Sound::Murmur,
+            Sound::Chimes,
             Sound::Hiss,
             Sound::Snort,
             Sound::Chatter,
@@ -1045,6 +1021,7 @@ pub mod tests {
                 | Sound::Fire
                 | Sound::Hum
                 | Sound::Murmur
+                | Sound::Chimes
                 | Sound::Calls(_) => {}
                 Sound::Hiss
                 | Sound::Snort

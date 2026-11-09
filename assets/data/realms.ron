@@ -44,6 +44,9 @@
         plants_hue: Some(1.25),
         // Its own deer and hare: the first realm's bodies in coats of this one (D642).
         animals: Some(["Glimmerhorn", "Glimmerdoe", "Moonhare"]),
+        // No bird of the first realm sings here: its cap forest rings.
+        birdsong: Some(0.0),
+        chimes: Some(0.45),
         // Half the first realm's undergrowth and a rare one of its trees: its cap
         // trees are its forest.
         plants: Some(0.5),

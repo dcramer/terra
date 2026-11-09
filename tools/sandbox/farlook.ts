@@ -2,7 +2,7 @@
 // The far realm, looked at in one step (D642, D71): a new world's troll is felled, its gate
 // opened and gone through, and stills are taken of the realm at each hour asked, looking at
 // the nearest things of a name, laid on one sheet; how many frames a second the first realm
-// and this one run at where the player stands is said. Each hour is a run of its own, about
+// and this one run at where the player stands is said, and what each sounds of. Each hour is a run of its own, about
 // four minutes, most of it reaching the gate. The stills are deleted once on the sheet.
 //
 //   node tools/sandbox/farlook.ts [--hours 13,22] [--look "Cap tree"] [--views 2]
@@ -32,6 +32,12 @@ const STAGE = args.includes("--stage") ? option("--stage", "").split(",") : [];
 type Found = { name: string; from_start: number[] };
 const playing = (seed: (s: string) => boolean) =>
   waitUntil("a world to be played", async () => (await call("title.state")) as { screen: string; seed: string | null }, (now) => now.screen === "Playing" && now.seed !== null && seed(now.seed), 600);
+/// What a place sounds of: its surrounding layers that are heard, loudest first.
+const sounds = async () => {
+  const { layers } = (await call("sound.state")) as { layers: Record<string, number> };
+  const heard = Object.entries(layers).filter(([, level]) => level > 0.01).sort((a, b) => b[1] - a[1]);
+  return heard.map(([name, level]) => `${name} ${level.toFixed(2)}`).join(", ") || "nothing";
+};
 const rate = async () => {
   const before = (await call("sandbox.status")) as { frame: number };
   await waitSeconds(5);
@@ -46,6 +52,7 @@ async function look(hour: string): Promise<string[]> {
     await playing((seed) => seed === SEED);
     await waitSeconds(12);
     const first = await rate();
+    const firstSounds = await sounds();
     // The troll's mark opens the gate.
     const { den } = (await call("den.state")) as { den: { mouth: number[] } };
     await warp([den.mouth[0], den.mouth[2]]);
@@ -61,6 +68,7 @@ async function look(hour: string): Promise<string[]> {
     await playing((seed) => seed === through.to.seed);
     await waitSeconds(15);
     console.log(`at ${hour}: the first realm ${first.toFixed(0)} frames a second, the far realm ${(await rate()).toFixed(0)}`);
+    console.log(`  the first realm sounds of ${firstSounds}; the far realm of ${await sounds()}`);
     const me = ((await call("sandbox.find", { name: "Player" })) as Found[])[0].from_start;
     const from = (at: number[]) => Math.hypot(at[0] - me[0], at[2] - me[2]);
     if (STAGE.length > 0) {
