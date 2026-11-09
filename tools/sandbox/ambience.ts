@@ -64,12 +64,17 @@ type Fish = { models: number; schools: number; fish: number; kinds: Record<strin
 /// The fish of a mountain lake on a July day: what swims near its shore, said in a line.
 async function fish(): Promise<string> {
   try {
-    await start(["--experiment", "play", "--fresh", "--save", "shots/ambience.ron", "--radius", "30000", "--seed", SEED, "--site", "lake", "--date", "7-10", "--time", "13", "--offscreen", "--mute"], { realTime: true, release: true });
+    await start(["--experiment", "play", "--fresh", "--save", "shots/ambience.ron", "--radius", "30000", "--seed", SEED, "--site", "lake", "--date", "7-10", "--time", "13", "--offscreen"], { realTime: true, release: true });
     await waitUntil("the world to be played", async () => (await call("title.state")) as { screen: string }, (now) => now.screen === "Playing", 600);
     const state = async () => (await call("fish.state")) as Fish;
     const swimming = await waitUntil("a school of fish in the lake", state, (now) => now.schools > 0 && now.nearest !== null, 60).catch(async () => {
       throw new Error(`no fish swim at the lake's shore (${JSON.stringify(await state())}): a school stands where the water suits a kind of assets/data/fish.ron (its deep_m, a_ha) within its seen_m of the eye; models says how many kinds' models were read`);
     });
+    // This start has its sound on, the only one of v0's checks that does: what sounds only
+    // when it is on is run here (a muted run skips it, and a fault in it stopped the game
+    // unseen), and the shore sounds of its water and the wind.
+    const { layers } = (await call("sound.state")) as { layers: Record<string, number> };
+    if (!(layers.Water > 0.05 && layers.Wind > 0.05)) throw new Error(`at a lake's shore the place sounds of ${JSON.stringify(layers)}, not of its water and the wind: terra_game::play::soundscape's place_level by where the player stands`);
     const before = swimming.nearest!;
     await waitSeconds(3);
     const after = (await state()).nearest!;
@@ -78,7 +83,7 @@ async function fish(): Promise<string> {
     await waitUntil("the school to dart from the swimmer", state, (now) => now.nearest?.darting === true, 20).catch(() => {
       throw new Error("a school a swimmer came on does not dart: fish::swim darts a school with a player within three metres of its water");
     });
-    return `${swimming.fish} fish in ${swimming.schools} schools at a lake's shore (${Object.entries(swimming.kinds).map(([name, count]) => `${count} ${name}`).join(", ")}), swimming, and darting from a swimmer`;
+    return `${swimming.fish} fish in ${swimming.schools} schools at a lake's shore (${Object.entries(swimming.kinds).map(([name, count]) => `${count} ${name}`).join(", ")}), swimming, and darting from a swimmer, the shore sounding of its water with the sound on`;
   } finally {
     await stop().catch(() => undefined);
   }
