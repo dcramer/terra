@@ -49,6 +49,10 @@ pub struct Realm {
     /// The share of the first realm's trees and undergrowth that grow here, 0 to 1.
     #[serde(default)]
     pub plants: Option<f32>,
+    /// The share of the first realm's trees alone, where its own kinds are its forest and
+    /// the undergrowth keeps another share; `plants` if not given.
+    #[serde(default)]
+    pub trees: Option<f32>,
     /// Its ground's layers: a stack among the materials (`assets/materials/<name>`,
     /// `tools/textures`), its layers in the first realm's order; the first realm's if not
     /// given.

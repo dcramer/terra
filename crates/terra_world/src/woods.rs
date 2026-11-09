@@ -414,7 +414,7 @@ fn cleared(middle: Vec3, trees: Vec<Tree>) -> Vec<Tree> {
 /// by its own place, so the same trees stand however the woods are asked for (near, far, a
 /// block at a time).
 fn thinned(planet: &Planet, trees: Vec<Tree>) -> Vec<Tree> {
-    let share = planet.plants();
+    let share = planet.trees();
     if share >= 1.0 {
         return trees;
     }

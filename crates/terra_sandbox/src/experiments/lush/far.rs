@@ -114,7 +114,7 @@ pub(super) fn lay(
                 Species::Oak => 0.55 + 0.4 * clumped,
                 _ => 0.75 + 0.25 * clumped,
             };
-            if glade_at(lay.glades, at) < -0.3 || luck(4) > stands * lay.planet.plants() {
+            if glade_at(lay.glades, at) < -0.3 || luck(4) > stands * lay.planet.trees() {
                 continue;
             }
             let (low, high) = HEIGHTS[species as usize];

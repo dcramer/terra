@@ -21,7 +21,7 @@ Not the first realm's trees in another colour. What stands where trees would is 
 
 Which of these, and how strange, is the developers' to say; the first to make is the cap tree, as it is the least like a tree.
 
-**What it costs** (a reading, not a bench: the high preset on the Radeon 8060S, a full-size world, standing): the first realm at its start 41 frames a second; this realm 39 at its gate and 35 two hundred metres on. The crystal's and the monolith's lamps are the likely tenth: some forty point lights within reach.
+**What it costs** (a reading, not a bench: the high preset on the Radeon 8060S, a full-size world, standing where the player arrives): the first realm at its start 41 frames a second; this realm 62, its cap trees its forest (1,500 a square kilometre, drawn to 450 m, some 950 in view) and one in sixteen of the first realm's trees (`trees`, a share of its own beside `plants`). The cap forest first ran at 16: each tree spawned a crown, far crown and shadow stand-ins of empty meshes, six parts in nine; a leafless tree is now its wood alone (`grown::drawn`), and drawn only to 150 m it ran no faster.
 
 ## Its parts, each by an existing pipeline
 

@@ -13,6 +13,7 @@ use sea::{WaterExtension, sea_waves};
 mod caved;
 pub mod entering;
 mod sea;
+mod shares;
 mod tweaks;
 mod worn;
 use bevy::math::DVec3;
@@ -118,6 +119,7 @@ pub struct Planet {
     /// The share of the first realm's plants that grow here (`realm::Realm::plants`): 1 where
     /// the realm says nothing.
     plants: f32,
+    trees: Option<f32>,
 }
 
 /// What grows at a place, each from 0 to 1.
@@ -178,6 +180,7 @@ impl Planet {
             cover: Noise::new(spec.seed.derive("ground cover")),
             round: None,
             plants: 1.0,
+            trees: None,
             start,
             den,
         }
@@ -192,6 +195,7 @@ impl Planet {
             cover: Noise::new(spec.seed.derive("ground cover")),
             round: None,
             plants: 1.0,
+            trees: None,
             start: START,
             den: None,
         }
@@ -206,6 +210,7 @@ impl Planet {
             cover: Noise::new(spec.seed.derive("ground cover")),
             round: None,
             plants: 1.0,
+            trees: None,
             start: START,
             den: None,
         }
@@ -384,16 +389,6 @@ impl Planet {
 
     /// Where the camera and the player start: a point on the ground, searched for from the
     /// seed on a world of biomes (`terra_land::spawn`, D596).
-    /// The share of the first realm's plants that grow on this world.
-    pub fn plants(&self) -> f32 {
-        self.plants
-    }
-
-    /// Sets how much of the first realm's plants grow here, as its realm says.
-    pub fn set_plants(&mut self, share: f32) {
-        self.plants = share.clamp(0.0, 1.0);
-    }
-
     /// The world's den, if its land holds one: where its mouth opens and its chamber's
     /// floor is (`terra_land::cave`).
     pub fn den(&self) -> Option<&terra_land::cave::Den> {

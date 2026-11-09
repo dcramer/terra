@@ -19,6 +19,7 @@ pub mod build;
 mod caps;
 mod cards;
 mod climate;
+mod drawn;
 pub mod pivots;
 pub mod plants;
 pub mod tree;
@@ -567,6 +568,9 @@ pub struct TreeModel {
     pub far: Handle<Mesh>,
     pub shadow_cards: Handle<Mesh>,
     pub shadow_lumps: Handle<Mesh>,
+    /// A tree with no leaves (a cap tree): its wood is all of it, so nothing is drawn or
+    /// shadowed for a crown.
+    pub leafless: bool,
     pub trunk_m: f32,
 }
 
@@ -646,8 +650,10 @@ pub fn grow_one(
                 shadow_lumps.triangles(),
                 far.triangles()
             );
+            let leafless = crown[0].triangles() == 0;
             Variant {
                 grew: Grew::Tree(Box::new(TreeModel {
+                    leafless,
                     wood: wood.map(|build| meshes.add(build.mesh(true))),
                     crown: crown.map(|build| meshes.add(build.mesh(false))),
                     bark: bark.clone(),
@@ -743,45 +749,8 @@ pub fn draw(entity: &mut EntityCommands, variant: &Variant, height: f32, looks: 
 fn draw_children(plant: &mut ChildSpawnerCommands, variant: &Variant, height: f32, looks: &Looks) {
     match &variant.grew {
         Grew::Tree(model) => {
-            let size = (height / DETAIL_FOR_M).clamp(0.45, 1.4);
-            for level in 0..3 {
-                // The simplest trunk stands on under the far crown too.
-                let last = if level == 2 { 3 } else { level };
-                let mut wood = plant.spawn((
-                    Mesh3d(model.wood[level].clone()),
-                    MeshMaterial3d(model.bark.clone()),
-                    detail(level, last, size),
-                ));
-                if level == 2 {
-                    wood.insert(NotShadowCaster);
-                }
-                plant.spawn((
-                    Mesh3d(model.crown[level].clone()),
-                    MeshMaterial3d(looks.leaves.clone()),
-                    detail(level, level, size),
-                    NotShadowCaster,
-                ));
-            }
-            // Far off, the crown as its solid lumps in the leaves' colour, so the forest
-            // carries on past where its cards end.
-            plant.spawn((
-                Mesh3d(model.far.clone()),
-                MeshMaterial3d(looks.far.clone()),
-                detail(3, 3, size),
-                NotShadowCaster,
-            ));
-            plant.spawn((
-                Mesh3d(model.shadow_cards.clone()),
-                MeshMaterial3d(looks.leaves.clone()),
-                between(0.0, SHADOW_M[0] * size),
-                RenderLayers::layer(SUN_ONLY),
-            ));
-            plant.spawn((
-                Mesh3d(model.shadow_lumps.clone()),
-                MeshMaterial3d(looks.solid.clone()),
-                between(SHADOW_M[0] * size, SHADOW_M[1] * size),
-                RenderLayers::layer(SUN_ONLY),
-            ));
+            let looks = (&looks.leaves, &looks.far, &looks.solid);
+            drawn::tree(plant, model, height, looks);
         }
         // Drawn once, out to its distance; its shadow from a copy only the sun sees, which
         // fades out nearer, so the bush itself never dithers between two of itself.
