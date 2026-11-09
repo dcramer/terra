@@ -15,6 +15,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
+import { onWsl } from "../sandbox/client.ts";
 import { PARTS, readJson, ROOT } from "./kind.ts";
 import { assembler } from "./part.ts";
 
@@ -117,16 +118,18 @@ const assembleItem: Assemble = (kind, ids, material) => {
 
 type Run = { ok: boolean; picture?: string; log: string };
 
-/** One workbench sheet through the GPU scheduler and the Windows build (D319), its picture found where the copy ran. */
+/** The game's command for one sheet: under WSL the Windows build in its own copy, elsewhere this machine's own, offscreen. */
+export function game(wsl: boolean, copy: string, words: string[]): string[] {
+  return wsl ? ["cargo", "xtask", "win", "-p", "terra_sandbox", "--copy", copy, "--", ...words] : ["cargo", "xtask", "sandbox", "--offscreen", ...words];
+}
+
+/** One workbench sheet through the GPU scheduler (D319), its picture found where the game ran: the Windows copy's folder, or here. */
 function render(copy: string, shot: string, args: string[], log: string): Run {
-  const run = spawnSync(
-    "cargo",
-    ["xtask", "gpu", "sheet", "--", "cargo", "xtask", "win", "-p", "terra_sandbox", "--copy", copy, "--", "--experiment", "workbench", ...args, "--sides", "270", "--moments", "0", "--sheet", shot, "--clean", "--settle", "60"],
-    { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 },
-  );
+  const words = ["--experiment", "workbench", ...args, "--sides", "270", "--moments", "0", "--sheet", shot, "--clean", "--settle", "60"];
+  const run = spawnSync("cargo", ["xtask", "gpu", "sheet", "--", ...game(onWsl, copy, words)], { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
   const said = `${run.stdout}\n${run.stderr}`;
   writeFileSync(log, said);
-  const dir = said.match(/\(in (\/[^)]+)\)/)?.[1];
+  const dir = onWsl ? said.match(/\(in (\/[^)]+)\)/)?.[1] : ROOT;
   if (run.status !== 0 || !dir) return { ok: false, log };
   const folder = join(dir, ...shot.split("/").slice(0, -1));
   const prefix = `${basename(shot)}-`;

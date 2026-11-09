@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Assemble, cells, label, plain, trimSets } from "./sheet.ts";
+import { type Assemble, cells, game, label, plain, trimSets } from "./sheet.ts";
 
 // A made-up axe kind and parts: two heads, two hafts, two collars; no cap exists.
 const kind = {
@@ -54,4 +54,9 @@ test("labels and refusals in plain words", () => {
   assert.equal(plain(said, "axe"), "too long: 0.81 m\n(an axe is at most 0.75 m)");
   assert.match(plain("✗ assemble: the axe's inertia_kgm2 0.2290 is outside its envelope [0.2424, 0.4436]", "axe"), /^too light to swing as an axe:.*at least 0.242\)$/s);
   assert.equal(plain("the assembler refused `x`: ✗ assemble: the axe's head slot is empty", "axe"), "the axe's head slot is empty");
+});
+
+test("the game is the Windows copy under WSL and this machine's own, offscreen, elsewhere", () => {
+  assert.deepEqual(game(true, "c", ["--x"]), ["cargo", "xtask", "win", "-p", "terra_sandbox", "--copy", "c", "--", "--x"]);
+  assert.deepEqual(game(false, "c", ["--x"]), ["cargo", "xtask", "sandbox", "--offscreen", "--x"]);
 });
