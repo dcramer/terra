@@ -20,6 +20,8 @@ pub struct Tree {
     pub trunk_m: f32,
     pub height: f32,
     pub habit: Habit,
+    /// The colour of a cap tree's caps over its surface; white for a tree.
+    pub cap_tint: Vec3,
 }
 
 /// A spray of leaves: where, how big, on which branch, and, for a conifer's, which way its
@@ -40,6 +42,7 @@ pub fn grow(dice: &mut Rng, def: &TreeDef, height: f32) -> Tree {
         trunk_m: height * def.trunk,
         height,
         habit: def.habit,
+        cap_tint: Vec3::ONE,
     };
     match def.habit {
         Habit::Spreading => {
@@ -57,6 +60,7 @@ pub fn grow(dice: &mut Rng, def: &TreeDef, height: f32) -> Tree {
             );
         }
         Habit::Conical | Habit::Upright => leader(dice, def, &mut tree),
+        Habit::Cap => super::caps::grow(dice, def, &mut tree),
     }
     tree
 }
@@ -399,6 +403,11 @@ pub fn wood(tree: &Tree, detail: usize, bark_m: f32, pivots: &Pivots) -> Build {
             [2, 1, 0][detail],
             [[10, 5, 3, 3], [7, 4, 3, 3], [5, 3, 3, 3]][detail],
         ),
+        // A cap is round: many sides near, and its young ones gone far off.
+        Habit::Cap => (
+            [2, 1, 1][detail],
+            [[12, 28, 14, 14], [9, 18, 9, 9], [6, 10, 6, 6]][detail],
+        ),
     };
     let mut build = Build::levelled(pivots);
     for (i, limb) in tree.limbs.iter().enumerate() {
@@ -412,7 +421,11 @@ pub fn wood(tree: &Tree, detail: usize, bark_m: f32, pivots: &Pivots) -> Build {
             sides[limb.depth.min(3) as usize],
             tree.height,
             bark_m,
-            Vec3::ONE,
+            if limb.depth >= 1 {
+                tree.cap_tint
+            } else {
+                Vec3::ONE
+            },
         );
     }
     build
@@ -822,6 +835,7 @@ mod tests {
             trunk_m: 0.05,
             height: 5.0,
             habit: Habit::Upright,
+            cap_tint: Vec3::ONE,
         }
     }
 

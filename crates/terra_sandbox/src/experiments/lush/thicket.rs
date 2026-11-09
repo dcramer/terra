@@ -39,6 +39,7 @@ fn empty(habit: Habit) -> Tree {
         trunk_m: 0.0,
         height: 0.0,
         habit,
+        cap_tint: Vec3::ONE,
     }
 }
 
@@ -84,6 +85,7 @@ fn def(habit: Habit, leaves: &str, clump_m: f32, trunk: f32) -> TreeDef {
         tint: (1.0, 1.0, 1.0),
         clump_m,
         trunk,
+        cap: None,
     }
 }
 

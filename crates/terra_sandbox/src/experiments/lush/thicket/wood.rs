@@ -38,6 +38,7 @@ pub(super) fn wood(tree: &Tree, detail: usize, fine: bool) -> Build {
         Habit::Conical => [1, 0][detail],
         Habit::Upright => [2, 1][detail],
         Habit::Spreading => [3, 2][detail],
+        Habit::Cap => [1, 1][detail],
     };
     let sides = if conical { CONIFER_SIDES } else { SIDES }[detail];
     let limbs = tapered(tree);
@@ -237,6 +238,7 @@ mod tests {
             trunk_m: 0.025,
             height: 3.0,
             habit: Habit::Upright,
+            cap_tint: Vec3::ONE,
         }
     }
 

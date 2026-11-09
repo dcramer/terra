@@ -16,6 +16,7 @@
 //! a material from the same tool.
 
 pub mod build;
+mod caps;
 mod cards;
 mod climate;
 pub mod pivots;
@@ -81,6 +82,35 @@ pub enum Habit {
     /// A slender trunk nearly to the top, with branches climbing steeply and twigs hanging,
     /// as a birch's.
     Upright,
+    /// No tree: a stalk under a wide domed cap, as a great fungus, with smaller caps down
+    /// its stalk and young ones at its foot (its `cap` says how wide, how deep, how many).
+    Cap,
+}
+
+/// A cap tree's cap (`Habit::Cap`): how wide it is and how deep, as shares of the height;
+/// how many caps stand in tiers on the stalk; how many young ones stand at its foot; and
+/// the cap's colour over the surface the stalk wears.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct CapDef {
+    pub across: f32,
+    pub depth: f32,
+    pub tiers: u32,
+    pub young: u32,
+    #[serde(default = "white")]
+    pub tint: (f32, f32, f32),
+}
+
+impl Default for CapDef {
+    fn default() -> Self {
+        CapDef {
+            across: 0.9,
+            depth: 0.22,
+            tiers: 1,
+            young: 2,
+            tint: white(),
+        }
+    }
 }
 
 fn white() -> (f32, f32, f32) {
@@ -103,6 +133,9 @@ pub struct TreeDef {
     pub tint: (f32, f32, f32),
     pub clump_m: f32,
     pub trunk: f32,
+    /// A cap tree's cap, for the `Cap` habit.
+    #[serde(default)]
+    pub cap: Option<CapDef>,
 }
 
 /// A bush: its leaf card and their tint, how many clumps of them, and how wide against
