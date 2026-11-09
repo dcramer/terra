@@ -17,6 +17,8 @@ Not the first realm's trees in another colour. What stands where trees would is 
 | Fan trees | A low, wide, forking tree whose branches end in flat translucent fans | The oak's forking skeleton with fan cards at its tips |
 | Undergrowth | Plum and magenta bushes, cyan ferns, glowing tufts | The first realm's grown bushes, rosettes and tufts on the realm's own leaf atlas (`foliage_far`, built) |
 
+**Each is data and each has its levels of detail** (the developers, 2026-11-08: "everything needs somewhat data driven and things will need LOD"; D136, D127): a kind is a row (its habit's numbers, its surface, its cards, the realm it grows in, from how far it is drawn), never a name in code, and it is drawn whole near, simpler at the middle distance and as a far form, as the forest's trees are. The forest's three species fixed in code are to become rows the same way.
+
 Which of these, and how strange, is the developers' to say; the first to make is the cap tree, as it is the least like a tree.
 
 **What it costs** (a reading, not a bench: the high preset on the Radeon 8060S, a full-size world, standing): the first realm at its start 41 frames a second; this realm 39 at its gate and 35 two hundred metres on. The crystal's and the monolith's lamps are the likely tenth: some forty point lights within reach.
