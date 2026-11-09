@@ -44,6 +44,9 @@ tracy = ["terra_world/tracy"]
 # The heap profile (src/heap.rs): dhat-rs in place of mimalloc, written as the app exits.
 # Slow; never in a timed build.
 dhat-heap = ["dep:dhat"]
+# The system's own allocator in place of mimalloc: for telling what the allocator keeps from
+# what the game does (the portal's resident memory, docs/instances.md). Never in a timed build.
+system-alloc = []
 # Bevy keeps the line of code behind every spawn and component change, for the remote's
 # `sandbox.why` (`r why`, D548). On in every dev build of the sandbox (xtask, the remote's
 # `start` and the seed pass it), never in a release or bench build, which are timed.

@@ -19,7 +19,7 @@ mod experiments;
 /// megabytes of section meshes and base copies while the main and render threads run, and
 /// on Windows the system heap's lock made both wait tens of milliseconds behind them
 /// (D340). The heap profile's build (`dhat-heap`, `heap`) has its own.
-#[cfg(not(feature = "dhat-heap"))]
+#[cfg(not(any(feature = "dhat-heap", feature = "system-alloc")))]
 #[global_allocator]
 static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[cfg(feature = "dhat-heap")]

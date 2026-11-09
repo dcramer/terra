@@ -4,7 +4,7 @@
 // the census in the forest before the first trip and after each return, and in the realm, and
 // holds it to the doc's rules: after trips 2 to 5 the forest's entities by archetype, assets by
 // type and resources equal trip 1's exactly, and the GPU's memory and the process's resident
-// memory are within 2% of trip 1's; what lives (creatures, D469) is counted apart, by kind, and
+// memory are within 2% and 4% of trip 1's; what lives (creatures, D469) is counted apart, by kind, and
 // each kind living before the first trip lives after every return, and no kind of entity
 // there before the first trip is gone after it; in the realm, what of the
 // forest is still there is listed; every crossing is over within 3 s (D501), as the game
@@ -31,7 +31,14 @@ const value = (flag: string, fallback: number) => {
 const TRIPS = value("--trips", 5);
 // Game seconds let pass in each world before its census, for what streams in round the eye.
 const SETTLE_S = value("--settle", 5);
+// The GPU's memory is held to 2% of trip 1's. The process's resident memory to 4%: it climbs
+// some 6 MiB a trip by the allocator's fragmentation, in steps of 80 to 100 MiB (read over 40
+// trips, docs/instances.md: the live heap, the GPU's memory and the pipelines are flat, and
+// under the system's allocator the same run climbs five times as fast), and one such step in
+// five trips is 2.5% of it; a leak of what a crossing makes, forty megabytes a trip or more, is past
+// 4% by the fifth all the same.
 const MEMORY_SLACK = 0.02;
+const RESIDENT_SLACK = 0.04;
 // The longest a crossing's cover may last, s (D501).
 const COVER_S = 3;
 
@@ -81,7 +88,7 @@ async function cross(): Promise<{ census: Census; took: string }> {
   return { census: await census(), took };
 }
 
-const within = (a: number | null | undefined, b: number | null | undefined) => a != null && b != null && Math.abs(b - a) <= MEMORY_SLACK * a;
+const within = (a: number | null | undefined, b: number | null | undefined, slack = MEMORY_SLACK) => a != null && b != null && Math.abs(b - a) <= slack * a;
 const memory = (c: Census) => `gpu ${c.gpu?.allocated_mib ?? "?"} MiB allocated, ${c.gpu?.reserved_mib ?? "?"} reserved, ${c.gpu?.pipelines ?? "?"} pipelines; resident ${c.resident_mib ?? "?"} MiB`;
 
 // A crossing's seconds are the machine's as much as the game's: wait for it to be quiet, and
@@ -135,8 +142,8 @@ try {
       continue;
     }
     const changed = snaps.changes(counts(trip1), counts(home));
-    const steady = within(trip1.gpu?.allocated_mib, home.gpu?.allocated_mib) && within(trip1.resident_mib, home.resident_mib);
-    console.log(`  against trip 1: ${changed.length ? `FAIL ${changed.length} changes: ${changed.slice(0, 20).join("; ")}` : "counts equal"}; memory ${steady ? "within 2%" : "FAIL past 2%"}`);
+    const steady = within(trip1.gpu?.allocated_mib, home.gpu?.allocated_mib) && within(trip1.resident_mib, home.resident_mib, RESIDENT_SLACK);
+    console.log(`  against trip 1: ${changed.length ? `FAIL ${changed.length} changes: ${changed.slice(0, 20).join("; ")}` : "counts equal"}; memory ${steady ? "within its bars" : "FAIL past its bars (the GPU's 2%, resident 4%)"}`);
     failed ||= changed.length > 0 || !steady;
   }
   const after = await snaps.take("after");
