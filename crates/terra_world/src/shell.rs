@@ -42,6 +42,7 @@ usage: terra_sandbox [options]
   --radius <metres>     planet radius: a world made takes it (default 30000, D13); a kept
                         world keeps its own; a run keeping no world, 2000 unless given
   --seed <n>            the world's seed, its only input (default 1; a kept world has its own)
+  --realm <kind>        begin in a realm of this kind of data/realms.ron (industrial), not the first
   --shot <file.png>     save a screenshot once the scene has settled, then exit
   --detail-sweep <from>-<to>@<frame>-<frame>
                         hold the clock and the wind still and sweep how far detail reaches,
@@ -303,6 +304,10 @@ pub struct Options {
     /// The world's seed (`--seed`), its only input (D596): every realm's and system's seed
     /// derives from it. A world kept on disk says its own (`terra_game::play::worlds`).
     pub seed: Option<u64>,
+    /// The kind of realm the run begins in (`--realm`, a kind of `data/realms.ron`): the
+    /// first realm if not given. For looking at and measuring a realm without the walk to
+    /// its gate.
+    pub realm: Option<String>,
     pub shot: Option<PathBuf>,
     /// Screenshots on chosen frames of one run (`--shots`).
     pub shots: Option<Shots>,
@@ -604,6 +609,7 @@ impl Options {
             radius_m: TEST_RADIUS_M,
             radius_asked: None,
             seed: None,
+            realm: None,
             shot: None,
             shots: None,
             detail_sweep: None,
@@ -820,6 +826,7 @@ impl Options {
                     options.radius_asked = Some(options.radius_m);
                 }
                 "--seed" => options.seed = Some(seed(&value("--seed")?)?),
+                "--realm" => options.realm = Some(realm(value("--realm")?)?),
                 "--settle" => {
                     options.settle_frames = value("--settle")?
                         .parse()
@@ -887,6 +894,16 @@ impl Options {
 }
 
 /// A world's seed, a whole number from 0 to 18446744073709551615.
+/// A realm's kind, as `--realm` names it: one the realms' data has.
+fn realm(kind: String) -> Result<String, String> {
+    if crate::realm::Realms::shared().of(&kind).is_none() {
+        return Err(format!(
+            "--realm {kind}: assets/data/realms.ron has no realm of that kind; name one of its `kind`s"
+        ));
+    }
+    Ok(kind)
+}
+
 fn seed(text: &str) -> Result<u64, String> {
     text.trim().parse().map_err(|_| {
         format!(

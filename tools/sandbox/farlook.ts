@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// The far realm, looked at in one step (D642, D71): a new world's troll is felled, its gate
-// opened and gone through, and stills are taken of the realm at each hour asked, looking at
-// the nearest things of a name, laid on one sheet; how many frames a second the first realm
-// and this one run at where the player stands is said, and what each sounds of. Each hour is a run of its own, about
-// four minutes, most of it reaching the gate. The stills are deleted once on the sheet.
+// The far realm, looked at in one step (D642, D71): a new world is begun in the realm
+// itself (`--realm`), and stills are taken of it at each hour asked, looking at the nearest
+// things of a name, laid on one sheet; how many frames a second it runs at where the player
+// stands is said, and what it sounds of. Each hour is a run of its own, about a minute and
+// a half. The stills are deleted once on the sheet.
 //
 //   node tools/sandbox/farlook.ts [--hours 13,22] [--look "Cap tree"] [--views 2]
-//                                 [--seed 3] [--out shots/far.png] [--quality high]
+//                                 [--seed 3] [--out shots/far.png] [--quality high] [--realm industrial]
 //                                 [--stage models/creatures/A.glb,models/creatures/B.glb]
 //
 // --stage stands those models in a row before the player, where they arrive, and the stills
@@ -27,6 +27,7 @@ const VIEWS = Number(option("--views", "2"));
 const SEED = option("--seed", "3");
 const OUT = option("--out", "shots/far.png");
 const QUALITY = option("--quality", "high");
+const REALM = option("--realm", "industrial");
 const STAGE = args.includes("--stage") ? option("--stage", "").split(",") : [];
 
 type Found = { name: string; from_start: number[] };
@@ -48,32 +49,16 @@ const rate = async () => {
 async function look(hour: string): Promise<string[]> {
   const stills: string[] = [];
   try {
-    await start(["--experiment", "play", "--fresh", "--save", "shots/farlook.ron", "--radius", "30000", "--seed", SEED, "--date", "7-10", "--time", hour, "--offscreen", "--mute", "--clean", "--quality", QUALITY], { realTime: true, release: true });
+    // Begun in the realm itself (`--realm`): the walk through the first realm's gate is
+    // gate.ts's to check.
+    await start(["--experiment", "play", "--fresh", "--save", "shots/farlook.ron", "--radius", "30000", "--seed", SEED, "--realm", REALM, "--date", "7-10", "--time", hour, "--offscreen", "--mute", "--clean", "--quality", QUALITY], { realTime: true, release: true });
     await playing((seed) => seed === SEED);
-    await waitSeconds(12);
-    const first = await rate();
-    const firstSounds = await sounds();
-    // The troll's mark opens the gate.
-    const { den } = (await call("den.state")) as { den: { mouth: number[] } };
-    await warp([den.mouth[0], den.mouth[2]]);
-    await call("creatures.strike", { name: "Troll", damage: 5000 });
-    await waitUntil("the troll's mark", async () => (await call("marks.state")) as { marks: string[] }, (now) => now.marks.includes("troll"), 20);
-    const gate = ((await call("sandbox.find", { name: "Portal" })) as Found[])[0].from_start;
-    const away = Math.hypot(gate[0], gate[2]);
-    await warp([gate[0] * (1 - 6 / away), gate[2] * (1 - 6 / away)]);
-    await call("portal.step");
-    await waitUntil("the gate to open", async () => (await call("portal.state")) as { open: boolean }, (now) => now.open, 30);
-    await waitSeconds(20);
-    const through = (await call("portal.step")) as { to: { seed: string } };
-    await playing((seed) => seed === through.to.seed);
     await waitSeconds(15);
-    console.log(`at ${hour}: the first realm ${first.toFixed(0)} frames a second, the far realm ${(await rate()).toFixed(0)}`);
-    console.log(`  the first realm sounds of ${firstSounds}; the far realm of ${await sounds()}`);
+    console.log(`at ${hour}: ${(await rate()).toFixed(0)} frames a second; it sounds of ${await sounds()}`);
     const me = ((await call("sandbox.find", { name: "Player" })) as Found[])[0].from_start;
     const from = (at: number[]) => Math.hypot(at[0] - me[0], at[2] - me[2]);
     if (STAGE.length > 0) {
-      // Twenty metres on from the gate the player arrived by, so its ring is out of the
-      // picture: in a row across the way, two metres apart, five metres before the player.
+      // Twenty metres on from the realm's gate, so its ring is out of the picture: in a row across the way, two metres apart, five metres before the player.
       const gate = ((await call("sandbox.find", { name: "Portal" })) as Found[])[0]?.from_start ?? [me[0] - 1, me[1], me[2]];
       const out = Math.hypot(me[0] - gate[0], me[2] - gate[2]) || 1;
       const [ax, az] = [(me[0] - gate[0]) / out, (me[2] - gate[2]) / out];

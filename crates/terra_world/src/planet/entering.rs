@@ -20,7 +20,11 @@ pub const FIRST_SEED: u64 = 1;
 pub fn first_world(options: &Options) -> WorldSpec {
     WorldSpec {
         key: InstanceKey(0),
-        kind: if options.yard() { "yard" } else { "world" }.into(),
+        kind: match (&options.realm, options.yard()) {
+            (Some(realm), _) => realm.clone(),
+            (None, true) => "yard".into(),
+            (None, false) => "world".into(),
+        },
         seed: options.seed.unwrap_or(FIRST_SEED),
     }
 }
