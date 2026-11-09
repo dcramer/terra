@@ -60,8 +60,7 @@ try {
   };
   // Forward, a second at a time, until the chamber or the clock.
   while ((off(at)[0] > NEAR_M || off(at)[1] > LEVEL_M) && Date.now() - began < MOST_S * 1000) {
-    // Held for two seconds and pressed again each second, so the walk never pauses between.
-    await holdKey("w", 2);
+    await holdKey("w", 1);
     for (let look = 0; look < 4; look++) {
       await waitSeconds(0.25);
       await eye();

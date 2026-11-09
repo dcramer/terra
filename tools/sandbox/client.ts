@@ -373,24 +373,33 @@ export async function waitSeconds(seconds: number) {
   await waitUntil(`${seconds} s of game time`, status, (now) => now.seconds >= from + seconds, 60 + seconds * 10);
 }
 
-/// How fast the game's frames come, measured over a quarter of a second and kept five.
-const rate = { at: 0, fps: 60 };
+/// How fast the game's frames come, measured over a quarter of a second and kept five, and
+/// the frame the last hold ends on.
+const rate = { at: 0, fps: 60, heldTo: 0 };
 
-/// Holds a key for so many seconds of the clock. A key is held for a count of frames
-/// (`press`), and how fast frames come is the machine's and the build's: a walk written
-/// `w:60` was a second at 60 frames a second and half that at 120, and a check that walked
-/// by it stopped short the day the game ran faster. The count is sized by the rate measured.
+/// Holds a key for so many seconds of the clock, after any hold before it has ended. A key
+/// is held for a count of frames (`press`), and how fast frames come is the machine's and the
+/// build's: a walk written `w:60` was a second at 60 frames a second and half that at 120, and
+/// a check that walked by it stopped short the day the game ran faster. The count is sized by
+/// the rate measured. A key pressed again while still held is let go, so a hold that outlasts
+/// its second (the rate fell) must not be pressed over: this waits for the frame the last
+/// ends on, which is what stalled den.ts on a busy machine.
 export async function holdKey(key: string, seconds: number) {
+  const frame = async () => ((await call("sandbox.status")) as { frame: number }).frame;
   if (Date.now() - rate.at > 5000) {
-    const frame = async () => ((await call("sandbox.status")) as { frame: number }).frame;
     const [before, began] = [await frame(), Date.now()];
     await sleep(250);
-    // Never taken for slower than 60 a second: on a busy machine a quarter second's sample
-    // read low, the hold came out short and a walk fell behind its clock (den.ts in a full run).
-    rate.fps = Math.max(60, ((await frame()) - before) / ((Date.now() - began) / 1000));
+    rate.fps = Math.max(30, ((await frame()) - before) / ((Date.now() - began) / 1000));
     rate.at = Date.now();
   }
-  await press(`${key}:${Math.ceil(seconds * rate.fps)}`);
+  let now = await frame();
+  while (now <= rate.heldTo) {
+    await sleep(20);
+    now = await frame();
+  }
+  const frames = Math.ceil(seconds * rate.fps);
+  rate.heldTo = now + frames;
+  await press(`${key}:${frames}`);
 }
 
 /// Presses keys, each written as --press names it, optionally `@after` frames from now and
