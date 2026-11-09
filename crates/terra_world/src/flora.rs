@@ -22,6 +22,8 @@ mod entering;
 mod fell;
 mod model;
 mod piece;
+mod stock;
+pub use stock::Stock;
 mod under;
 use super::scene::SUN_DIRECTION;
 use crate::planet::Planet;
@@ -1033,6 +1035,7 @@ fn plant(
         obstacles.add(at, radius);
     }
 
+    commands.insert_resource(stock::Stock::of(&flora, &models, looks));
     // The grass is the cover's, every world's (`cover`), grown round the camera.
     info!(
         "Planted {planted} trees, rocks and plants ({} of them solid).",

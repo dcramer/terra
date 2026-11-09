@@ -68,11 +68,19 @@ pub struct Realm {
     pub parts: Vec<Part>,
 }
 
-/// A part of a realm: a catalogue item's model file, how many a square kilometre holds, and
-/// from how far it is drawn.
+/// A part of a realm: a catalogue item's model or a grown kind, how many a square kilometre
+/// holds, and from how far it is drawn.
 #[derive(Deserialize, Clone, Debug, PartialEq)]
 pub struct Part {
+    /// A model's file, for a part that is a catalogue item.
+    #[serde(default)]
     pub file: String,
+    /// Or a grown kind's name (`data/flora.ron`, one that `grows: Stood`), for a part that
+    /// is grown by rule, and how tall it stands, from and to, in metres.
+    #[serde(default)]
+    pub grown: Option<String>,
+    #[serde(default)]
+    pub tall_m: Option<(f32, f32)>,
     pub a_km2: f32,
     /// From how far off it is drawn, in metres: by its size, as what cannot be made out is
     /// not worth its triangles or its shadow. As far as the parts stand, if not given.

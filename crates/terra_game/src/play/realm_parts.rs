@@ -46,12 +46,21 @@ const SHOWN_EVERY: u32 = 20;
 #[derive(Component)]
 struct SeenFrom(f32);
 
+/// What a part is: a catalogue item's model, or a grown kind and how tall it stands.
+enum What<'a> {
+    Model(std::sync::Arc<super::catalogue::Item>),
+    Grown(&'a str, (f32, f32)),
+}
+
 /// A part stood: its entity, and the ground it keeps clear of plants while it stands.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Part {
     entity: Entity,
     ground: Vec3,
     clear_m: f32,
+    /// Whether it stands among the walkers' obstacles: a grown part's stalk does (a model's
+    /// own solid goes with its entity).
+    solid: bool,
 }
 
 /// Made afresh in each world: the cells its parts have been stood in, each with its part if
@@ -152,6 +161,46 @@ pub fn cell(seed: u32, shares: &[f32], cell: IVec2) -> Option<(usize, Vec2, f32)
     Some((part, at, (mix3(seed, c, r, 4) % 360) as f32))
 }
 
+/// What each of a realm's parts is, with how many a square kilometre holds and from how far
+/// it is drawn: a catalogue item's model, or a grown kind this world has. One the data names
+/// that is neither is said and left out.
+fn parts_of<'a>(
+    realm: &'a terra_world::realm::Realm,
+    builds: &Builds,
+    stock: Option<&terra_world::flora::Stock>,
+) -> Vec<(What<'a>, f32, f32)> {
+    realm
+        .parts
+        .iter()
+        .filter_map(|part| {
+            let seen_m = part.seen_m.unwrap_or(REACH_CELLS as f32 * CELL_M);
+            let what = match &part.grown {
+                Some(kind) => {
+                    let grows = stock.is_some_and(|stock| stock.variants(kind) > 0);
+                    if !grows {
+                        error!(
+                            "{} has {kind} among its parts, which is no grown kind of data/flora.ron (one that grows: Stood).",
+                            realm.name
+                        );
+                    }
+                    grows.then(|| What::Grown(kind.as_str(), part.tall_m.unwrap_or((4.0, 8.0))))
+                }
+                None => {
+                    let item = builds.item_from(&part.file);
+                    if item.is_none() {
+                        error!(
+                            "{} has {} among its parts, which is not in the catalogue (data/builds.ron).",
+                            realm.name, part.file
+                        );
+                    }
+                    item.map(What::Model)
+                }
+            };
+            Some((what?, part.a_km2, seen_m))
+        })
+        .collect()
+}
+
 /// Stands the realm's parts in the cells come within the player's reach, and takes down
 /// those gone past it.
 #[allow(clippy::too_many_arguments)]
@@ -161,6 +210,10 @@ fn stand(
     (realms, spec): (Res<Realms>, Res<WorldSpec>),
     (planet, start, site): (Res<Planet>, Res<Start>, Res<Site>),
     (builds, models): (Res<Builds>, Res<Models>),
+    (stock, mut obstacles): (
+        Option<Res<terra_world::flora::Stock>>,
+        ResMut<terra_world::flora::Obstacles>,
+    ),
     player: Query<&GlobalTransform, With<Player>>,
     gate: Option<Res<Gate>>,
     mut kept: Option<ResMut<KeptClear>>,
@@ -180,6 +233,9 @@ fn stand(
     let (come, gone) = stood.moved((here.xz() / CELL_M).floor().as_ivec2());
     for part in gone {
         commands.entity(part.entity).try_despawn();
+        if part.solid {
+            obstacles.remove(part.ground);
+        }
         if let Some(kept) = kept.as_mut() {
             kept.release(part.ground, part.clear_m);
         }
@@ -187,21 +243,7 @@ fn stand(
     if come.is_empty() {
         return;
     }
-    let items: Vec<_> = realm
-        .parts
-        .iter()
-        .filter_map(|part| {
-            let item = builds.item_from(&part.file);
-            if item.is_none() {
-                error!(
-                    "{} has {} among its parts, which is not in the catalogue (data/builds.ron).",
-                    realm.name, part.file
-                );
-            }
-            let seen_m = part.seen_m.unwrap_or(REACH_CELLS as f32 * CELL_M);
-            Some((item?, part.a_km2, seen_m))
-        })
-        .collect();
+    let items = parts_of(realm, &builds, stock.as_deref());
     let shares: Vec<f32> = items.iter().map(|(_, share, _)| *share).collect();
     let seed = planet.seed().derive("realm parts").0 as u32;
     let to_site = site.frame.compute_affine().inverse();
@@ -211,11 +253,20 @@ fn stand(
         let Some((part, at, turn)) = cell(seed, &shares, at_cell) else {
             continue;
         };
-        let (item, _, seen_m) = &items[part];
+        let (what, _, seen_m) = &items[part];
         let ground = on_ground(at);
+        // How tall a grown one stands, by the seed; and half the footing either keeps.
+        let (c, r) = (at_cell.x as u32, at_cell.y as u32);
+        let tall = match what {
+            What::Grown(_, (least, most)) => least + (most - least) * unit3(seed, c, r, 5),
+            What::Model(item) => item.dims.y,
+        };
+        let footing = match what {
+            What::Grown(..) => tall * 0.12,
+            What::Model(item) => item.dims.x.max(item.dims.z) / 2.0,
+        };
         // Dry, level under its footing, and clear of the gate: by the land alone, never by
         // what else stands, so a cell come back to holds what it held.
-        let footing = item.dims.x.max(item.dims.z) / 2.0;
         let rise = [Vec2::X, Vec2::NEG_X, Vec2::Y, Vec2::NEG_Y]
             .iter()
             .map(|way| (on_ground(at + *way * footing).length() - ground.length()).abs())
@@ -227,26 +278,49 @@ fn stand(
         if wet || rise > LEVEL_M || in_gate {
             continue;
         }
-        let Some(entity) = props::place(
-            &mut commands,
-            &models,
-            &site,
-            &planet,
-            item,
-            to_site.transform_point3(ground).with_y(0.0),
-            0.0,
-            turn,
-            false,
-        ) else {
-            continue;
+        let (entity, solid) = match what {
+            What::Model(item) => {
+                let Some(entity) = props::place(
+                    &mut commands,
+                    &models,
+                    &site,
+                    &planet,
+                    item,
+                    to_site.transform_point3(ground).with_y(0.0),
+                    0.0,
+                    turn,
+                    false,
+                ) else {
+                    continue;
+                };
+                commands.entity(entity).insert(Theirs);
+                (entity, false)
+            }
+            What::Grown(kind, _) => {
+                let variant = mix3(seed, c, r, 6) as usize;
+                let stood = stock.as_ref().and_then(|stock| {
+                    stock.stand(
+                        &mut commands,
+                        kind,
+                        (variant, ground, tall, turn.to_radians()),
+                    )
+                });
+                let Some((entity, _)) = stood else {
+                    continue;
+                };
+                // Its stalk stops a walker, as a trunk does.
+                obstacles.add(ground, tall * 0.035);
+                (entity, true)
+            }
         };
-        commands.entity(entity).insert((Theirs, SeenFrom(*seen_m)));
+        commands.entity(entity).insert(SeenFrom(*seen_m));
         let clear_m = footing + 0.8;
         clear.write(ClearAround(ground, clear_m));
         let part = Part {
             entity,
             ground,
             clear_m,
+            solid,
         };
         stood.cells.insert(at_cell, Some(part));
         count += 1;
@@ -310,6 +384,7 @@ mod tests {
                     entity: Entity::from_raw_u32(made).unwrap(),
                     ground: Vec3::ZERO,
                     clear_m: 0.0,
+                    solid: false,
                 };
                 stood.cells.insert(*cell, Some(part));
             }

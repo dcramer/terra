@@ -937,6 +937,11 @@ mod tests {
                     "{} at {height} m: {wood} triangles of wood and {crown} of leaves",
                     kind.name
                 );
+                // A tree has leaves; a cap tree has none, and wood enough to be round.
+                if def.habit == Habit::Cap {
+                    assert!(wood > 300, "{} at {height} m: {wood} triangles", kind.name);
+                    continue;
+                }
                 assert!(
                     crown > 300,
                     "{} at {height} m has only {crown} triangles of leaves",

@@ -9,7 +9,9 @@
 //   name     what it is called
 //   models   the models it is drawn from, in assets/models/nature, for one that is modelled
 //   grown    how it is grown, for one that is (D222, crates/terra_world/src/grown):
-//            Tree: its habit (Spreading as an oak, Conical as a pine, Upright as a birch),
+//            Tree: its habit (Spreading as an oak, Conical as a pine, Upright as a birch, or
+//              Cap, a great fungus: its cap's width and depth against its height, its tiers,
+//              its young and its cap's colour),
 //              its bark (a material in assets/materials) and how many metres its picture
 //              covers, its leaves (a card in assets/data/foliage.ron) and their tint, how
 //              big a spray of them is, and its trunk's radius against its height;
@@ -29,7 +31,8 @@
 //            run down its faces below them, over its own material
 //   sway     how it moves in the wind: Tree, Bush, Plant or Still
 //   grows    the layer it grows in: Trees, Rocks, Bushes, Plants, Flowers, Heath, Shore
-//            or Understory, or Laid for one another layer lays and draws (the forest floor's
+//            or Understory, Stood for one a realm's rules stand (realms.ron's parts), or Laid
+//            for one another layer lays and draws (the forest floor's
 //            stumps and logs), the kind saying only how it is cut, with no models
 //   site     for a Shore or Understory kind, where on the ground it grows: metres over the
 //            nearest water, the steepest slope in degrees, the trees' shade over it (0 open
@@ -59,6 +62,27 @@
         ("*", (0.4, 0.56, 0.24), Foliage),
     ],
     kinds: [
+        (
+            // The far realm's cap tree (D642, docs/realm-two.md): a great fungus where a tree
+            // would stand, grown by rule (`grown::caps`) and stood by the realm's own rules
+            // (`data/realms.ron`'s parts), never by a layer here.
+            name: "Cap tree",
+            grown: Tree((
+                habit: Cap,
+                bark: "bark_brown_02",
+                bark_m: 3.0,
+                bark_tint: (1.5, 1.42, 1.3),
+                leaves: "oak",
+                clump_m: 1.0,
+                trunk: 0.045,
+                // Drawn blue-violet, which the realm's turn of every hue brings out plum.
+                cap: (across: 0.85, depth: 0.2, tiers: 2, young: 2, tint: (0.42, 0.34, 0.85)),
+            )),
+            variants: 5,
+            sway: Still,
+            grows: Stood,
+            size: (9.0, 22.0),
+        ),
         (
             name: "Pine",
             grown: Tree((

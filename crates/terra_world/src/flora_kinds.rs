@@ -118,6 +118,9 @@ pub enum Grows {
     /// Laid and drawn by another layer, the forest floor's stumps and logs: the kind says only
     /// how it is cut, and has no models.
     Laid,
+    /// Stood by a realm's rules, not grown by a layer: a realm's row names it among its
+    /// parts (`data/realms.ron`), and it is grown here as any kind is (`flora::Stock`).
+    Stood,
 }
 
 impl Grows {
