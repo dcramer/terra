@@ -6,7 +6,7 @@
 // a half. The stills are deleted once on the sheet.
 //
 //   node tools/sandbox/farlook.ts [--hours 13,22] [--look "Cap tree"] [--views 2]
-//                                 [--seed 3] [--out shots/far.png] [--quality high] [--realm industrial]
+//                                 [--seed 3] [--out shots/far.png] [--quality high] [--realm industrial] [--site lake]
 //                                 [--stage models/creatures/A.glb,models/creatures/B.glb]
 //
 // --stage stands those models in a row before the player, where they arrive, and the stills
@@ -28,6 +28,8 @@ const SEED = option("--seed", "3");
 const OUT = option("--out", "shots/far.png");
 const QUALITY = option("--quality", "high");
 const REALM = option("--realm", "industrial");
+// A place the land's rules make to begin at (`--site lake`), where the open is wanted.
+const SITE = args.includes("--site") ? ["--site", option("--site", "")] : [];
 const STAGE = args.includes("--stage") ? option("--stage", "").split(",") : [];
 
 type Found = { name: string; from_start: number[] };
@@ -51,7 +53,7 @@ async function look(hour: string): Promise<string[]> {
   try {
     // Begun in the realm itself (`--realm`): the walk through the first realm's gate is
     // gate.ts's to check.
-    await start(["--experiment", "play", "--fresh", "--save", "shots/farlook.ron", "--radius", "30000", "--seed", SEED, "--realm", REALM, "--date", "7-10", "--time", hour, "--offscreen", "--mute", "--clean", "--quality", QUALITY], { realTime: true, release: true });
+    await start(["--experiment", "play", "--fresh", "--save", "shots/farlook.ron", "--radius", "30000", "--seed", SEED, "--realm", REALM, ...SITE, "--date", "7-10", "--time", hour, "--offscreen", "--mute", "--clean", "--quality", QUALITY], { realTime: true, release: true });
     await playing((seed) => seed === SEED);
     await waitSeconds(15);
     console.log(`at ${hour}: ${(await rate()).toFixed(0)} frames a second; it sounds of ${await sounds()}`);
