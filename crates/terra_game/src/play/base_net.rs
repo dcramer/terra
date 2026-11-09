@@ -74,6 +74,16 @@ pub(super) struct Shared {
     pending: Vec<Vec<Op>>,
 }
 
+impl Shared {
+    /// Whether the base's frame as it now is has been told: what stands in the base is told
+    /// by its place in that frame (`props_net`), so it is told after it. A prop told first,
+    /// in a frame the joined game had not heard, was set down where the old frame put it: a
+    /// claim stone 9 m off, when the host's base moved to its first stone between two ticks.
+    pub(super) fn told(&self, frame: &Transform) -> bool {
+        self.frame == Some(frame_of(frame))
+    }
+}
+
 pub fn plugin(app: &mut App) {
     app.init_resource::<Shared>().add_systems(
         FixedUpdate,

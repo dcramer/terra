@@ -187,7 +187,12 @@ fn changes(told: &HashMap<Key, Stood>, standing: &HashMap<Key, (Entity, Stood)>)
 
 /// On the host, before the tick's telling: what a guest asks of a prop is done, and every
 /// prop newly standing or gone, whoever's doing, is ordered where it stands.
-fn host(mut host: ResMut<Host>, mut told: ResMut<Told>, mut setting: Setting) {
+fn host(
+    mut host: ResMut<Host>,
+    mut told: ResMut<Told>,
+    mut setting: Setting,
+    base: Res<super::base_net::Shared>,
+) {
     let asked = std::mem::take(&mut host.asked);
     for (peer, bytes) in asked {
         if bytes.first() != Some(&PROP) {
@@ -200,7 +205,8 @@ fn host(mut host: ResMut<Host>, mut told: ResMut<Told>, mut setting: Setting) {
         }
     }
     told.since += 1;
-    if told.since < EVERY_TICKS {
+    // After the base's frame: a prop's place is in it (`base_net::Shared::told`).
+    if told.since < EVERY_TICKS || !base.told(&setting.site.frame) {
         return;
     }
     told.since = 0;
