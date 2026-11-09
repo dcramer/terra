@@ -17,7 +17,9 @@ creature.json says, in the model's units once turned (Tripo's are a metre across
 side), where each bone's head and tail are (`bones`; a bone ending `.L` is mirrored to `.R`),
 which bones make each leg (`legs`: upper, lower, the foot that meets the ground, and toes),
 and each clip's kind and numbers (`clips`); `middle` is the x of the body's middle line, if
-Tripo put it off centre, and `ground` the height its feet stand at, if not the origin. Check
+Tripo put it off centre, and `ground` the height its feet stand at, if not the origin. A body
+with no legs (`"legs": {}`) stands on its root bone, `planted` keeps what lies on the ground
+with it, and its clips are of the `wave` kind, written as data. Place bones with `fit.py`; check
 what it made with `sheet.py`.
 """
 
@@ -82,7 +84,10 @@ for leg, chain in SPEC["legs"].items():
 feet = [BONES[chain[2]][2] for chain in LEGS.values()]
 # `ground` is the height its feet stand at in the model, where Tripo left it centred on its
 # middle and not standing on the origin (the Drillhog, made as a prop).
-ORIGIN = Vector((MIDDLE, sum(v.y for v in feet) / len(feet), SPEC.get("ground", 0.0)))
+# A body with no legs (an upright worm, a fish on its tail) stands on its root bone's head.
+ROOT_AT = next(head for parent, head, _ in BONES.values() if parent is None)
+STANDS_Y = sum(v.y for v in feet) / len(feet) if feet else ROOT_AT.y
+ORIGIN = Vector((MIDDLE, STANDS_Y, SPEC.get("ground", 0.0)))
 
 
 def ours(v):
@@ -233,8 +238,25 @@ weights = heat(mesh, closed=False)
 bare = sum(1 for w in weights.values() if not w)
 print("unweighted vertices", bare, "of", len(mesh.data.vertices))
 if bare > 0.002 * len(mesh.data.vertices):
-    weights = heat(mesh, closed=True)
-    print("unweighted vertices from the closed copy", sum(1 for w in weights.values() if not w))
+    closed = heat(mesh, closed=True)
+    left = sum(1 for w in closed.values() if not w)
+    print("unweighted vertices from the closed copy", left)
+    # The closed copy's, where it is the better: bone heat fails outright on some copies (the
+    # Seawish's seaweed), and taking its nothing for the skin's few left the body unskinned.
+    if left < bare:
+        weights = closed
+bare = [i for i, w in weights.items() if not w]
+if bare and len(bare) < len(weights):
+    # What heat did not reach (thin strands, loose tips) goes with the nearest skin that it did.
+    from mathutils.kdtree import KDTree
+    reached = [i for i, w in weights.items() if w]
+    tree = KDTree(len(reached))
+    for i in reached:
+        tree.insert(mesh.data.vertices[i].co, i)
+    tree.balance()
+    for i in bare:
+        weights[i] = dict(weights[tree.find(mesh.data.vertices[i].co)[1]])
+    print("unweighted vertices given their nearest skin's weights", len(bare))
 
 
 def haunch(weights, spec):
@@ -398,6 +420,22 @@ if SPEC["plan"] == "quadruped" and SPEC.get("zones", {}) is not False:
     zoned(weights, SPEC.get("zones", {}))
 if "haunch" in SPEC:
     haunch(weights, SPEC["haunch"])
+if "planted" in SPEC:
+    # What lies on the ground under an upright body (a worm's coil, a fish's tail fin) is the
+    # root's alone, eased into the body over a band: `planted` is the height it reaches and
+    # the band's width, in the model's units. Left to bone heat it swayed with the body over
+    # it and slid on the ground it rests on.
+    top, band = SPEC["planted"]
+    root = next(b for b, (parent, _, _) in BONES.items() if parent is None)
+    for v in mesh.data.vertices:
+        height = v.co.z / SCALE + SPEC.get("ground", 0.0)
+        keep = smooth(top - band, top, height)
+        if keep >= 1.0:
+            continue
+        ws = weights.setdefault(v.index, {})
+        for b in list(ws):
+            ws[b] *= keep
+        ws[root] = ws.get(root, 0.0) + (1.0 - keep)
 mesh.vertex_groups.clear()
 groups = {b.name: mesh.vertex_groups.new(name=b.name) for b in rig.data.bones}
 for v, ws in weights.items():
@@ -481,7 +519,7 @@ def foot_skin(leg):
 
 FOOT_SKIN = {leg: foot_skin(leg) for leg in LEGS}
 # The whole body lifted so a foot laid flatter rests its sole on the ground (`sole_edges`).
-LAID = max(raised for _, _, raised in SOLE.values())
+LAID = max((raised for _, _, raised in SOLE.values()), default=0.0)
 
 
 def on_sole(leg, ang):
@@ -1331,8 +1369,49 @@ def clip_swim(name, c):
 
 
 
+def clip_wave(name, c):
+    """A clip written as data, for a body no plan here knows (the Worman, the Seawish, D250):
+    `turns`, for a bone, waves `[axis, degrees, cycles, phase]`: it turns about that axis of
+    the animal's by so many degrees either way, so many times through the clip, begun so far
+    through a cycle (0 to 1), so a wave run up a chain of bones is a sway that travels; whole
+    cycles loop. `hits`, for a bone, `[axis, degrees, from, to]`: one turn out and back
+    between those shares of the clip, a blow; with `hold` it goes out and stays, a fall.
+    `bob`, `[metres, hops, phase]`, lifts the whole body off the ground and sets it down so
+    many times, never under it."""
+    frames = round(c["seconds"] * FPS)
+    axes = {"X": X, "Y": Y, "Z": Z}
+
+    def keys(drops):
+        for f in range(1, frames + 2):
+            t = (f - 1) / frames
+            turn = {}
+            for b, waves in c.get("turns", {}).items():
+                for axis, deg, cycles, phase in waves:
+                    turn[b] = turn.get(b, Quaternion()) @ q(axes[axis], deg * math.sin(math.tau * (cycles * t + phase)))
+            for b, hits in c.get("hits", {}).items():
+                for axis, deg, start, end in hits:
+                    u = min(max((t - start) / max(end - start, 1e-6), 0.0), 1.0)
+                    out = smooth(0.0, 1.0, u) if c.get("hold") else math.sin(math.pi * u)
+                    turn[b] = turn.get(b, Quaternion()) @ q(axes[axis], deg * out)
+            metres, hops, phase = c.get("bob", [0.0, 1, 0.0])
+            lift = metres * abs(math.sin(math.pi * (hops * t + phase))) - drops[f - 1]
+            key({"turn": turn, "root": Vector((0, 0, lift))}, f)
+
+    act = new_clip(name)
+    keys([0.0] * (frames + 1))
+    if c.get("hold"):
+        # A fall rests on the ground: each frame lowered or raised so its lowest skin is on it,
+        # as `clip_death` does.
+        lows = [evaluated_low(f, act) for f in range(1, frames + 2)]
+        rig.animation_data.action = None
+        bpy.data.actions.remove(act)
+        act = new_clip(name)
+        keys(lows)
+    finish(name, act, frames)
+
+
 KINDS = {"idle": clip_idle, "gait": clip_gait, "graze": clip_graze, "sit": clip_sit, "death": clip_death,
-         "fly": clip_fly, "swim": clip_swim}
+         "fly": clip_fly, "swim": clip_swim, "wave": clip_wave}
 for name, c in SPEC["clips"].items():
     KINDS[c["kind"]](name, c)
 if clamped[0]:

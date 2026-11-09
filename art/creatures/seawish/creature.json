@@ -1,0 +1,339 @@
+{
+  "subject": "the Seawish (D250), a monster drawn by a developer's daughter: a fish standing on its tail with seaweed growing on its head, fighting with a sword and its seaweed; its model made as a prop (art/props/seawish), rigged here as an upright body: a chain up from its tail and two fin-arms",
+  "file": "Seawish",
+  "plan": "upright",
+  "zones": false,
+  "generator": "h3.1 (art/props/seawish, made 2026-10-14)",
+  "credits": {},
+  "turn": -90,
+  "ground": -0.49,
+  "middle": 0.0,
+  "scale": 1.33,
+  "budget": 3400,
+  "planted": [
+    -0.4,
+    0.06
+  ],
+  "textures": {
+    "colour": 1024,
+    "normal": 1024,
+    "roughness_metal": 512
+  },
+  "bones": {
+    "Root": [
+      null,
+      [
+        0,
+        0,
+        -0.49
+      ],
+      [
+        0,
+        0.03,
+        -0.3
+      ]
+    ],
+    "Body1": [
+      "Root",
+      [
+        0,
+        0.03,
+        -0.3
+      ],
+      [
+        0,
+        0.0,
+        -0.05
+      ]
+    ],
+    "Body2": [
+      "Body1",
+      [
+        0,
+        0.0,
+        -0.05
+      ],
+      [
+        0,
+        -0.03,
+        0.2
+      ]
+    ],
+    "Head": [
+      "Body2",
+      [
+        0,
+        -0.03,
+        0.2
+      ],
+      [
+        0,
+        -0.05,
+        0.42
+      ]
+    ],
+    "UpperArm.L": [
+      "Body2",
+      [
+        0.17,
+        -0.08,
+        0.0
+      ],
+      [
+        0.26,
+        -0.1,
+        -0.05
+      ]
+    ],
+    "Forearm.L": [
+      "UpperArm.L",
+      [
+        0.26,
+        -0.1,
+        -0.05
+      ],
+      [
+        0.34,
+        -0.1,
+        -0.11
+      ]
+    ]
+  },
+  "legs": {},
+  "clips": {
+    "Idle": {
+      "kind": "wave",
+      "seconds": 3.0,
+      "bob": [
+        0.01,
+        1,
+        0.0
+      ],
+      "turns": {
+        "Body1": [
+          [
+            "Y",
+            3,
+            1,
+            0.0
+          ]
+        ],
+        "Body2": [
+          [
+            "Y",
+            3,
+            1,
+            0.15
+          ]
+        ],
+        "Head": [
+          [
+            "Z",
+            6,
+            1,
+            0.0
+          ]
+        ],
+        "UpperArm.L": [
+          [
+            "X",
+            5,
+            1,
+            0.5
+          ]
+        ],
+        "UpperArm.R": [
+          [
+            "X",
+            5,
+            1,
+            0.0
+          ]
+        ]
+      }
+    },
+    "Walk": {
+      "kind": "wave",
+      "seconds": 0.8,
+      "bob": [
+        0.05,
+        2,
+        0.0
+      ],
+      "turns": {
+        "Body1": [
+          [
+            "Y",
+            8,
+            1,
+            0.0
+          ]
+        ],
+        "Body2": [
+          [
+            "Y",
+            5,
+            1,
+            0.15
+          ]
+        ],
+        "Head": [
+          [
+            "Y",
+            -6,
+            1,
+            0.2
+          ]
+        ],
+        "UpperArm.L": [
+          [
+            "X",
+            15,
+            1,
+            0.5
+          ]
+        ],
+        "UpperArm.R": [
+          [
+            "X",
+            15,
+            1,
+            0.0
+          ]
+        ]
+      }
+    },
+    "Run": {
+      "kind": "wave",
+      "seconds": 0.5,
+      "bob": [
+        0.08,
+        2,
+        0.0
+      ],
+      "turns": {
+        "Body1": [
+          [
+            "Y",
+            12,
+            1,
+            0.0
+          ],
+          [
+            "X",
+            8,
+            2,
+            0.0
+          ]
+        ],
+        "Body2": [
+          [
+            "Y",
+            7,
+            1,
+            0.15
+          ]
+        ],
+        "Head": [
+          [
+            "Y",
+            -9,
+            1,
+            0.2
+          ]
+        ],
+        "UpperArm.L": [
+          [
+            "X",
+            24,
+            1,
+            0.5
+          ]
+        ],
+        "UpperArm.R": [
+          [
+            "X",
+            24,
+            1,
+            0.0
+          ]
+        ]
+      }
+    },
+    "Slash": {
+      "kind": "wave",
+      "seconds": 0.8,
+      "hits": {
+        "Body1": [
+          [
+            "X",
+            12,
+            0.15,
+            0.8
+          ]
+        ],
+        "Body2": [
+          [
+            "Z",
+            -20,
+            0.1,
+            0.75
+          ]
+        ],
+        "UpperArm.L": [
+          [
+            "X",
+            60,
+            0.1,
+            0.7
+          ],
+          [
+            "Z",
+            -30,
+            0.2,
+            0.7
+          ]
+        ],
+        "Forearm.L": [
+          [
+            "X",
+            25,
+            0.2,
+            0.7
+          ]
+        ]
+      }
+    },
+    "Death": {
+      "kind": "wave",
+      "seconds": 1.2,
+      "hold": true,
+      "hits": {
+        "Body1": [
+          [
+            "X",
+            70,
+            0.0,
+            0.85
+          ]
+        ],
+        "Body2": [
+          [
+            "X",
+            15,
+            0.2,
+            1.0
+          ]
+        ],
+        "Head": [
+          [
+            "X",
+            8,
+            0.3,
+            1.0
+          ]
+        ]
+      }
+    }
+  }
+}

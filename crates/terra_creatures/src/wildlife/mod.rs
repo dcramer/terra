@@ -63,6 +63,10 @@ const WOODED: (usize, f32) = (2, 10.0);
 const OPEN_M: f32 = 14.0;
 /// The shore is dry ground within so far of water, or water as shallow as this.
 const SHORE_M: f32 = 4.0;
+/// How many places in a cell are tried for one of a kind's niche.
+const PLACES_TRIED: u32 = 6;
+/// How high over the water a bank may stand and be its shore, metres.
+const BANK_M: f32 = 1.5;
 const SHALLOWS_M: f32 = 0.35;
 /// Water deep enough to swim on.
 pub(super) const SWIMMING_M: f32 = 0.4;
@@ -373,7 +377,10 @@ impl Surroundings<'_, '_> {
         let height = ground.length();
         let by_water = (0..6).any(|i| {
             let turn = Quat::from_axis_angle(up, i as f32 * std::f32::consts::TAU / 6.0);
-            self.planet.water_near_m(ground + turn * side * SHORE_M) > height + 0.1
+            // A bank as high as this over the water is its shore still: asked for water
+            // higher than the ground, a steep lake's bank was no shore at all, and nothing
+            // of the shore's stood by it.
+            self.planet.water_near_m(ground + turn * side * SHORE_M) > height - BANK_M
         });
         let trunks = self.trunks(ground, WOODED.1).count();
         let open = trunks == 0 && self.trunks(ground, OPEN_M).next().is_none();
@@ -766,12 +773,18 @@ fn put_kind(
     if dice.unit() >= groups {
         return Vec::new();
     }
-    let at =
-        ground + east * dice.range(-0.5, 0.5) * CELL_M + north * dice.range(-0.5, 0.5) * CELL_M;
-    let at = around.ground(at);
-    if !around.fits_unseen(niche, at, bestiary.get(species).seen_m()) {
+    // A few places in the cell are tried for one of its niche: a shore is a strip a few metres
+    // wide, which one place in a cell all but never finds, and nothing of the shore's stood
+    // by a lake (no heron, no Seawish). In woods or the open the first place does.
+    let seen_m = bestiary.get(species).seen_m();
+    let Some(at) = (0..PLACES_TRIED).find_map(|_| {
+        let at =
+            ground + east * dice.range(-0.5, 0.5) * CELL_M + north * dice.range(-0.5, 0.5) * CELL_M;
+        let at = around.ground(at);
+        around.fits_unseen(niche, at, seen_m).then_some(at)
+    }) else {
         return Vec::new();
-    }
+    };
     let count = fewest + (dice.unit() * (most - fewest + 1) as f32) as u32;
     let group = put_group(
         commands,
