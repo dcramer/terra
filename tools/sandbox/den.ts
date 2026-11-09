@@ -15,7 +15,7 @@
 //
 // Node 22.18 or later; no dependencies. About three minutes.
 
-import { call, press, start, stop, waitSeconds, waitUntil, warp } from "./client.ts";
+import { call, holdKey, press, start, stop, waitSeconds, waitUntil, warp } from "./client.ts";
 
 const args = process.argv.slice(2);
 const SEED = args.includes("--seed") ? args[args.indexOf("--seed") + 1] : "3";
@@ -60,7 +60,7 @@ try {
   };
   // Forward, a second at a time, until the chamber or the clock.
   while ((off(at)[0] > NEAR_M || off(at)[1] > LEVEL_M) && Date.now() - began < MOST_S * 1000) {
-    await press("w:60");
+    await holdKey("w", 1);
     for (let look = 0; look < 4; look++) {
       await waitSeconds(0.25);
       await eye();

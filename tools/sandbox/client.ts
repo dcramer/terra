@@ -373,6 +373,24 @@ export async function waitSeconds(seconds: number) {
   await waitUntil(`${seconds} s of game time`, status, (now) => now.seconds >= from + seconds, 60 + seconds * 10);
 }
 
+/// How fast the game's frames come, measured over a quarter of a second and kept five.
+const rate = { at: 0, fps: 60 };
+
+/// Holds a key for so many seconds of the clock. A key is held for a count of frames
+/// (`press`), and how fast frames come is the machine's and the build's: a walk written
+/// `w:60` was a second at 60 frames a second and half that at 120, and a check that walked
+/// by it stopped short the day the game ran faster. The count is sized by the rate measured.
+export async function holdKey(key: string, seconds: number) {
+  if (Date.now() - rate.at > 5000) {
+    const frame = async () => ((await call("sandbox.status")) as { frame: number }).frame;
+    const [before, began] = [await frame(), Date.now()];
+    await sleep(250);
+    rate.fps = Math.max(30, ((await frame()) - before) / ((Date.now() - began) / 1000));
+    rate.at = Date.now();
+  }
+  await press(`${key}:${Math.ceil(seconds * rate.fps)}`);
+}
+
 /// Presses keys, each written as --press names it, optionally `@after` frames from now and
 /// `:frames` held: `e`, `w:60`, `f@40`, `e@90:80`.
 export async function press(...keys: string[]) {
