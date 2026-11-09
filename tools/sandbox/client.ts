@@ -385,7 +385,9 @@ export async function holdKey(key: string, seconds: number) {
     const frame = async () => ((await call("sandbox.status")) as { frame: number }).frame;
     const [before, began] = [await frame(), Date.now()];
     await sleep(250);
-    rate.fps = Math.max(30, ((await frame()) - before) / ((Date.now() - began) / 1000));
+    // Never taken for slower than 60 a second: on a busy machine a quarter second's sample
+    // read low, the hold came out short and a walk fell behind its clock (den.ts in a full run).
+    rate.fps = Math.max(60, ((await frame()) - before) / ((Date.now() - began) / 1000));
     rate.at = Date.now();
   }
   await press(`${key}:${Math.ceil(seconds * rate.fps)}`);
