@@ -103,6 +103,30 @@ pub(crate) const SCENES: &[Scene] = &[
         frames: "2700",
     },
     Scene {
+        name: "far-walk-first",
+        about: "the far-walk scene's walk in the first realm, the same seed, land, date and route: what the far realm is measured against",
+        args: &[
+            "--experiment",
+            "play",
+            "--radius",
+            SCALE_RADIUS,
+            "--seed",
+            "3",
+            "--date",
+            "07-10",
+            "--time",
+            "13",
+            "--route",
+            "0,-90",
+            "--route",
+            "90,-90",
+            "--route",
+            "90,0",
+        ],
+        // 45 s at the scripted 1/60 s a frame.
+        frames: "2700",
+    },
+    Scene {
         name: "forest",
         about: "the lush forest spike: thousands of trees of leaf cards, grass, bushes",
         args: &[
