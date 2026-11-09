@@ -20,7 +20,7 @@
         model: "props/FishMinnow.glb",
         long_m: (0.06, 0.09),
         school: (14, 30),
-        deep_m: (0.3, 4.0),
+        deep_m: (0.3, 12.0),
         under_m: (0.08, 0.3),
         a_ha: 45.0,
         seen_m: 28.0,

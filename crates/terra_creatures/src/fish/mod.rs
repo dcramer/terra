@@ -36,6 +36,8 @@ const CELLS_A_FRAME: usize = 6;
 const STARTLE_M: f32 = 3.0;
 const DARTS: f32 = 4.0;
 const DART_S: f32 = 1.5;
+/// How many places in a cell are tried for water that suits a kind.
+const SPOTS: u32 = 3;
 /// A fish keeps this far off the bed.
 const OFF_THE_BED_M: f32 = 0.12;
 
@@ -227,13 +229,17 @@ fn put(
 ) -> Option<(Entity, usize)> {
     let (c, r) = (cell.x as u32, cell.y as u32);
     let luck = |salt: u32| unit3(seed, c, r, salt);
-    let spot = (cell.as_vec2() + Vec2::new(luck(1), luck(2))) * CELL_M;
     let depth_at = |at: Vec2| {
         let ground = planet.ground_at(start.at(at.x, at.y));
         planet.water_radius_m(ground) - ground.length()
     };
-    let depth = depth_at(spot);
-    let kind = kind_at(seed, cell, &kinds.defs, depth)?;
+    // A few places in the cell are tried for water that suits a kind: a steep shore's
+    // shallows are a band a few metres wide, which one place in twelve metres seldom finds.
+    let (spot, depth, kind) = (0..SPOTS).find_map(|spot| {
+        let at = (cell.as_vec2() + Vec2::new(luck(10 + spot * 2), luck(11 + spot * 2))) * CELL_M;
+        let depth = depth_at(at);
+        Some((at, depth, kind_at(seed, cell, &kinds.defs, depth)?))
+    })?;
     let (def, look) = (&kinds.defs[kind], kinds.looks[kind].as_ref()?);
     let count =
         (between((def.school.0 as f32, def.school.1 as f32 + 0.99), luck(4)) as usize).min(room);
