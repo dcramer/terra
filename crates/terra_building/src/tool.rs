@@ -59,6 +59,7 @@ use terra_world::tick::Sim;
 
 mod act;
 mod aim;
+mod claimed;
 mod place;
 mod prompt;
 mod show;

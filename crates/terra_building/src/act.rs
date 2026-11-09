@@ -293,6 +293,10 @@ impl Building<'_, '_> {
         let Some(claim) = by.and_then(|by| self.claims.get(by).ok()) else {
             return Some(nothing);
         };
+        // Anyone builds in any claim (D645): the one the builder stands in, their own first.
+        let claim = (by.and_then(|by| self.walkers.get(by).ok())).map_or(claim, |stands| {
+            terra_survival::claim::builds_in(claim, self.claims.iter(), stands.translation)
+        });
         let Some((_, centre)) = claim.stone else {
             return Some(nothing);
         };

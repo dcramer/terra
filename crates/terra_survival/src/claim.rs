@@ -100,6 +100,22 @@ impl Claim {
     }
 }
 
+/// The claim a builder builds in (D645: anyone may build in any claim): the claim they stand
+/// in, whoever's it is, their own first; standing in none, their own, which covers where
+/// they aim or does not. A claim says where building is allowed, not whose it is.
+pub fn builds_in<'a>(
+    own: &'a Claim,
+    every: impl IntoIterator<Item = &'a Claim>,
+    stands: Vec3,
+) -> &'a Claim {
+    if own.covers(stands) {
+        return own;
+    }
+    (every.into_iter())
+        .find(|claim| claim.covers(stands))
+        .unwrap_or(own)
+}
+
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Claim>()
         .add_systems(
@@ -340,5 +356,31 @@ mod tests {
         assert!(claim.covers(centre + Vec3::Z * (half + 1.0)));
         claim.set_step(rule.across_m.len() - 1, rule);
         assert_eq!(claim.next(rule), None);
+    }
+
+    /// Anyone may build in any claim (D645): a builder builds in the claim they stand in,
+    /// their own or another's, and in their own when they stand in none.
+    #[test]
+    fn a_builder_builds_in_the_claim_they_stand_in_whoevers_it_is() {
+        let up = Vec3::Y * 1000.0;
+        let claim = |east: f32| Claim {
+            stone: Some((Entity::PLACEHOLDER, up + Vec3::X * east)),
+            step: 0,
+            across_m: 20.0,
+        };
+        let (mine, theirs, none) = (claim(0.0), claim(100.0), Claim::default());
+        let every = [mine.clone(), theirs.clone()];
+        let at = |east: f32| up + Vec3::X * east;
+        let stone = |claim: &Claim| claim.stone.map(|(_, at)| at);
+        assert_eq!(stone(builds_in(&mine, &every, at(3.0))), stone(&mine));
+        assert_eq!(stone(builds_in(&mine, &every, at(104.0))), stone(&theirs));
+        assert_eq!(
+            stone(builds_in(&mine, &every, at(50.0))),
+            stone(&mine),
+            "in neither: their own"
+        );
+        // One with no claim of their own builds in another's where they stand in it.
+        assert_eq!(stone(builds_in(&none, &every, at(98.0))), stone(&theirs));
+        assert_eq!(stone(builds_in(&none, &every, at(50.0))), None);
     }
 }

@@ -664,40 +664,31 @@ pub(super) fn afford(
         .flat_map(|village| village.1.iter().map(|&point| (point, 0.0)))
         .collect();
     let first_across = builds.claim.across_m[0];
+    // Anyone builds in any claim (D645): each builds in the claim they stand in.
+    let every: Vec<Claim> = players
+        .iter()
+        .map(|(_, _, claim, ..)| claim.clone())
+        .collect();
     for (player, at, claim, mut builder, local) in &mut players {
         if builder.work.is_some() {
             continue;
         }
         let free = building.free();
-        // Nothing is built or taken apart outside your claim (D94), except the claim stone
+        // Nothing is built or taken apart outside a claim (D94; anyone builds in any, D645), except the claim stone
         // that makes one; and there is one claim each.
         let placing_claim = matches!(builder.picked(&builds).kind, Kind::Items(_))
             && builder.item(&builds).is_some_and(|item| item.claims)
             && !builder.is_carrying();
         let on_planet = target_point(&builder.target, &props)
             .map(|point| building.site.frame.transform_point(point));
-        builder.unclaimed = match on_planet {
-            // The yard, the flat test level, is all one claim.
-            _ if free => None,
-            Some(_) if placing_claim && claim.stone.is_some() => {
-                Some("You already have a claim; take its stone away to move it")
-            }
-            Some(point) if placing_claim => terra_survival::claim::too_near(
-                point,
-                first_across,
-                claims
-                    .iter()
-                    .filter(|(owner, _)| *owner != player)
-                    .map(|(_, keeps)| *keeps),
-                villages.iter().copied(),
-            ),
-            Some(point) if !claim.covers(point) => Some(if claim.stone.is_none() {
-                "Place a claim stone to build here: it is under Claim in the build menu"
-            } else {
-                "That is outside your claim"
-            }),
-            _ => None,
-        };
+        let builds_in = terra_survival::claim::builds_in(claim, &every, at.translation);
+        builder.unclaimed = super::claimed::refusal(
+            on_planet,
+            (free, placing_claim),
+            (claim, builds_in),
+            (player, &claims, &villages),
+            first_across,
+        );
         let near = building.local(at.translation);
         builder.planned = plan_work(&builds, &look, &mut building, player, near, &builder);
         // What this machine's player would build next is lit in the base.

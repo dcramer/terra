@@ -242,7 +242,7 @@ impl Refusal {
             Refusal::Malformed => "That can't be built.".into(),
             Refusal::UnknownKind(_) => "That isn't a kind of building.".into(),
             Refusal::WrongPart(_) => "That part is of another kind.".into(),
-            Refusal::OutsideClaim(_) => "That's outside your claim.".into(),
+            Refusal::OutsideClaim(_) => "That's outside the claim.".into(),
             Refusal::OverBudget { budget } => {
                 format!("Your claim can plan only {budget} cubes at once.")
             }

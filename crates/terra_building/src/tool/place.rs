@@ -71,7 +71,7 @@ fn place(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         } else if let Some(why) = claiming.then(too_near).flatten() {
             json!({ "done": false, "refused": why })
         } else if !claiming && !building.free() && !claim.covers(on_planet) {
-            json!({ "done": false, "refused": "That is outside your claim" })
+            json!({ "done": false, "refused": "That is outside the claim" })
         } else if !building.pay(player, &item.cost, 1) {
             json!({ "done": false, "refused": format!("Not enough to build a {name}") })
         } else {
