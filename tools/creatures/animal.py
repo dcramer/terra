@@ -17,7 +17,8 @@ creature.json says, in the model's units once turned (Tripo's are a metre across
 side), where each bone's head and tail are (`bones`; a bone ending `.L` is mirrored to `.R`),
 which bones make each leg (`legs`: upper, lower, the foot that meets the ground, and toes),
 and each clip's kind and numbers (`clips`); `middle` is the x of the body's middle line, if
-Tripo put it off centre. Check what it made with `sheet.py`.
+Tripo put it off centre, and `ground` the height its feet stand at, if not the origin. Check
+what it made with `sheet.py`.
 """
 
 import json
@@ -79,7 +80,9 @@ for leg, chain in SPEC["legs"].items():
         LEGS[leg[:-2] + ".R"] = [b[:-2] + ".R" for b in chain]
 # The origin: under the middle of the feet, so the game stands it where it is.
 feet = [BONES[chain[2]][2] for chain in LEGS.values()]
-ORIGIN = Vector((MIDDLE, sum(v.y for v in feet) / len(feet), 0.0))
+# `ground` is the height its feet stand at in the model, where Tripo left it centred on its
+# middle and not standing on the origin (the Drillhog, made as a prop).
+ORIGIN = Vector((MIDDLE, sum(v.y for v in feet) / len(feet), SPEC.get("ground", 0.0)))
 
 
 def ours(v):

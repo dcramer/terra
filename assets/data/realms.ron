@@ -42,8 +42,9 @@
         // And every leaf and blade is turned a fifth of the way round the hue circle: its
         // greens are teal, and the atlas's blue-violet bushes come out magenta and plum.
         plants_hue: Some(1.25),
-        // Its own deer and hare: the first realm's bodies in coats of this one (D642).
-        animals: Some(["Glimmerhorn", "Glimmerdoe", "Moonhare"]),
+        // Its own deer and hare, the first realm's bodies in coats of this one (D642), and its
+        // monster, the Drillhog (D250; here for now, D650).
+        animals: Some(["Glimmerhorn", "Glimmerdoe", "Moonhare", "Drillhog"]),
         // No bird of the first realm sings here: its cap forest rings.
         birdsong: Some(0.0),
         chimes: Some(0.45),

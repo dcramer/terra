@@ -71,7 +71,8 @@ async function look(hour: string): Promise<string[]> {
       }
       for (let view = 0; view * 2 < STAGE.length; view++) {
         const across = (view * 2 + 0.5 - (STAGE.length - 1) / 2) * 2;
-        await warp(along(20, across), along(25, across));
+        // A step to one side, so the player's own body is not between the eye and them.
+        await warp(along(19.5, across - 1.6), along(25, across));
         await waitSeconds(4);
         stills.push(`shots/farlook-${hour}-${view}.png`);
         await shot(stills[stills.length - 1]);

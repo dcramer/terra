@@ -714,4 +714,45 @@
             (joint: "Arm", part: Legs, radius_m: 0.05),
         ],
     ),
+    // The Drillhog (D250), a monster drawn by a developer's daughter: a groundhog the size of a
+    // boar with drills of horn growing from its back and head, which it gores with. Its model
+    // rigged on the wild boar's skeleton fitted to its own stub legs (art/creatures/drillhog),
+    // its gaits a waddle and a scuttle. It is met in the far realm for now (D650, Open: its
+    // decided home is dungeons and underground); the numbers are stand-ins.
+    (
+        name: "Drillhog",
+        model: ("models/creatures/Drillhog.glb", 1.0),
+        clips: (idle: "Idle", walk: "Walk", run: "Run", eat: "Eat", attack: "Gore", death: "Death", paces: (0.718, 1.651), trot: ("Trot", 1.511)),
+        health: 60.0,
+        walk_mps: 0.7,
+        run_mps: 1.98,
+        body: (radius: 0.4, weight: 2.5, nose_m: Some(0.75), rear_m: Some(0.7)),
+        temper: Hostile(
+            notices_m: 12.0,
+            leash_m: 35.0,
+            attacks_within_m: 1.6,
+            bite: 12.0,
+            bite_at_s: 0.4,
+            bite_reach_m: 2.0,
+            attack_s: 0.9,
+        ),
+        lives: About(per_ha: 0.12, group: (1, 2)),
+        niche: (warmth_c: (0.0, 40.0), haunts: [Woods, Open]),
+        seen_m: 120.0,
+        stride: (0.25, 0.1),
+        feet: Skitter,
+        voice: Snort,
+        blood: Red,
+        carcass: (needs: Flesh, gives: [("Meat", 3), ("Hide", 2)]),
+        lies_s: 120.0,
+        zones: [
+            (joint: "Head", part: Head, radius_m: 0.16),
+            (joint: "Neck", part: Body, radius_m: 0.2),
+            (joint: "Chest", part: Body, radius_m: 0.28),
+            (joint: "Spine", part: Body, radius_m: 0.3),
+            (joint: "Hips", part: Body, radius_m: 0.28),
+            (joint: "Thigh", part: Legs, radius_m: 0.07),
+            (joint: "Arm", part: Legs, radius_m: 0.07),
+        ],
+    ),
 ]

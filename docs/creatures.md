@@ -77,7 +77,7 @@ Monsters the developers have designed, each its own kind (D250). Their models ar
 | Kind | What it is | Where |
 |---|---|---|
 | Worman | A giant earthworm standing as tall as a person, disguised as a traveller: a blue cap, round dark glasses, red lips, two thin arms and a knife. It attacks anyone who comes close | Wherever travellers go |
-| Drillhog | A groundhog the size of a boar, with drills growing from its back and head, which it digs and attacks with | Dungeons and places underground |
+| Drillhog | A groundhog the size of a boar, with drills growing from its back and head, which it digs and attacks with. Rigged and in play (`art/creatures/drillhog`: the boar's skeleton fitted to its stub legs; it waddles, scuttles and gores); it does not dig | Dungeons and places underground; about the far realm for now (D650, Open) |
 | Seawish | A fish as tall as a person, standing on its tail, with a thick mop of seaweed growing on its head; it fights with a rusty sword and its seaweed. In the water it passes for a floating clump of seaweed | Beaches |
 | Cetri (D534) | A living oak 9-10 m tall that stands in the forest as one of its trees, wakes and lunges at whoever comes close, then stalks them slowly | Broadleaf forest, among the oaks |
 

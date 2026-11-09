@@ -1,0 +1,317 @@
+{
+  "subject": "the Drillhog (D250), a monster drawn by a developer's daughter: a groundhog the size of a boar, red-brown, with drills of iron-hard horn growing from its back and head; its model made as a prop (art/props/drillhog), rigged here on the wild boar's skeleton fitted to its feet",
+  "file": "Drillhog",
+  "plan": "quadruped",
+  "zones": {
+    "near": 0.15,
+    "far": 0.45,
+    "blend": 0
+  },
+  "generator": "h3.1 (art/props/drillhog, 55 credits, made 2026-10-13)",
+  "credits": {},
+  "turn": 150.6,
+  "ground": -0.425,
+  "scale": 1.36,
+  "budget": 3400,
+  "textures": {
+    "colour": 1024,
+    "normal": 1024,
+    "roughness_metal": 512
+  },
+  "bones": {
+    "Hips": [
+      null,
+      [
+        0,
+        0.234,
+        -0.045
+      ],
+      [
+        0,
+        0.054,
+        -0.026
+      ]
+    ],
+    "Spine": [
+      "Hips",
+      [
+        0,
+        0.054,
+        -0.026
+      ],
+      [
+        0,
+        -0.104,
+        -0.026
+      ]
+    ],
+    "Chest": [
+      "Spine",
+      [
+        0,
+        -0.104,
+        -0.026
+      ],
+      [
+        0,
+        -0.239,
+        -0.054
+      ]
+    ],
+    "Neck": [
+      "Chest",
+      [
+        0,
+        -0.239,
+        -0.054
+      ],
+      [
+        0,
+        -0.318,
+        -0.083
+      ]
+    ],
+    "Head": [
+      "Neck",
+      [
+        0,
+        -0.318,
+        -0.083
+      ],
+      [
+        0,
+        -0.588,
+        -0.206
+      ]
+    ],
+    "Ear.L": [
+      "Head",
+      [
+        0.05,
+        -0.318,
+        -0.017
+      ],
+      [
+        0.09,
+        -0.306,
+        0.031
+      ]
+    ],
+    "Tail1": [
+      "Hips",
+      [
+        0,
+        0.38,
+        -0.064
+      ],
+      [
+        0,
+        0.436,
+        -0.14
+      ]
+    ],
+    "Tail2": [
+      "Tail1",
+      [
+        0,
+        0.436,
+        -0.14
+      ],
+      [
+        0,
+        0.492,
+        -0.216
+      ]
+    ],
+    "Tail3": [
+      "Tail2",
+      [
+        0,
+        0.492,
+        -0.216
+      ],
+      [
+        0,
+        0.526,
+        -0.282
+      ]
+    ],
+    "Shoulder.L": [
+      "Chest",
+      [
+        0.172,
+        -0.171,
+        -0.026
+      ],
+      [
+        0.21,
+        -0.104,
+        -0.15
+      ]
+    ],
+    "UpperArm.L": [
+      "Shoulder.L",
+      [
+        0.21,
+        -0.104,
+        -0.15
+      ],
+      [
+        0.21,
+        -0.06,
+        -0.27
+      ]
+    ],
+    "Forearm.L": [
+      "UpperArm.L",
+      [
+        0.21,
+        -0.06,
+        -0.27
+      ],
+      [
+        0.21,
+        -0.13,
+        -0.385
+      ]
+    ],
+    "Paw.L": [
+      "Forearm.L",
+      [
+        0.21,
+        -0.13,
+        -0.385
+      ],
+      [
+        0.21,
+        -0.16,
+        -0.42
+      ]
+    ],
+    "Thigh.L": [
+      "Hips",
+      [
+        0.19,
+        0.2,
+        -0.064
+      ],
+      [
+        0.19,
+        0.16,
+        -0.24
+      ]
+    ],
+    "Shin.L": [
+      "Thigh.L",
+      [
+        0.19,
+        0.16,
+        -0.24
+      ],
+      [
+        0.19,
+        0.34,
+        -0.37
+      ]
+    ],
+    "Foot.L": [
+      "Shin.L",
+      [
+        0.19,
+        0.34,
+        -0.37
+      ],
+      [
+        0.19,
+        0.29,
+        -0.42
+      ]
+    ]
+  },
+  "legs": {
+    "Fore.L": [
+      "UpperArm.L",
+      "Forearm.L",
+      "Paw.L"
+    ],
+    "Hind.L": [
+      "Thigh.L",
+      "Shin.L",
+      "Foot.L"
+    ]
+  },
+  "clips": {
+    "Idle": {
+      "kind": "idle",
+      "seconds": 4,
+      "tail": 4
+    },
+    "Walk": {
+      "kind": "gait",
+      "cycle": 0.55,
+      "stride": 0.18,
+      "lift": 0.045,
+      "duty": 0.62,
+      "bob": 0.008,
+      "phases": {
+        "Hind.L": 0,
+        "Fore.L": 0.25,
+        "Hind.R": 0.5,
+        "Fore.R": 0.75
+      },
+      "tail": 4
+    },
+    "Trot": {
+      "kind": "gait",
+      "cycle": 0.36,
+      "stride": 0.2,
+      "lift": 0.05,
+      "duty": 0.5,
+      "bob": 0.01,
+      "phases": {
+        "Hind.L": 0,
+        "Fore.R": 0,
+        "Hind.R": 0.5,
+        "Fore.L": 0.5
+      },
+      "tail": 5
+    },
+    "Run": {
+      "kind": "gait",
+      "cycle": 0.28,
+      "stride": 0.17,
+      "lift": 0.045,
+      "duty": 0.5,
+      "bob": 0.02,
+      "phases": {
+        "Hind.L": 0,
+        "Hind.R": 0.1,
+        "Fore.L": 0.5,
+        "Fore.R": 0.6
+      },
+      "tail": 6
+    },
+    "Eat": {
+      "kind": "graze",
+      "seconds": 3.5,
+      "crouch": 0.04,
+      "root": 8,
+      "spine": 15,
+      "neck": 40,
+      "head": 40
+    },
+    "Death": {
+      "kind": "death",
+      "seconds": 1.2
+    },
+    "Gore": {
+      "kind": "graze",
+      "seconds": 0.9,
+      "crouch": 0.03,
+      "root": 10,
+      "spine": 16,
+      "neck": 30,
+      "head": 32
+    }
+  }
+}
