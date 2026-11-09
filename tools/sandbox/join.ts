@@ -239,10 +239,10 @@ try {
   await until(`the host's base is ${built} and the friend's game has ${base(friend) || "none of it"}: the host orders every act done to the base where it stands, and a joined game makes them (play::base_net); the host said: ${remote(host, "said", "--all", "--containing", "Base:").trim().split("\n").slice(-3).join(" / ")}`, () => base(friend) === built, 30);
   console.log(`✓ the base is the same in both games: the host's room (${built}) stands in the friend's game too, and its claim stone beside it`);
 
-  // Anyone builds in any claim (D645): the friend, with no claim of its own, stands in the
-  // host's and lays a floor beside the room; it is done, and stands in both games. The friend's
-  // game is told how far the host's claim reaches (claim_net); before, it refused the friend
-  // there as outside any claim.
+  // What a joined game builds stands in both: the friend lays a floor beside the host's room,
+  // in the host's claim. This does NOT prove the claims' rule (D645): `build.lay` is not held
+  // to a claim as the hammer is (with claim_net taken out this step still passed, the fault
+  // planted 2026-11-09); the rule wants a step by the hammer's own keys.
   const spot = (JSON.parse(remote(host, "call", "play.state")) as { at: [number, number] }).at;
   remote(host, "call", "net.place_guests", JSON.stringify({ at: [spot[0] + 1.5, spot[1]] }));
   let floored = { done: false, refused: "not asked yet" } as { done: boolean; refused?: string };
@@ -253,7 +253,7 @@ try {
   );
   const raised = base(friend);
   await until(`the friend built in its host's claim and has ${raised}, the host ${base(host)}: a joined game's acts are asked of the host and ordered back (play::base_net)`, () => base(host) === raised, 30);
-  console.log(`✓ the friend built in its host's claim: its floor stands in both games (${raised})`);
+  console.log(`✓ what the friend built stands in both games: its floor beside the host's room (${raised})`);
 
   // What storage holds is the same in both games (netcode.md, step 5): the host sets down a
   // chest and leaves stone in it, which the friend's game shows in it; the friend leaves wood
