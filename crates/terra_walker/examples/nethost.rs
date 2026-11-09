@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use terra_core::{PlanetSpec, Seed};
 use terra_net::server::Config;
 use terra_net::transport::udp::UdpServer;
-use terra_walker::net::instance::{Instances, walker};
+use terra_walker::net::instance::{Instances, trees, walker};
 use terra_walker::net::session::VERSION;
 use terra_walker::net::{Guest, Host};
 use terra_world::planet::Planet;
@@ -53,7 +53,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let mut host = Instances::new(wire, Config::new(VERSION), vec![walker]);
+    let mut host = Instances::new(wire, Config::new(VERSION), vec![walker, trees]);
     let before_mb = resident_mb();
     for realm in 0..realms {
         let planet = Planet::new(PlanetSpec {

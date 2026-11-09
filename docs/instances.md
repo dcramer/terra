@@ -115,6 +115,8 @@ In the sandbox, with no server: a portal in the forest that unloads the forest a
 - **The portal**: in the forest near the start, crossing on interact under the short fade (D501).
 - **An experiment, `portal`**, standing for the forest walk with the portal (D467's way), with keys to cross for scripted runs.
 
+**What a realm instance holds so far (D640).** The walker's layer (the ground, the mover, the walk, hosting) and, since 2026-11-09, the trees' layer (`terra_walker::net::instance::trees`): what a small world's trees and bigger rocks stop a walker by, from the world's own rule (`terra_world::flora::trees`: the trees' and the rocks' scatter lifted out of `plant`, which calls them; their sizes measured without meshes, `grown::measure` and the models' files), so a player a realm walks is stopped by what their game shows: `crossing.ts` reads 0 cm in the realm handed to, where it read 23 (a rock by the start the realm did not have). Not yet in a realm: a world with mountains' woods and shore stones (`terra_world::woods`, the forest's own trunks), a base's footprint and its solids, props, creatures; until all are, the game's own hosting stays the listen server.
+
 **The test that proves nothing leaks.**
 
 1. *A unit test in `terra_world`, no GPU*: a stand-in module spawns placed and unplaced entities, a world resource, a component on a `Global`, and assets, one also held by a `Global`. After a round trip: the census equals the one before; the shared asset is loaded and the world's others are freed; and a stand-in that spawns an unscoped entity without a `Transform` is reported by the census, so the test is known to catch a leak.

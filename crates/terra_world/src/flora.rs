@@ -766,42 +766,7 @@ fn plant(
     place(trees);
 
     // Rocks: anywhere, more of them on bare and steep ground, mossy in the grass.
-    let rocks = scatter(seed.derive("rocks"), 300.0, 7.0, |rng, x, z, out| {
-        let point = ground.ground(&planet, x, z);
-        let cover = planet.cover(point, planet.normal(point));
-        // On the heath past the trees, boulders lie in fields on the scoured rises and the
-        // fellfield, few elsewhere, and lichen grows over them as moss does in the grass.
-        let heath = planet.round().map(|round| round.heath.at(point));
-        let (chance, grown_over) = match heath {
-            Some(h) if h.open > 0.3 => {
-                let field = smoothstep(0.0, 0.3, blooms.fbm(point / 60.0 + 13.0, 2, 2.0, 0.5));
-                (
-                    0.06 + 0.5 * (h.fellfield / h.open).min(1.0) + 0.25 * field,
-                    h.open * 0.8,
-                )
-            }
-            _ => (0.4 - 0.22 * cover.grass, cover.grass),
-        };
-        if point.length() - planet.water_near_m(point) < -0.4 || rng.unit() > chance {
-            return;
-        }
-        // Mostly small, now and then a boulder; a few of the bigger ones hold ore.
-        let size = 0.35 + 2.4 * rng.unit().powi(3) + if rng.unit() < 0.04 { 2.5 } else { 0.0 };
-        // A few of the bigger ones hold ore; in the grass, most are mossy.
-        let Some(kind) = flora.choose(Grows::Rocks, 0.0, grown_over, size, &season, rng) else {
-            return;
-        };
-        let (index, model) = pick(rng, kind);
-        let scale = size / model.height;
-        out.push(Placing {
-            kind,
-            model: index,
-            stops: (size > 0.9).then_some((point, model.spread * scale * 0.8)),
-            transform: standing(rng, point, 0.5, scale, size * 0.22),
-            room: 1.0 + size,
-            cut: flora.kinds()[kind].cuttable(size),
-        });
-    });
+    let rocks = trees::rocks((&planet, &start.0), seed, &flora, &sizes, &season);
     place(rocks);
 
     // A mountain lake's shore: the bare band its high water and ice keep scoured

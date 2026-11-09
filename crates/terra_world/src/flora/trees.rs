@@ -10,6 +10,7 @@ use crate::flora_kinds::{Flora, Grows, Season};
 use crate::grown;
 use crate::planet::Planet;
 use bevy::prelude::*;
+use terra_gen::smoothstep;
 use terra_gen::{Noise, Rng, Seed};
 
 /// How far from the start trees are scattered, and how far apart at their closest, metres.
@@ -20,13 +21,15 @@ const SPACING_M: f32 = 6.5;
 /// far round its foot, metres.
 pub type Sizes = Vec<Vec<(f32, f32)>>;
 
-/// The sizes of the trees' variants as measured, with nothing grown: none for a kind that is
-/// not a grown tree, which the trees' layer never chooses.
+/// Every kind's sizes as measured, with nothing grown or built: a grown tree's variants from
+/// their shapes, a modelled kind's from its files; none for the other grown kinds (bushes,
+/// herbs), which stop nothing.
 pub fn measured(flora: &Flora, seed: Seed) -> Sizes {
     (flora.kinds().iter())
         .map(|kind| {
             let Some(how) = &kind.grown else {
-                return Vec::new();
+                // A modelled kind's (a rock's), from its files.
+                return super::model::measured(kind);
             };
             let seed = seed.derive("grown").derive(&kind.name);
             let size = kind.size.unwrap_or((1.0, 1.0));
@@ -121,14 +124,75 @@ pub(super) fn trees(
     )
 }
 
-/// What a world's trees stop: each one's foot and how far round it, for a world that draws
-/// nothing. The same feet and widths as `plant` files for the trees it stands.
+/// The rocks of a world: anywhere, more of them on bare and steep ground, mossy in the grass;
+/// the bigger ones stop a walker.
+pub(super) fn rocks(
+    (planet, start): (&Planet, &Transform),
+    seed: Seed,
+    flora: &Flora,
+    sizes: &Sizes,
+    season: &Season,
+) -> Vec<Placing> {
+    let middle = start.translation;
+    let up = middle.normalize();
+    let east = up.cross(Vec3::X).normalize();
+    let ground = Patch {
+        middle,
+        east,
+        north: east.cross(up),
+    };
+    let blooms = Noise::new(seed.derive("blooms"));
+    scatter(seed.derive("rocks"), 300.0, 7.0, |rng, x, z, out| {
+        let point = ground.ground(planet, x, z);
+        let cover = planet.cover(point, planet.normal(point));
+        // On the heath past the trees, boulders lie in fields on the scoured rises and the
+        // fellfield, few elsewhere, and lichen grows over them as moss does in the grass.
+        let heath = planet.round().map(|round| round.heath.at(point));
+        let (chance, grown_over) = match heath {
+            Some(h) if h.open > 0.3 => {
+                let field = smoothstep(0.0, 0.3, blooms.fbm(point / 60.0 + 13.0, 2, 2.0, 0.5));
+                (
+                    0.06 + 0.5 * (h.fellfield / h.open).min(1.0) + 0.25 * field,
+                    h.open * 0.8,
+                )
+            }
+            _ => (0.4 - 0.22 * cover.grass, cover.grass),
+        };
+        if point.length() - planet.water_near_m(point) < -0.4 || rng.unit() > chance {
+            return;
+        }
+        // Mostly small, now and then a boulder; a few of the bigger ones hold ore.
+        let size = 0.35 + 2.4 * rng.unit().powi(3) + if rng.unit() < 0.04 { 2.5 } else { 0.0 };
+        // A few of the bigger ones hold ore; in the grass, most are mossy.
+        let Some(kind) = flora.choose(Grows::Rocks, 0.0, grown_over, size, season, rng) else {
+            return;
+        };
+        if sizes[kind].is_empty() {
+            return;
+        }
+        let index = rng.below(sizes[kind].len() as u32) as usize;
+        let (height, spread) = sizes[kind][index];
+        let scale = size / height;
+        out.push(Placing {
+            kind,
+            model: index,
+            stops: (size > 0.9).then_some((point, spread * scale * 0.8)),
+            transform: standing(rng, point, 0.5, scale, size * 0.22),
+            room: 1.0 + size,
+            cut: flora.kinds()[kind].cuttable(size),
+        });
+    })
+}
+
+/// What a world's trees and rocks stop: each one's foot and how far round it, for a world
+/// that draws nothing. The same feet and widths as `plant` files for those it stands, where
+/// no building's footprint covers them (a base's is the layer above's to say).
 pub fn stops(world: (&Planet, &Transform), flora: &Flora, season: &Season) -> Vec<(Vec3, f32)> {
     let seed = world.0.seed().derive("flora");
     let sizes = measured(flora, seed);
-    (trees(world, seed, flora, &sizes, season).iter())
-        .filter_map(|tree| tree.stops)
-        .collect()
+    let stood = (trees(world, seed, flora, &sizes, season).into_iter())
+        .chain(rocks(world, seed, flora, &sizes, season));
+    stood.filter_map(|thing| thing.stops).collect()
 }
 
 #[cfg(test)]
@@ -153,9 +217,21 @@ mod tests {
         let flora = Flora::read();
         let (planet, start) = world(3);
         let stood = stops((&planet, &start), &flora, &Season::Unknown);
-        assert!(stood.len() > 200, "{} trees", stood.len());
-        for (foot, radius) in &stood {
+        assert!(stood.len() > 200, "{} trees and rocks", stood.len());
+        // Its trees first, each a trunk's width; then its bigger rocks.
+        let seed = planet.seed().derive("flora");
+        let sizes = measured(&flora, seed);
+        let wood = trees((&planet, &start), seed, &flora, &sizes, &Season::Unknown);
+        assert!(
+            wood.len() > 200 && wood.len() < stood.len(),
+            "{} trees",
+            wood.len()
+        );
+        for (_, radius) in &stood[..wood.len()] {
             assert!((0.25..=0.6).contains(radius), "a trunk {radius} m round");
+        }
+        for (foot, radius) in &stood {
+            assert!(*radius > 0.05 && *radius < 12.0, "a thing {radius} m round");
             assert!(
                 foot.distance(planet.ground_at(*foot)) < 0.01,
                 "a tree off the ground"

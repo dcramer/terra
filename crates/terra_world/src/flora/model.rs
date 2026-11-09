@@ -114,13 +114,28 @@ fn model_of(
 
 /// Turns a model's parts into one mesh in our colours, carrying how each vertex moves in
 /// the wind.
-pub(super) fn build_model(kind: &FloraDef, parts: &[Part], meshes: &MeshSink) -> Model {
+/// How tall a model's parts stand and how far round its foot they reach, as the model is
+/// made: what a thing of it stops is from these, drawn or not ([`super::trees`]).
+pub(super) fn measure(parts: &[Part]) -> (f32, f32) {
     let all = || parts.iter().flat_map(|part| part.positions.iter());
     let height = all().map(|p| p.y).fold(0.01, f32::max);
     let spread = all()
         .filter(|p| p.y < height * 0.15)
         .map(|p| p.xz().length())
         .fold(0.05, f32::max);
+    (height, spread)
+}
+
+/// A modelled kind's models' sizes, read from their files with nothing built.
+pub(super) fn measured(kind: &FloraDef) -> Vec<(f32, f32)> {
+    (kind.models.iter())
+        .filter_map(|name| read_model(&format!("nature/{name}.glb")).ok())
+        .map(|parts| measure(&parts))
+        .collect()
+}
+
+pub(super) fn build_model(kind: &FloraDef, parts: &[Part], meshes: &MeshSink) -> Model {
+    let (height, spread) = measure(parts);
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut colours = Vec::new();

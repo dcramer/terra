@@ -164,3 +164,37 @@ fn a_joined_game_handed_on_walks_in_the_next_realm_once_its_land_is_made() {
     assert!(off < 0.5, "{off} m from where the second realm has it");
     assert!(game.resource::<link::Link>().tick().is_some());
 }
+
+/// A realm with the trees' layer holds what its world's trees stop, by the world's own rule:
+/// a body put at a tree's foot is pushed out of its trunk there, and is left where it is in
+/// a realm with the walker's layer alone, which is the fault this would hide (a player
+/// walked by a realm through the trunks their own game shows, 23 cm apart in crossing.ts).
+#[test]
+fn a_realm_with_the_trees_layer_stops_a_body_at_a_trunk() {
+    use instance::{Instances, trees, walker};
+    use terra_world::flora::Obstacles;
+    use terra_world::flora_kinds::{Flora, Season};
+    let planet = || {
+        Planet::smooth(PlanetSpec {
+            seed: Seed(3),
+            radius_m: 2000.0,
+        })
+    };
+    let world = planet();
+    let start = terra_world::start::Start::choose(&world, false);
+    let stood =
+        terra_world::flora::trees::stops((&world, &start.0), &Flora::read(), &Season::Unknown);
+    let (foot, radius) = stood[stood.len() / 2];
+    let pushed = |layers: Vec<instance::Layer>| {
+        let mut realms = Instances::new(Network::new().server(), Config::new(VERSION), layers);
+        realms.open(planet(), start.translation);
+        let obstacles = realms.realm(0).world().resource::<Obstacles>();
+        obstacles.push_out(foot, 0.3, 0.3).distance(foot)
+    };
+    let with = pushed(vec![walker, trees]);
+    assert!(
+        with > radius,
+        "at a trunk {radius} m round the body moved {with} m"
+    );
+    assert_eq!(pushed(vec![walker]), 0.0);
+}

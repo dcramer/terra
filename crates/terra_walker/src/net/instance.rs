@@ -46,6 +46,26 @@ pub fn walker(app: &mut App) {
     super::hosting(app);
 }
 
+/// The trees' layer of a realm (D640): what a small world's trees stop a walker by, filed
+/// among the realm's obstacles as the game files them for the trees it draws, by the same
+/// rule of the world (`terra_world::flora::trees`), so a player a realm walks is stopped by
+/// the trunk their own game shows. After [`walker`]. A world with mountains has its trees
+/// from the woods (`terra_world::woods`), which no realm holds yet.
+pub fn trees(app: &mut App) {
+    use terra_world::flora_kinds::{Flora, Season};
+    let planet = app.world().resource::<Planet>();
+    // The start as the game chooses it for this planet: the rule is laid out from it.
+    let start = terra_world::start::Start::choose(planet, false);
+    let stood =
+        terra_world::flora::trees::stops((planet, &start.0), &Flora::read(), &Season::Unknown);
+    let mut obstacles = app
+        .world_mut()
+        .get_resource_or_init::<terra_world::flora::Obstacles>();
+    for (foot, radius) in stood {
+        obstacles.add(foot, radius);
+    }
+}
+
 /// Where a realm is in its life (docs/instances.md).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Life {
