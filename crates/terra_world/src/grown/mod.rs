@@ -20,6 +20,7 @@ mod caps;
 mod cards;
 mod climate;
 mod drawn;
+pub mod measure;
 pub mod pivots;
 pub mod plants;
 pub mod tree;
@@ -641,8 +642,7 @@ pub fn grow_one(
     let mut dice = seed.index(u64::from(index)).rng();
     match def {
         Grown::Tree(def) => {
-            let height = size.0 + (size.1 - size.0) * (index as f32 + 0.5) / count as f32;
-            let shape = tree::grow(&mut dice, def, height);
+            let (mut dice, height, shape) = measure::shape(def, seed, (index, count), size);
             let (leaf, tint) = (cards.get(&def.leaves), vec3(def.tint));
             let canopy = tree::Canopy::of(&shape, tint);
             let pivots = tree::pivots(&shape);
@@ -681,7 +681,7 @@ pub fn grow_one(
                     trunk_m: shape.trunk_m,
                 })),
                 height,
-                spread: shape.trunk_m * 1.3,
+                spread: measure::spread(&shape),
             }
         }
         Grown::Bush(def) => {
