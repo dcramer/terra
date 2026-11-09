@@ -286,3 +286,16 @@ fn a_date_is_a_day_of_the_clock_or_of_a_calendar() {
         assert!(parse(&["--date", wrong]).unwrap_err().contains("10-15"));
     }
 }
+
+/// The debug menu is there for anyone playing, and in an unattended run only when asked for
+/// (D81): a scripted run's keys and pictures stay the game's own.
+#[test]
+fn the_debug_menu_is_there_for_a_player_and_asked_for_by_a_script() {
+    assert!(parse(&[]).unwrap().debug_menu_on());
+    assert!(!parse(&["--background"]).unwrap().debug_menu_on());
+    assert!(
+        parse(&["--background", "--debug-menu"])
+            .unwrap()
+            .debug_menu_on()
+    );
+}

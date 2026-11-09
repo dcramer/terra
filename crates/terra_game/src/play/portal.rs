@@ -82,6 +82,7 @@ fn state(
     In(_): In<Option<serde_json::Value>>,
     portals: Query<(&Portal, &Transform)>,
     body: Option<Single<&Transform, With<LocalPlayer>>>,
+    start: Option<Res<crate::start::Start>>,
 ) -> bevy::remote::BrpResult {
     let refused = terra_world::remote::refused;
     let body = body.ok_or_else(|| refused("There is no player near any portal yet."))?;
@@ -92,6 +93,8 @@ fn state(
     let (portal, at) = nearest.ok_or_else(|| refused("No portal stands in this world."))?;
     Ok(serde_json::json!({
         "away_m": at.translation.distance(body.translation),
+        // Where it stands from the start, east, up and south, as `play.warp` is told.
+        "at": start.map(|start| start.local(at.translation).to_array()),
         "open": portal.open,
         "to": { "kind": portal.to.kind, "seed": portal.to.seed.to_string() },
     }))

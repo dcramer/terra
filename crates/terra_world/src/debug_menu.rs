@@ -1,4 +1,5 @@
-//! The debug menu (D81): there only when the run starts with `--debug-menu`, opened and closed
+//! The debug menu (D81): there for anyone playing (in an unattended run only with
+//! `--debug-menu`, `Options::debug_menu_on`), opened and closed
 //! with the backtick key, as Unreal's console and Quake's before it; drawn with egui, as Dear
 //! ImGui debug windows are in shipped engines, since every build already carries egui for the
 //! F1 inspector and its sliders, search field and collapsing groups come with it, where Bevy
@@ -21,6 +22,8 @@ use bevy::{
     remote::{BrpResult, builtin_methods::parse_some},
     window::{CursorGrabMode, CursorOptions},
 };
+/// egui, for a page another crate adds ([`DebugMenu::add`]).
+pub use bevy_inspector_egui::bevy_egui::egui as ui;
 use bevy_inspector_egui::bevy_egui::{
     EguiContext, EguiGlobalSettings, EguiPrimaryContextPass, PrimaryEguiContext,
     egui::{self, Color32, RichText},
@@ -62,7 +65,7 @@ pub fn plugin(app: &mut App) {
     if options.as_ref().is_some_and(Options::unattended) {
         app.add_systems(Startup, deaf_to_the_real_mouse);
     }
-    if !options.is_some_and(|o| o.debug_menu) {
+    if !options.is_some_and(|o| o.debug_menu_on()) {
         return;
     }
     app.init_resource::<TunablesPage>()

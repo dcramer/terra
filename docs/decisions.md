@@ -644,7 +644,7 @@ Checks, developer tools, languages and the repository.
 | [D69](decisions/D69.md) | QA for agents | Tech | Agent | Decided | The game's QA is reachable by our coding agents… |
 | [D71](decisions/D71.md) | Developer tools | Tech | Developers | Decided | Tools that help refine each system… |
 | [D77](decisions/D77.md) | Logs and frame-time readout | Tech | Developers | Decided | Every build has a frame-time readout on screen at all… |
-| [D81](decisions/D81.md) | Debug menu | Tech | Developers | Decided | An in-game debug menu, switched on by a flag at launch… |
+| [D81](decisions/D81.md) | Debug menu | Tech | Developers | Decided | An in-game debug menu, opened with the backtick key… |
 | [D82](decisions/D82.md) | Token stats | Tech | Agent | Decided | Each developer's Claude token use on this repository is… |
 | [D121](decisions/D121.md) | Languages | Tech | Developers | Decided | Code is Rust or TypeScript. |
 | [D133](decisions/D133.md) | Repository layout | Tech | Developers | Decided | Each kind of thing has one home. |

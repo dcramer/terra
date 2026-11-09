@@ -14,6 +14,7 @@ pub use flora::{FloraSystems, Growth, Obstacles};
 pub use flora_kinds::Flora;
 pub use footprint::Footprint;
 pub mod base_net;
+mod debug_page;
 mod map;
 pub mod marks;
 pub mod music;
@@ -176,6 +177,7 @@ impl Plugin for GameplayPlugin {
         harvest::plugin(app);
         dig::plugin(app);
         probe::plugin(app);
+        debug_page::plugin(app);
         // Sound: noises from what happens, what they sound like, the place, and music.
         noise::plugin(app);
         noises::plugin(app);

@@ -884,6 +884,13 @@ impl Options {
         self.scripted() || self.background
     }
 
+    /// Whether the debug menu is there (D81): for anyone playing, while the game is before
+    /// its release, and in an unattended run only when asked for (`--debug-menu`), so a
+    /// scripted run's keys and pictures are the game's alone.
+    pub fn debug_menu_on(&self) -> bool {
+        self.debug_menu || !self.unattended()
+    }
+
     /// Whether anything is heard. An unattended run is silent, so it neither plays sounds
     /// over whatever the person at the machine is doing nor needs a sound device. WSL
     /// usually has no sound device, and its sound library fills the log saying so, so
@@ -1194,7 +1201,9 @@ impl Plugin for ShellPlugin {
                 loading::hold::count_frames.after(bevy::diagnostic::update_frame_count),
             )
             .add_systems(PostUpdate, keep_the_mouse_free);
-        if self.0.remote || self.0.calls.is_some() {
+        // The debug menu's pages do what they do through the remote's methods (D81), so
+        // they are there with it, answering no one unless the remote is on.
+        if self.0.remote || self.0.calls.is_some() || self.0.debug_menu_on() {
             crate::remote::plugin(app);
         }
         crate::debug::probe::plugin(app);

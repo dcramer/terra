@@ -44,6 +44,11 @@ impl Kinds {
         Self(terra_world::data::read(Self::FILE))
     }
 
+    /// Every kind, in the file's order.
+    pub fn all(&self) -> &[Kind] {
+        &self.0
+    }
+
     pub fn get(&self, key: &str) -> Option<&Kind> {
         self.0.iter().find(|kind| kind.key == key)
     }

@@ -175,6 +175,23 @@ pub fn method<M>(
         .insert(name, RemoteMethodSystemId::Instant(id));
 }
 
+/// Makes a remote method's call from inside the game, as the remote protocol would, and
+/// answers what it did or why it was refused: the debug menu's buttons do what a script's
+/// calls do (D81).
+pub fn call(world: &mut World, name: &str, params: Option<Value>) -> Result<Value, String> {
+    let handler = world
+        .get_resource::<RemoteMethods>()
+        .and_then(|methods| methods.get(name).copied());
+    let Some(RemoteMethodSystemId::Instant(id)) = handler else {
+        return Err(format!("there is no method {name}"));
+    };
+    match world.run_system_with(id, params) {
+        Ok(Ok(answer)) => Ok(answer),
+        Ok(Err(error)) => Err(error.message),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 /// A request that cannot be done, said in words.
 pub fn refused(message: impl ToString) -> BrpError {
     BrpError::internal(message)

@@ -58,6 +58,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Last, trace);
     method(app, "play.state", state);
     method(app, "play.warp", warp);
+    method(app, "play.hour", hour);
     method(app, "play.give", ask_give);
     method(app, "play.take", ask_take);
     method(app, "play.aim", ask_aim);
@@ -87,6 +88,21 @@ fn warp(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Warp { at, facing } = parse_some(params)?;
     world.resource_mut::<super::WarpTo>().0 = Some(((at[0], at[1]), facing.map(|f| (f[0], f[1]))));
     Ok(json!("warping on the next frame"))
+}
+
+#[derive(Deserialize)]
+struct Hour {
+    hour: f32,
+}
+
+/// `play.hour {hour}`: sets the world's clock to an hour of the day, 0 to 24, noon at 12.
+fn hour(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Hour { hour } = parse_some(params)?;
+    let mut clock = world
+        .get_resource_mut::<terra_world::daylight::Clock>()
+        .ok_or_else(|| refused("No world is made yet, so there is no clock."))?;
+    clock.hour = hour.rem_euclid(24.0);
+    Ok(json!({ "hour": clock.hour }))
 }
 
 #[derive(Deserialize)]
