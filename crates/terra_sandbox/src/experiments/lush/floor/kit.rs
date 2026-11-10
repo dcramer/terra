@@ -202,8 +202,26 @@ pub(in crate::experiments::lush) fn decide<W: Ways>(
 impl Put {
     /// Spawns what was decided, in the order decided, with the app's assets and commands.
     pub(in crate::experiments::lush) fn spawn(&mut self, lay: &mut Lay, kit: &Kit) {
+        self.spawn_some(lay, kit, usize::MAX);
+    }
+
+    /// How many things are decided and not spawned yet.
+    pub(in crate::experiments::lush) fn left(&self) -> usize {
+        self.laid.len()
+    }
+
+    /// Spawns the next `most` of what was decided, in the order decided: the load's floor
+    /// is put down a slice a frame behind the loading screen (`lush::lay_floor`), since all
+    /// of it at once is one frame of 240 to 310 ms of applying commands.
+    pub(in crate::experiments::lush) fn spawn_some(
+        &mut self,
+        lay: &mut Lay,
+        kit: &Kit,
+        most: usize,
+    ) {
         let _part = info_span!("floor", name = "spawning").entered();
-        for laid in std::mem::take(&mut self.laid) {
+        let rest = self.laid.split_off(most.min(self.laid.len()));
+        for laid in std::mem::replace(&mut self.laid, rest) {
             match laid {
                 Laid::Rock {
                     boulder,

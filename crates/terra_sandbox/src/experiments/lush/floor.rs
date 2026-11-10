@@ -537,7 +537,8 @@ impl Drawn {
 pub(super) fn lay<W: Ways>(lay: &mut Lay, map: &mut Floor<W>, area: &Area) -> Kit {
     let kit = make_kit(lay);
     let put = decide_load(&lay.ground(), &kit, map, area, lay.seed);
-    put_down(lay, &kit, put);
+    let mut put = put;
+    put_down(lay, &kit, &mut put, usize::MAX);
     kit
 }
 
@@ -562,9 +563,13 @@ pub(super) fn decide_load<W: Ways>(
     put
 }
 
-/// Spawns the load's floor as decided, says what it has, and hands its shadows over.
-pub(super) fn put_down(lay: &mut Lay, kit: &Kit, mut put: Put) {
-    put.spawn(lay, kit);
+/// Spawns the next `most` things of the load's floor as decided and, once none is left,
+/// says what the floor has and hands its shadows over. Whether all of it is down.
+pub(super) fn put_down(lay: &mut Lay, kit: &Kit, put: &mut Put, most: usize) -> bool {
+    put.spawn_some(lay, kit, most);
+    if put.left() > 0 {
+        return false;
+    }
     let (laid, nearest) = (put.wood, put.nearest);
     info!(
         "lush: the floor has {} rocks, {} boulders, {} fallen logs and {} stumps; the nearest \
@@ -594,6 +599,7 @@ pub(super) fn put_down(lay: &mut Lay, kit: &Kit, mut put: Put) {
         .collect();
     info!("lush: undergrowth: {}.", counts.join(", "));
     lay.hand_over_shadows();
+    true
 }
 
 /// A stump at `stump_at` and a fallen log at `log_at`, of the floor's own wood, as if the
