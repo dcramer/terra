@@ -185,6 +185,8 @@ pub struct Kept {
     pub stance: bool,
     /// Off the ground last frame, so the frame it comes down is known.
     was_off: bool,
+    /// Where the body stood last frame, so a frame it was put elsewhere is known (`stands_at`).
+    stood: Option<Vec3>,
     /// Each foot's heel (its ankle) and ball over the body's ground along its up, as the clip
     /// posed them before the lock and the bend: the clip's own sole over its flat ground, which
     /// the walk record holds against the world's (`feet.ground`).
@@ -213,7 +215,31 @@ pub struct Kept {
     told: bool,
 }
 
+/// How far a body goes in a frame at most by its own going, m, and besides that how fast,
+/// m/s (a fall's end is under 60): farther, it was put there (a warp, a respawn, a crossing).
+/// As engines tell a teleport from a move by distance (Unreal's cloth and AnimDynamics
+/// `TeleportDistanceThreshold`), and as `swing` does for what hangs from the body.
+const PUT_M: f32 = 2.0;
+const PUT_MPS: f32 = 60.0;
+
 impl Kept {
+    /// The body stands at `at` this frame. Put there from elsewhere, not gone there, its feet
+    /// start afresh: a foot left locked where it stood before, and the pelvis lowered to reach
+    /// it, drew the figure waist deep in the ground with its legs splayed for the frames until
+    /// the lock gave way. True if it was put.
+    fn stands_at(&mut self, at: Vec3, dt: f32) -> bool {
+        let put =
+            (self.stood.replace(at)).is_some_and(|stood| stood.distance(at) > PUT_M + PUT_MPS * dt);
+        if put {
+            self.feet = Default::default();
+            self.placing = Placing::default();
+            self.was = [None; 2];
+            self.strained = [false; 2];
+            self.over = [[0.0; 2]; 2];
+        }
+        put
+    }
+
     /// The clip playing travels `pace` metres a second (scaled to the body) at `rate`, `way`,
     /// its feet's travel along the way stretched `warp` times (`pace::gait`, stride warping):
     /// the ground its planted feet stand on passes under the body that fast (none for a clip
@@ -504,6 +530,7 @@ pub(crate) fn keep(
         };
         let ground = base.translation();
         let up = ground.normalize_or(Vec3::Y);
+        kept.stands_at(ground, dt);
         // Down, off the ground (a jump, a fall, swimming), or let go by a layer above.
         let aloft = motion.is_some_and(|motion| !motion.on_ground);
         let landing = kept.was_off && !aloft;
@@ -741,6 +768,51 @@ const DROP_STILL_M: f32 = 1e-4;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A body put elsewhere (a warp, a respawn, a crossing) starts its feet afresh, where a
+    /// planted foot was left locked where it stood before and the figure drawn sunk to its
+    /// waist reaching for it; one that walked, ran or fell there keeps its locks.
+    #[test]
+    fn a_body_put_elsewhere_lets_its_planted_feet_go() {
+        let dt = 1.0 / 60.0;
+        let stood = Vec3::new(0.0, 2000.0, 0.0);
+        let planted = || {
+            let mut kept = Kept::default();
+            let posed = Posed {
+                pose: Pose {
+                    at: stood,
+                    turn: Quat::IDENTITY,
+                },
+                swing_mps: 0.0,
+                lock: 1.0,
+                up: Vec3::Y,
+                strained: false,
+                off: false,
+                landing: false,
+                low: true,
+                ball: Vec3::NEG_Z * 0.15,
+                sole: [0.0; 2],
+                over: [0.0; 2],
+            };
+            for _ in 0..30 {
+                kept.feet[0].update(posed, dt, false);
+            }
+            assert!(kept.feet[0].planted(), "{}", kept.feet[0].state());
+            kept.was[0] = Some(Vec3::ZERO);
+            assert!(!kept.stands_at(stood, dt));
+            kept
+        };
+        // A sprint's frame, and a long fall's at a slow frame.
+        for (gone, dt) in [(0.12, dt), (5.0, 0.1)] {
+            let mut kept = planted();
+            assert!(!kept.stands_at(stood + Vec3::X * gone, dt));
+            assert!(kept.feet[0].planted() && kept.was[0].is_some());
+        }
+        let mut kept = planted();
+        assert!(kept.stands_at(stood + Vec3::X * 40.0, dt));
+        assert!(!kept.feet[0].planted() && kept.feet[0].locked().is_none());
+        assert_eq!(kept.was, [None; 2]);
+    }
 
     /// The body files whose clips the game plays: every clip carries its foot locks
     /// (`tools/characters/markers.ts`; a re-export without them leaves every foot free), a
