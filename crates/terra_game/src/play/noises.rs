@@ -124,9 +124,11 @@ fn step(
             .last
             .map_or(0.0, |last| (here - last).reject_from(up).length());
         feet.last = Some(here);
-        // Off the ground, or carried somewhere at once (loading, waking at a bed).
+        // Off the ground or on the wing, or carried somewhere at once (loading, waking at a
+        // bed). A bird in flight stepped every tenth of a metre of its way: 2,169 of the
+        // 3,540 creatures' steps heard within 18 m in a three minute walk (2026-11-10).
         let grounded = player.is_none_or(|(motion, downed)| motion.on_ground && !downed)
-            && creature.is_none_or(Creature::alive);
+            && creature.is_none_or(|c| c.alive() && !matches!(c.state, State::Fly { .. }));
         if !grounded || moved > 4.0 {
             feet.walked = 0.0;
             continue;
@@ -171,24 +173,27 @@ fn creatures_heard(
 ) {
     let dice = dice.get_or_insert_with(|| terra_gen::Seed(23).derive("calls").rng());
     for (entity, creature, at, was) in &mut creatures {
-        // Running from someone, or going for them, or up a tree out of reach.
-        let alarmed = matches!(
-            creature.state,
-            State::Flee(_) | State::Chase | State::Attack(_) | State::Climb { .. }
-        );
+        // Making off from a fright (running, put up, up a trunk), or going for someone. Not
+        // a bird changing perch: crying at every takeoff, a wood's crows were heard 115
+        // times a minute and its chaffinches' alarm 65 (heard.ts, 2026-11-10).
+        let alarmed =
+            creature.frightened() || matches!(creature.state, State::Chase | State::Attack(_));
         let flying = matches!(creature.state, State::Fly { .. });
+        let about = bestiary.get(creature.species);
         let Some(mut was) = was else {
+            // Its first call any time within its longest wait, so a place's animals do not
+            // all call as a walker comes to them.
+            let calls_in = dice.range(0.0, about.calls_s.map_or(1.0, |(_, most)| most));
             commands.entity(entity).try_insert(Was {
                 health: creature.health,
                 alarmed,
                 flying,
                 through: -1.0,
-                calls_in: dice.range(0.0, 20.0),
+                calls_in,
             });
             continue;
         };
         let here = at.translation() + at.translation().normalize_or(Vec3::Y) * 0.5;
-        let about = bestiary.get(creature.species);
         if creature.health < was.health - 0.01 {
             let cue = if creature.alive() {
                 Cue::Hit
@@ -224,9 +229,9 @@ fn creatures_heard(
         let recorded = |set: &Option<String>| set.as_deref().and_then(voiced).map(Cue::Voiced);
         let cry = recorded(&about.cry).or(voice);
         let call = recorded(&about.call).or(cry);
-        // A call as it takes fright, and wings beating as it takes off.
+        // A call as it takes fright, and wings beating whenever it takes off.
         // One that warns is heard in its warning, not here.
-        let fled = (alarmed && !was.alarmed && about.warns.is_none()) || (flying && !was.flying);
+        let fled = alarmed && !was.alarmed && about.warns.is_none();
         if fled
             && creature.alive()
             && let Some(cue) = cry

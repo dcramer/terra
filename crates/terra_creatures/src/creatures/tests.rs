@@ -10,6 +10,7 @@ use terra_walker::walker::Motion;
 use terra_world::spatial::SpatialHash;
 use terra_world::tick::Ticks;
 
+mod fright;
 mod level;
 
 #[test]
@@ -31,6 +32,7 @@ fn a_creature_about_its_day_is_unaware_and_one_that_has_noticed_is_not() {
         side: Vec3::X,
         bolt: Vec3::ZERO,
         pace: Pace::Startled,
+        put_up: false,
         progress: Default::default(),
         dice: own_dice(Seed(1), Vec3::ZERO),
         luck: Vec2::ZERO,
@@ -79,6 +81,7 @@ fn spider(world: &mut World, at: Vec3) -> Entity {
                 side: Vec3::X,
                 bolt: Vec3::ZERO,
                 pace: Pace::Startled,
+                put_up: false,
                 progress: Default::default(),
                 dice: own_dice(Seed(1), at),
                 luck: luck(Seed(1), at),

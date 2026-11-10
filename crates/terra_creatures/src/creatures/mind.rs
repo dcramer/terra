@@ -268,7 +268,7 @@ fn aloft(
         State::Roost { .. } if flees_within_m.is_some_and(|m| s.near(m * ROOSTING_LETS)) => {
             let away = s.away.unwrap_or(creature.facing);
             (creature.bolt, creature.pace) = (away, Pace::Startled);
-            refuge(about, s.here, away, around, dice).unwrap_or(State::Roost {
+            refuge(creature, about, s.here, away, around, dice).unwrap_or(State::Roost {
                 at: s.here,
                 left: 2.0,
             })
@@ -312,6 +312,7 @@ fn aloft(
 /// Come down where it flew to: in a crown it sits a while among the leaves, on the ground
 /// or the water it is home there.
 fn landed(creature: &mut Creature, to: Vec3, around: &Surroundings, dice: &mut Rng) -> State {
+    creature.put_up = false;
     let ground = around.ground(to);
     creature.home = ground;
     // Over the ground or the water's surface, whichever is higher.
@@ -368,7 +369,7 @@ fn shy(
                 creature.hurt = false;
                 creature.bolt = s.away.unwrap_or(creature.bolt);
                 let away = s.away.unwrap_or(creature.facing);
-                refuge(about, s.here, away, around, dice).unwrap_or(State::Flee(flees_s))
+                refuge(creature, about, s.here, away, around, dice).unwrap_or(State::Flee(flees_s))
             } else {
                 State::Flee(left - s.dt)
             }
@@ -437,7 +438,7 @@ fn shy(
             creature.hurt = false;
             creature.bolt = s.away.unwrap_or(Vec3::ZERO);
             let away = s.away.unwrap_or(creature.facing);
-            refuge(about, s.here, away, around, dice).unwrap_or(State::Flee(flees_s))
+            refuge(creature, about, s.here, away, around, dice).unwrap_or(State::Flee(flees_s))
         }
         _ => return None,
     })
@@ -700,8 +701,22 @@ fn settle(
 }
 
 /// Where a shy creature goes when it is startled, by its kind's refuge: up the nearest trunk,
-/// away on the wing, or none, for one that runs.
+/// away on the wing, or none, for one that runs. One that takes wing so was put up
+/// (`Creature::frightened`), until it lands.
 fn refuge(
+    creature: &mut Creature,
+    about: &SpeciesDef,
+    here: Vec3,
+    away: Vec3,
+    around: &Surroundings,
+    dice: &mut Rng,
+) -> Option<State> {
+    let to = refuge_of(about, here, away, around, dice);
+    creature.put_up = matches!(to, Some(State::Fly { .. }));
+    to
+}
+
+fn refuge_of(
     about: &SpeciesDef,
     here: Vec3,
     away: Vec3,

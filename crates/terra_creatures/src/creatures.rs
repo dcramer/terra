@@ -150,6 +150,9 @@ pub struct Creature {
     bolt: Vec3,
     /// Why it is on the move, which sets how fast (`gait`).
     pace: Pace,
+    /// Whether the flight it is on is from a fright (`mind`'s refuge) and not one of its own
+    /// accord, from perch to perch: its pace does not say, being left as it last was.
+    put_up: bool,
     /// Whether it is getting on its way or stuck (`ground::step`).
     progress: ground::Progress,
     /// What it rolls when it decides (`mind`), its own from its home (`own_dice`): one stream
@@ -190,6 +193,19 @@ impl Creature {
 
     pub fn alive(&self) -> bool {
         !matches!(self.state, State::Dead(_))
+    }
+
+    /// Whether it is making off from a fright: running or walking off from someone, on the
+    /// wing because it was put up, or going up a trunk. Not a bird changing perch, one calmly
+    /// crossing someone's way (`dash` at `Pace::Calm`) or a climber coming down again: a cry
+    /// of alarm belongs to these and to no other going.
+    pub fn frightened(&self) -> bool {
+        match self.state {
+            State::Flee(_) => self.pace != Pace::Calm,
+            State::Fly { .. } => self.put_up,
+            State::Climb { height, .. } => height > 0.0,
+            _ => false,
+        }
     }
 
     /// The clip it is part way through, and how many seconds, while it deals a blow, warns
@@ -248,7 +264,7 @@ impl Creature {
 
     /// On the wing from one place to another, calmly.
     pub fn fly(&mut self, from: Vec3, to: Vec3) {
-        self.pace = Pace::Calm;
+        (self.pace, self.put_up) = (Pace::Calm, false);
         self.state = State::Fly {
             from,
             to,
@@ -276,6 +292,7 @@ impl Creature {
             side: Vec3::X,
             bolt: Vec3::ZERO,
             pace: Pace::Startled,
+            put_up: false,
             progress: Default::default(),
             dice: own_dice(Seed(1), home),
             luck: luck(Seed(1), home),
@@ -548,6 +565,7 @@ pub fn spawn(
                 side: Vec3::X,
                 bolt: Vec3::ZERO,
                 pace: Pace::Startled,
+                put_up: false,
                 progress: Default::default(),
                 dice: own_dice(planet.seed(), feet),
                 luck: own,
