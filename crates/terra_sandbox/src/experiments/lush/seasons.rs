@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn crowns_that_come_after_the_maps_are_painted_are_thinned_for_bare_oaks() {
         let years = terra_world::data::read(terra_world::climate::YEARS_FILE);
-        let fields = ClimateFields::for_tests(years);
+        let fields = ClimateFields::for_tests_of(years, 2000.0, terra_gen::Seed(1));
         let (clock, on) = a_bare_day(&fields);
         let mut app = App::new();
         app.insert_resource(fields)
