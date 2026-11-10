@@ -630,11 +630,7 @@ fn whole_view(bench: &Bench, degrees: f32) -> Transform {
 
 /// The camera `distance` from `target`, `degrees` round from the models' front.
 fn around(bench: &Bench, target: Vec3, degrees: f32, distance: f32, height: f32) -> Transform {
-    let side = bench.up.cross(bench.front);
-    let turn = degrees.to_radians();
-    let out = (bench.front * libm::cosf(turn) + side * libm::sinf(turn)).normalize();
-    Transform::from_translation(target + out * distance + bench.up * height)
-        .looking_at(target, bench.up)
+    bounds::orbit((bench.up, bench.front), target, degrees, distance, height)
 }
 
 /// The camera for a view from `degrees`: with a `--focus`, close on that part of the first

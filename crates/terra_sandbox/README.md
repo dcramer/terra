@@ -57,7 +57,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--joints` | In the workbench: print where each model's joints and sockets stand once shaped (`JOINTS` lines), to compare with the export's `SOCKETS` (`tools/characters/sockets.py`) |
 | `--attach <file>[@<socket>]` | In the workbench: any look, on a socket such as `models/x.glb@socket.back` (on a hand, held as play holds it, its carry pose from its file), or without one as its file says. Repeatable |
 | `--focus <name>` | In the workbench: look closely at one part, such as `socket.hand.R`, and whole at what it holds; a model without that part (`--focus whole`, a part's model) is itself looked at closely, whole. On the first model |
-| `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments. In `icons`: also save the baked icons laid out, `<prefix>.png` and `<prefix>-half.png` |
+| `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments. The camera is stood for each clip by where the models' joints are at its moments, so a body of any size is whole in every cell wherever the clip takes it (a `--focus` keeps its close view). In `icons`: also save the baked icons laid out, `<prefix>.png` and `<prefix>-half.png` |
 | `--sides <degrees,…>` | In the workbench sheet: where to look from, round from the front; 30,120,210,300 by default |
 | `--moments <fraction,…>` | In the workbench sheet: how far through each clip; 0.4 by default |
 

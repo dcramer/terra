@@ -1,7 +1,10 @@
 //! The workbench's contact sheet: each clip, held at each `--moments` fraction, seen
 //! from each of `--sides`, as one picture per clip, `<prefix>-<clip>.png`. Rows are the
 //! sides, top to bottom; columns are the moments, left to right; side by side models
-//! share each picture. Then the sandbox exits.
+//! share each picture. Each clip is first measured at its moments, and its camera stands
+//! to hold every model's joints at all of them, so a body of any size is whole in every
+//! cell wherever its clip takes it (a `--focus` keeps its close view). Then the sandbox
+//! exits.
 
 use std::path::PathBuf;
 use terra_world::planet::MainCamera;
@@ -15,7 +18,7 @@ use bevy::{
     },
 };
 
-use super::{Bench, pose, view};
+use super::{Bench, bounds, pose, view};
 use terra_world::shell::Options;
 
 /// Directions to look from, in degrees round from the front, and fractions of a clip,
@@ -34,7 +37,17 @@ pub(super) struct Sheet {
     waiting: bool,
     /// This clip's pictures so far.
     cells: Vec<Cell>,
+    /// How many of this clip's moments have been measured, and where every model's joints
+    /// were at each: the camera stands to hold them all (`bounds::fit`), so a body its
+    /// clip carries off its feet is whole in every cell.
+    measured: usize,
+    reach: Vec<Vec3>,
 }
+
+/// Frames a pose is held before its joints are measured.
+const SETTLE_REACH: u32 = 4;
+/// The flesh round a joint, as a share of the tallest model's height.
+const FLESH: f32 = 0.12;
 
 /// One picture, cut to the middle and halved.
 struct Cell {
@@ -54,7 +67,7 @@ pub fn capture(
     picture: Option<Res<terra_world::shell::Picture>>,
     mut sheet: ResMut<Sheet>,
     mut players: Query<&mut AnimationPlayer>,
-    mut camera: Query<&mut Transform, With<MainCamera>>,
+    mut camera: Query<(&mut Transform, &Projection), With<MainCamera>>,
     children: Query<&Children>,
     names: Query<&Name>,
     (globals, boxes): (
@@ -94,6 +107,8 @@ pub fn capture(
         let path = PathBuf::from(format!("{}-{clip}.png", prefix.display()));
         save(&sheet.cells, moments.len(), &path);
         sheet.cells.clear();
+        sheet.measured = 0;
+        sheet.reach.clear();
     }
     if sheet.step >= bench.clips.len() * per_clip {
         exit.write(AppExit::Success);
@@ -105,19 +120,54 @@ pub fn capture(
         sides[within / moments.len()],
         moments[within % moments.len()],
     );
+    // First where the clip takes each body, a moment at a time.
+    if options.focus.is_none() && sheet.measured < moments.len() {
+        if sheet.waited == 0 {
+            pose(
+                &mut bench,
+                &clip,
+                Some(moments[sheet.measured]),
+                &mut players,
+            );
+        }
+        sheet.waited += 1;
+        if sheet.waited >= SETTLE_REACH {
+            sheet.waited = 0;
+            sheet.measured += 1;
+            reach(&bench, &children, (&globals, &boxes), &mut sheet.reach);
+        }
+        return;
+    }
     if sheet.waited == 0 {
         pose(&mut bench, &clip, Some(moment), &mut players);
     }
     // Every frame, so a camera on a moving part follows it into the pose.
-    if let Ok(mut transform) = camera.single_mut() {
-        *transform = view(
-            &bench,
-            options.focus.as_deref(),
+    if let Ok((mut transform, projection)) = camera.single_mut() {
+        // The frame's half height and half width, the width a cell's unless it is whole.
+        let (fov, aspect) = match projection {
+            Projection::Perspective(lens) => (lens.fov, lens.aspect_ratio),
+            _ => (45f32.to_radians(), 16.0 / 9.0),
+        };
+        let half = libm::tanf(fov * 0.5);
+        let across = if bench.wide { aspect } else { aspect.min(0.75) };
+        let fitted = bounds::fit(
+            (bench.up, bench.front),
+            &sheet.reach,
+            FLESH * bench.tallest,
             side,
-            &children,
-            &names,
-            (&globals, &boxes),
+            (half * across, half),
+            (super::CLOSEST_M, 0.7),
         );
+        *transform = fitted.unwrap_or_else(|| {
+            view(
+                &bench,
+                options.focus.as_deref(),
+                side,
+                &children,
+                &names,
+                (&globals, &boxes),
+            )
+        });
     }
     sheet.waited += 1;
     if sheet.waited < SETTLE_VIEW {
@@ -145,6 +195,37 @@ pub fn capture(
                 }
             },
         );
+}
+
+/// Adds to `reach` where every model is now: its joints, a model without a skeleton's
+/// boxes, and a row with props' ends and top.
+fn reach(
+    bench: &Bench,
+    children: &Query<&Children>,
+    (globals, boxes): (
+        &Query<&GlobalTransform>,
+        &Query<(&bevy::camera::primitives::Aabb, &GlobalTransform)>,
+    ),
+    reach: &mut Vec<Vec3>,
+) {
+    for model in &bench.models {
+        for part in children.iter_descendants(model.root) {
+            match (model.player, boxes.get(part)) {
+                // A skinned mesh's box is its rest pose's, wherever its joints have gone.
+                (None, Ok((bounds, at))) => reach.extend(bounds::corners(bounds, at)),
+                _ => reach.extend(globals.get(part).map(GlobalTransform::translation)),
+            }
+        }
+    }
+    if bench.wide {
+        let side = bench.up.cross(bench.front) * bench.length * 0.5;
+        for end in [side, -side] {
+            reach.extend([
+                bench.stand + end,
+                bench.stand + end + bench.up * bench.tallest,
+            ]);
+        }
+    }
 }
 
 /// The middle of a picture, as wide as three quarters of its height, or the `whole` of it,
