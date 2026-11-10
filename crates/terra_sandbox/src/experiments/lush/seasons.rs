@@ -62,18 +62,16 @@ fn follow_leaves(
             return;
         }
         let up = occluders.up;
-        let broadleaf = occluders
-            .crowns
-            .iter()
-            .map(|crown| {
-                feet.iter()
-                    .min_by(|a, b| {
-                        let across = |foot: Vec3| (crown.middle - foot).reject_from(up).length();
-                        across(a.0).total_cmp(&across(b.0))
-                    })
-                    .is_some_and(|(_, oak)| *oak)
-            })
-            .collect();
+        // Over every core: each crown against every foot, one after another, was a frame
+        // of the loading screen standing still at each world entered (portal-freeze j3).
+        let broadleaf = terra_gen::par::map(&occluders.crowns, |crown| {
+            feet.iter()
+                .min_by(|a, b| {
+                    let across = |foot: Vec3| (crown.middle - foot).reject_from(up).length();
+                    across(a.0).total_cmp(&across(b.0))
+                })
+                .is_some_and(|(_, oak)| *oak)
+        });
         commands.insert_resource(Crowns {
             planted: occluders.crowns.clone(),
             broadleaf,
