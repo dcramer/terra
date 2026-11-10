@@ -20,7 +20,7 @@ quiver painted models/gear/quiver.glb 01ea3e44863bd4a6 -
 small_pack painted models/gear/small_pack.glb 702531998f9d64ad -
 spear painted models/held/spear.glb b9d83cef7625178d -
 stone painted - - -
-stone_axe painted models/held/stone_axe.glb 622673294037f023 -
+stone_axe painted models/held/stone_axe.glb ba4fb6f7bb1c38c1 -
 stone_pickaxe painted models/held/stone_pickaxe.glb 7f6bffa4da4b234d -
 torch painted models/held/torch.glb e97bb57ead0e2e7e -
 trousers painted models/gear/trousers.glb d9bb99b6a3d05ed4 -
