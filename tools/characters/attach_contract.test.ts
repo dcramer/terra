@@ -80,6 +80,27 @@ test("a hammer's face and a pickaxe's longer pick lead toward -Z", () => {
   assert.ok(Math.abs(workingReach(look("held/hammer"), "-Z")! - reach.minusZ) < 0.002, "its face point is its -Z end");
 });
 
+test("a head_scale narrows the head across the handle by that much and leaves the handle its haft", () => {
+  for (const name of ["stone_pickaxe", "iron_pickaxe"]) {
+    const d = dataOf(`held/${name}`) as { source: string; length: number; haft: number; head_scale: number };
+    const across = (pts: V3[]) => {
+      const w = (k: number) => Math.max(...pts.map((p) => p[k])) - Math.min(...pts.map((p) => p[k]));
+      return { wide: Math.max(w(0), w(2)), tall: w(1) };
+    };
+    const source = across(readLook(join(ROOT, "assets", "models", d.source), name).points);
+    const made = look(`held/${name}`).points;
+    // The source's widest way across, at the look's length, times the scale: known from the
+    // source and the data alone.
+    const want = (source.wide * d.length * d.head_scale) / source.tall;
+    assert.ok(Math.abs(across(made).wide - want) < 0.005, `${name}: ${across(made).wide.toFixed(3)} m across, wanted ${want.toFixed(3)}`);
+    assert.ok(d.head_scale < 1 && across(made).tall > d.length - 0.005, `${name}: its length is kept`);
+    // Its handle round the grip is the haft's, not narrowed again (its vertices' rings there,
+    // which a tapering handle puts a few millimetres inside the section at the grip itself).
+    const grip = across(made.filter((p) => Math.abs(p[1]) < 0.05)).wide;
+    assert.ok(grip > d.haft * 0.85 && grip < d.haft + 0.004, `${name}: ${grip.toFixed(3)} m across at the grip, its haft ${d.haft}`);
+  }
+});
+
 test("a hung basket passes once it says so, and fails standing up or unmarked", () => {
   const basket = look("held/basket");
   assert.deepEqual(rules(basket), []);

@@ -170,6 +170,7 @@ Equipment, packs, tools, stations and icons.
 | [D566](decisions/D566.md) | Assembled items' parts join on one line, made in the finished frame and never scaled; the kinds are data in assets/data/kinds | Tech | Agent | Decided | Each part of an assembled item (D565) is made in the… |
 | [D602](decisions/D602.md) | The starting kit's clothes are Quaternius's Ranger outfit | Design | Developers | Decided | The v0 starting kit's clothes are Quaternius's Ranger… |
 | [D653](decisions/D653.md) | The one-handed tool axe is a hatchet, its own kind; the long axe's envelope is kept as the axe kind | Tech | Agent | Decided | The bar's one-handed axe is a hatchet… |
+| [D656](decisions/D656.md) | Today's pickaxe in hand is a one-handed pick, 0.55 m, its head 0.36 m across, until the two-handed pickaxe's takes are built | Tech | Agent | Decided | The stone and iron pickaxes' looks are a one-handed… |
 
 ## Lore, magic, combat and growth
 

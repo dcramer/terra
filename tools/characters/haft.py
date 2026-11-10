@@ -33,10 +33,13 @@ def line_at(ob, z):
     return ((min(c.x for c in cs) + max(c.x for c in cs)) / 2, (min(c.y for c in cs) + max(c.y for c in cs)) / 2)
 
 
-def thin_haft(ob, haft, grip=0.0, about=(0.0, 0.0)):
+def thin_haft(ob, haft, grip=0.0, about=(0.0, 0.0), head_scale=1.0):
     """The handle, running up +Z (Blender's), thinned about its line through `about` (x, y) to
-    `haft` metres across its widest at the height `grip`; full below the blend, the source's at
-    the head. Returns the width it found at the grip (m) and where its head starts."""
+    `haft` metres across its widest at the height `grip` (None: left as it is); full below the
+    blend, the source's at the head. `head_scale` narrows the head across the handle: everything
+    from where the head starts is scaled by it about the handle's line (its height kept), and the
+    handle's blend ends at that scale, so the haft meets the eye without a step. Returns the
+    width it found at the grip (m) and where its head starts."""
     vs = ob.data.vertices
 
     def width(z):
@@ -47,17 +50,23 @@ def thin_haft(ob, haft, grip=0.0, about=(0.0, 0.0)):
     top = max(v.co.z for v in vs)
     start = int(round(grip * 100))
     head = next((z / 100 for z in range(start + 1, int(top * 100)) if width(z / 100) > HEAD_RATIO * across), top)
-    k = haft / across
+    k = 1.0 if haft is None else haft / across
     ax, ay = about
     for v in vs:
         if v.co.z >= head:
+            f = head_scale
+        elif v.co.z <= head - HAFT_BLEND_M:
+            f = k
+        else:
+            f = k + (head_scale - k) * (v.co.z - head + HAFT_BLEND_M) / HAFT_BLEND_M
+        if f == 1.0:
             continue
-        f = k if v.co.z <= head - HAFT_BLEND_M else k + (1 - k) * (v.co.z - head + HAFT_BLEND_M) / HAFT_BLEND_M
         if about == (0.0, 0.0):
             v.co.x *= f
             v.co.y *= f
         else:
             v.co.x = ax + (v.co.x - ax) * f
             v.co.y = ay + (v.co.y - ay) * f
-    print("HAFT", ob.name, f"{across * 100:.1f} cm across at the grip -> {haft * 100:.1f}, its head from {head:.2f} m")
+    print("HAFT", ob.name, f"{across * 100:.1f} cm across at the grip -> {across * k * 100:.1f}, its head from {head:.2f} m",
+          f"scaled {head_scale} across" if head_scale != 1.0 else "")
     return across, head

@@ -23,6 +23,9 @@ item is adding a file, never editing this script. Its "fit" says how the look is
   whose handle is too thick for its length (a chunky stylised tool) has it thinned about its
   line to that thickness at the grip, swelling back to the source's own under its head, as a
   real haft swells into the eye (a pickaxe's is about 4 cm; haft.py, shared with the prop).
+  "head_scale": a source whose head is too wide for its length (the free pickaxe's, 0.86 of
+  its length across) has everything from where its head starts scaled by that across the
+  handle, about the handle's line, its height and the handle below untouched.
 - "points": a textured model of ours (tools/props, "into": "tools"), kept in its own materials
   and maps: "grip", the point held at the middle of the fist; "toward", a point its handle runs
   toward at its working end (the look's +Y); "out", the direction that becomes the look's +X,
@@ -279,8 +282,8 @@ for item in look.args():
     # "The grip across the handle"); then turned "turn" degrees about the handle (Blender's +Z
     # is glTF's +Y, and a turn about it is the same turn there), so a one-sided head faces -Z.
     ob.data.transform(Matrix.Rotation(math.radians(d.get("turn", 0)), 4, "Z") @ Matrix.Translation(-handle_middle(ob)))
-    if "haft" in d:
-        thin_haft(ob, d["haft"])
+    if "haft" in d or "head_scale" in d:
+        thin_haft(ob, d.get("haft"), head_scale=d.get("head_scale", 1.0))
     for slot in ob.material_slots:
         if slot.material and slot.material.use_nodes and not maps:
             bsdf = slot.material.node_tree.nodes["Principled BSDF"]

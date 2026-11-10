@@ -58,13 +58,13 @@
     "open": [{ "owner": "technical", "why": "a pick's use set (holding.md's count, the tools' three), keyed for the reference" }]
   },
   "reference": {
-    "item": { "value": "iron_pickaxe", "source": "today's look, art/held/iron_pickaxe.json" },
-    "length_m": { "value": 0.9, "source": "art/held/iron_pickaxe.json length; the look's bounds measured 0.900" },
+    "item": { "value": "none in the game", "source": "the iron pickaxe's look was this kind's reference until 2026-11-09, when it became a one-handed pick of 0.55 m, as the game swings it today (D656, art/held/iron_pickaxe.json); the two-handed pickaxe of D567 has no item until its takes are keyed" },
+    "length_m": { "value": 0.9, "source": "the iron pickaxe's look as it was, a fitted length of 0.9; its bounds measured 0.900" },
     "mass_kg": { "value": 1.86, "source": "the head and a 0.04 m ash haft 0.9 m long (670 kg/m^3, recalled), 0.76 kg; a stand-in until its parts are weighed" },
     "head_mass_kg": { "value": 1.1, "source": "a 2.5 lb pick head (recalled)" },
     "balance_m": { "value": 0.613, "source": "computed from the head at 0.86 m and the haft's middle, from the grip" },
     "inertia_kgm2": { "value": 0.823, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
-    "grip_diameter_m": { "value": 0.04, "source": "art/held/iron_pickaxe.json haft (0.04: the source's 8.3 cm handle thinned to a real pick's)" }
+    "grip_diameter_m": { "value": 0.04, "source": "art/held/iron_pickaxe.json haft, the same in today's short look (0.04:the source's 8.3 cm handle thinned to a real pick's)" }
   },
   "envelope": {
     "inertia_kgm2": { "value": [0.6223, 1.139], "source": "D459's tempo clamp 0.85 to 1.15: I_ref/1.15^2 to I_ref/0.85^2" },
