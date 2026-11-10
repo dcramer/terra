@@ -599,3 +599,51 @@ fn rise_by_part() {
     time("horns", &|p| range.horns(p, 1.0, 1.0, HORNS_ALONE).0);
     time("face_shaping", &|p| range.face_shaping(p).0);
 }
+
+#[test]
+fn only_ground_standing_high_over_the_ranges_floor_is_stepped_into_faces() {
+    // The rim of a low cirque at a range's edge was stepped like a high wall
+    // (`FACES_STAND_M`): a range's outer ground under the first distance over the floor is as
+    // it is without faces, and the walls high over it are still stepped.
+    let range = Range::new(Mountains::START, Seed(1));
+    let plain = Range::new(
+        Mountains {
+            faces: &[],
+            ..Mountains::START
+        },
+        Seed(1),
+    );
+    let (mut low, mut high, mut stepped) = (0, 0, 0);
+    for d in directions(40_000) {
+        let point = d * RADIUS;
+        let inside = range.inside(point);
+        if inside <= 0.0 {
+            continue;
+        }
+        // Steep enough broadly that a wall here is stepped where the faces stand.
+        let fall = range.gradient(point, FACES_SLOPE_M);
+        if (fall - d * fall.dot(d)).length() < 0.7 {
+            continue;
+        }
+        let floor = Mountains::START.base_m * smoothstep(0.0, FLOOR_RISES, inside);
+        let standing = range.unribbed(point) - floor;
+        let step = range.rise(d, RADIUS).height_m - plain.rise(d, RADIUS).height_m;
+        if standing < FACES_STAND_M.0 && inside < FACES_INSIDE.0 {
+            low += 1;
+            assert_eq!(
+                step, 0.0,
+                "stepped {step} m standing {standing} m at {point}"
+            );
+        } else if standing > FACES_STAND_M.1 {
+            high += 1;
+            if step.abs() > 1.0 {
+                stepped += 1;
+            }
+        }
+    }
+    assert!(low > 20, "only {low} steep places stand low");
+    assert!(
+        stepped * 4 > high && high > 100,
+        "{stepped} of {high} high walls stepped"
+    );
+}

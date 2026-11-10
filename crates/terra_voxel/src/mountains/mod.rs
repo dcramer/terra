@@ -24,7 +24,7 @@ mod faces;
 mod horns;
 mod massif;
 pub use faces::Faces;
-use faces::RIB_FADE;
+use faces::{FACES_INSIDE, FACES_STAND_M, RIB_FADE};
 pub(crate) use massif::smooth_max;
 
 /// A world's mountains, as its theme's numbers.
@@ -708,10 +708,19 @@ impl Range {
         let up = direction;
         let point = direction * radius_m;
         let (ridged, upper, foot, ribs) = self.ridged_upper_and_foot(point);
-        if self.inside(point) <= 0.0 {
+        let inside = self.inside(point);
+        if inside <= 0.0 {
             return Rise::default();
         }
         let m = &self.mountains;
+        // How far the ground here stands over the range's floor, for the faces
+        // (`FACES_STAND_M`).
+        let standing = ridged - m.base_m * smoothstep(0.0, FLOOR_RISES, inside);
+        let high = smoothstep(FACES_STAND_M.0, FACES_STAND_M.1, standing).max(smoothstep(
+            FACES_INSIDE.0,
+            FACES_INSIDE.1,
+            inside,
+        ));
         if m.gullies_m <= 0.0 {
             return Rise {
                 height_m: ridged + ribs,
@@ -811,7 +820,7 @@ impl Range {
             let rise = broad();
             (rise - up * rise.dot(up)).length()
         };
-        let step = self.stepped(point, height_m, broad, (upper, rib));
+        let step = self.stepped(point, height_m, broad, (upper * high, rib));
         let height_m = height_m + step + ribs;
         Rise {
             height_m,

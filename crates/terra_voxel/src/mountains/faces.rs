@@ -98,6 +98,22 @@ const STEPPED_MOST: f32 = 0.9;
 pub(super) const RIB_FADE: (f32, f32) = (0.45, 0.95);
 /// Within so many metres of a kept spot no face is stepped, whole past the second.
 const FACES_KEPT_M: (f32, f32) = (700.0, 1500.0);
+/// Over a range's outer part, as far into it as `FACES_INSIDE` (`Range::inside`, none of the
+/// rule under the first to whole past the second), a wall is stepped into faces (`faces`) only
+/// where the ground stands so many metres over the range's own floor, none under the first to
+/// whole past the second: cliff bands belong to the high walls ice cut, not to a range's low
+/// outer ground. Without it every slope past the cliff angle with the ridged sum near its
+/// crests was stepped, however low it stood: the rim of a cirque cut 200 m under the floor at
+/// a range's edge (inside 0.13), standing no more than 100 m over it, was a staircase of eight
+/// 60 degree risers over 27 degree ledges from a lake's shore ("look at this wack ass hill ...
+/// the geography doesnt look realistic", the developer, 2026-11-09). Both grow over hundreds of
+/// metres, never across a ledge faster than a ledge falls. In a range's heart every wall
+/// stands as it did: by height alone, the walls between its lowered tops and round its
+/// cirques, under 450 m over the floor, lost their ledges
+/// (`faces_stand_sheer_over_ledges_that_still_drain`). The numbers are a judgement between
+/// that rim and those walls, not measured against a real range.
+pub(super) const FACES_STAND_M: (f32, f32) = (150.0, 450.0);
+pub(super) const FACES_INSIDE: (f32, f32) = (0.2, 0.5);
 
 impl Range {
     /// How much a wall's faces (`Mountains::faces`) raise or lower ground of this height and
