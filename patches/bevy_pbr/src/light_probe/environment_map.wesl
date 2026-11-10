@@ -7,6 +7,7 @@ import package::render::mesh_view_types::{
 import package::render::pbr_lighting::{F_Schlick_vec, LightingInput, LayerLightingInput, LAYER_BASE, LAYER_CLEARCOAT};
 import package::render::clustered_forward::ClusterableObjectIndexRanges;
 import bevy_render::maths::quat_rotate;
+@if(IRRADIANCE_VOLUME) import package::light_probe::irradiance_volume::irradiance_volume_light_held;
 
 /// The maximum representable value in a 32-bit floating point number.
 const FLOAT_MAX: f32 = 3.40282347e+38;
@@ -93,6 +94,45 @@ fn compute_cubemap_sample_dir(
     return sample_dir;
 }
 
+// Terra's patch (D485, D336): how much of the view's environment map, the open sky's, a
+// fragment mirrors toward `direction`, 0 to 1: the light the irradiance volumes holding it
+// give from that side against the open sky's diffuse light from it, mixed in by the volumes'
+// weight, so 1 outside every volume and through a volume's falloff. Bevy 0.20 occludes the
+// sky's diffuse light by a volume and not its reflection, so leather, skin and stone under a
+// canopy or in a den mirrored the whole open sky. The reflection's occlusion is derived from
+// the diffuse light's visibility, as Frostbite's specular occlusion is (Lagarde and de
+// Rousiers, "Moving Frostbite to Physically Based Rendering 3.0", 2014, section 4.10.2) and
+// as Unreal's sky light occlusion dims its sky's reflections with its diffuse light. Per
+// fragment, so it does not change with where the camera stands. A reflection probe's own
+// map (a room's) is not scaled: it holds what the room sees.
+@if(IRRADIANCE_VOLUME && MULTIPLE_LIGHT_PROBES_IN_ARRAY)
+fn sky_reflection_seen(
+    world_position: vec3<f32>,
+    direction: vec3<f32>,
+    clusterable_object_index_ranges: ptr<function, ClusterableObjectIndexRanges>,
+) -> f32 {
+    if (light_probes.view_cubemap_index < 0) {
+        return 1.0;
+    }
+    let held = irradiance_volume_light_held(world_position, direction, clusterable_object_index_ranges);
+    let weight = min(held.w, 1.0);
+    if (weight <= 0.0) {
+        return 1.0;
+    }
+    var sample_dir = quat_rotate(light_probes.view_rotation, direction);
+    sample_dir.z = -sample_dir.z;
+    let luma = vec3<f32>(0.2126, 0.7152, 0.0722);
+    let open = dot(textureSampleLevel(
+        bindings::diffuse_environment_maps[light_probes.view_cubemap_index],
+        bindings::environment_map_sampler,
+        sample_dir,
+        0.0).rgb, luma) * light_probes.intensity_for_view;
+    if (open <= 1.0e-6) {
+        return 1.0;
+    }
+    return mix(1.0, saturate(dot(held.rgb, luma) / open), weight);
+}
+
 // Define two versions of this function, one for the case in which there are
 // multiple light probes and one for the case in which only the view light probe
 // is present.
@@ -128,6 +168,8 @@ fn compute_radiances(
     while (true) {
         var query_result = light_probe_iterator_next(&iterator);
         var view_rotation = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        // Terra's patch (D485, D336): the share of the view's map this fragment mirrors.
+        var sky_seen = 1.0;
 
         // If we reached the end of the light probe list, and we didn't find
         // enough reflection probes to reach a weight of 1.0, use the view
@@ -150,6 +192,12 @@ fn compute_radiances(
                 query_result.flags = 0u;
             }
             query_result.weight = 1.0 - total_weight;
+            @if(IRRADIANCE_VOLUME)
+            sky_seen = sky_reflection_seen(
+                world_position,
+                radiance_sample_direction(N, R, roughness),
+                clusterable_object_index_ranges,
+            );
         }
 
         // If we reached the end, we're done.
@@ -200,7 +248,7 @@ fn compute_radiances(
                 bindings::specular_environment_maps[query_result.texture_index],
                 bindings::environment_map_sampler,
                 radiance_sample_dir,
-                radiance_level).rgb * query_result.intensity * query_result.weight;
+                radiance_level).rgb * query_result.intensity * query_result.weight * sky_seen;
 
         total_weight += query_result.weight;
     }

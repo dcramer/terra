@@ -276,15 +276,6 @@ fn under_an_overcast_deck_what_faces_up_is_lit_over_what_faces_out() {
 }
 
 #[test]
-fn under_a_closed_canopy_nothing_mirrors_the_sky_and_in_the_open_all_of_it() {
-    assert_eq!(sky_reflected(0.0), 0.0);
-    assert_eq!(sky_reflected(1.0), 1.0);
-    assert!(sky_reflected(0.3) < sky_reflected(0.6));
-    // Small changes as the eye walks are not followed.
-    assert_eq!(sky_reflected(0.401), sky_reflected(0.405));
-}
-
-#[test]
 fn the_sky_is_blue_above_and_the_ground_below() {
     let c = colours();
     let above = toward(&c, Vec3::Y);

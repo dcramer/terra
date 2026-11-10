@@ -72,13 +72,6 @@ fn sky_seen(world: vec3<f32>, N: vec3<f32>, frag_coord: vec4<f32>) -> f32 {
 // sky the point sees, as Frostbite's from ambient occlusion (Lagarde and de Rousiers, "Moving
 // Frostbite to Physically Based Rendering", 2014, section 4.10.2), the visibility here the
 // sky occlusion volume's, as Unreal's sky light occlusion dims its sky's reflections as well.
-@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP)
-fn sky_specular(input: PbrInput, frag_coord: vec4<f32>) -> f32 {
-    let seen = sky_seen(input.world_position.xyz, input.N, frag_coord);
-    let n_dot_v = max(dot(input.N, input.V), 1.0e-4);
-    let roughness = input.material.perceptual_roughness * input.material.perceptual_roughness;
-    return clamp(pow(n_dot_v + seen, exp2(-16.0 * roughness - 1.0)) - 1.0 + seen, 0.0, 1.0);
-}
 
 // What colour a leaf passes light on in, lit through: yellower than it reflects, as
 // chlorophyll passes green and yellow and keeps the red and blue (D247).
@@ -1387,8 +1380,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // 18's judges: "grey-blue and about a stop darker than the fog").
     pbr_input.diffuse_occlusion = mix(pbr_input.diffuse_occlusion, vec3<f32>(1.0), snowed);
     pbr_input.specular_occlusion = mix(pbr_input.specular_occlusion, 1.0, snowed);
+    // Bark and leaves reflect the sky only where they see it (D289, D292): the patch of
+    // bevy_pbr occludes the sky's reflection for every material, per fragment, from the sky
+    // volume's light (`sky_reflection_seen`, environment_map.wesl, D336), as this shader did
+    // for foliage alone.
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) {
-    pbr_input.specular_occlusion *= sky_specular(pbr_input, in.position);
     if wind.bark < 0.5 {
         pbr_input.specular_occlusion *= LEAF_SKY_SHEEN;
     }

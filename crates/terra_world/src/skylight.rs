@@ -95,18 +95,6 @@ const FILTER_FRAMES: u32 = 1;
 /// runs through all of the loading screen, some 300 frames, at no cost to play.
 const FIRST_FILTER_FRAMES: u32 = 30;
 
-/// How much of the open sky's reflection reaches an eye with so much sky open round it, over
-/// it and to its sides (`SkySeen::around_at`, D336), in steps of a fiftieth so the light is
-/// not changed every frame. Under a canopy a shiny thing mirrors leaves and stems, not sky:
-/// the irradiance volume takes away the sky's diffuse light where the crowns hide it (D270),
-/// but not its reflection, so leather, skin and stone under the trees mirrored the whole open sky and read lilac by a low sun. Shipped
-/// engines occlude the reflection so (specular occlusion); this does it once, for where the
-/// eye is, which is right for what stands near it. Beyond the volume the environment map gives
-/// the diffuse light as well, and that dims with it while the eye is under the trees.
-pub fn sky_reflected(open: f32) -> f32 {
-    libm::roundf(open.clamp(0.0, 1.0) * 50.0) / 50.0
-}
-
 pub fn plugin(app: &mut App) {
     app.init_resource::<SkyLight>()
         .init_resource::<OpenSky>()
@@ -191,7 +179,6 @@ fn paint(
     tweaks: Res<Tweaks>,
     mut painted: ResMut<Painted>,
     mut open: ResMut<OpenSky>,
-    sky_seen: crate::sky_occlusion::SkySeen,
     snow: Option<Res<crate::climate::SnowCover>>,
     nightfall: Option<Res<crate::daylight::Nightfall>>,
     dust: Option<Res<crate::air::AirDust>>,
@@ -212,11 +199,12 @@ fn paint(
         return;
     };
     let up = at.translation().normalize_or(Vec3::Y);
-    // Squared: the volume's coarse crowns leave about a third of the sky open round an eye in
-    // the forest where the vantage views measure a few hundredths of it seen (D336); leather
-    // still read lilac with the third.
-    let around = sky_seen.around_at(at.translation());
-    let intensity = light.brightness * sky_reflected(around * around);
+    // The map is the open sky's everywhere, whatever stands over the eye: each fragment's
+    // share of its reflection is worked out where the fragment is, from the irradiance
+    // volume holding it (`sky_reflection_seen`, patches/bevy_pbr's environment_map.wesl,
+    // D336). Scaled by the sky open round the eye, as it was, open land dimmed when the
+    // camera went under the trees.
+    let intensity = light.brightness;
     let rotation = Quat::from_rotation_arc(Vec3::Y, up);
     // Bevy makes the light the shading reads, `EnvironmentMapLight`, from the generated
     // one, and does not follow later changes to its brightness or turn, so they are given
