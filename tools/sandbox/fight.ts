@@ -22,7 +22,7 @@ const MOST_S = 240;
 /// Swings reach about this far, metres; the player closes to it and no nearer.
 const CLOSE_M = 2.4;
 /// When a blow of the troll's may land, in seconds from its beginning as the game says it:
-/// its sweep lands at 1.4 s and its smash at 2.2 s (data/creatures.ron), and the script sees
+/// its sweep lands at 1.4 s and its smash at 1.93 s (data/creatures.ron), and the script sees
 /// each a fifth of a second late; which of the two is coming it cannot tell, as a player
 /// new to the troll cannot. The guard is up through all of it.
 const LANDS_S: [number, number][] = [[0.9, 2.5]];

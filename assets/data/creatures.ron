@@ -120,16 +120,20 @@
         temper: Hostile(
             notices_m: 16.0,
             leash_m: 34.0,
-            attacks_within_m: 3.6,
+            // The smash as its clip stands (tools/characters/blow.ts): the fists land 1.93 s
+            // in, 2.3 m ahead of where it stood; it hits whoever is within 0.8 m of there (the
+            // fists' spread, a fist and a person's width) and begins on one who, standing
+            // still, would be.
+            attacks_within_m: 2.9,
             bite: 34.0,
-            bite_at_s: 2.2,
-            bite_reach_m: 4.4,
-            attack_s: 4.0,
+            bite_at_s: 1.93,
+            bite_reach_m: 3.1,
+            attack_s: 3.9,
         ),
         lives: Den,
         marks: Some("troll"),
-        // Its smash is its temper's own blow: both arms raised over two seconds, the tell,
-        // then brought down. Its sweep reaches wider and lands sooner. It roars once on
+        // Its smash is its temper's own blow: both fists raised over a second and a half, the
+        // tell, then brought down in a lunge. Its sweep reaches wider and lands sooner. It roars once on
         // noticing anyone.
         blows: [
             (clip: "Troll_Sweep", within_m: 4.6, damage: 24.0, lands_at_s: 1.4, reach_m: 5.2, lasts_s: 3.0),
@@ -145,8 +149,8 @@
         heard: [
             (clip: "Troll_Roar", at_s: 0.6, cry: Roar),
             (clip: "Troll_Smash", at_s: 0.3, cry: Grunt),
-            (clip: "Troll_Smash", at_s: 1.9, cry: Whoosh),
-            (clip: "Troll_Smash", at_s: 2.2, cry: Slam),
+            (clip: "Troll_Smash", at_s: 1.57, cry: Whoosh),
+            (clip: "Troll_Smash", at_s: 1.93, cry: Slam),
             (clip: "Troll_Sweep", at_s: 0.2, cry: Grunt),
             (clip: "Troll_Sweep", at_s: 1.1, cry: Whoosh),
             (clip: "Death01", at_s: 0.0, cry: Groan),
