@@ -38,11 +38,11 @@ pub struct Round {
 }
 
 /// Lakes are found on a grid this fine, round the middle, this far across.
-const LAKE_CELL_M: f32 = 10.0;
-const LAKES_ACROSS_M: f32 = 10_000.0;
+pub(crate) const LAKE_CELL_M: f32 = 10.0;
+pub(crate) const LAKES_ACROSS_M: f32 = 10_000.0;
 /// Where the ground is patterned, the pools of its polygons are found on a grid this fine, this
 /// far across: a polygon's sunken middle is a few metres wide.
-const POOL_CELL_M: f32 = 2.0;
+pub(crate) const POOL_CELL_M: f32 = 2.0;
 const POOLS_ACROSS_M: f32 = 1_600.0;
 /// A pool stands as water once it is this deep and this big; shallower hollows are wet ground.
 const POOL_DEEPEST_M: f32 = 0.35;
@@ -50,6 +50,19 @@ const POOL_DEEPEST_M: f32 = 0.35;
 const LAKE_DEEPEST_M: f32 = 1.5;
 const LAKE_AREA_M2: f32 = 5_000.0;
 const POOL_AREA_M2: f32 = 8.0;
+/// Ground patterned more strongly than this at the middle has its pools found.
+pub(crate) const POOLED: f32 = 0.2;
+
+/// On patterned ground, whether a hollow's water is a lake's, not a polygon's pool.
+pub(crate) fn is_lake(lake: &crate::lakes::Lake) -> bool {
+    lake.deepest_m >= LAKE_DEEPEST_M || lake.area_m2 >= LAKE_AREA_M2
+}
+
+/// Whether a polygon's hollow stands as water: only the thawed pools; the low middles a
+/// hand deep are wet hollows, their water in the moss, not standing.
+pub(crate) fn is_pool(pool: &crate::lakes::Lake) -> bool {
+    pool.deepest_m >= POOL_DEEPEST_M && pool.area_m2 >= POOL_AREA_M2
+}
 
 /// The day whose snow keeps trees off the ground it lies on: snow lying into midsummer leaves
 /// too short a season for a tree's seedlings, so a late snowbed is treeless heath however warm
@@ -73,9 +86,7 @@ impl Round {
             p.strength(middle, over_sea) > 0.0
         });
         let waters = Waters::round(&land, middle, LAKES_ACROSS_M.min(across_m), LAKE_CELL_M)
-            .keeping(|lake| {
-                !pooled || lake.deepest_m >= LAKE_DEEPEST_M || lake.area_m2 >= LAKE_AREA_M2
-            });
+            .keeping(|lake| !pooled || is_lake(lake));
         let drift = Drift::over(
             waters.region(),
             crate::drift::wind_from(land.fields.climate().wind.prevailing_from_deg),
@@ -118,14 +129,11 @@ impl Round {
             .patterned()
             .is_some_and(|p| {
                 let over_sea = land.surface(middle).length() - land.sea_radius_m();
-                p.strength(middle, over_sea) > 0.2
+                p.strength(middle, over_sea) > POOLED
             })
             .then(|| {
-                // Only the thawed pools: the polygons' low middles a hand deep are wet hollows,
-                // their water in the moss, not standing.
-                Waters::round(&land, middle, POOLS_ACROSS_M.min(across_m), POOL_CELL_M).keeping(
-                    |pool| pool.deepest_m >= POOL_DEEPEST_M && pool.area_m2 >= POOL_AREA_M2,
-                )
+                Waters::round(&land, middle, POOLS_ACROSS_M.min(across_m), POOL_CELL_M)
+                    .keeping(is_pool)
             });
         let microsites = woods::Microsites::new(land.ground.spec().seed);
         let heath = heath_over(

@@ -5,13 +5,15 @@
 //! rings round the origin by the seed, Valheim's boss altars at seeded places of their biome.
 //!
 //! Of the land round the start, on the survey's grid (`survey::Grid`, 50 m cells), a cell may
-//! hold the gate if a walk from the start reaches it, it is dry and well over the sea, level
+//! hold the gate if a walk from the start reaches it, it is dry and well over the sea (no
+//! water within [`DRY_M`] of it as the world draws its lakes, `dry`, not only on this grid), level
 //! enough to stand a ring on, and neither too near the start nor too far ([`NEAR_M`],
 //! [`FAR_M`], then [`FARTHEST_M`]: how far a gate stands from where a player begins is the developers' to tune;
 //! these are first values). Of those the seed picks one, so worlds differ in which way their
 //! gate lies. Where in its cell the ring stands, clear of trees and rocks, is the game's to
 //! refine. [`faults`] holds a place to the same rules read afresh, for the sweep.
 
+use crate::dry::Dry;
 use crate::survey::{Biome, CELL_M, Grid, PLOT_OVER_SEA_M};
 use crate::{Land, region::Region};
 use glam::Vec3;
@@ -26,9 +28,15 @@ pub const FARTHEST_M: f32 = 800.0;
 /// Steeper than this over its cell, in degrees, ground holds no gate.
 pub const LEVEL_DEG: f32 = 8.0;
 
-/// The grid round a start that a gate is looked for on, and the start's cell in it.
-fn grid(land: &Land, start: Vec3) -> (Grid, (usize, usize)) {
-    let grid = Grid::round(land, start, FARTHEST_M + 2.0 * CELL_M);
+/// No water stands within so many metres of a gate, as the world draws it: its ring and the
+/// ground one steps out onto before it are dry.
+pub const DRY_M: f32 = 15.0;
+
+/// The grid round a start that a gate is looked for on, its lakes the world's (`dry`), and
+/// the start's cell in it.
+fn grid(land: &Land, start: Vec3, dry: &Dry) -> (Grid, (usize, usize)) {
+    let mut grid = Grid::round(land, start, FARTHEST_M + 2.0 * CELL_M);
+    dry.drown(&mut grid);
     let middle = grid.region.cells / 2;
     let cell = grid.region.cell_of(start).unwrap_or((middle, middle));
     (grid, cell)
@@ -73,20 +81,23 @@ fn wrong(
 /// The direction from the planet's centre of the place a world's gate stands, for a start;
 /// none if no ground round the start holds one, which the sweep counts a fault of the world.
 pub fn find(land: &Land, start: Vec3) -> Option<Vec3> {
-    let (grid, cell) = grid(land, start);
+    let dry = Dry::round(land, start);
+    let (grid, cell) = grid(land, start, &dry);
     let n = grid.region.cells;
     let reached = grid.reached(cell, n);
     let seed = land.ground.spec().seed.derive("gate").0 as u32;
-    let may: Vec<(usize, usize)> = (0..n * n)
+    let mut may: Vec<(usize, usize)> = (0..n * n)
         .map(|k| (k % n, k / n))
         .filter(|&at| wrong(land, &grid, &reached, at).is_none())
         .collect();
+    // The seed's order among the cells that may hold it: by their hashes, the least first.
+    may.sort_by_key(|&(column, row)| terra_gen::hash::mix3(seed, column as u32, row as u32, 0));
     [FAR_M, FARTHEST_M].into_iter().find_map(|far| {
         may.iter()
             .filter(|&&(column, row)| from_start_m(&grid.region, column, row) <= far)
-            // The seed's pick among the cells that may hold it: the least of their hashes.
-            .min_by_key(|&&(column, row)| terra_gen::hash::mix3(seed, column as u32, row as u32, 0))
             .map(|&(column, row)| grid.region.direction(column, row))
+            // The first with no pond beside it either, asked of one place at a time.
+            .find(|&toward| !dry.wet(toward, DRY_M))
     })
 }
 
@@ -94,7 +105,8 @@ pub fn find(land: &Land, start: Vec3) -> Option<Vec3> {
 /// if a walker reaches it and it stands as a gate may. Read afresh from the land, not from
 /// what [`find`] kept.
 pub fn faults(land: &Land, start: Vec3, gate: Vec3) -> Vec<String> {
-    let (grid, cell) = grid(land, start);
+    let dry = Dry::round(land, start);
+    let (grid, cell) = grid(land, start, &dry);
     let Some(at) = grid.region.cell_of(gate) else {
         return vec![format!(
             "the gate is over {FARTHEST_M:.0} m from the start, off the land searched"
@@ -102,6 +114,11 @@ pub fn faults(land: &Land, start: Vec3, gate: Vec3) -> Vec<String> {
     };
     let reached = grid.reached(cell, grid.region.cells);
     wrong(land, &grid, &reached, at)
+        .or_else(|| {
+            dry.wet(gate, DRY_M).then(|| {
+                format!("water stands within {DRY_M:.0} m of it, as the world draws its lakes")
+            })
+        })
         .map(|why| format!("the gate: {why}"))
         .into_iter()
         .collect()
@@ -125,7 +142,10 @@ mod tests {
 
     #[test]
     fn a_gate_is_found_from_the_seed_where_a_walk_reaches_and_differs_by_world() {
-        let seeds: Vec<u64> = (2..10).collect();
+        // Not seeds 4 and 9: the planet's own start lies in seed 9's lake, and on seed 4's
+        // shore no level ground is reached without crossing water, so neither has a gate
+        // from it (each has from its searched start).
+        let seeds = [2u64, 3, 5, 6, 7, 8, 10, 11];
         let found = terra_gen::par::map(&seeds, |&seed| {
             let land = land(seed);
             // The planet's own start, not the seed's searched one (seconds a seed): the sweep
@@ -169,7 +189,8 @@ mod tests {
         assert!(far[0].contains("off the land searched"), "{far:?}");
         // The nearest water or steep ground in the ring, if this world has any there, is
         // refused too; every cell the search refuses is one `faults` names.
-        let (grid, cell) = grid(&land, start);
+        let dry = Dry::round(&land, start);
+        let (grid, cell) = grid(&land, start, &dry);
         let n = grid.region.cells;
         let reached = grid.reached(cell, n);
         let refused = (0..n * n)

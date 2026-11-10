@@ -10,6 +10,7 @@
 
 pub mod cave;
 pub mod drift;
+pub mod dry;
 pub mod fingerprint;
 pub mod frame;
 pub mod gate;

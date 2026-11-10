@@ -231,6 +231,13 @@ impl Grid {
         }
     }
 
+    /// Makes water of a cell: a lake's that this grid's own fill let spill off its edge
+    /// (`dry::Dry::drown`).
+    pub fn drown(&mut self, k: usize) {
+        self.biomes[k] = Biome::Water;
+        self.walkable[k] = false;
+    }
+
     /// Whether a walker crosses a cell: dry and no steeper than one climbs.
     pub fn walkable(&self, k: usize) -> bool {
         self.walkable[k]

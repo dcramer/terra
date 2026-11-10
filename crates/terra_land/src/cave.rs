@@ -13,6 +13,7 @@
 //! sweep.
 
 use crate::Land;
+use crate::dry::Dry;
 use crate::survey::{Biome, CELL_M, Grid, PLOT_OVER_SEA_M};
 use glam::Vec3;
 use terra_voxel::caves::{Part, System};
@@ -233,9 +234,15 @@ fn wrong_shape(land: &Land, den: &Den) -> Option<String> {
     }
 }
 
-/// The grid round a start that a den is looked for on, and the start's cell in it.
-fn grid(land: &Land, start: Vec3) -> (Grid, (usize, usize)) {
-    let grid = Grid::round(land, start, FARTHEST_M + 2.0 * CELL_M);
+/// No water stands within so many metres of a den's mouth, as the world draws it (`dry`):
+/// the open length of its passage is dry and nothing floods it.
+pub const DRY_M: f32 = 25.0;
+
+/// The grid round a start that a den is looked for on, its lakes the world's (`dry`), and
+/// the start's cell in it.
+fn grid(land: &Land, start: Vec3, dry: &Dry) -> (Grid, (usize, usize)) {
+    let mut grid = Grid::round(land, start, FARTHEST_M + 2.0 * CELL_M);
+    dry.drown(&mut grid);
     let middle = grid.region.cells / 2;
     let cell = grid.region.cell_of(start).unwrap_or((middle, middle));
     (grid, cell)
@@ -309,7 +316,8 @@ fn den_at(land: &Land, grid: &Grid, seed: u32, (column, row): (usize, usize)) ->
 /// A world's den, for a start; none if no ground round the start holds one, which the sweep
 /// counts a fault of the world.
 pub fn find(land: &Land, start: Vec3) -> Option<Den> {
-    let (grid, cell) = grid(land, start);
+    let dry = Dry::round(land, start);
+    let (grid, cell) = grid(land, start, &dry);
     let n = grid.region.cells;
     let reached = grid.reached(cell, n);
     let gate = crate::gate::find(land, start);
@@ -323,14 +331,17 @@ pub fn find(land: &Land, start: Vec3) -> Option<Den> {
     [FAR_M, FARTHEST_M].into_iter().find_map(|far| {
         may.iter()
             .filter(|&&(column, row)| grid.region.offset(column, row).length() <= far)
-            .find_map(|&at| den_at(land, &grid, seed, at))
+            // The first whose shape the land holds, with no pond at its mouth either.
+            .filter_map(|&at| den_at(land, &grid, seed, at))
+            .find(|den| !dry.wet(den.mouth.normalize(), DRY_M))
     })
 }
 
 /// What is wrong with a den, for a start: nothing if a walker reaches its mouth and the land
 /// holds its shape. Read afresh from the land, not from what [`find`] kept.
 pub fn faults(land: &Land, start: Vec3, den: &Den) -> Vec<String> {
-    let (grid, cell) = grid(land, start);
+    let dry = Dry::round(land, start);
+    let (grid, cell) = grid(land, start, &dry);
     let Some(at) = grid.region.cell_of(den.mouth.normalize()) else {
         return vec![format!(
             "the den's mouth is over {FARTHEST_M:.0} m from the start, off the land searched"
@@ -340,6 +351,13 @@ pub fn faults(land: &Land, start: Vec3, den: &Den) -> Vec<String> {
     let gate = crate::gate::find(land, start);
     wrong_mouth(land, &grid, &reached, gate, at)
         .or_else(|| wrong_shape(land, den))
+        .or_else(|| {
+            dry.wet(den.mouth.normalize(), DRY_M).then(|| {
+                format!(
+                    "water stands within {DRY_M:.0} m of its mouth, as the world draws its lakes"
+                )
+            })
+        })
         .map(|why| format!("the den: {why}"))
         .into_iter()
         .collect()

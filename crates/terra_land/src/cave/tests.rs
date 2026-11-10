@@ -18,7 +18,9 @@ fn land(seed: u64) -> Land {
 /// room over the floor for a 4 m body, and the worlds' dens differ.
 #[test]
 fn a_den_is_found_from_the_seed_open_from_its_mouth_to_a_chamber_a_troll_fits() {
-    let seeds: Vec<u64> = (2..10).collect();
+    // Not seeds 4 and 9, whose planet's own start is in a lake or cut off by one
+    // (`gate`'s test).
+    let seeds = [2u64, 3, 5, 6, 7, 8, 10, 11];
     let found = terra_gen::par::map(&seeds, |&seed| {
         let land = land(seed);
         // The planet's own start (the seed's searched one takes seconds; the sweep holds it).
@@ -141,7 +143,7 @@ fn the_27_layouts_are_each_picked() {
 fn why_no_den() {
     let land = land(9);
     let start = crate::PLANET_START;
-    let (grid, cell) = grid(&land, start);
+    let (grid, cell) = grid(&land, start, &crate::dry::Dry::round(&land, start));
     let n = grid.region.cells;
     let reached = grid.reached(cell, n);
     let gate = crate::gate::find(&land, start);
