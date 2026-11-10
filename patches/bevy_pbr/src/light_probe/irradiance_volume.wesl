@@ -19,6 +19,24 @@ fn irradiance_volume_light(
     N: vec3<f32>,
     clusterable_object_index_ranges: ptr<function, ClusterableObjectIndexRanges>,
 ) -> vec3<f32> {
+    return irradiance_volume_light_held(world_position, N, clusterable_object_index_ranges).rgb;
+}
+
+@if(IRRADIANCE_VOLUMES_ARE_USABLE)
+
+/// The irradiance volumes' light at a fragment, and in `w` the weight of the volumes holding
+/// it: 0 where none does (Terra's patch, D485). Bevy 0.20 takes a fragment no volume holds
+/// as lit by the volumes with no light, whenever the view has any volume in its picture, so
+/// a den's volume a hundred metres off, once in the frustum, put out the sky's diffuse light
+/// on everything outside it, and turning the camera lit the land again. A caller asks `w`
+/// and falls back to the environment map, as Unreal's volumetric lightmap gives way to the
+/// sky light outside its bounds and Godot 4's VoxelGI to the scene's ambient outside its
+/// box (godotengine/godot, MIT).
+fn irradiance_volume_light_held(
+    world_position: vec3<f32>,
+    N: vec3<f32>,
+    clusterable_object_index_ranges: ptr<function, ClusterableObjectIndexRanges>,
+) -> vec4<f32> {
     // Find all irradiance volumes that contain the fragment. We're going to
     // accumulate all the irradiance from them in a weighted sum.
     var iterator = light_probe_iterator_new(
@@ -82,7 +100,7 @@ fn irradiance_volume_light(
         total_irradiance /= total_weight;
     }
 
-    return total_irradiance;
+    return vec4(total_irradiance, total_weight);
 }
 
 // Terra's patch (D485): a reflection probe smaller than every irradiance volume holding a

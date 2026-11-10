@@ -712,13 +712,17 @@ fn apply_pbr_lighting(
         in.world_position.xyz,
         &clusterable_object_index_ranges,
     )) {
-        let irradiance_volume_light = irradiance_volume::irradiance_volume_light(
+        // Terra's patch (D485): only where a volume holds the fragment; outside every
+        // volume the environment map lights it, as with no volume in the picture.
+        let irradiance_volume_light = irradiance_volume::irradiance_volume_light_held(
             in.world_position.xyz,
             in.N,
             &clusterable_object_index_ranges,
         );
-        indirect_light += irradiance_volume_light * diffuse_color * diffuse_occlusion;
-        found_diffuse_indirect = true;
+        if (irradiance_volume_light.w > 0.0) {
+            indirect_light += irradiance_volume_light.rgb * diffuse_color * diffuse_occlusion;
+            found_diffuse_indirect = true;
+        }
     }
 
     // Environment map light (indirect)

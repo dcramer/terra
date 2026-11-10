@@ -20,7 +20,7 @@ import bevy_pbr::render::{
 import super::hue::hue_turned;
 import super::cap_skin::{cap_skin, is_cap_skin};
 import super::sight::sight_keep;
-@if(IRRADIANCE_VOLUME) import bevy_pbr::light_probe::irradiance_volume::irradiance_volume_light;
+@if(IRRADIANCE_VOLUME) import bevy_pbr::light_probe::irradiance_volume::{irradiance_volume_light, irradiance_volume_light_held};
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) import bevy_pbr::render::mesh_view_bindings::{light_probes, environment_map_sampler};
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) import bevy_pbr::render::mesh_view_bindings::diffuse_environment_maps;
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP && !MULTIPLE_LIGHT_PROBES_IN_ARRAY) import bevy_pbr::render::mesh_view_bindings::diffuse_environment_map;
@@ -41,7 +41,12 @@ fn sky_seen(world: vec3<f32>, N: vec3<f32>, frag_coord: vec4<f32>) -> f32 {
     var ranges = unpack_clusterable_object_index_ranges(
         view_fragment_cluster_index(frag_coord.xy, view_z, orthographic),
     );
-    let seen = irradiance_volume_light(world, N, &ranges);
+    let held = irradiance_volume_light_held(world, N, &ranges);
+    // Outside every volume (a den's, seen from the open land) nothing hides the sky.
+    if held.w <= 0.0 {
+        return 1.0;
+    }
+    let seen = held.rgb;
     var d = quat_rotate(light_probes.view_rotation, N);
     d.z = -d.z;
     var open = vec3<f32>(0.0);

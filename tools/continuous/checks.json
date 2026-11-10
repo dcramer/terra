@@ -20,6 +20,12 @@
     "minutes": 20
   },
   {
+    "name": "turnlight",
+    "does": "the play start's land at dusk is as bright facing each of the four quarters: a light volume in the picture (the den's) does not put out the sky's light on what is outside it (D485; tools/sandbox/turnlight.ts)",
+    "run": ["node", "tools/sandbox/turnlight.ts"],
+    "minutes": 20
+  },
+  {
     "name": "indoorlight",
     "does": "a closed dungeon room and corridor are as bright at noon as at midnight and their unlit corners near black: their rooms' probes, not the forest's sky volume, light them (D485, D486; tools/sandbox/indoorlight.ts)",
     "run": ["node", "tools/sandbox/indoorlight.ts"],
