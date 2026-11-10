@@ -168,6 +168,25 @@ fn sky_light_over_its_cube(N: vec3<f32>) -> vec3<f32> {
     return select(scale, vec3<f32>(1.0), cube <= vec3<f32>(1.0e-6));
 }
 
+/// The view's environment map's diffuse light toward a world direction, at the view's
+/// brightness: what `sky_light_over_its_cube` brings an open cell's light to, for a shader
+/// that reads a volume's light itself (a leaf's light from above, shaded snow's tint) to
+/// fall back on where no volume holds the fragment, or none is in the picture (Terra's
+/// patch, D485). Nothing where the view has no map.
+@if(ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY)
+fn sky_light_toward(N: vec3<f32>) -> vec3<f32> {
+    if (light_probes.view_cubemap_index < 0) {
+        return vec3<f32>(0.0);
+    }
+    let in_map = quat_rotate(light_probes.view_rotation, N);
+    // Cubemaps are left-handed, so we negate the Z coordinate.
+    return textureSampleLevel(
+        bindings::diffuse_environment_maps[light_probes.view_cubemap_index],
+        bindings::environment_map_sampler,
+        vec3<f32>(in_map.xy, -in_map.z),
+        0.0).rgb * light_probes.intensity_for_view;
+}
+
 @if(IRRADIANCE_VOLUME && MULTIPLE_LIGHT_PROBES_IN_ARRAY)
 fn sky_reflection_seen(
     world_position: vec3<f32>,

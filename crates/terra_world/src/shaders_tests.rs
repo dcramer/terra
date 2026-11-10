@@ -392,30 +392,21 @@ fn global() -> Vec<ShaderDefVal> {
 /// The main camera at a quality preset (`scene.rs`): HDR, so tonemapped after; TAA, so a
 /// depth and motion vector prepass and jitter; distance fog and the sky's environment map;
 /// at high quality SSAO and contact shadows, so a normal prepass, and temporal soft shadows.
-/// With an irradiance volume in its picture (a forest's sky volume, a den's) or none: Bevy
-/// defines `IRRADIANCE_VOLUME` by the view, and the shaders that read a volume themselves
-/// (a leaf's light from above, shaded snow's tint) take another path without it.
+/// Every 3D view has `IRRADIANCE_VOLUME`, with a volume in its picture or none (the patch's
+/// `HELD_BY_EVERY_VIEW`, D485), so no view here is without it.
 struct View {
     name: &'static str,
     occlusion: bool,
-    volume: bool,
 }
 
 const VIEWS: &[View] = &[
     View {
-        name: "high quality, a light volume in view",
-        occlusion: true,
-        volume: true,
-    },
-    View {
         name: "high quality",
         occlusion: true,
-        volume: false,
     },
     View {
         name: "low quality",
         occlusion: false,
-        volume: false,
     },
 ];
 
@@ -456,11 +447,9 @@ fn forward(view: &View, alpha: Blending, mesh: &[Part]) -> Vec<&'static str> {
         "MULTIPLE_LIGHT_PROBES_IN_ARRAY",
         "MULTIPLE_LIGHTMAPS_IN_ARRAY",
         "IRRADIANCE_VOLUMES_ARE_USABLE",
+        "IRRADIANCE_VOLUME",
         "CLUSTERED_DECALS_ARE_USABLE",
     ];
-    if view.volume {
-        defs.push("IRRADIANCE_VOLUME");
-    }
     if view.occlusion {
         defs.extend_from_slice(&[
             "NORMAL_PREPASS",

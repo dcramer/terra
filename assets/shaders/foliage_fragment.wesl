@@ -20,7 +20,9 @@ import bevy_pbr::render::{
 import super::hue::hue_turned;
 import super::cap_skin::{cap_relief, cap_skin, is_cap_skin};
 import super::sight::sight_keep;
-@if(IRRADIANCE_VOLUME) import bevy_pbr::light_probe::irradiance_volume::irradiance_volume_light;
+@if(IRRADIANCE_VOLUME) import bevy_pbr::light_probe::irradiance_volume::irradiance_volume_light_held;
+@if(ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) import bevy_pbr::light_probe::environment_map::sky_light_toward;
+@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) import bevy_pbr::light_probe::environment_map::sky_light_over_its_cube;
 
 // What colour a leaf passes light on in, lit through: yellower than it reflects, as
 // chlorophyll passes green and yellow and keeps the red and blue (D247).
@@ -65,6 +67,25 @@ fn lit_through(input: PbrInput, colour: vec3<f32>, sky: f32, frag_coord: vec4<f3
         * reached * deep * wind.leaf.z * (0.8 * forward + 0.05 * behind);
 }
 
+// The irradiance volumes' light on a fragment toward a direction, and in `w` the weight of
+// the volumes holding it: 0 where none does (`irradiance_volume_light_held`, D485). Every 3D
+// view has `IRRADIANCE_VOLUME` whether or not a volume is in its picture, so what a volume
+// changes is asked of `w`, never of the definition.
+@if(IRRADIANCE_VOLUME)
+fn volume_light_held(world: vec4<f32>, toward: vec3<f32>, frag_coord: vec4<f32>) -> vec4<f32> {
+    let view_z = dot(vec4<f32>(
+        view.view_from_world[0].z,
+        view.view_from_world[1].z,
+        view.view_from_world[2].z,
+        view.view_from_world[3].z
+    ), world);
+    let orthographic = view.clip_from_view[3].w == 1.0;
+    var ranges = unpack_clusterable_object_index_ranges(
+        view_fragment_cluster_index(frag_coord.xy, view_z, orthographic),
+    );
+    return irradiance_volume_light_held(world.xyz, toward, &ranges);
+}
+
 // The sky's light through a leaf (D272): what falls on its upper face, as the sky occlusion
 // volume holds it there (D270), little deep under the canopy and most at its top, passed on
 // in the leaf's own colour, yellower. Green light passes through a leaf as readily as it is
@@ -73,26 +94,29 @@ fn lit_through(input: PbrInput, colour: vec3<f32>, sky: f32, frag_coord: vec4<f3
 // (`lit_through`). Bevy's own diffuse transmission took the open sky, unshaded by the crowns,
 // and the colour after its underside was darkened, so it gave almost nothing.
 fn sky_through(input: PbrInput, colour: vec3<f32>, frag_coord: vec4<f32>) -> vec3<f32> {
-    var light = vec3<f32>(0.0);
-@if(IRRADIANCE_VOLUME) {
     let world = input.world_position.xyz;
     let up = normalize(world);
-    let view_z = dot(vec4<f32>(
-        view.view_from_world[0].z,
-        view.view_from_world[1].z,
-        view.view_from_world[2].z,
-        view.view_from_world[3].z
-    ), input.world_position);
-    let orthographic = view.clip_from_view[3].w == 1.0;
-    var ranges = unpack_clusterable_object_index_ranges(
-        view_fragment_cluster_index(frag_coord.xy, view_z, orthographic),
-    );
-    let above = irradiance_volume_light(world, up, &ranges);
+    // Where no volume holds the leaf, or none is in the picture, the open sky's light is the
+    // environment map's (D485): read from the volume alone, a leaf in the open had none, and
+    // every leaf lost it when the last volume left the picture.
+    var above = vec3<f32>(0.0);
+@if(ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) {
+    above = sky_light_toward(up);
+}
+@if(IRRADIANCE_VOLUME) {
+    let held = volume_light_held(input.world_position, up, frag_coord);
+    if held.w > 0.0 {
+        // The volume says how much of the sky arrives; the sky's light is the map's, as the
+        // lit pass scales it (`sky_light_over_its_cube`).
+        above = held.rgb;
+        @if(ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) {
+            above *= sky_light_over_its_cube(up);
+        }
+    }
+}
     // Seen from below, a leaf shows the light it passes on; from above, what it reflects.
     let seen = 0.25 + 0.75 * smoothstep(0.1, -0.6, dot(input.V, up));
-    light = colour * THROUGH * above * view.exposure * SKY_THROUGH * wind.leaf.z * seen;
-}
-    return light;
+    return colour * THROUGH * above * view.exposure * SKY_THROUGH * wind.leaf.z * seen;
 }
 
 // How much of the light on a leaf's upper face it passes on, for its colour (D272).
@@ -1307,9 +1331,15 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // not hide, and the sky they hide the volume's cells already trace (D270): dimmed by its
     // own sky again, the forest's near trunks stood black on snow (weather round 4). Over a
     // dark floor, and for leaves, the inside of a crown a cell is too coarse to see, it stays.
+    // Only where a volume holds the trunk (D485): outside every volume the environment
+    // map's light is the whole sky's, and the trunk's own sky is all that hides any of it.
     if wind.bark > 0.5 && wind.climate.on != 0u {
         let lying = textureSampleLevel(climate_ground, climate_ground_sampler, climate_place(in.world_position.xyz), 0.0).r * SNOW_FULL_M;
-        hidden = mix(hidden, vec3<f32>(1.0), smoothstep(0.02, 0.1, lying));
+        let on_snow = smoothstep(0.02, 0.1, lying);
+        if on_snow > 0.0 {
+            let held = volume_light_held(in.world_position, normalize(in.world_position.xyz), in.position).w;
+            hidden = mix(hidden, vec3<f32>(1.0), on_snow * step(1.0e-6, held));
+        }
     }
 }
     pbr_input.diffuse_occlusion *= hidden;
@@ -1342,8 +1372,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // Bark and leaves reflect the sky only where they see it (D289, D292): the patch of
     // bevy_pbr occludes the sky's reflection for every material, per fragment, from the sky
     // volume's light (`sky_reflection_seen`, environment_map.wesl, D336), as this shader did
-    // for foliage alone.
-@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) {
+    // for foliage alone. A leaf's own sheen is its surface's, the same in a volume and out
+    // of one, so it asks no volume.
+@if(ENVIRONMENT_MAP) {
     if wind.bark < 0.5 {
         pbr_input.specular_occlusion *= LEAF_SKY_SHEEN;
     }

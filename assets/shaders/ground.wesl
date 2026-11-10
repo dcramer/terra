@@ -38,6 +38,7 @@ import bevy_pbr::render::{
     render::clustered_forward as clustering,
     light_probe::irradiance_volume,
 };
+@if(!PREPASS_PIPELINE && IRRADIANCE_VOLUME && ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) import bevy_pbr::light_probe::environment_map;
 import super::horizon::horizon_lit;
 
 // Field order must match GroundExtension in planet.rs.
@@ -2784,9 +2785,14 @@ fn fragment(
             let cluster = clustering::view_fragment_cluster_index(pbr_input.frag_coord.xy, view_z, pbr_input.is_orthographic);
             var ranges = clustering::unpack_clusterable_object_index_ranges(cluster);
             if !irradiance_volume::smaller_reflection_probe_holds(in.world_position.xyz, &ranges) {
-                let held = irradiance_volume::irradiance_volume_light(in.world_position.xyz, pbr_input.N, &ranges);
-                if any(held > vec3<f32>(0.0)) {
-                    ambient = held;
+                // Only where a volume holds the pixel (D485), and its light as the lit pass
+                // has it: scaled to the environment map's by direction.
+                let held = irradiance_volume::irradiance_volume_light_held(in.world_position.xyz, pbr_input.N, &ranges);
+                if held.w > 0.0 && any(held.rgb > vec3<f32>(0.0)) {
+                    ambient = held.rgb;
+                    @if(ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) {
+                        ambient *= environment_map::sky_light_over_its_cube(pbr_input.N);
+                    }
                 }
             }
         }
