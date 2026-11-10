@@ -9,7 +9,7 @@ hammer painted models/held/hammer.glb d1c2a851f7acdec0 -
 heater_shield painted models/held/heater_shield.glb 60154d85ce21367a -
 hide painted - - -
 iron painted - - -
-iron_axe painted models/held/iron_axe.glb a965c026a4e4204c -
+iron_axe painted models/held/iron_axe.glb a36207ad0e3ede3a -
 iron_pickaxe painted models/held/iron_pickaxe.glb 930171efa541460a -
 knife painted models/held/knife.glb 180035c3195a751b -
 large_pack painted models/gear/large_pack.glb 65ea5a6365a8ca96 -

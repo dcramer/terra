@@ -11,7 +11,7 @@ arming_sword: an arming sword, a straight double-edged steel blade with a straig
 bow: a wooden recurve bow with a thin string
 heater_shield: a heater shield seen from the front, a leather-covered board painted dull red at its flat top and ochre toward its point, the paint chipped, with a dark rawhide rim
 hammer: a hammer with a turned wooden handle and a pale block head
-iron_axe: an iron axe, a wooden handle with a grey iron head
+iron_axe: a hatchet, a short pale wooden handle with a grey iron head and a narrow iron collar round the handle below it
 iron_pickaxe: an iron pickaxe, a slim wooden handle with a grey iron pick head curving down to a point at each end
 knife: a knife, a steel blade with a serrated back and a wooden grip
 spear: a spear, a long wooden shaft with a small pointed tip
