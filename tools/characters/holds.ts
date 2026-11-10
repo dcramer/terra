@@ -266,7 +266,7 @@ export async function measured(file: string, on: string[], ctx: Ctx, limit: <T>(
 }
 
 /** At most `n` jobs at once. */
-function pool(n: number) {
+export function pool(n: number) {
   let free = n;
   const waiting: (() => void)[] = [];
   return async <T>(job: () => Promise<T>): Promise<T> => {
