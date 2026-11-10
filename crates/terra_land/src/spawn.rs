@@ -6,12 +6,14 @@
 //! ground round it is not walled in by steep slopes, and a walk reaches a forest, water and the
 //! heights past the trees (`survey`'s rules, which the sweep then checks the start by).
 //!
-//! The first world's seed keeps the planet's own start, which its demos and baselines stand
-//! on (D393); a world too small for latitudes (`frame::has_latitudes`) has no biomes to walk
-//! to and keeps it too.
+//! Every seed's start is searched for, the first world's too (the developers: "the seed
+//! shoudl dictate how worlds look"); it kept the planet's own start while its lake there
+//! stood, a cirque the foothills no longer hold (`terra_voxel` `HORNS_STAND_M`). A world too
+//! small for latitudes (`frame::has_latitudes`) has no biomes to walk to and keeps the
+//! planet's own.
 
 use crate::survey::{self, CELL_M, Grid, PLOT_OVER_SEA_M, PLOT_RISE_M, REACH_M};
-use crate::{Land, PLANET_START, frame, site};
+use crate::{Land, PLANET_START, frame};
 use glam::Vec3;
 
 /// How far from the planet's own start the search goes, in metres: within the first, and
@@ -39,7 +41,7 @@ pub fn find(land: &Land) -> Vec3 {
 
 /// [`find`], and how far its search got, if it searched.
 pub fn find_tried(land: &Land) -> (Vec3, Option<Tried>) {
-    if land.ground.spec().seed.0 == site::PINNED_SEED || !frame::has_latitudes(land.radius_m()) {
+    if !frame::has_latitudes(land.radius_m()) {
         return (PLANET_START, None);
     }
     let mut tried = Tried::default();
@@ -130,7 +132,7 @@ pub fn searched(land: &Land, search_m: f32) -> (Option<Vec3>, Tried) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ground, start_climate};
+    use crate::{ground, site, start_climate};
     use terra_core::{PlanetSpec, Seed};
 
     fn land(seed: u64) -> Land {
@@ -144,8 +146,18 @@ mod tests {
     }
 
     #[test]
-    fn the_first_world_keeps_its_start_and_another_finds_one_its_survey_passes() {
-        assert_eq!(find(&land(site::PINNED_SEED)), PLANET_START);
+    fn every_seed_finds_a_start_its_survey_passes_the_first_world_too() {
+        // The first world's start is searched for as any other's is: the seed says where.
+        let first = land(site::PINNED_SEED);
+        let start = find(&first);
+        let survey = survey::of(&first, start);
+        assert!(survey.faults().is_empty(), "{survey:?}");
+        let off = (start - PLANET_START).length() * first.radius_m();
+        assert!(
+            off < SEARCH_M[0],
+            "seed 1 starts {off:.0} m from the planet's start"
+        );
+        eprintln!("seed 1 starts {off:.0} m from the planet's start");
         // Seed 2's own start has no heights past the trees in reach (the sweep of j2): the
         // search moves it to where the survey finds everything a start asks for.
         let land = land(2);

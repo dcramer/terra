@@ -10,8 +10,8 @@
 //! point to `reach` at its foot): taking from it raises the ground, adding to it lowers.
 
 use super::{
-    CIRQUES, HORN_BOWL, HORN_JITTER, HORN_PROFILE, HORN_REACH, HORNS_FROM, HORNS_KEPT, KEPT_M,
-    NEIGHBOURS_KEPT_M, Range,
+    CIRQUES, FLOOR_RISES, HORN_BOWL, HORN_JITTER, HORN_PROFILE, HORN_REACH, HORNS_FROM, HORNS_KEPT,
+    KEPT_M, NEIGHBOURS_KEPT_M, Range,
 };
 use glam::{IVec3, Vec3};
 use std::cell::RefCell;
@@ -83,7 +83,32 @@ fn ribbed(d: f32, second: f32, across: f32, reach: f32, key: f32) -> f32 {
     d - RIB_DEPTH * reach * (rib - 0.5) * upper * (1.0 - on_arete)
 }
 
+/// Over a range's outer part, its foothills, as far into it as `HORNS_INSIDE` (`Range::inside`,
+/// none of the rule under the first to whole past the second; in its heart they stand as they
+/// did, as by height alone the horns on its crests between lowered tops went too),
+/// horns and their cirques stand only where the ridges still stand so many metres over the
+/// range's floor after its tops' lowering (`Mountains::tops`), none under the first to whole
+/// past the second: ice cuts horns and cirques out of high ground, never out of foothills.
+/// They stood by the ridged sum alone, which the lowering does not change, so two-thirds of
+/// the horns' ground and half the cirques' on seed 1 lay where the ridges stood under 100 m,
+/// the cirques cut up to 200 m under the floor: foothills of small pyramids and bowls down to
+/// the sea's level ("the geography doesnt look realistic", the developer, 2026-11-09). Past
+/// 300 m three cirque points in 1,640 cut under the floor. A judgement on those counts.
+pub(super) const HORNS_STAND_M: (f32, f32) = (100.0, 400.0);
+pub(super) const HORNS_INSIDE: (f32, f32) = (0.2, 0.5);
+
 impl Range {
+    /// How far horns and their cirques stand on ground `ground` metres over the planet's own,
+    /// `inside` the range, 0 to 1 (`HORNS_STAND_M`).
+    pub(super) fn stood(&self, ground: f32, inside: f32) -> f32 {
+        let floor = self.mountains.base_m * smoothstep(0.0, FLOOR_RISES, inside);
+        smoothstep(HORNS_STAND_M.0, HORNS_STAND_M.1, ground - floor).max(smoothstep(
+            HORNS_INSIDE.0,
+            HORNS_INSIDE.1,
+            inside,
+        ))
+    }
+
     /// How much the horns raise the ground at a point, or the cirques between them lower it
     /// (`Mountains::horns_m`), in metres.
     ///
@@ -107,6 +132,7 @@ impl Range {
         along: f32,
         inside: f32,
         ground: f32,
+        stood: f32,
     ) -> (f32, f32, f32) {
         // The neighbours round a horn (`massif`) stand wherever the range does, past its
         // crests; the horn itself only where the ridges are near their crests.
@@ -122,7 +148,7 @@ impl Range {
         if kept <= 0.0 {
             return (0.0, 0.0, 0.0);
         }
-        let crest = smoothstep(HORNS_FROM.0, HORNS_FROM.1, along) * edge;
+        let crest = smoothstep(HORNS_FROM.0, HORNS_FROM.1, along) * edge * stood;
         let (horns, ribs) = if crest > 0.0 {
             self.horn_tops(point, crest * kept)
         } else {

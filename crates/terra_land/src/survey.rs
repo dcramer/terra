@@ -418,13 +418,13 @@ fn rise_on_rings(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{PLANET_START, ground, start_climate};
+    use crate::{ground, start_climate};
     use terra_core::{PlanetSpec, Seed};
 
     #[test]
-    fn the_first_world_walks_from_its_lake_into_its_forest_and_up_to_tundra() {
-        // The start of seed 1's 30 km world is by a lake in a wooded valley under mountains
-        // (the demos', D393): the walk starts round the lake, not in it, and reaches both.
+    fn the_first_world_walks_from_its_start_into_its_forest_and_up_to_tundra() {
+        // The start of seed 1's 30 km world, found as any seed's is (`spawn`), is in wooded
+        // foothills under mountains with water in reach: the walk reaches all three.
         let land = Land::new(
             ground::world(PlanetSpec {
                 seed: Seed(1),
@@ -432,7 +432,7 @@ mod tests {
             }),
             start_climate().unwrap(),
         );
-        let survey = of(&land, PLANET_START);
+        let survey = of(&land, crate::spawn::find(&land));
         assert!(survey.reached(Biome::Forest) >= FOREST_M2, "{survey:?}");
         assert!(survey.reached(Biome::Tundra) >= TUNDRA_M2, "{survey:?}");
         assert!(survey.reached(Biome::Water) > 0.0, "{survey:?}");
@@ -442,13 +442,6 @@ mod tests {
             assert!(walk.reached(biome) <= walk.present_m2[biome as usize]);
         }
         assert!(walk.share() > 0.0 && walk.share() < 1.0, "{survey:?}");
-        // Its valley has no level plot on the near rings, and one on the far: the first world
-        // is valid where it stands, its land as it is (D596).
-        let near = least_rise_m(&land, PLANET_START, 0.0).unwrap();
-        assert!(
-            near > PLOT_RISE_M,
-            "a level plot near seed 1's start, {near:.1} m"
-        );
         assert!(survey.faults().is_empty(), "{:?}", survey.faults());
     }
 

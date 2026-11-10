@@ -600,7 +600,8 @@ impl Range {
             0.0
         };
         let (horns, ribs, walled) = if m.horns_m > 0.0 && with_horns {
-            self.horns(point, along, inside, height - lowered)
+            let stood = self.stood(height - lowered, inside);
+            self.horns(point, along, inside, height - lowered, stood)
         } else {
             (0.0, 0.0, 0.0)
         };

@@ -375,7 +375,8 @@ impl Range {
         let (inside, _) = self.inside_and_front(at);
         let along = (self.ridges(at / self.mountains.ridges_m) - VALLEY) / (CREST - VALLEY);
         let stands = smoothstep(HORNS_FROM.0, HORNS_FROM.1, along) * smoothstep(0.0, 0.25, inside);
-        let value = (stands, self.ridged_upper_and_foot_with(at, false).0);
+        let ground = self.ridged_upper_and_foot_with(at, false).0;
+        let value = (stands * self.stood(ground, inside), ground);
         SITES.with(|sites| sites.borrow_mut()[slot] = (tag, value));
         value
     }

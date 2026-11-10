@@ -335,9 +335,10 @@ fn horns_stand_steep_and_pointed_over_the_crests() {
     let crests: Vec<Vec3> = directions(400_000)
         .filter(|&d| {
             let point = d * RADIUS;
-            with.inside(point) > 0.0
+            // In the range's heart, where horns stand whatever the ground (`HORNS_INSIDE`).
+            with.inside(point) > horns::HORNS_INSIDE.1
                 && (with.ridges(point / with.mountains.ridges_m) - VALLEY) / (CREST - VALLEY) > 0.9
-                && with.horns(point, 1.0, 1.0, HORNS_ALONE).0 > 0.3 * with.mountains.horns_m
+                && with.horns(point, 1.0, 1.0, HORNS_ALONE, 1.0).0 > 0.3 * with.mountains.horns_m
         })
         .collect();
     let steep_share = |range: &Range| {
@@ -378,7 +379,11 @@ fn horns_stand_at_unlike_heights() {
     // and its lesser neighbour. From seven tenths to the whole (main before round 21), the
     // tops spread under 0.5 of it and the lake's two horns stood as twin pyramids (r20 review).
     let range = range();
-    let horn = |d: Vec3| range.horns(d.normalize() * RADIUS, 1.0, 1.0, HORNS_ALONE).0;
+    let horn = |d: Vec3| {
+        range
+            .horns(d.normalize() * RADIUS, 1.0, 1.0, HORNS_ALONE, 1.0)
+            .0
+    };
     let top = 0.5 * range.mountains.horns_m;
     let mut heights = Vec::new();
     for d in directions(400_000).filter(|&d| horn(d) > top) {
@@ -525,7 +530,7 @@ fn the_horns_answer_alike_whatever_their_memo_held() {
     let range = range();
     let mut points: Vec<Vec3> = directions(400_000)
         .map(|d| d * RADIUS)
-        .filter(|&p| range.horns(p, 1.0, 1.0, HORNS_ALONE).0 > 0.0)
+        .filter(|&p| range.horns(p, 1.0, 1.0, HORNS_ALONE, 1.0).0 > 0.0)
         .take(300)
         .collect();
     let near: Vec<Vec3> = points
@@ -539,7 +544,7 @@ fn the_horns_answer_alike_whatever_their_memo_held() {
             points
                 .iter()
                 .map(|&p| {
-                    let (h, r, w) = range.horns(p, 1.0, 1.0, HORNS_ALONE);
+                    let (h, r, w) = range.horns(p, 1.0, 1.0, HORNS_ALONE, 1.0);
                     [h.to_bits(), r.to_bits(), w.to_bits()]
                 })
                 .collect::<Vec<_>>()
@@ -596,7 +601,7 @@ fn rise_by_part() {
     time("ridges", &|p| range.ridges(p / range.mountains.ridges_m));
     time("tops_at", &|p| range.tops_at(p));
     time("deep_inside", &|p| range.deep_inside(p));
-    time("horns", &|p| range.horns(p, 1.0, 1.0, HORNS_ALONE).0);
+    time("horns", &|p| range.horns(p, 1.0, 1.0, HORNS_ALONE, 1.0).0);
     time("face_shaping", &|p| range.face_shaping(p).0);
 }
 
@@ -645,5 +650,58 @@ fn only_ground_standing_high_over_the_ranges_floor_is_stepped_into_faces() {
     assert!(
         stepped * 4 > high && high > 100,
         "{stepped} of {high} high walls stepped"
+    );
+}
+
+#[test]
+fn foothills_hold_no_horns_or_cirques_and_the_heart_keeps_its_own() {
+    // Over a range's outer part the horns' rule moves no ground standing low over the range's
+    // floor (`HORNS_STAND_M`) but for the ridges out from a horn standing near: no cirque cut
+    // under the floor, and half as much of it raised over 50 m (297 places in 10,851; 622 before). In its
+    // heart the horns and cirques are there, on low ground between its tops too.
+    use horns::{HORNS_INSIDE, HORNS_STAND_M};
+    let range = range();
+    let without = Range::new(
+        Mountains {
+            horns_m: 0.0,
+            ..Mountains::START
+        },
+        Seed(1),
+    );
+    let (mut low, mut raised, mut heart, mut moved) = (0, 0, 0, 0);
+    for d in directions(60_000) {
+        let point = d * RADIUS;
+        let inside = range.inside(point);
+        if inside <= 0.0 {
+            continue;
+        }
+        let ground = without.unribbed(point);
+        let floor = Mountains::START.base_m * smoothstep(0.0, FLOOR_RISES, inside);
+        let by = range.unribbed(point) - ground;
+        if inside < HORNS_INSIDE.0 && ground - floor < HORNS_STAND_M.0 {
+            low += 1;
+            // Never cut, and raised only by a ridge out from a horn that stands (`massif`).
+            assert!(
+                by > -1.0,
+                "a cirque cuts low foothill ground {by} m at {point}"
+            );
+            if by > 50.0 {
+                raised += 1;
+            }
+        } else if inside > HORNS_INSIDE.1 {
+            heart += 1;
+            if by.abs() > 50.0 {
+                moved += 1;
+            }
+        }
+    }
+    assert!(low > 1000, "only {low} places on low foothill ground");
+    assert!(
+        raised * 20 < low,
+        "{raised} of {low} low foothill places raised"
+    );
+    assert!(
+        moved * 10 > heart && heart > 1000,
+        "{moved} of {heart} places in the heart moved"
     );
 }
