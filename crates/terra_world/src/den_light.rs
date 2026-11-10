@@ -284,7 +284,7 @@ fn texels(seen: &Seen, sides: &[(Vec3, Vec3); 6]) -> Vec<u8> {
 }
 
 /// Works the den's light out once in each world, then lights it from the sky as it is
-/// painted, again whenever the sky has changed.
+/// painted, again whenever the sky has changed. Its volume is in the world once first lit.
 fn light(
     mut commands: Commands,
     mut state: ResMut<Light>,
@@ -328,11 +328,6 @@ fn light(
                     Name::new("Den light"),
                     Transform::from_matrix(Mat4::from_mat3(seen.axes))
                         .with_translation(seen.middle),
-                    IrradianceVolume {
-                        voxels: image.clone(),
-                        intensity: 0.0,
-                        affects_lightmapped_meshes: false,
-                    },
                 ))
                 .id();
             *state = Light::Lit {
@@ -360,6 +355,15 @@ fn light(
             *from = Some(Box::new(*open));
             if let Some(mut picture) = images.get_mut(&*image) {
                 picture.data = Some(texels(seen, &world_sides(&open)));
+                // In the world, for a view to gather, only from its first light: a volume
+                // with none in it would black out all it holds (D485).
+                if !volumes.contains(*entity) {
+                    commands.entity(*entity).insert(IrradianceVolume {
+                        voxels: image.clone(),
+                        intensity: open.brightness,
+                        affects_lightmapped_meshes: false,
+                    });
+                }
             }
         }
     }
@@ -368,6 +372,46 @@ fn light(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_dens_volume_is_in_the_world_only_once_it_is_lit() {
+        // D485: a fragment inside a volume takes its diffuse light from the volume alone, so
+        // one gathered before its light is written blacks out the den and the land over it.
+        // Worked out but with no sky painted yet, nothing is there to gather; with a sky,
+        // a volume with light in it is.
+        use crate::sky_occlusion::lit_volumes;
+        let seen = Seen {
+            cells: UVec3::splat(2),
+            sides: vec![[1.0; 6]; 8],
+            about: vec![1.0; 8],
+            middle: Vec3::Y * 1000.0,
+            axes: Mat3::from_diagonal(Vec3::splat(6.0)),
+        };
+        let pool = AsyncComputeTaskPool::get_or_init(bevy::tasks::TaskPool::new);
+        let mut app = App::new();
+        app.insert_resource(Planet::smooth(terra_core::PlanetSpec {
+            seed: terra_core::Seed(1),
+            radius_m: 2000.0,
+        }))
+        .init_resource::<Assets<Image>>()
+        .insert_resource(Light::Baking(pool.spawn(async move { seen })))
+        .add_systems(Update, light);
+        let mut frames = 0;
+        while !matches!(*app.world().resource::<Light>(), Light::Lit { .. }) {
+            app.update();
+            frames += 1;
+            assert!(frames < 20_000, "the den's light was never worked out");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        app.update();
+        assert!(lit_volumes(&mut app).is_empty());
+        app.insert_resource(crate::skylight::clear_sky(
+            Vec3::new(0.3, 0.5, 0.8),
+            Quat::IDENTITY,
+        ));
+        app.update();
+        assert_eq!(lit_volumes(&mut app).len(), 1);
+    }
 
     /// A level ground with a chamber under it and a shaft up to the air at one end: sky
     /// reaches down the shaft and a little way in, the chamber's far end sees none, and the
