@@ -1,0 +1,77 @@
+{
+  "$schema": "./part.schema.json",
+  "part": "cross_peen_head",
+  "type": "hammer_head",
+  "about": "a builder's plain forged-iron hammer head: a flat square face, a thick cheek round the eye and a blunt cross peen (art/parts/hammer/heads.png)",
+  "kinds": [
+    "hammer"
+  ],
+  "model": "models/parts/cross_peen_head.glb",
+  "points": [
+    {
+      "name": "eye.lower",
+      "type": "eye",
+      "at": [
+        0,
+        0,
+        0
+      ],
+      "dir": [
+        0,
+        1,
+        0
+      ],
+      "size": 0.015
+    },
+    {
+      "name": "eye.upper",
+      "type": "eye",
+      "at": [
+        0,
+        0.047,
+        0
+      ],
+      "dir": [
+        0,
+        1,
+        0
+      ],
+      "size": 0.015
+    },
+    {
+      "name": "face",
+      "type": "face",
+      "at": [
+        0.00003,
+        0.02562,
+        -0.04141
+      ],
+      "dir": [
+        0,
+        0,
+        -1
+      ]
+    }
+  ],
+  "centre_m": [
+    0.00004,
+    0.02472,
+    -0.00033
+  ],
+  "bounds_m": [
+    [
+      -0.01885,
+      0,
+      -0.04141
+    ],
+    [
+      0.0191,
+      0.04799,
+      0.06125
+    ]
+  ],
+  "volume_m3": {
+    "value": 0.000070959,
+    "source": "measured on models/parts/cross_peen_head.glb by tools/items/part.ts --write"
+  }
+}

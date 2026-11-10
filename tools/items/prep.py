@@ -29,6 +29,8 @@ The part's prep.json says what a person decided and nothing measured:
               exact at bore_m, its wall wall_m out from it (the relief kept in proportion), its
               look baked on from the model; Tripo's tubes are open, so they cannot be cut
   edge_band_m a head's bit: how far back from its front-most point the cutting edge runs
+  face_band_m a hammer_head's striking face (its `face` point, in place of the edge's two): how far
+              back from its front-most point the face lies (default 3 mm); its middle is the point
   budget      a head: triangles before its cuts add about 340 (art-style.md: a tool's head, 800 at most)
 
 The points are in glTF's frame (+Y up, front +Z); part.ts --write measures a head's volume, a
@@ -295,6 +297,14 @@ def edge_points(ob, band):
     return keep[0], keep[-1]
 
 
+def face_point(ob, band):
+    """A hammer head's striking face, its front (-Z in glTF, +y here): the middle, across and up,
+    of what lies within `band` of the front-most point, on the front-most plane."""
+    most = max(v.co.y for v in ob.data.vertices)
+    near = [v.co for v in ob.data.vertices if v.co.y > most - band]
+    return Vector(((min(p.x for p in near) + max(p.x for p in near)) / 2, most, (min(p.z for p in near) + max(p.z for p in near)) / 2))
+
+
 def look(ob, path):
     """The part from its side (glTF +X), from above and from its front (glTF -Z), in its own
     colours, in one row: where the eye was marked and cut shows, so the mark is checked by eye."""
@@ -417,13 +427,18 @@ def main():
     bm.free()
     ob.data.transform(Matrix.Translation(-Vector((x, y, lo))))
     high.data.transform(Matrix.Translation(-Vector((x, y, lo))))
-    a, b = edge_points(ob, prep.get("edge_band_m", 0.03))
     points = [
         {"name": "eye.lower", "type": "eye", "at": [0.0, 0.0, 0.0], "dir": UP, "size": size},
         {"name": "eye.upper", "type": "eye", "at": [0.0, round(hi - lo, 5), 0.0], "dir": UP, "size": size},
-        {"name": "edge.lower", "type": "edge", "at": gltf(a), "dir": [0.0, 0.0, -1.0]},
-        {"name": "edge.upper", "type": "edge", "at": gltf(b), "dir": [0.0, 0.0, -1.0]},
     ]
+    if prep["type"] == "hammer_head":
+        points.append({"name": "face", "type": "face", "at": gltf(face_point(ob, prep.get("face_band_m", 0.003))), "dir": [0.0, 0.0, -1.0]})
+    else:
+        a, b = edge_points(ob, prep.get("edge_band_m", 0.03))
+        points += [
+            {"name": "edge.lower", "type": "edge", "at": gltf(a), "dir": [0.0, 0.0, -1.0]},
+            {"name": "edge.upper", "type": "edge", "at": gltf(b), "dir": [0.0, 0.0, -1.0]},
+        ]
     pieces.only(ob)
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(50.0), keep_sharp_edges=True)
     # Its own UVs (the cut's walls have none of Tripo's), then its look baked from the model as

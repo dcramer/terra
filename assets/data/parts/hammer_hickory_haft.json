@@ -1,0 +1,13 @@
+{
+  "$schema": "./part.schema.json",
+  "part": "hammer_hickory_haft",
+  "type": "haft",
+  "about": "a builder's hammer's short grey-brown hickory haft, a slight swell at its butt and a slim neck under the head, drawn in the hickory haft's skin (art/parts/axe/handles.png)",
+  "kinds": ["hammer"],
+  "skin": "models/parts/hickory_haft_skin.glb",
+  "length_m": { "value": 0.33, "source": "the reference hammer's, 0.33 m overall: a carpenter's 16 to 20 oz hammer is 13 in overall, a framing hammer 16 in (assets/data/kinds/hammer.json; recalled)" },
+  "grip_from_end_m": { "value": 0.07, "source": "the fist's middle a little under a hand's width up from the butt, the little finger 2 to 3 cm above the swell (assets/data/kinds/hammer.json; D546's hafted 0.04 to 0.12)" },
+  "grip_diameter_m": { "value": 0.032, "source": "the hatchet's 32 mm (short_hickory_haft.json): thinner handles sit badly in the fist; inside a power grip's range (holds.ts, NIOSH 2004-164)" },
+  "profile_m": { "value": [[0, 0.035], [0.008, 0.037], [0.018, 0.0365], [0.03, 0.034], [0.045, 0.032], [0.13, 0.032], [0.21, 0.025], [0.268, 0.021]], "source": "a hammer handle's shape: a low swell at the butt, a straight 32 mm grip a fist and a half long, then drawn down to a neck 21 to 25 mm across under the head, which whips a little, and a short shoulder into the eye's size (by eye, from wooden claw and cross-peen hammer handles; recalled)" },
+  "density_kg_m3": { "value": 765, "source": "hickory 600 to 930 kg/m^3, the middle (The Engineering ToolBox, Wood Species - Densities, engineeringtoolbox.com/wood-density-d_40.html, looked up 2026-10-28)" }
+}

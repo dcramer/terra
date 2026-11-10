@@ -10,10 +10,10 @@
   "slots": [
     { "slot": "working", "name": "head", "made_by": "model", "fits": ["hammer_head"], "joins": "its eye's two openings on the haft's line; the haft made to their diameters, 4 mm proud of eye.upper" },
     { "slot": "handle", "name": "haft", "made_by": "code", "fits": ["haft"], "joins": "a round shaft along +Y from its butt" },
-    { "slot": "trim", "name": "binding", "made_by": "model", "fits": ["collar"], "optional": true, "joins": "its bore on the haft: under the head (its straps, as today's look has 43 cm of them) or at the grip (a leather wrap)" }
+    { "slot": "trim", "name": "binding", "made_by": "model", "fits": ["collar"], "optional": true, "joins": "its bore on the haft: under the head or at the grip (a leather wrap)" }
   ],
   "points": {
-    "grip": { "state": "by rule", "how": "on the haft, grip_from_end up from its butt (the reference's 0.06 m; D546's hafted 0.04 to 0.12): the item's origin" },
+    "grip": { "state": "by rule", "how": "on the haft, grip_from_end up from its butt (the reference's 0.07 m; D546's hafted 0.04 to 0.12): the item's origin" },
     "second": { "state": "does not apply", "how": "held in one hand; a great hammer is another kind (holding.md's great_hammer)" },
     "edge": { "state": "by rule", "how": "the head's face point (its striking face's centre and span along +Y, on -Z, D546) carried through; a claw on +Z is not a working edge" }
   },
@@ -52,19 +52,19 @@
     "open": [{ "owner": "technical", "why": "a hammer's use set (holding.md's count, the tools' three), keyed for the reference" }]
   },
   "reference": {
-    "item": { "value": "hammer", "source": "today's look, art/held/hammer.json (tools/Hammer_Small.glb)" },
-    "length_m": { "value": 0.42, "source": "art/held/hammer.json length; the look's bounds measured 0.420" },
-    "mass_kg": { "value": 0.59, "source": "the head and a 0.025 m ash haft 0.42 m long (670 kg/m^3, recalled), 0.14 kg; a stand-in until its parts are weighed" },
-    "head_mass_kg": { "value": 0.45, "source": "a 16 oz claw hammer's head (recalled)" },
-    "balance_m": { "value": 0.284, "source": "computed from the head at 0.385 m and the haft's middle, from the grip" },
-    "inertia_kgm2": { "value": 0.056, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
-    "grip_diameter_m": { "value": 0.025, "source": "the hammer look's handle across, median (research/2026-10-28-assembled-parts-art.md section 4)" }
+    "item": { "value": "hammer", "source": "the bar's build tool (art/held/hammer.json), a one-handed builder's hammer; the numbers below are its recipe's in iron, cross_peen_head on hammer_hickory_haft, as `assemble item hammer cross_peen_head hammer_hickory_haft` gives them" },
+    "length_m": { "value": 0.33, "source": "the assembler's, the haft's own length, 4 mm proud of the head: a carpenter's 16 to 20 oz hammer is 13 in overall and a framing hammer 16 in (recalled): the shorter, one-handed and used at arm's length on a wall, not swung from the shoulder" },
+    "mass_kg": { "value": 0.7021, "source": "the assembler's: the parts weighed, the head in iron and the hickory haft 0.152 kg" },
+    "head_mass_kg": { "value": 0.5499, "source": "cross_peen_head's measured volume in iron (assets/data/parts/cross_peen_head.json, materials.json), made to 0.55 kg by its prep.json: a 20 oz (0.57 kg) carpenter's head, between a joiner's 0.45 kg and a framing hammer's 0.7 kg (recalled)" },
+    "balance_m": { "value": 0.1948, "source": "the assembler's, from the grip 0.07 m up from the butt" },
+    "inertia_kgm2": { "value": 0.033, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
+    "grip_diameter_m": { "value": 0.032, "source": "hammer_hickory_haft's grip, 32 mm, the hatchet's: inside a power grip's range (holds.ts, NIOSH 2004-164); the old look's 25 mm sat badly in the fist" }
   },
   "envelope": {
-    "inertia_kgm2": { "value": [0.0424, 0.0776], "source": "D459's tempo clamp 0.85 to 1.15: I_ref/1.15^2 to I_ref/0.85^2" },
-    "length_m": { "value": [0.378, 0.462], "source": "the reference's length ±10% at a fixed head (research/2026-10-28-assembled-items-animation.md section 1)" },
-    "head_mass_kg": { "value": [0.334, 0.631], "source": "the inertia band at the reference's length, solved for the head (-26% to +40%)" },
-    "balance_m": { "value": [0.239, 0.342], "source": "the inertia band at the reference's mass and length, solved for the balance" },
-    "state": "computed from stand-in masses; the hammer's use clips are not keyed for any item, so nothing is measured"
+    "inertia_kgm2": { "value": [0.025, 0.0457], "source": "D459's tempo clamp 0.85 to 1.15: I_ref/1.15^2 to I_ref/0.85^2" },
+    "length_m": { "value": [0.297, 0.363], "source": "the reference's length ±10% at a fixed head (research/2026-10-28-assembled-items-animation.md section 1)" },
+    "head_mass_kg": { "value": [0.42, 0.752], "source": "the inertia band at the reference's length and haft, solved for the head (-24% to +37%)" },
+    "balance_m": { "value": [0.163, 0.237], "source": "the inertia band at the reference's mass and length, solved for the balance" },
+    "state": "computed from the reference's weighed parts, not measured on clips: the hammer's use clips are not keyed for any item"
   }
 }
