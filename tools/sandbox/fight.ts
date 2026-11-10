@@ -11,9 +11,10 @@
 // Node 22.18 or later; no dependencies. About five minutes.
 
 import { spawnSync } from "node:child_process";
-import { readdirSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { call, film, give, press, start, stop, unpress, waitSeconds, waitUntil, warp } from "./client.ts";
+import { ROOT, call, film, give, press, sleep, start, stop, unpress, waitSeconds, waitUntil, warp } from "./client.ts";
+import { type Arm, type Through, readBlows, readChain, swing, untilLanding } from "./fight/plan.ts";
 
 const args = process.argv.slice(2);
 const SEED = args.includes("--seed") ? args[args.indexOf("--seed") + 1] : "3";
@@ -21,14 +22,15 @@ const SEED = args.includes("--seed") ? args[args.indexOf("--seed") + 1] : "3";
 const MOST_S = 240;
 /// Swings reach about this far, metres; the player closes to it and no nearer.
 const CLOSE_M = 2.4;
-/// When a blow of the troll's may land, in seconds from its beginning as the game says it:
-/// its sweep lands at 1.4 s and its smash at 1.93 s (data/creatures.ron), and the script sees
-/// each a fifth of a second late; which of the two is coming it cannot tell, as a player
-/// new to the troll cannot. The guard is up through all of it.
-const LANDS_S: [number, number][] = [[0.9, 2.5]];
-/// A swing commits the arm for this long, seconds (the set's slash, to where a guard may cut
-/// it short): none is begun with a blow due to land sooner, nor sooner after the last.
-const SWING_S = 0.7;
+/// When each blow of the troll's lands and how long it lasts, and how long each blow of the
+/// sword's chain keeps the arm, read from the game's data (fight/plan.ts): the guard is up
+/// from before the soonest may land until the latest has, and a swing is begun only if it
+/// is done before the next may land, since a held guard is raised only once the arm is in
+/// no move (a swing is not cut short by it).
+const BLOWS = readBlows(readFileSync(resolve(ROOT, "assets/data/creatures.ron"), "utf8"), "Troll");
+const CHAIN = readChain(readFileSync(resolve(ROOT, "assets/data/moves/sword.shielded.ron"), "utf8"));
+/// Presses of the swing's key are at least this far apart, seconds: one look and the next.
+const PRESS_APART_S = 0.25;
 /// A film of the fight is so many frames from its beginning.
 const FILM_FRAMES = 900;
 
@@ -88,6 +90,8 @@ async function fight(): Promise<string> {
   let [guards, swings, lowest, left] = [0, 0, hale, whole];
   let guarding = false;
   let swung = 0;
+  // The blow of the chain the arm was last sent on, and when.
+  let arm: { swing: number; began: number } | undefined;
   let held = "";
   let [stood, since, hops] = [[0, 0] as [number, number], Date.now(), 0];
   // What each second of the fight was, said if it is lost (--trace says it of a won one).
@@ -95,7 +99,9 @@ async function fight(): Promise<string> {
   let traced = -1;
   let was: [number, number] = [0, 0];
   while (Date.now() - began < MOST_S * 1000) {
+    const asked = Date.now();
     const now = await state();
+    const answered = Date.now();
     const it = now.near.find((each) => each.what === "Troll");
     lowest = Math.min(lowest, now.health);
     const second = Math.floor((Date.now() - began) / 1000);
@@ -119,16 +125,30 @@ async function fight(): Promise<string> {
     // the hill above the den.
     const me = (now as unknown as { at: [number, number] }).at;
     const [east, south] = [it.at![0] - me[0], it.at![1] - me[1]];
-    const far = 30 / Math.max(0.5, Math.hypot(east, south));
-    await call("play.aim", { at: [me[0] + east * far, me[1] + south * far], up: 2.5, level: true }).catch(() => undefined);
-    // "Attack(1.2)": a blow of its, so far through. Guard from its beginning until it has landed.
-    const through = /^Attack\(([0-9.]+)/.exec(it.doing ?? "")?.[1];
-    const coming = through !== undefined && (it.distance ?? 99) < 7 && LANDS_S.some(([from, to]) => Number(through) >= from && Number(through) < to);
+    const aimed = 30 / Math.max(0.5, Math.hypot(east, south));
+    // "Attack(1.2)": a blow of its, so far through.
+    // How far through it is now is between what was said plus the time since the answer came
+    // and plus the time since it was asked; a key pressed takes about an answer's time to
+    // arrive. Both are the machine's, measured each look.
+    const said = /^Attack\(([0-9.]+)/.exec(it.doing ?? "")?.[1];
+    const ago = (from: number) => (Date.now() - from) / 1000;
+    const through: Through | undefined = said === undefined || (it.distance ?? 99) >= 7 ? undefined : [Number(said) + ago(answered), Number(said) + ago(asked)];
+    const late = (answered - asked) / 1000;
+    const until = untilLanding(BLOWS, through);
+    const far = (it.distance ?? 0) > CLOSE_M;
+    // A swing, if the arm will be free of it before a blow may land: the chain's next from
+    // a blow past its cancel, its first from a free arm. Never while the troll is in no blow:
+    // its next begins the moment it is in reach.
+    const busy: Arm = arm && { swing: arm.swing, for: ago(arm.began) };
+    const committed = busy !== undefined && busy.for < CHAIN[busy.swing].cancel;
+    const next = far || through === undefined || now.stamina <= 25 ? undefined : swing(CHAIN, busy, until, late);
     // One key is held at a time, long, and let go by the clock when what the player is at
-    // changes: on their guard through a blow, stepping in while the troll is out of the
-    // sword's reach, else free to swing. (A step breaks the guard, a guard stops the step,
-    // and a key pressed again while held is pressed anew, which lowers a raised guard.)
-    const want = coming ? "b" : (it.distance ?? 0) > CLOSE_M ? "w" : "";
+    // changes: stepping in while the troll is out of the sword's reach and no blow is about
+    // to land, hands free for a swing that fits or is under way, else on their guard through
+    // the troll's blow. (A step breaks the guard, a guard stops the step, and a key pressed
+    // again while held is pressed anew, which lowers a raised guard.)
+    const coming = through !== undefined && (far ? until < 0.7 + late : next === undefined && !committed);
+    const want = coming ? "b" : far ? "w" : "";
     if (want !== held) {
       if (held) await unpress();
       if (want) await hold(want, 10);
@@ -145,13 +165,15 @@ async function fight(): Promise<string> {
         await press("space");
       }
     } else since = Date.now();
-    const due = through === undefined || LANDS_S.some(([from, to]) => Number(through) + SWING_S > from && Number(through) < to);
-    if (!want && !due && now.stamina > 25 && Date.now() - swung > SWING_S * 1000) {
+    if (!want && next !== undefined && Date.now() - swung > PRESS_APART_S * 1000) {
       swung = Date.now();
+      arm = { swing: next, began: swung };
       swings++;
       await press("e");
     }
-    await waitSeconds(0.1);
+    // The view last, each look: what is decided above waits on nothing but the look itself.
+    await call("play.aim", { at: [me[0] + east * aimed, me[1] + south * aimed], up: 2.5, level: true }).catch(() => undefined);
+    await sleep(50);
   }
   const took = (Date.now() - began) / 1000;
   if (filming) {
