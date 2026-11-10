@@ -324,10 +324,9 @@ export function fistOff(body: Glb, pose: Pose[], side: string, socket: number, h
   for (const stem of CHAINS) {
     if (stem === "thumb" && grip === "hook") continue;
     const bones = chainBones(stem, side);
-    for (let k = stem === "thumb" ? 1 : 0; k < 3; k++) {
-      const off = (toLine(pose[body.named(bones[k])].t, pose[body.named(bones[k + 1])].t, line.c, line.d) - line.r - pad) * 100;
-      if (Math.abs(off) > Math.abs(worst.cm)) worst = { ...worst, cm: off, where: bones[k] };
-    }
+    const offs: [string, number][] = [];
+    for (let k = stem === "thumb" ? 1 : 0; k < 3; k++) offs.push([bones[k], (toLine(pose[body.named(bones[k])].t, pose[body.named(bones[k + 1])].t, line.c, line.d) - line.r - pad) * 100]);
+    for (const [bone, off] of counted(offs, grip)) if (Math.abs(off) > Math.abs(worst.cm)) worst = { ...worst, cm: off, where: bone };
     if (stem === "thumb") continue;
     const wrap = wrapOf(bones.map((b) => pose[body.named(b)].t), line.c, line.d);
     if (wrap < worst.wrap) worst = { ...worst, wrap, short: bones[0] };
@@ -337,9 +336,10 @@ export function fistOff(body: Glb, pose: Pose[], side: string, socket: number, h
 
 /** A hand closed on a handle at rest (`close` from `handRest`'s `locals` and `socket`): each
  * counted bone's gap to the handle's surface padded by a finger, cm, by its bone, in the hand's
- * frame, as `fistOff` measures a posed body's. */
-export function restOff(locals: Map<string, Pose>, socket: Pose, handle: Handle, grip: Grip, side: string): Map<string, number> {
-  const turns = close(locals, socket, handle, grip, side);
+ * frame, as `fistOff` measures a posed body's. `closedOn`: the handle the fingers closed on,
+ * where it is not the one measured (a test's planted handle). */
+export function restOff(locals: Map<string, Pose>, socket: Pose, handle: Handle, grip: Grip, side: string, closedOn: Handle = handle): Map<string, number> {
+  const turns = close(locals, socket, closedOn, grip, side);
   const line = inFrame(handle, socket);
   const out = new Map<string, number>();
   for (const stem of CHAINS) {
@@ -352,9 +352,22 @@ export function restOff(locals: Map<string, Pose>, socket: Pose, handle: Handle,
       parent = apply(parent, { ...rest, r: turns.get(b) ?? rest.r });
       at.push(parent.t);
     }
-    for (let k = stem === "thumb" ? 1 : 0; k < 3; k++) out.set(bones[k], (toLine(at[k], at[k + 1], line.c, line.d) - line.r - FINGER_M * socket.s[0]) * 100);
+    const offs: [string, number][] = [];
+    for (let k = stem === "thumb" ? 1 : 0; k < 3; k++) offs.push([bones[k], (toLine(at[k], at[k + 1], line.c, line.d) - line.r - FINGER_M * socket.s[0]) * 100]);
+    for (const [bone, off] of counted(offs, grip)) out.set(bone, off);
   }
   return out;
+}
+
+/** Of one finger's bones' gaps to the handle (cm, by bone), those a grip is judged by. A power
+ * grip clamps the handle between fingers and palm, so every bone lies on it: all of them. A hook
+ * grip hangs the handle in the fingers' curl with the palm off it (Napier 1956, "The prehensile
+ * movements of the human hand": the hook grip, a load carried on the flexed fingers alone), so
+ * a thin handle lies on one bone of each finger and the knuckle's bone need not reach it: the
+ * one bone furthest into the handle, or, none in it, the nearest. A finger with no bone on the
+ * handle is still that far off, and a bone through it that far in. */
+export function counted(offs: [string, number][], grip: Grip): [string, number][] {
+  return grip === "hook" && offs.length ? [offs.reduce((a, b) => (b[1] < a[1] ? b : a))] : offs;
 }
 
 /** The least a finger closed round a handle comes round it from its knuckle, degrees: near a

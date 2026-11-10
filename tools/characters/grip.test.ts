@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { ROOT } from "./attach_contract.ts";
 import { Glb } from "./glb.ts";
-import { FINGER_M, FIST_CM, FIT_M, PALM_M, type Handle, handRest, palmed, restOff, seatOf, seated } from "./grip.ts";
+import { FINGER_M, FIST_CM, FIT_M, PALM_M, type Handle, counted, handRest, lookGrip, palmed, restOff, seatOf, seated } from "./grip.ts";
 import { BODY, skinOf } from "./skin.ts";
 
 // The fist on thin, middle and thick handles (D562): every template's own hand, closed at rest
@@ -49,6 +49,42 @@ test("a seated look's handle crosses the grip on the palm, a thinner one nearer 
   // As thick as the fist is placed for, or thicker: mid palm.
   assert.equal(palmed(FIT_M)[2], -0);
   assert.equal(palmed(0.025)[2], -0);
+});
+
+// A hook grip (held-report j2): the committed basket hangs by its handle in the left hand's
+// curled fingers. Judged as a power grip, as main judged it on 2026-11-09, a knuckle's bone is
+// over a centimetre off the thin handle (2.6 cm in play), which a hook never brings to it.
+// Judged as a hook, each finger by the one bone the handle lies on, it passes on every body;
+// the planted faults (D632) still fail: the handle 3 cm out of the fingers' curl, and 1.5 cm
+// into them.
+test("a hung look's hook grip is judged by the bone of each finger its handle lies on", () => {
+  const { grip, handle } = lookGrip(join(ROOT, "assets", "models", "held", "basket.glb"))!;
+  assert.equal(grip, "hook");
+  const worstOf = (h: Handle, as: "hook" | "power") => {
+    let most = { cm: 0, where: "" };
+    for (const shape of [{ name: "base", moved: undefined }, ...shapes]) {
+      const { locals, socket } = handRest(body, "l", shape.moved);
+      // The fingers closed on the handle as it is; `h` is where a planted one is measured.
+      for (const [bone, cm] of restOff(locals, socket, h, as, "l", handle)) if (Math.abs(cm) > Math.abs(most.cm)) most = { cm, where: `${bone}, ${shape.name}` };
+    }
+    return most;
+  };
+  const real = worstOf(handle, "hook");
+  assert.ok(Math.abs(real.cm) <= FIST_CM, `${real.cm.toFixed(2)} cm at ${real.where}`);
+  const power = worstOf(handle, "power");
+  assert.ok(power.cm > FIST_CM, `as a power grip ${power.cm.toFixed(2)} cm at ${power.where}`);
+  assert.doesNotMatch(real.where, /thumb/);
+  // Planted: the handle out of the curl, away from the fingers' ends, and into the fingers.
+  for (const [by, sign] of [[0.03, 1], [0.015, -1]] as const) {
+    const most = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([x, z]) => worstOf({ ...handle, at: [handle.at[0] + x * by, handle.at[1], handle.at[2] + z * by] }, "hook").cm);
+    const found = sign > 0 ? Math.max(...most) : Math.min(...most);
+    assert.ok(sign * found > FIST_CM, `the handle moved ${by * 100} cm: ${most.map((m) => m.toFixed(2))} cm`);
+  }
+  // The rule itself: all a power grip's bones count, a hook's one a finger.
+  const offs: [string, number][] = [["a", 2.6], ["b", 0.4], ["c", 0.1]];
+  assert.deepEqual(counted(offs, "power"), offs);
+  assert.deepEqual(counted(offs, "hook"), [["c", 0.1]]);
+  assert.deepEqual(counted([["a", 2.6], ["b", -1.5], ["c", 0.1]], "hook"), [["b", -1.5]]);
 });
 
 test("the twin's numbers are the game's", () => {
