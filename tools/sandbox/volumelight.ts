@@ -37,7 +37,7 @@ type Den = { mouth: Place; floor: Place; ahead: Place };
 
 /// The den's check. The world, the volume's name (`den_light`), and the frames a view is
 /// held before its still (the exposure eases).
-const DEN = ["--experiment", "play", "--fresh", "--save", "shots/volumelight.ron", "--radius", "30000", "--seed", "3", "--time", "13", "--mute"];
+const DEN = ["--experiment", "play", "--fresh", "--save", "shots/volumelight.ron", "--radius", "30000", "--seed", "3", "--time", "13", "--mute", "--clean"];
 const DEN_VOLUME = "Den light";
 const HELD_FRAMES = 240;
 const PASSES = ["warm", "on", "off", "back"];
@@ -47,6 +47,14 @@ const PASSES = ["warm", "on", "off", "back"];
 const TRUNK: Box = [0.525, 0.1, 0.6, 0.25];
 const GRASS: Box = [0.85, 0.88, 1, 1];
 const WHOLE: Box = [0, 0, 1, 1];
+/// On the ground view, looking down from the level view's eye, read and not judged: the bare
+/// floor inside the den's box (matte and facing up), grass inside the box, and the grass in
+/// the corner, outside it. The last is lit the same either way, so what it reads apart from
+/// 1 is the eye's own change between the stills (the exposure), not the volume's: an inside
+/// reading over it is the volume's alone.
+const FLOOR: Box = [0.1, 0.85, 0.3, 1];
+const GRASS_IN: Box = [0.65, 0.55, 0.76, 0.7];
+const GRASS_OUT: Box = [0.87, 0.9, 1, 1];
 /// How far the trunk may stand from itself without the volume, and its still with the volume
 /// put back from its first (a run less steady than that has measured nothing). The trunk
 /// reads 0.984 and 0.992 (two steady runs, 2026-11-10; 1.05 before a volume's light took the
@@ -55,7 +63,9 @@ const WHOLE: Box = [0, 0, 1, 1];
 const SAME = 0.05;
 const STEADY = 0.05;
 /// The chamber toward the mouth with the volume: its luma and blue share at most these, and
-/// without the volume at least LIT times as bright. Read 0.008, 0.19 and 7.8 at b4ea4ba5.
+/// without the volume at least LIT times as bright. Read 0.008, 0.19 and 7.8 at b4ea4ba5;
+/// 0.0036, 0.195 and 14.75 once the stills were `--clean` (one run, 2026-11-10): the
+/// interface's own light had been counted in the chamber's.
 const DARK = 0.02;
 const BLUE = 0.25;
 const LIT = 2;
@@ -148,7 +158,8 @@ async function shoot(volume: string, sandboxArgs: string[], views: (den?: Den) =
   await stop().catch(() => undefined);
 }
 
-/// The den's views: level at the mouth from 15 m back, and from the chamber's floor toward it.
+/// The den's views: level at the mouth from 15 m back, down at the ground from the same eye,
+/// and from the chamber's floor toward the mouth.
 function denViews(den?: Den): View[] {
   if (!den) throw new Error("this world has no den (den.state)");
   const { mouth, floor, ahead } = den;
@@ -161,6 +172,7 @@ function denViews(den?: Den): View[] {
   const [mx, mz] = toward(floor, mouth);
   return [
     { name: "level", vantage: [mouth[0] - ax * 15, mouth[1] + 3, mouth[2] - az * 15, ...mouth] },
+    { name: "ground", vantage: [mouth[0] - ax * 15, mouth[1] + 3, mouth[2] - az * 15, mouth[0] - ax * 11, mouth[1], mouth[2] - az * 11] },
     { name: "chamber", vantage: [floor[0], floor[1] + 1.6, floor[2], floor[0] + mx * 4, floor[1] + 0.4, floor[2] + mz * 4] },
   ];
 }
@@ -171,7 +183,7 @@ if (import.meta.main) {
     allowPositionals: true,
   });
   const out = resolve(values.from ?? values.out ?? join(ROOT, "target/check/volumelight"));
-  const views = values.volume ? ["view"] : ["level", "chamber"];
+  const views = values.volume ? ["view"] : ["level", "ground", "chamber"];
   if (!values.from) {
     if (values.volume && !values.view) {
       console.log("volumelight: ✗ --volume needs --view x,y,z,x,y,z, an eye and what it looks at from the start (the script's header), or --from a folder already shot");
@@ -193,8 +205,11 @@ if (import.meta.main) {
     process.exit(0);
   }
   const [trunk, grass, chamber] = [shaded(out, "level", TRUNK), shaded(out, "level", GRASS), reading(out, "chamber", WHOLE)];
+  const [floor, inside, outside] = [FLOOR, GRASS_IN, GRASS_OUT].map((box) => shaded(out, "ground", box));
+  const over = (r: Reading) => `${r.ratio.toFixed(3)} (back over on ${r.steady.toFixed(3)}, ${(r.ratio / outside.ratio).toFixed(3)} over the grass outside)`;
+  const down = `looking down, read only, the floor in the box ${over(floor)}, grass in it ${over(inside)}, grass outside it ${told(outside)}`;
   const failed = judged(trunk, chamber);
   const fix = failed.length ? `: ${failed.join("; ")}. The den's volume holds the wrong light in those cells: see den_light.rs's \`Whose\` (open air and the rock under it hold the open sky's, D485) and \`thrown_on\`, and do not widen the bars` : "";
-  console.log(`volumelight: ${failed.length ? "✗" : "✓"} the den's volume on against off: the trunk over the den ${told(trunk)}, within ${SAME} of 1; the grass by it, read only, ${told(grass)}; the chamber toward the mouth luma ${chamber.on.toFixed(4)} (at most ${DARK}), blue share ${chamber.blue.toFixed(3)} (at most ${BLUE}), ${(1 / chamber.ratio).toFixed(2)} times as bright without it (at least ${LIT})${fix}; stills in ${out}`);
+  console.log(`volumelight: ${failed.length ? "✗" : "✓"} the den's volume on against off: the trunk over the den ${told(trunk)}, within ${SAME} of 1; the grass by it, read only, ${told(grass)}; ${down}; the chamber toward the mouth luma ${chamber.on.toFixed(4)} (at most ${DARK}), blue share ${chamber.blue.toFixed(3)} (at most ${BLUE}), ${(1 / chamber.ratio).toFixed(2)} times as bright without it (at least ${LIT})${fix}; stills in ${out}`);
   process.exit(failed.length ? 1 : 0);
 }
