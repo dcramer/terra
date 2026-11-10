@@ -95,11 +95,152 @@ fn a_carried_torchs_key_hangs_over_its_holders_head() {
         let hearth = torch(0.0)[0].clone();
         torch::lights(&hearth, &blaze, 1.0, Vec3::ZERO, hang, |_| None, held)
     };
-    let (held, staked) = (rig(true), rig(false));
+    let (held, staked) = (rig(Some(None)), rig(None));
     let over = held[0].at.y - staked[0].at.y;
     assert!((0.25..0.4).contains(&over), "{over} m over a staked key");
     assert!(held[0].casts && !held[1].casts);
     assert_eq!(held[1].at, staked[1].at);
+}
+
+/// A torch whose holder's body says where its key hangs (`carried::Carried`): the key stays
+/// on that point of the body however the hand swings the flames, and turns and walks with the
+/// body; the tip light stays on the flames. On the hand bone the key's step changed 16 mm a
+/// frame while running, and every shadow it cast shook with it (torch-light j3).
+#[test]
+fn a_carried_torchs_key_moves_with_its_holders_body_not_their_hand() {
+    use crate::fire::carried::Carried;
+    let feet = Vec3::new(0.0, 2000.0, 0.0);
+    let by = Carried {
+        by: Entity::PLACEHOLDER,
+        side: 1.0,
+        key: Some([0.3, 2.1, 0.15]),
+        fill: None,
+    };
+    let lights = |holder: Transform, hand: Vec3| {
+        let blaze = Blaze {
+            at: hand,
+            tall: 0.3,
+            heat: 0.6,
+            seed: 0.3,
+            wide: 0.1,
+            out: Vec3::ZERO,
+        };
+        let hang = |share: f32| blaze.at + Vec3::Y * blaze.tall * share;
+        let hearth = torch(0.0)[0].clone();
+        let at = by.at(&GlobalTransform::from(holder));
+        let held = Some(at.key);
+        torch::lights(&hearth, &blaze, 1.0, Vec3::ZERO, hang, |_| None, held)
+    };
+    let stood = Transform::from_translation(feet);
+    let hand = feet + Vec3::new(0.3, 1.4, -0.3);
+    // The hand swings 0.2 m in a frame: the key does not move, the tip goes with the flames.
+    let (a, b) = (
+        lights(stood, hand),
+        lights(stood, hand + Vec3::new(0.0, 0.15, 0.13)),
+    );
+    assert_eq!(a[0].at, b[0].at);
+    assert!(a[0].casts && !a[1].casts);
+    assert!((a[1].at.distance(b[1].at) - 0.2).abs() < 0.01);
+    assert!(a[0].at.distance(feet + Vec3::new(0.3, 2.1, -0.15)) < 1e-3);
+    // The body walks a metre and turns to face +x: the key goes with it, to its right still.
+    let turned = Transform::from_translation(feet + Vec3::X).looking_to(Vec3::X, Vec3::Y);
+    let c = lights(turned, hand);
+    assert!(
+        c[0].at.distance(feet + Vec3::X + Vec3::new(0.15, 2.1, 0.3)) < 1e-3,
+        "{}",
+        c[0].at - feet
+    );
+}
+
+/// The lights of one hand torch's flames at `feet + (−0.39, 1.86, −0.43)` (where the left hand
+/// holds it standing) over ten seconds at 60 frames a second, as `lit` makes them, with `rig`
+/// and its holder's body's places if it is carried.
+fn frames(rig: crate::fire::Rig, carried: bool) -> Vec<Vec<Lit>> {
+    use crate::fire::carried::CarriedAt;
+    let feet = Vec3::new(0.0, 2000.0, 0.0);
+    let blazes = Blazes {
+        kept: vec![Blaze {
+            at: feet + Vec3::new(-0.39, 1.86, -0.43),
+            tall: 0.3,
+            heat: 0.6,
+            seed: 0.3,
+            wide: 0.1,
+            out: Vec3::ZERO,
+        }],
+        rigs: vec![rig],
+        carried: vec![if carried {
+            CarriedAt {
+                key: Some(feet + Vec3::new(-0.33, 2.25, -0.47)),
+                fill: Some((feet + Vec3::new(0.0, 1.4, 1.0), 0.035)),
+            }
+        } else {
+            CarriedAt::default()
+        }],
+        ..default()
+    };
+    (0..600)
+        .map(|frame| lit(&blazes, frame as f32 / 60.0, crate::fire::BreathTier::Cards))
+        .collect()
+}
+
+/// A carried torch lights its holder too: a third light on the point of their body it is
+/// given, behind them, a few hundredths of the torch's light, casting nothing, steady while
+/// the key flickers, with no glow in the air and no twin, reaching no farther than the body.
+/// A staked or wall torch, a carried one whose holder gives no place, and a hearth have two
+/// lights, as before.
+#[test]
+fn a_carried_torch_has_a_dim_steady_fill_on_its_holder_and_no_other_fire_has() {
+    use crate::fire::Rig;
+    let feet = Vec3::new(0.0, 2000.0, 0.0);
+    let held = frames(Rig::Held, true);
+    let key: f32 = held.iter().map(|l| l[0].lumens).sum::<f32>() / held.len() as f32;
+    let flickers = held.iter().any(|l| (l[0].lumens / key - 1.0).abs() > 0.02);
+    assert!(flickers, "the key does not flicker: the test shows nothing");
+    for lights in &held {
+        assert_eq!(lights.len(), 3);
+        let fill = &lights[2];
+        assert!(!fill.casts && !fill.kept && fill.still.is_none());
+        assert_eq!(fill.at, feet + Vec3::new(0.0, 1.4, 1.0));
+        assert!((fill.lumens / held[0][2].lumens - 1.0).abs() < 1e-5);
+        assert!(fill.range < 3.0 && fill.color == lights[0].color);
+    }
+    // The share it is given, of the whole torch's light (its key's and its tip's).
+    let whole: f32 = held.iter().map(|l| l[0].lumens + l[1].lumens).sum::<f32>() / 600.0;
+    let share = held[0][2].lumens / whole;
+    assert!((share - 0.035).abs() < 0.003, "the fill is {share}");
+    for (rig, carried) in [
+        (Rig::Held, false),
+        (Rig::Torch, false),
+        (Rig::Hearth, false),
+    ] {
+        let lights = frames(rig, carried);
+        assert!(lights.iter().all(|l| l.len() == 2), "{rig:?}");
+    }
+    // Its key and tip are what they were without the fill.
+    let alone = frames(Rig::Held, false);
+    assert_eq!(held[7][0].lumens, alone[7][0].lumens);
+    assert_eq!(held[7][1].at, alone[7][1].at);
+}
+
+/// With its holder standing still a carried torch's key moves only by its flames' sway, under
+/// 5 mm a frame at 60 frames a second: on the hand bone it moved with the arm, its step
+/// changing 16 mm a frame while running (torch-light j3). Over its flames it would go with a
+/// hand swung 0.2 m, as the test above shows.
+#[test]
+fn a_carried_torchs_key_on_a_still_body_moves_under_five_millimetres_a_frame() {
+    let held = frames(crate::fire::Rig::Held, true);
+    let steps: Vec<f32> = held
+        .windows(2)
+        .map(|w| w[0][0].at.distance(w[1][0].at) * 1000.0)
+        .collect();
+    let most = steps.iter().copied().fold(0.0_f32, f32::max);
+    let mean = steps.iter().sum::<f32>() / steps.len() as f32;
+    assert!(most > 0.0, "the key does not sway: the test shows nothing");
+    assert!(
+        mean < 5.0 && most < 10.0,
+        "the key steps {mean} mm a frame on the mean, {most} at most"
+    );
+    println!("key step mean {mean} mm, most {most} mm");
 }
 
 /// Two shadow-casting lights far apart are still matched by place: the nearer entity wins

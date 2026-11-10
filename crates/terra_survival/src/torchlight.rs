@@ -5,11 +5,13 @@
 
 use crate::held::InHand;
 use crate::inventory::{self, Backpack, Bar, Gear, Items, OFF_HAND};
-use bevy::{light::NotShadowCaster, platform::collections::HashSet, prelude::*};
+use bevy::light::NotShadowCaster;
+use bevy::platform::collections::{HashMap, HashSet};
+use bevy::prelude::*;
 use terra_walker::Player;
 use terra_walker::character::Held;
 use terra_walker::figure::{Grip, Hand};
-use terra_world::fire::{Body, Kindled, Logs, Rig, TORCH_LIGHT};
+use terra_world::fire::{Body, Carried, Fill, Kindled, Logs, Rig, TORCH_LIGHT};
 use terra_world::footprint::Footprint;
 
 /// Where its flames stand from along its look, from where it is held, in metres: its head, as
@@ -27,6 +29,29 @@ const FIRE: Kindled = Kindled {
     light: TORCH_LIGHT,
     rig: Rig::Held,
 };
+
+/// Where a carried torch's shadowed light hangs on its holder's body (`fire::Carried::key`:
+/// to the torch's side, up, ahead, metres from their feet). None: over its flames, on the
+/// hand. A place on the body is tried against that in one game run by
+/// tools/sandbox/torchlight.ts (`fire.carried`).
+const KEY_M: Option<[f32; 3]> = None;
+/// Its fill on its holder (`fire::Carried::fill`): none.
+const FILL: Option<Fill> = None;
+
+/// The light of the torch in `grip`'s hand on its holder's body: on the right for the main
+/// hand, the left for the off hand.
+fn carried(grip: &Grip) -> Carried {
+    let side = match grip.hand {
+        Hand::Main => 1.0,
+        Hand::Off => -1.0,
+    };
+    Carried {
+        by: grip.player,
+        side,
+        key: KEY_M,
+        fill: FILL,
+    }
+}
 
 /// A torch's flame, with its light.
 #[derive(Component)]
@@ -49,7 +74,7 @@ fn light(
     meshes: Query<(), With<Mesh3d>>,
 ) {
     // What is alight now: the look in each hand holding a torch.
-    let mut alight = HashSet::new();
+    let mut alight = HashMap::new();
     for (hand, grip, shown) in &grips {
         let lights = shown
             .kind()
@@ -71,19 +96,20 @@ fn light(
             .ok()
             .and_then(|looks| looks.iter().find(|&each| held.contains(each)));
         if let (true, Some(torch)) = (burning, in_hand) {
-            alight.insert(torch);
+            alight.insert(torch, carried(grip));
         }
     }
     // Anything alight that is not a torch in hand goes out.
     let mut lit = HashSet::new();
     for (flame, parent) in &flames {
-        if alight.contains(&parent.parent()) {
+        if alight.contains_key(&parent.parent()) {
             lit.insert(parent.parent());
         } else {
             commands.entity(flame).despawn();
         }
     }
-    for torch in alight.into_iter().filter(|torch| !lit.contains(torch)) {
+    let unlit = alight.into_iter().filter(|(torch, _)| !lit.contains(torch));
+    for (torch, carried) in unlit {
         // The fire burns up from the head however the torch is tipped: a kept fire is drawn
         // from where it stands, up. An empty footprint, so it clears no ground as a campfire
         // does (`fire::scorch`).
@@ -91,6 +117,7 @@ fn light(
             Name::new("Flame"),
             Flame,
             FIRE,
+            carried,
             Footprint::default(),
             Transform::from_xyz(0.0, HEAD_M, 0.0),
         ));
@@ -121,6 +148,27 @@ fn unshadow(
         });
         if burning {
             commands.entity(part).insert(NotShadowCaster);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A torch's light is its holder's, on the side of the hand it is in. A key on the body
+    /// hangs over the head (a 1.8 m body) and ahead of the spine: never behind, where it
+    /// would throw the holder's shadow forward over the ground they walk into.
+    #[test]
+    fn a_torchs_light_is_on_its_holders_body_on_the_torchs_side() {
+        let player = Entity::PLACEHOLDER;
+        let of = |hand| carried(&Grip { player, hand });
+        let (main, off) = (of(Hand::Main), of(Hand::Off));
+        assert_eq!(main.by, player);
+        assert!(main.side == 1.0 && off.side == -1.0);
+        assert_eq!((main.key, main.fill), (off.key, off.fill));
+        if let Some([side, up, ahead]) = main.key {
+            assert!(side >= 0.0 && up > 1.8 && up < 2.5 && ahead >= 0.0);
         }
     }
 }

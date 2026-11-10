@@ -6,6 +6,7 @@
 //! flipbook campfire lays a card every log's width or so along each log's top (RealTimeVFX's
 //! campfire breakdowns; research/2026-10-23-campfire-one-body.md).
 
+use super::carried::{Carried, CarriedAt};
 use super::{Blaze, Blazes, HEARTHS, Kindled, Rig};
 use crate::planet::MainCamera;
 use bevy::prelude::*;
@@ -137,7 +138,14 @@ impl Blazes {
 /// nearest `HEARTHS` to the eye come first and are drawn as hearths; each keeps its slot while it stays among them, so
 /// a slot's fire does not change as the eye moves (a dungeon has more torches than slots).
 pub(super) fn keep(
-    kindled: Query<(Entity, &Kindled, &GlobalTransform, Option<&Hung>)>,
+    kindled: Query<(
+        Entity,
+        &Kindled,
+        &GlobalTransform,
+        Option<&Hung>,
+        Option<&Carried>,
+    )>,
+    holders: Query<&GlobalTransform>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut slots: Local<Vec<Entity>>,
     mut numbers: Local<bevy::platform::collections::HashMap<Entity, f32>>,
@@ -168,7 +176,7 @@ pub(super) fn keep(
     fires.sort_by_key(|fire| order(fire.0));
     let hearths: Vec<[Vec4; 2]> = fires
         .iter()
-        .map(|(_, fire, placed, _)| fire.logs.packed(placed))
+        .map(|(_, fire, placed, ..)| fire.logs.packed(placed))
         .collect();
     let bodies: Vec<f32> = fires.iter().map(|(_, fire, ..)| fire.body.told()).collect();
     let lights: Vec<Color> = fires.iter().map(|(_, fire, ..)| fire.light).collect();
@@ -177,10 +185,18 @@ pub(super) fn keep(
         .iter()
         .map(|f| f.3.map_or(Vec3::ZERO, |h| h.0))
         .collect();
+    let carried: Vec<CarriedAt> = fires
+        .iter()
+        .map(|f| {
+            let by = f.4?;
+            Some(by.at(holders.get(by.by).ok()?))
+        })
+        .map(Option::unwrap_or_default)
+        .collect();
     numbers.retain(|&entity, _| kindled.contains(entity));
     let kept: Vec<Blaze> = fires
         .iter()
-        .map(|(entity, fire, at, _)| {
+        .map(|(entity, fire, at, ..)| {
             let at = at.translation();
             // One spawned this frame is not placed yet (its `GlobalTransform` is the next
             // frame's): its number waits for its place, or every fire's would be the same.
@@ -206,6 +222,7 @@ pub(super) fn keep(
         || lights != blazes.lights
         || rigs != blazes.rigs
         || hangs != blazes.hangs
+        || carried != blazes.carried
     {
         blazes.kept = kept;
         blazes.lights = lights;
@@ -213,6 +230,7 @@ pub(super) fn keep(
         blazes.hearths = hearths;
         blazes.bodies = bodies;
         blazes.hangs = hangs;
+        blazes.carried = carried;
     }
 }
 

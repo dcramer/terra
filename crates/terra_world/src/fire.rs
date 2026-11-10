@@ -32,6 +32,7 @@ use bevy::{
     prelude::*,
     render::{render_resource::Face, storage::ShaderBuffer},
 };
+pub use carried::{Carried, Fill};
 pub use exposure::{FireExposure, LEANING_WEIGHT};
 pub use hearth::{Body, Hung, Logs};
 
@@ -93,6 +94,8 @@ pub struct Blazes {
     lights: Vec<Color>,
     rigs: Vec<Rig>,
     hangs: Vec<Vec3>,
+    /// Where each carried one's lights hang, in the world (`Carried`).
+    carried: Vec<carried::CarriedAt>,
 }
 
 impl Blazes {
@@ -353,6 +356,7 @@ impl Puffs {
 
 pub fn plugin(app: &mut App) {
     seen::plugin(app);
+    carried::plugin(app);
     light::plugin(app);
     fog::plugin(app);
     fogged::plugin(app);
@@ -889,6 +893,7 @@ fn show(
 mod books;
 #[cfg(test)]
 mod burnout;
+mod carried;
 mod film;
 mod fog;
 mod fogged;

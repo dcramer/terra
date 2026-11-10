@@ -535,8 +535,12 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 };
                 if matches!(rig, Rig::Torch | Rig::Held) {
                     let hang = |share| blazes.hangs(fire, blaze, share);
-                    let held = rig == Rig::Held;
-                    return torch::lights(&main, blaze, shines, swayed, hang, still, held);
+                    let carried = blazes.carried.get(fire).copied().unwrap_or_default();
+                    let held = (rig == Rig::Held).then_some(carried.key);
+                    let [key, tip] = torch::lights(&main, blaze, shines, swayed, hang, still, held);
+                    let fill = carried.fill.filter(|_| held.is_some());
+                    let fill = fill.map(|(at, share)| torch::fill(&key, shines, at, share));
+                    return [Some(key), Some(tip), fill];
                 }
                 let top_rest = blazes.hangs(fire, blaze, HEARTH_TOP_UP);
                 let top = Lit {
@@ -551,8 +555,9 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     still: still(top_rest),
                     ..main.clone()
                 };
-                [main, top]
-            }),
+                [Some(main), Some(top), None]
+            })
+            .flatten(),
     );
     lit.extend(gathered(blazes, t));
     lit

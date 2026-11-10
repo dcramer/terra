@@ -57,7 +57,8 @@ const HELD_LIGHT_UP: f32 = 1.3;
 
 /// A torch's two lights: `hearth` is the hearth rig's key as it would be (its colour, glow and
 /// sway), `hang` where a share of its flames' height hangs, `still` its steady twin's, `held`
-/// whether it is carried in hand (`Rig::Held`).
+/// whether it is carried in hand (`Rig::Held`), and then where its holder's body hangs its key
+/// (`carried::Carried`) if it says: without, the key hangs over its flames.
 pub(super) fn lights(
     hearth: &Lit,
     blaze: &Blaze,
@@ -65,15 +66,15 @@ pub(super) fn lights(
     swayed: Vec3,
     hang: impl Fn(f32) -> Vec3,
     still: impl Fn(Vec3) -> Option<shadows::Still>,
-    held: bool,
+    held: Option<Option<Vec3>>,
 ) -> [Lit; 2] {
-    let (gain, range, up) = if held {
+    let (gain, range, up) = if held.is_some() {
         (HELD_GAIN, HELD_RANGE_M, HELD_LIGHT_UP)
     } else {
         (1.0, TORCH_RANGE_M, TORCH_LIGHT_UP)
     };
     let lumens = blaze.tall * blaze.heat * TORCH_LUMENS_A_METRE * shines * gain;
-    let rest = hang(up);
+    let rest = held.flatten().unwrap_or_else(|| hang(up));
     let key = Lit {
         at: rest + swayed,
         lumens: lumens * (1.0 - TORCH_TIP),
@@ -96,4 +97,29 @@ pub(super) fn lights(
         ..key.clone()
     };
     [key, tip]
+}
+
+/// How far a carried torch's fill reaches, metres: no farther than its holder's body.
+const HELD_FILL_RANGE_M: f32 = 2.2;
+
+/// A carried torch's fill: a dim unshadowed light of the torch's colour hung at `at` on its
+/// holder's body (`carried::Carried::fill`), `share` of the torch's lumens, so the holder is
+/// not a black cutout against the ground their torch lights. The key hangs over and ahead of
+/// them, and from the camera behind their back took a fortieth of the light of the ground 2 m
+/// ahead (tools/sandbox/torchlight.ts's holder line, 0.026 at midnight, torch-light j4).
+/// Third-person games light the carrier of a torch so: the light on the character, not on the
+/// prop, with a fill that casts nothing. It reaches no farther than the body, so the ground
+/// behind takes little of it and their shadow stays; steady, with no flicker, sway, glow in
+/// the air or twin (`shines` is the key's flicker, taken out again).
+pub(super) fn fill(key: &Lit, shines: f32, at: Vec3, share: f32) -> Lit {
+    Lit {
+        at,
+        lumens: key.lumens / (1.0 - TORCH_TIP) / shines * share,
+        range: HELD_FILL_RANGE_M,
+        glow: 1.0,
+        kept: false,
+        casts: false,
+        still: None,
+        ..key.clone()
+    }
 }
