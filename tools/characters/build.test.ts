@@ -199,6 +199,31 @@ test("the character build's steps: every need a step, every input there, each lo
   assert.ok(steps.filter((s) => s.name.startsWith("fit:")).every((s) => closure(s.inputs).includes("assets/models/character/mannequin.glb")));
 });
 
+test("a creature's keyed clip is solved on its game file and put in after everything else that writes it", () => {
+  const bodies = bodiesData();
+  const troll = bodies.creatures!.find((c) => c.name === "troll")!;
+  const keys = "art/animation/keyed/troll_smash.json";
+  const step = (keyed?: Record<string, string>) => buildSteps({ ...bodies, creatures: [{ ...troll, keyed }] }, gearData()).find((s) => s.name === "creature:troll")!;
+  const [plain, with_keys] = [step(), step({ Troll_Smash: keys })];
+  const lines = with_keys.run.split("\n");
+  const at = (text: string) => lines.findIndex((l) => l.includes(text));
+  // key.ts reads the game's file (the keys' body and guard), so it runs once the export and the
+  // tint have written it; glb_clips.ts then puts the take's clip in, the last thing to write it.
+  assert.ok(at("export_character.py") < at("tint.ts") && at("tint.ts") < at(`key.ts ${keys}`) && at(`key.ts ${keys}`) < at("glb_clips.ts assets/models/characters/troll.glb"));
+  assert.equal(at("glb_clips.ts assets/models/characters/troll.glb"), lines.length - 1);
+  assert.match(lines.at(-1)!, / Troll_Smash$/);
+  // A change to the keys or the solver runs the step again; a creature with none reads neither.
+  for (const p of [keys, "tools/characters/key.ts", "tools/characters/glb_clips.ts"]) assert.ok(with_keys.inputs.includes(p) && !plain.inputs.includes(p), p);
+  assert.ok(!plain.run.includes("key.ts"));
+  // The keys in bodies.json: each names its clip and is solved on its creature's own game file.
+  for (const c of bodies.creatures ?? [])
+    for (const [clip, path] of Object.entries(c.keyed ?? {})) {
+      const k = JSON.parse(readFileSync(join(ROOT, path), "utf8"));
+      assert.equal(k.name, clip, `${path} makes ${k.name}, bodies.json says ${clip}`);
+      assert.equal(k.body, `assets/models/characters/${c.name}.glb`, `${path} is keyed on ${k.body}`);
+    }
+});
+
 test("a fresh worktree restores from the step cache what another built from the same inputs, and builds what differs", async () => {
   const cache = mkdtempSync(join(tmpdir(), "terra-steps-"));
   const one = scratch(cache);

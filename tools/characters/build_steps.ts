@@ -113,8 +113,10 @@ export function gltfFiles(path: string, root = ROOT): string[] {
 
 /** A creature: `art/characters/<name>/rigged.glb` converted as a creature's at its height and
  * triangle budget, exported with the game's clips and its set's (`art/animation/sets/<set>`)
- * to `assets/models/characters/<name>.glb`, its colour factor laid on (tint.ts). */
-export type Creature = { name: string; height: number; triangles: number; set: string; colour: [number, number, number] };
+ * to `assets/models/characters/<name>.glb`, its colour factor laid on (tint.ts). `keyed` names
+ * the clips keyed on its own body (D588, docs/keyed-moves.md), each with its keys' file: solved
+ * on the game's file by key.ts and put into it last, in place of the set's take of that name. */
+export type Creature = { name: string; height: number; triangles: number; set: string; colour: [number, number, number]; keyed?: Record<string, string> };
 
 export function bodiesData(root = ROOT): Bodies {
   const b: Bodies = JSON.parse(readFileSync(join(root, HERE, "bodies.json"), "utf8"));
@@ -367,11 +369,12 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
   for (const c of b.creatures ?? []) {
     const set = `art/animation/sets/${c.set}`;
     const game = `assets/models/characters/${c.name}.glb`;
+    const keyed = Object.entries(c.keyed ?? {});
     steps.push({
       name: `creature:${c.name}`,
       section: 5,
       needs: ["clips", "base"],
-      inputs: [...py("convert_rig.py", "rig_check.py", "made_clips.py", "export_character.py", "tint.ts"), `art/characters/${c.name}/rigged.glb`, `${set}.json`, set],
+      inputs: [...py("convert_rig.py", "rig_check.py", "made_clips.py", "export_character.py", "tint.ts"), ...(keyed.length ? py("key.ts", "glb_clips.ts") : []), ...keyed.map(([, keys]) => keys), `art/characters/${c.name}/rigged.glb`, `${set}.json`, set],
       outputs: [`${OUT}/${c.name}.glb`, `${OUT}/${c.set}-mannequin.glb`, game],
       run: [
         `export CREATURE=1 TRIANGLES=${c.triangles} WSLENV=CREATURE:TRIANGLES`,
@@ -380,6 +383,9 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
         blender("made_clips.py", `"$out/${c.set}-mannequin.glb" --list=${set}.json`, "^MADE [0-9]|Error"),
         blender("export_character.py", `"$out/${c.name}.glb" ${game} "--clips=$out/${c.set}-mannequin.glb" --list=${set}.json --textures=2048`, "^(SOCKETS|EXPORTED)|Error"),
         `node $here/tint.ts ${game} ${c.colour.join(",")}`,
+        // Its keyed clips, solved on the file just made (the keys' guard is a clip of it) and
+        // put in over the set's takes of their names; glb_clips.ts moves nothing else.
+        ...keyed.flatMap(([clip, keys]) => [`node $here/key.ts ${keys} "$out/${c.name}-${clip}.glb"`, `node $here/glb_clips.ts ${game} "$out/${c.name}-${clip}.glb" ${clip}`]),
       ].join("\n"),
     });
   }
