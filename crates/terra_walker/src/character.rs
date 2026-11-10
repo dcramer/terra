@@ -34,10 +34,7 @@ pub use held::{CARRIED_IN, CarryHold, CarryPosed, Held};
 
 use bevy::{
     gltf::{GltfExtras, GltfMaterialName},
-    mesh::{
-        VertexAttributeValues,
-        skinning::{SkinnedMesh, SkinnedMeshInverseBindposes},
-    },
+    mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes},
     pbr::{ExtendedMaterial, MaterialExtension},
     prelude::*,
     render::render_resource::AsBindGroup,
@@ -492,76 +489,9 @@ pub fn used_joints(
     (kept, index)
 }
 
-/// Cuts mesh `id`'s skin down to the joints it uses, once: its joint indices renumbered and its
-/// bind poses (from its file, before any body reshapes them) kept for those alone.
-fn trim(
-    id: AssetId<Mesh>,
-    poses: &Handle<SkinnedMeshInverseBindposes>,
-    count: usize,
-    meshes: &mut Assets<Mesh>,
-    bindposes: &mut Assets<SkinnedMeshInverseBindposes>,
-) -> Option<(Vec<usize>, Handle<SkinnedMeshInverseBindposes>)> {
-    let all: Vec<Mat4> = bindposes.get(poses)?.to_vec();
-    let mut mesh = meshes.get_mut(id)?;
-    // Both sets of four where the mesh has eight influences a vertex (D601).
-    let sets = [
-        (Mesh::ATTRIBUTE_JOINT_INDEX, Mesh::ATTRIBUTE_JOINT_WEIGHT),
-        (
-            Mesh::ATTRIBUTE_JOINT_INDEX_1,
-            Mesh::ATTRIBUTE_JOINT_WEIGHT_1,
-        ),
-    ];
-    let mut influences = (Vec::new(), Vec::new());
-    let mut vertices = 0;
-    for (i, (index, weight)) in sets.iter().enumerate() {
-        match (mesh.attribute(*index), mesh.attribute(*weight)) {
-            (
-                Some(VertexAttributeValues::Uint16x4(j)),
-                Some(VertexAttributeValues::Float32x4(w)),
-            ) if j.len() == w.len() && (i == 0 || w.len() == vertices) => {
-                vertices = w.len();
-                influences.0.extend_from_slice(j);
-                influences.1.extend_from_slice(w);
-            }
-            _ if i == 0 => return None,
-            _ => {}
-        }
-    }
-    let (kept, index) = used_joints(&influences.0, &influences.1, count);
-    if kept.is_empty() || kept.len() == count || vertices == 0 {
-        return None;
-    }
-    let mut weights = influences.1.chunks(vertices);
-    for (joint_index, _) in sets {
-        let Some(ws) = weights.next() else { break };
-        let Some(VertexAttributeValues::Uint16x4(indices)) = mesh.attribute_mut(joint_index) else {
-            break;
-        };
-        for (joints, ws) in indices.iter_mut().zip(ws) {
-            for (j, w) in joints.iter_mut().zip(ws) {
-                // An unused slot points at the first joint kept, with no weight.
-                *j = if *w > 0.0 { index[*j as usize] } else { 0 };
-            }
-        }
-    }
-    // The glTF loader's bounds (its default `DynamicSkinnedMeshBounds`, the box frustum
-    // culling tests each frame) name joints by the file's numbering: left so, they track
-    // other joints or none, and a worn piece could be culled while it is on screen. Made
-    // again from the renumbered skin. (Not the iso hero's roll, where his torso is hidden
-    // behind his own hips as he dives, iso-hero j8.)
-    if mesh.skinned_mesh_bounds().is_some()
-        && let Err(e) = mesh.generate_skinned_mesh_bounds()
-    {
-        warn!(
-            "a worn mesh's bounds could not follow its trimmed skin ({e:?}): it may be culled on screen"
-        );
-        mesh.set_skinned_mesh_bounds(None);
-    }
-    let handle = bindposes.add(SkinnedMeshInverseBindposes::from(
-        kept.iter().map(|i| all[*i]).collect::<Vec<_>>(),
-    ));
-    Some((kept, handle))
-}
+mod trim;
+use trim::trim;
+pub use trim::untrimmed;
 
 /// Puts worn look `look` on `body`, as its file says: hung on its socket, or its skins
 /// re-bound to the body's own joints and its copy of the skeleton dropped.
@@ -635,6 +565,17 @@ fn dress(
             trimmed.as_deref_mut(),
         ) {
             let id = mesh.0.id();
+            // A mesh loaded again under the id it had (its file read again while a handle to
+            // it lived: a world left and another entered) holds its file's numbering again.
+            let stale = trimmed.0.get(&id).is_some_and(|(kept, _)| {
+                assets
+                    .get(id)
+                    .is_some_and(|mesh| untrimmed(mesh, kept.len()))
+            });
+            if stale {
+                info!("a worn mesh was loaded again under its id: its skin is cut down again");
+                trimmed.0.remove(&id);
+            }
             if !trimmed.0.contains_key(&id)
                 && let Some(cut) = trim(
                     id,
@@ -687,6 +628,7 @@ fn dress(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::mesh::VertexAttributeValues;
 
     #[test]
     fn a_skin_of_eight_influences_is_trimmed_by_both_sets() {
@@ -821,7 +763,7 @@ mod tests {
         let posed = world
             .resource_mut::<Assets<SkinnedMeshInverseBindposes>>()
             .add(SkinnedMeshInverseBindposes::from(poses.clone()));
-        let mesh = world.resource_mut::<Assets<Mesh>>().add(
+        let fresh = || {
             Mesh::new(
                 bevy::mesh::PrimitiveTopology::TriangleList,
                 bevy::asset::RenderAssetUsages::default(),
@@ -834,11 +776,19 @@ mod tests {
             .with_inserted_attribute(
                 Mesh::ATTRIBUTE_JOINT_WEIGHT,
                 vec![[0.7f32, 0.3, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
-            ),
-        );
-        // Two wearers of the same look, each with its file's copy of the skeleton.
+            )
+        };
+        let mesh = world.resource_mut::<Assets<Mesh>>().add(fresh());
+        // Two wearers of the same look, each with its file's copy of the skeleton; then a
+        // third after the mesh's file was read again under the same id (a world left and
+        // another entered, held-explode j2): its numbering is the file's again, and is cut
+        // again rather than its skin's indices run past the joints kept.
         let mut skins = vec![];
-        for _ in 0..2 {
+        for wearer in 0..3 {
+            if wearer == 2 {
+                let mut meshes = world.resource_mut::<Assets<Mesh>>();
+                meshes.insert(mesh.id(), fresh()).unwrap();
+            }
             let look = world.spawn(Worn { body }).id();
             let armature = world.spawn(ChildOf(look)).id();
             let copy: Vec<Entity> = names

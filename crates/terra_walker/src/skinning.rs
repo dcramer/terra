@@ -25,7 +25,7 @@ use bevy::{
     shader::Shader,
 };
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 /// Where Bevy keeps its skinning shader (`bevy_pbr/src/render/skinning.wesl`); a shader at
 /// this path is the module `bevy_pbr::render::skinning`.
@@ -93,9 +93,43 @@ pub fn carry_share(weights: &mut [f32], share: f32) {
     }
 }
 
-/// The meshes already given their shares: a mesh shared by many bodies, once.
+/// The meshes already given their shares: a mesh shared by many bodies, once. With each, the
+/// vertex given the greatest share, if any has one (`witness`): a mesh whose file is read
+/// again under the id it had (a world left and another entered, held-explode j2) has its
+/// file's weights again, that vertex's summing to one, and is given its shares again.
 #[derive(Resource, Default)]
-struct Blended(HashSet<AssetId<Mesh>>);
+struct Blended(HashMap<AssetId<Mesh>, Option<usize>>);
+
+/// The sum of vertex `v`'s weights in `mesh`, over both its sets; none if it has no such vertex.
+fn weight_sum(mesh: &Mesh, v: usize) -> Option<f32> {
+    let of = |attribute| match mesh.attribute(attribute) {
+        Some(VertexAttributeValues::Float32x4(w)) => w.get(v).map(|w| w.iter().sum::<f32>()),
+        _ => None,
+    };
+    Some(of(Mesh::ATTRIBUTE_JOINT_WEIGHT)? + of(Mesh::ATTRIBUTE_JOINT_WEIGHT_1).unwrap_or(0.0))
+}
+
+/// The vertex of `mesh` carrying the greatest share, if any carries one.
+fn witness(mesh: &Mesh) -> Option<usize> {
+    let Some(VertexAttributeValues::Float32x4(w)) = mesh.attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT)
+    else {
+        return None;
+    };
+    (0..w.len())
+        .filter_map(|v| Some((v, weight_sum(mesh, v)?)))
+        .filter(|(_, sum)| *sum > 1.0 + SHARED)
+        .max_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(v, _)| v)
+}
+
+/// How far past one a vertex's weights must sum to be read as carrying a share.
+const SHARED: f32 = 1e-3;
+
+/// Whether a mesh recorded as given its shares, `witness` its vertex with the greatest, no
+/// longer holds them.
+fn shares_lost(mesh: &Mesh, witness: Option<usize>) -> bool {
+    witness.is_some_and(|v| weight_sum(mesh, v).is_none_or(|sum| sum <= 1.0 + SHARED))
+}
 
 /// On a skinned mesh whose shares are still to be given (its mesh may not have loaded yet).
 #[derive(Component)]
@@ -169,7 +203,9 @@ fn blend_meshes(
 ) {
     for (entity, mesh3d, skinned) in &waiting {
         let id = mesh3d.0.id();
-        if blended.0.contains(&id) {
+        let lost =
+            |witness: &Option<usize>| meshes.get(id).is_some_and(|m| shares_lost(m, *witness));
+        if blended.0.get(&id).is_some_and(|witness| !lost(witness)) {
             commands.entity(entity).remove::<AwaitingBlend>();
             continue;
         }
@@ -188,7 +224,7 @@ fn blend_meshes(
         if let Some((dual, count)) = give_shares(&mut mesh, &blend, &linear) {
             info!("skinning: {dual} of {count} vertices of a mesh mostly dual quaternion");
         }
-        blended.0.insert(id);
+        blended.0.insert(id, witness(&mesh));
         commands.entity(entity).remove::<AwaitingBlend>();
     }
 }
@@ -254,6 +290,40 @@ pub fn give_shares(mesh: &mut Mesh, blend: &Blend, linear: &[bool]) -> Option<(u
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_mesh_read_again_from_its_file_is_seen_to_have_lost_its_shares() {
+        let fresh = || {
+            Mesh::new(
+                bevy::mesh::PrimitiveTopology::TriangleList,
+                bevy::asset::RenderAssetUsages::default(),
+            )
+            .with_inserted_attribute(
+                Mesh::ATTRIBUTE_JOINT_INDEX,
+                VertexAttributeValues::Uint16x4(vec![[0, 1, 0, 0], [1, 0, 0, 0]]),
+            )
+            .with_inserted_attribute(
+                Mesh::ATTRIBUTE_JOINT_WEIGHT,
+                vec![[0.5f32, 0.5, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+            )
+        };
+        let blend = Blend {
+            linear_joints: vec!["hips".into()],
+            ..Blend::read()
+        };
+        // Joint 0 keeps the linear blend: the second vertex, all on joint 1, has the greater share.
+        let mut mesh = fresh();
+        give_shares(&mut mesh, &blend, &[true, false]).unwrap();
+        let seen = witness(&mesh);
+        assert_eq!(seen, Some(1));
+        assert!(!shares_lost(&mesh, seen), "still as given");
+        assert!(shares_lost(&fresh(), seen), "its file's weights again");
+        // A mesh no vertex of which carries a share is its file's own: nothing to lose.
+        let mut plain = fresh();
+        give_shares(&mut plain, &blend, &[true, true]).unwrap();
+        assert_eq!(witness(&plain), None);
+        assert!(!shares_lost(&fresh(), None));
+    }
 
     #[test]
     fn ours_stands_in_for_bevys_skinning() {
