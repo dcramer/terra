@@ -38,6 +38,14 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 5. **Their sound**: birdsong by hour and place, insects' hum, a splash: with the ambient beds of [audio.md](audio.md).
 6. **Each realm its own**: the industrial realm's small life is not chosen (D642).
 
+## Butterflies as things in the world (D655; the developers, 2026-11-09: "you cant use a model generator here or what", "i want like.. diff breeds of butterflies")
+
+- **Breeds**, each a model of its own (`art/props/butterfly_<breed>`, as the fish are props): the first realm's are the small white, the brimstone (lemon yellow), the small tortoiseshell (orange, barred black), the peacock (dark red, four eyespots) and the common blue (small, sky blue). Told apart by colour, pattern and size (D182). Their real spans, 3 to 7 cm, are to be looked up, not taken from here [M]. The far realm keeps its drift moths until its theme is chosen (D642).
+- **The model**: wings spread flat as a set specimen's, the body along Z (head +Z), the span along X, a few hundred triangles, its own textures (D304). The shader raises and lowers each side about the body's axis, in bouts with a glide between; no skeleton, as the fish's bend.
+- **In the world**: a kind is a row of `assets/data/butterflies.ron` (model, span, how many fly together, how far apart, to a hectare, where: open, woods, water; season, air and hours as the drift's rows had), placed by rule in cells round whoever looks, from the seed, so two players find a group in the same place (`terra_creatures`, beside `fish`). They fly in small groups with stretches between that have none: threes close together or fives spread out, the developers' to choose. For the eye in v0: each game's own, nothing crosses the network.
+- **Not chosen**: whether they may be caught (D655), whether they settle on flowers and rise as a player nears.
+- When they fly, the drift's two butterfly rows for the first realm go.
+
 ## Taken as working assumptions (the agent's, 2026-11-08; the developers overrule)
 
 - A small bird is drawn 1.6 times life size (finch, sparrow), as a butterfly is drawn at 10 cm: at life size neither is seen past a few metres.
