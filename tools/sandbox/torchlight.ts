@@ -13,6 +13,9 @@
 //   colour   the lit ground's hue and saturation 2 m ahead
 //   shadow   the darkest ground on a ring 1.5 m round the holder against the ring's median, and
 //            how many metres of the ring its edge takes to go from 10% to 90%
+//   trunk    by the tree (the nearest standing trunk, `world.trunks`): its shadow on the ground
+//            2 m past it against the lit ground either side, its width, each edge's 10% to
+//            90%, and how much its edges change from frame to frame against the lit ground
 //   flicker  the pool's luma over 120 frames: its deviation over its mean, its dominant
 //            period, and its largest step from one frame to the next
 //   run      the whole picture's largest step from one frame to the next, running and
@@ -38,7 +41,8 @@ type V = [number, number, number];
 type View = { eye: V; at: V; feet: V; ahead: [number, number] };
 const VFOV = Math.PI / 4;
 const FRAMES = 120;
-const SIZE = [960, 540];
+// The size the game is judged at (D185), so a place's `-play.png` is a still for the desk.
+const SIZE = [1920, 1080];
 
 const sub = (a: V, b: V): V => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot = (a: V, b: V) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -129,6 +133,52 @@ const whole = (p: Picture) => {
 };
 const frames = (stem: string) => Array.from({ length: FRAMES }, (_, i) => `${stem}-${String(i).padStart(5, "0")}.png`);
 
+/// A trunk's shadow on the ground behind it from the holder: the ground's luma by bearing from
+/// the holder's feet, a quarter degree a step for 25° either side of the trunk's, the mean of
+/// 1.5, 2 and 2.5 m past it. Its darkest against the lit ground either side, how wide it is
+/// at half depth, how far each edge takes from 10% to 90% (metres, 2 m past the trunk), and
+/// how much its edges change from frame to frame against the lit ground's (a jittered soft
+/// shadow's noise shows here; waving grass in both).
+function trunk(view: View, tree: [number, number], lit: Picture, stills: string[]): string {
+  const to = [tree[0] - view.feet[0], tree[1] - view.feet[2]];
+  const [away, bearing] = [Math.hypot(to[0], to[1]), (Math.atan2(view.ahead[0] * to[1] - view.ahead[1] * to[0], view.ahead[0] * to[0] + view.ahead[1] * to[1]) * 180) / Math.PI];
+  const steps = Array.from({ length: 201 }, (_, i) => bearing + (i - 100) * 0.25);
+  const profile = (p: Picture) =>
+    steps.map((b) => {
+      const seen = [1.5, 2, 2.5].map((past) => project(view, p, ground(view, away + past, b))).filter((at) => at !== undefined);
+      return seen.length ? seen.map((at) => luma(patch(p, at))).reduce((x, y) => x + y, 0) / seen.length : NaN;
+    });
+  const row = profile(lit);
+  if (row.some(Number.isNaN)) return `its shadow's ground is out of the picture (${away.toFixed(1)} m away, ${bearing.toFixed(0)}° from ahead)`;
+  // Smoothed over five steps (the grass); the lit ground is the outer 8° either side.
+  const smooth = row.map((_, i) => median(row.slice(Math.max(0, i - 2), i + 3)));
+  const open = median([...smooth.slice(0, 32), ...smooth.slice(-32)]);
+  const low = Math.min(...smooth.slice(60, 141));
+  const dark = smooth.indexOf(low, 60);
+  const level = (share: number) => low + share * (open - low);
+  const run = (way: number, share: number) => {
+    let i = dark;
+    while (i > 0 && i < 200 && smooth[i] < level(share)) i += way;
+    return i;
+  };
+  const metres = (n: number) => (Math.abs(n) * 0.25 * Math.PI * (away + 2)) / 180;
+  const edges = [-1, 1].map((way) => metres(run(way, 0.9) - run(way, 0.1)));
+  const wide = metres(run(1, 0.5) - run(-1, 0.5));
+  const edge = [...new Set([-1, 1].flatMap((way) => [run(way, 0.3), run(way, 0.5), run(way, 0.7)]))];
+  let noise = "";
+  if (stills.length > 8) {
+    const rows = stills.map((file) => profile(readPng(file)));
+    const sway = (i: number) => {
+      const series = rows.map((each) => each[i]);
+      const mean = series.reduce((a, b) => a + b, 0) / series.length;
+      return Math.sqrt(series.reduce((a, b) => a + (b - mean) ** 2, 0) / series.length) / mean;
+    };
+    const mean = (list: number[]) => list.reduce((a, b) => a + b, 0) / list.length;
+    noise = `; over ${rows.length} frames its edges change ${(mean(edge.map(sway)) * 100).toFixed(1)}% of their mean, the lit ground ${(mean([4, 12, 20, 28, 172, 180, 188, 196].map(sway)) * 100).toFixed(1)}%`;
+  }
+  return `${away.toFixed(1)} m away at ${bearing.toFixed(0)}°: its shadow 2 m past it ${(low / open).toFixed(2)} of the lit ground, ${wide.toFixed(2)} m wide at half depth, its edges ${edges.map((e) => e.toFixed(2)).join(" and ")} m from 10% to 90%${noise}`;
+}
+
 /// A place's numbers, said a line each.
 function measure(out: string, name: string) {
   const view = JSON.parse(readFileSync(join(out, `${name}.json`), "utf8")) as View;
@@ -170,7 +220,10 @@ function measure(out: string, name: string) {
   let edge = 0;
   for (let i = dark; i < ring.length && !(ring[i] >= low + 0.9 * (mid - low)); i++) if (ring[i] >= low + 0.1 * (mid - low)) edge++;
   say("shadow", `the darkest ground 1.5 m round them ${(low / mid).toFixed(2)} of the ring's median, at ${dark * 2 - 178}° from ahead, its edge ${((edge * 2 * Math.PI * 1.5) / 180).toFixed(2)} m from 10% to 90% (${seen.length} of 180 bearings seen)`);
-  const still = frames(join(out, `${name}-still`)).filter(existsSync).map((file) => pool(view, readPng(file)));
+  const stills = frames(join(out, `${name}-still`)).filter(existsSync);
+  const tree = join(out, `${name}-tree.json`);
+  if (existsSync(tree)) say("trunk", trunk(view, JSON.parse(readFileSync(tree, "utf8")) as [number, number], lit, stills));
+  const still = stills.map((file) => pool(view, readPng(file)));
   if (still.length > 8) {
     const f = flicker(still);
     say("flicker", `the pool's deviation ${(f.depth * 100).toFixed(1)}% of its mean, dominant period ${f.period.toFixed(2)} s, largest step ${(f.step * 100).toFixed(1)}% a frame (${still.length} frames)`);
@@ -248,7 +301,7 @@ if (import.meta.main) {
   if (!from) {
     mkdirSync(out, { recursive: true });
     try {
-      const options = ["--experiment", "play", "--fresh", "--save", join(out, "save.ron"), "--offscreen", "--mute", "--time", "0", "--picture", SIZE.join("x"), ...(argv.includes("--den") ? ["--radius", "30000", "--seed", "3"] : [])];
+      const options = ["--experiment", "play", "--fresh", "--save", join(out, "save.ron"), "--offscreen", "--clean", "--mute", "--time", "0", "--picture", SIZE.join("x"), ...(argv.includes("--den") ? ["--radius", "30000", "--seed", "3"] : [])];
       // The game runs one copy a machine (D319): while another's runs, wait for it, half an
       // hour at most.
       for (let tries = 0; ; tries++) {
@@ -266,13 +319,20 @@ if (import.meta.main) {
       await warp([here[0], here[2]], [here[0] + 10, here[2]]);
       await shoot(out, "meadow", [1, 0]);
       const asked = flag("--woods")?.split(",").map(Number);
-      const trees = asked ? [] : (await Promise.all(["Oak", "Pine", "Spruce", "Birch", "Fir", "Tree"].map((name) => call("sandbox.find", { name }) as Promise<Found>))).flat().filter((t) => t.from_start && !/leaf|card|crown/i.test(t.name));
-      const tree = asked ? ([asked[0], 0, asked[1]] as V) : trees.sort((a, b) => Math.hypot(a.from_start[0], a.from_start[2]) - Math.hypot(b.from_start[0], b.from_start[2]))[0]?.from_start;
+      // The nearest standing trunk over 4 m tall (`world.trunks`, nearest first). The world's
+      // trees have no names: found by name, "Fir" matched the entity "Fire: light 0" at the
+      // world's centre and this place was a second meadow (torch-light j1 to j3).
+      type Trunk = { at: [number, number]; apart: number; radius: number; height: number };
+      const solid = asked ? [] : ((await call("world.trunks", { at: [here[0], here[2]], within: 120 })) as Trunk[]);
+      const trunk = solid.find((each) => each.height >= 4 && each.apart > 6);
+      const tree = asked ?? trunk?.at;
       if (tree) {
         // Three metres short of the trunk and a metre to its side, facing past it.
-        await warp([tree[0] - 3, tree[2] + 1], [tree[0] + 7, tree[2] + 1]);
+        await warp([tree[0] - 3, tree[1] + 1], [tree[0] + 7, tree[1] + 1]);
+        if (trunk) console.log(`torchlight: woods  by a trunk ${trunk.radius.toFixed(2)} m in radius, ${trunk.height.toFixed(0)} m tall,${tree[0].toFixed(1)} m east and ${tree[1].toFixed(1)} m south of the start: 3 m ahead of the holder, 1 m to their left`);
+        writeFileSync(join(out, "woods-tree.json"), JSON.stringify(tree));
         await shoot(out, "woods", [1, 0]);
-      } else console.log("torchlight: woods  no tree found by name (Oak, Pine, Spruce, Birch, Fir, Tree): give --woods EAST,SOUTH");
+      } else console.log(`torchlight: woods  no trunk over 4 m tall from 6 to 120 m of the start (world.trunks gave ${solid.length}): give --woods EAST,SOUTH`);
       if (argv.includes("--den")) {
         const { den } = (await call("den.state")) as { den: { mouth: V; floor: V; ahead: V } | null };
         if (!den) throw new Error("this world has no den (den.state)");

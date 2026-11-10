@@ -144,6 +144,7 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.whoami", whoami);
     method(app, "world.obstacles", obstacles);
     method(app, "world.solids", solids);
+    method(app, "world.trunks", trunks);
     why::plugin(app);
     crate::gpu_memory::remote(app);
     crate::instance::census::remote(app);
@@ -746,6 +747,39 @@ fn obstacles(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
                     }),
                 )
             })
+        })
+        .collect();
+    found.sort_by(|a, b| a.0.total_cmp(&b.0));
+    Ok(Value::Array(
+        found.into_iter().map(|(_, v)| v).take(200).collect(),
+    ))
+}
+
+/// The standing trees within so far of a spot, east and south of the start, nearest first
+/// (`flora::Trunks`): each trunk's foot, east and south, how far it is, its radius and its
+/// height. What a script stands by a tree with: the world's trees have no names
+/// (`sandbox.find` finds none), and `world.obstacles` does not tell a trunk from a boulder.
+fn trunks(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Near { at, within } = parse_some(params)?;
+    let start = *world.resource::<crate::start::Start>();
+    let planet = world.resource::<crate::planet::Planet>().clone();
+    let centre = planet.ground_at(start.at(at[0], at[1]));
+    let obstacles = world.resource::<crate::flora::Obstacles>();
+    let mut found: Vec<(f32, Value)> = world
+        .resource::<crate::flora::Trunks>()
+        .near(centre, within, obstacles)
+        .map(|trunk| {
+            let local = start.local(trunk.foot);
+            let apart = Vec2::new(local.x - at[0], local.z - at[1]).length();
+            (
+                apart,
+                json!({
+                    "at": [local.x, local.z],
+                    "apart": apart,
+                    "radius": trunk.radius_m,
+                    "height": trunk.height_m,
+                }),
+            )
         })
         .collect();
     found.sort_by(|a, b| a.0.total_cmp(&b.0));
