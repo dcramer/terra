@@ -73,6 +73,7 @@ use serde_json::{Value, json};
 use std::collections::VecDeque;
 
 mod card;
+mod ground;
 mod pointer;
 mod why;
 use card::card;
@@ -145,6 +146,7 @@ pub fn plugin(app: &mut App) {
     method(app, "world.obstacles", obstacles);
     method(app, "world.solids", solids);
     method(app, "world.trunks", trunks);
+    method(app, "world.ground", ground::ground);
     why::plugin(app);
     crate::gpu_memory::remote(app);
     crate::instance::census::remote(app);

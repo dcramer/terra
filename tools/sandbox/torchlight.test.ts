@@ -3,7 +3,19 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { flicker, project } from "./torchlight.ts";
+import { flicker, level, project } from "./torchlight.ts";
+
+test("open ground is level near, nearly level ahead and dry; a bump, a slope or a pond is said", () => {
+  // 17 spots of the disc (itself, 4 m, 8 m), then 17 east from 10 m, 2.5 m apart.
+  const flat = () => Array.from({ length: 34 }, () => ({ up: 3, water: -5 }));
+  const with_ = (i: number, change: { up?: number; water?: number }) => flat().map((g, j) => (j === i ? { ...g, ...change } : g));
+  assert.equal(level(flat()), undefined);
+  assert.match(level(with_(3, { up: 3.5 }))!, /0\.50 m off level within 8 m/);
+  assert.match(level(with_(17 + 4, { up: 1 }))!, /2\.0 m off level within 25 m/);
+  // 40 m ahead a rise is allowed, a pond is not.
+  assert.equal(level(with_(17 + 12, { up: 5 })), undefined);
+  assert.match(level(with_(17 + 12, { water: 0.2 }))!, /water stands 0\.2 m/);
+});
 
 test("a sine's depth, period and step are read back", () => {
   // 10% deep at 2.5 Hz over 120 frames at 60 a second: deviation 0.1/sqrt 2, period 0.4 s.
