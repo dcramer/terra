@@ -23,7 +23,7 @@ use terra_world::shell::Options;
 
 /// Directions to look from, in degrees round from the front, and fractions of a clip,
 /// unless `--sides` and `--moments` say otherwise.
-const SIDES: [f32; 4] = [30.0, 120.0, 210.0, 300.0];
+pub(super) const SIDES: [f32; 4] = [30.0, 120.0, 210.0, 300.0];
 const MOMENTS: [f32; 1] = [0.4];
 /// Frames to let a pose and the camera settle before each capture.
 const SETTLE_VIEW: u32 = 12;
@@ -45,7 +45,7 @@ pub(super) struct Sheet {
 }
 
 /// Frames a pose is held before its joints are measured.
-const SETTLE_REACH: u32 = 4;
+pub(super) const SETTLE_REACH: u32 = 4;
 /// The flesh round a joint, as a share of the tallest model's height.
 const FLESH: f32 = 0.12;
 
@@ -143,31 +143,14 @@ pub fn capture(
     }
     // Every frame, so a camera on a moving part follows it into the pose.
     if let Ok((mut transform, projection)) = camera.single_mut() {
-        // The frame's half height and half width, the width a cell's unless it is whole.
-        let (fov, aspect) = match projection {
-            Projection::Perspective(lens) => (lens.fov, lens.aspect_ratio),
-            _ => (45f32.to_radians(), 16.0 / 9.0),
-        };
-        let half = libm::tanf(fov * 0.5);
-        let across = if bench.wide { aspect } else { aspect.min(0.75) };
-        let fitted = bounds::fit(
-            (bench.up, bench.front),
+        *transform = stand(
+            &bench,
+            (options.focus.as_deref(), side),
             &sheet.reach,
-            FLESH * bench.tallest,
-            side,
-            (half * across, half),
-            (super::CLOSEST_M, 0.7),
+            projection,
+            (&children, &names),
+            (&globals, &boxes),
         );
-        *transform = fitted.unwrap_or_else(|| {
-            view(
-                &bench,
-                options.focus.as_deref(),
-                side,
-                &children,
-                &names,
-                (&globals, &boxes),
-            )
-        });
     }
     sheet.waited += 1;
     if sheet.waited < SETTLE_VIEW {
@@ -197,9 +180,41 @@ pub fn capture(
         );
 }
 
+/// Where the camera stands to look from `side`: holding all of `reach` in the middle of
+/// the frame a cell or a film's frame keeps (`bounds::fit`), or, with a `focus` or nothing
+/// measured, the workbench's own `view`.
+pub(super) fn stand(
+    bench: &Bench,
+    (focus, side): (Option<&str>, f32),
+    reach: &[Vec3],
+    projection: &Projection,
+    (children, names): (&Query<&Children>, &Query<&Name>),
+    (globals, boxes): (
+        &Query<&GlobalTransform>,
+        &Query<(&bevy::camera::primitives::Aabb, &GlobalTransform)>,
+    ),
+) -> Transform {
+    // The frame's half height and half width, the width a cell's unless it is whole.
+    let (fov, aspect) = match projection {
+        Projection::Perspective(lens) => (lens.fov, lens.aspect_ratio),
+        _ => (45f32.to_radians(), 16.0 / 9.0),
+    };
+    let half = libm::tanf(fov * 0.5);
+    let across = if bench.wide { aspect } else { aspect.min(0.75) };
+    let fitted = bounds::fit(
+        (bench.up, bench.front),
+        reach,
+        FLESH * bench.tallest,
+        side,
+        (half * across, half),
+        (super::CLOSEST_M, 0.7),
+    );
+    fitted.unwrap_or_else(|| view(bench, focus, side, children, names, (globals, boxes)))
+}
+
 /// Adds to `reach` where every model is now: its joints, a model without a skeleton's
 /// boxes, and a row with props' ends and top.
-fn reach(
+pub(super) fn reach(
     bench: &Bench,
     children: &Query<&Children>,
     (globals, boxes): (

@@ -13,7 +13,7 @@ pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "workbench",
         takes: "[args]",
-        does: "models in the game's renderer: --model, --prop Forge|all, --hold, --sheet",
+        does: "models in the game's renderer: --model, --prop Forge|all, --hold, --sheet, --film",
         group: "Look at things",
         run: |args| cargo_run("terra_sandbox", &["--experiment", "workbench"], args),
     },

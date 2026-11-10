@@ -58,7 +58,8 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--attach <file>[@<socket>]` | In the workbench: any look, on a socket such as `models/x.glb@socket.back` (on a hand, held as play holds it, its carry pose from its file), or without one as its file says. Repeatable |
 | `--focus <name>` | In the workbench: look closely at one part, such as `socket.hand.R`, and whole at what it holds; a model without that part (`--focus whole`, a part's model) is itself looked at closely, whole. On the first model |
 | `--sheet <prefix>` | In the workbench: one picture per `--anim`, `<prefix>-<clip>.png`, then exit: rows are the sides, columns the moments. The camera is stood for each clip by where the models' joints are at its moments, so a body of any size is whole in every cell wherever the clip takes it (a `--focus` keeps its close view). In `icons`: also save the baked icons laid out, `<prefix>.png` and `<prefix>-half.png` |
-| `--sides <degrees,…>` | In the workbench sheet: where to look from, round from the front; 30,120,210,300 by default |
+| `--film <prefix>` | In the workbench: each `--anim` once through at its own speed from each of `--sides`, as frames `<prefix>-<clip>-<side>-<0000…>.png`, 30 to the clip's second from its start to before its end (so a loop repeats cleanly), then exit. Each frame is the clip held at that frame's time, so any machine films the same clip; one camera a side holds the models' joints through the whole clip. Each frame is the middle of the picture, 810x1080 offscreen. ffmpeg makes the film ([the workbench](#the-workbench)) |
+| `--sides <degrees,…>` | In the workbench sheet and film: where to look from, round from the front; 30,120,210,300 by default |
 | `--moments <fraction,…>` | In the workbench sheet: how far through each clip; 0.4 by default |
 
 ## Controls
@@ -146,7 +147,16 @@ WGPU_POWER_PREF=low WSLENV=WGPU_POWER_PREF cargo xtask win -p terra_sandbox --re
 cargo xtask win -p terra_sandbox --copy wb -- --experiment workbench --model models/character/mannequin.glb --model models/character/base.glb --anim Jog_Fwd_Loop --sides 30,100 --moments 0.1,0.35,0.6,0.85 --sheet shots/wb/compare --clean --settle 60
 ```
 
-Models on a plain floor in the game's own light and renderer, playing animations (D71), holding and wearing things as they would in play (`--hold`, `--wear`, `--attach`, through the shared `character` module). It prints each model's clips, joints and sockets. Fly round by hand, drive it live with `--remote` ([tools/sandbox](../../tools/sandbox/README.md), which adds `pose CLIP FRACTION`), or give `--sheet` to save one contact sheet per clip and exit, which is how an agent checks a model. The command above puts the mannequin and the base body side by side through the jog, from two sides at four moments. Run sheets on the Windows GPU; the CPU renderer under WSL is far too slow. How characters are made and checked before they get here is in `.agents/skills/character/SKILL.md`.
+Models on a plain floor in the game's own light and renderer, playing animations (D71), holding and wearing things as they would in play (`--hold`, `--wear`, `--attach`, through the shared `character` module). It prints each model's clips, joints and sockets. Fly round by hand, drive it live with `--remote` ([tools/sandbox](../../tools/sandbox/README.md), which adds `pose CLIP FRACTION`), or give `--sheet` to save one contact sheet per clip and exit, which is how an agent checks a model. The command above puts the mannequin and the base body side by side through the jog, from two sides at four moments. Run sheets on the Windows GPU; the CPU renderer under WSL is far too slow.
+
+A sheet's stills cannot show speed, weight or a breath: `--film` saves a clip's frames, and ffmpeg sets two sides beside each other as a film at the clip's own speed (`-stream_loop 1` before each `-i` plays a loop twice):
+
+```bash
+cargo xtask gpu film -- cargo xtask workbench --offscreen --model models/characters/troll.glb --anim Troll_Sweep --sides 30,90 --film shots/film/troll --clean --settle 60
+ffmpeg -framerate 30 -i shots/film/troll-Troll_Sweep-30-%04d.png -framerate 30 -i shots/film/troll-Troll_Sweep-90-%04d.png -filter_complex hstack -an -c:v libx264 -pix_fmt yuv420p -crf 28 -preset slow -movflags +faststart sweep.mp4
+```
+
+How characters are made and checked before they get here is in `.agents/skills/character/SKILL.md`.
 
 ## Item icons
 

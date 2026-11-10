@@ -133,6 +133,9 @@ usage: terra_sandbox [options]
   --focus <name>        in the workbench: look closely at a part and what it holds, or a model without it whole
   --sheet <prefix>      in the workbench: capture each clip, save one picture of it per
                         clip as <prefix>-<clip>.png, then exit
+  --film <prefix>       in the workbench: each clip once through from each of --sides,
+                        30 frames to its second, as <prefix>-<clip>-<side>-<frame>.png,
+                        then exit
   --renders <folder>    in the icon baker: also write every item's render here, for
                         painting (tools/icons)
   --keep <item>         in the icon baker: keep an item's painted icon though its look's
@@ -457,6 +460,8 @@ pub struct Options {
     pub moments: Vec<f32>,
     pub anims: Vec<String>,
     pub sheet: Option<PathBuf>,
+    /// In the workbench: where to save each clip's frames, played once through.
+    pub film: Option<PathBuf>,
     pub renders: Option<PathBuf>,
     /// In the icon baker: items whose painted icons still match their looks, though the
     /// looks' files changed, so they are recorded as made from the looks as they are now.
@@ -589,6 +594,7 @@ impl Options {
             "--frame-times" => &mut self.frame_times,
             "--shot" => &mut self.shot,
             "--sheet" => &mut self.sheet,
+            "--film" => &mut self.film,
             "--renders" => &mut self.renders,
             _ => return None,
         })
@@ -602,8 +608,9 @@ impl Options {
         Ok(())
     }
 
-    pub fn from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
-        let mut options = Options {
+    /// What a run with no arguments is given.
+    fn unasked() -> Self {
+        Options {
             experiments: Vec::new(),
             list: false,
             radius_m: TEST_RADIUS_M,
@@ -684,12 +691,17 @@ impl Options {
             moments: Vec::new(),
             anims: Vec::new(),
             sheet: None,
+            film: None,
             renders: None,
             keeps: Vec::new(),
             quality: None,
             cine: None,
             picture: PICTURE_SIZE,
-        };
+        }
+    }
+
+    pub fn from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
+        let mut options = Self::unasked();
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
             let mut value = |name: &str| args.next().ok_or(format!("{name} needs a value"));
@@ -869,7 +881,11 @@ impl Options {
 
     /// Whether this run drives itself and exits, rather than waiting for a person.
     pub fn scripted(&self) -> bool {
-        self.shot.is_some() || self.shots.is_some() || self.bench || self.sheet.is_some()
+        self.shot.is_some()
+            || self.shots.is_some()
+            || self.bench
+            || self.sheet.is_some()
+            || self.film.is_some()
     }
 
     /// Whether the game draws its interface: not for pictures, from a fixed camera or in a

@@ -98,6 +98,8 @@ fn reads_the_options() {
     assert!(parse(&["--press", "F13@10"]).is_err());
     assert!(options.scripted());
     assert!(!parse(&[]).unwrap().scripted());
+    let film = parse(&["--film", "out/troll"]).unwrap();
+    assert!(film.scripted() && film.film == Some("out/troll".into()) && film.sheet.is_none());
     let sequence = parse(&["--shots", "out/walk@300-302,600,301"]).unwrap();
     let shots = sequence.shots.unwrap();
     assert_eq!(shots.frames, [300, 301, 302, 600]);

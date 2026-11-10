@@ -16,7 +16,7 @@
 //! `--attach <file>[@<socket>]` puts on any look, on a socket if given (held as play holds
 //! it, on a hand), otherwise as the file says (`character`). `--focus <name>` looks closely
 //! at one part and whole at what it holds, or at a whole model without it (`--focus whole`,
-//! a part's model), of the first model. `--sheet <prefix>` saves a contact sheet per clip and exits (`sheet`). With
+//! a part's model), of the first model. `--sheet <prefix>` saves a contact sheet per clip and exits (`sheet`), `--film <prefix>` each clip's frames (`film`). With
 //! `--remote`, `workbench.pose {clip, fraction}` holds every model at a moment of a clip, and
 //! `workbench.shape {model, template | morphs, skin}` reshapes a model's body live
 //! (`appearance`): a template by name, or any mix of morphs, such as `{"heavy": 0.5}`.
@@ -28,6 +28,7 @@
 //! checked against a body and by number without playing. `--prop all` stands every item.
 
 mod bounds;
+mod film;
 mod sheet;
 
 use bounds::{standing_span, world_box};
@@ -203,11 +204,15 @@ pub fn plugin(app: &mut App) {
         OnEnter(terra_world::instance::InWorld),
         setup.in_set(terra_world::instance::Building::Stage),
     )
-    .add_systems(Update, (spawn, measure, recarry, sheet::capture).chain())
+    .add_systems(
+        Update,
+        (spawn, measure, recarry, sheet::capture, film::capture).chain(),
+    )
     .add_systems(Update, draw_contracts);
     remote::method(app, "workbench.pose", pose_method);
     remote::method(app, "workbench.shape", shape_method);
     sheet::plugin(app);
+    film::plugin(app);
 }
 
 fn setup(
@@ -367,7 +372,7 @@ fn spawn(
             // Say why and stop, rather than wait for a model that will never come.
             error!("workbench: {path} did not load: {error}");
             bench.spawned = true;
-            if options.sheet.is_some() {
+            if options.sheet.is_some() || options.film.is_some() {
                 exit.write(AppExit::error());
             }
             return;
