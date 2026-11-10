@@ -17,8 +17,9 @@ const shape = (look: Look) => shapeOf(look, "hafted", "in hand", fist);
 
 test("the committed axe's shape passes, and each planted fault of shape fails naming its measure", () => {
   assert.deepEqual(failing(shape(axe)), []);
-  // Twice life size: its length, and its handle's radius with it; its head reads as many fists.
-  const big = shape(changed((p) => [p[0] * 2, p[1] * 2, p[2] * 2]));
+  // Three times life size (the axe is a 0.42 m hatchet, D653: twice is still under a hafted's
+  // metre): its length, and its handle's radius with it; its head reads as many fists.
+  const big = shape(changed((p) => [p[0] * 3, p[1] * 3, p[2] * 3]));
   assert.ok(failing(big).includes("size.length"), JSON.stringify(failing(big)));
   // An oversized head alone (the far quarter three times as wide) is read, not barred: no source
   // gives a bar for a head in fists.

@@ -82,10 +82,10 @@ test("--all is every item with data, held and worn", () => {
 });
 
 test("a make is keyed on every script its maker reaches and the item's data and source", () => {
-  const data = JSON.parse(readFileSync(join(ROOT, "art", "held", "stone_axe.json"), "utf8"));
-  const held = rel(makeInputs({ name: "stone_axe", worn: false, file: join(ROOT, "art", "held", "stone_axe.json"), data }));
+  const data = JSON.parse(readFileSync(join(ROOT, "art", "held", "stone_pickaxe.json"), "utf8"));
+  const held = rel(makeInputs({ name: "stone_pickaxe", worn: false, file: join(ROOT, "art", "held", "stone_pickaxe.json"), data }));
   // fit_held.py imports look.py and haft.py: an edit to either makes it again.
-  for (const f of ["tools/characters/fit_held.py", "tools/characters/look.py", "tools/characters/haft.py", "tools/blender/version", "art/held/stone_axe.json", `assets/models/${data.source}`]) assert.ok(held.includes(f), f);
+  for (const f of ["tools/characters/fit_held.py", "tools/characters/look.py", "tools/characters/haft.py", "tools/blender/version", "art/held/stone_pickaxe.json", `assets/models/${data.source}`]) assert.ok(held.includes(f), f);
   // A worn item's maker runs build.ts, whose steps name the Python scripts they run.
   const worn = rel(makeInputs({ name: "quiver", worn: true, file: join(ROOT, "art", "gear", "quiver", "fit.json"), data: {} }));
   for (const f of ["tools/characters/build_item.sh", "tools/characters/build.ts", "tools/characters/fit_gear.py", "tools/characters/gear_check.py", "art/gear/quiver/fit.json", "art/gear/small_pack/fit.json"]) assert.ok(worn.includes(f), f);

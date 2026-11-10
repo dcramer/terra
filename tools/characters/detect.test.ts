@@ -24,7 +24,7 @@ test("every committed hafted, blade and polearm item: the detector finds the tur
     .map((f) => f.replace(/\.json$/, ""))
     // An assembled look (D565) has no source to detect on: its grip and facing are its parts' points.
     .filter((i) => ["hafted", "blade", "polearm"].includes(heldData(i).kind as string) && heldData(i).assembled === undefined);
-  assert.ok(items.length >= 8, `only ${items.length} items`);
+  assert.ok(items.length >= 7, `only ${items.length} items`);
   for (const item of items) {
     const d = heldData(item);
     const f = detectItem(item);

@@ -183,8 +183,8 @@ test("a skinned look is made on the base, at its size, and a pack's bag is behin
 
 test("a look is made from its data as it stands, and its data's source is there", () => {
   const stale = (name: string, change: Record<string, unknown>) => judge(look(name), body, { ...dataOf(name)!, ...change }).map((f) => f.rule);
-  assert.deepEqual(stale("held/stone_axe", { length: 0.8 }).filter((r) => r === "stale"), ["stale"], "its length changed, not made again");
-  assert.deepEqual(stale("held/stone_axe", { grip_from_end: 0.12 }).filter((r) => r === "stale"), ["stale"]);
+  assert.deepEqual(stale("held/stone_pickaxe", { length: 0.8 }).filter((r) => r === "stale"), ["stale"], "its length changed, not made again");
+  assert.deepEqual(stale("held/stone_pickaxe", { grip_from_end: 0.12 }).filter((r) => r === "stale"), ["stale"]);
   assert.deepEqual(stale("held/basket", { out: 0.1 }).filter((r) => r === "stale"), ["stale"]);
   // An assembled look (D565) is stale when its data names another recipe, and not as it stands.
   assert.deepEqual(stale("held/iron_axe", {}), []);
