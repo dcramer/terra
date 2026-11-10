@@ -4,6 +4,10 @@
 // put by rule from the world's seed, near the player (terra_creatures::butterflies). A new
 // breed is a row and a model; a row whose model is not there is skipped.
 //   span_m     how wide one is across its spread wings, least and most, metres
+//              (drawn 1.6 times life size, as the small birds are, docs/ambient-life.md:
+//              at life size a group 3 m off was a few pixels in the grass; life is
+//              white 42-54 mm, brimstone 57-63, tortoiseshell 50-56, peacock 63-69,
+//              blue 32-37, Butterfly Conservation)
 //   group      how many fly together, least and most
 //   spread_m   how far from the group's middle any of it wanders
 //   roams_m    how far the group's middle drifts from where the group was put
@@ -33,7 +37,7 @@
         // Over the meadow and the wood's edge, fluttering with hardly a glide.
         name: "Small white",
         model: "props/ButterflySmallWhite.glb",
-        span_m: (0.042, 0.054),
+        span_m: (0.067, 0.086),
         group: (2, 4),
         spread_m: 1.5,
         roams_m: 3.0,
@@ -47,7 +51,7 @@
         beat_hz: 11.8,
         bout_s: (0.7, 0.15),
         speed: 1.6,
-        over_m: (0.6, 1.6),
+        over_m: (0.9, 1.8),
         seen_m: 45.0,
         realms: ["world"],
     ),
@@ -56,7 +60,7 @@
         // strongly and far.
         name: "Brimstone",
         model: "props/ButterflyBrimstone.glb",
-        span_m: (0.057, 0.063),
+        span_m: (0.091, 0.101),
         group: (1, 2),
         spread_m: 3.0,
         roams_m: 4.0,
@@ -70,7 +74,7 @@
         beat_hz: 10.0,
         bout_s: (0.6, 0.25),
         speed: 2.0,
-        over_m: (0.7, 2.2),
+        over_m: (1.0, 2.2),
         seen_m: 50.0,
         realms: ["world"],
     ),
@@ -79,7 +83,7 @@
         // out, beating a few times and gliding.
         name: "Small tortoiseshell",
         model: "props/ButterflySmallTortoiseshell.glb",
-        span_m: (0.05, 0.056),
+        span_m: (0.08, 0.09),
         group: (4, 6),
         spread_m: 4.0,
         roams_m: 3.0,
@@ -93,7 +97,7 @@
         beat_hz: 9.0,
         bout_s: (0.45, 0.4),
         speed: 1.8,
-        over_m: (0.6, 1.8),
+        over_m: (0.9, 1.9),
         seen_m: 45.0,
         realms: ["world"],
     ),
@@ -102,7 +106,7 @@
         // long between its beats.
         name: "Peacock",
         model: "props/ButterflyPeacock.glb",
-        span_m: (0.063, 0.069),
+        span_m: (0.101, 0.11),
         group: (1, 3),
         spread_m: 3.0,
         roams_m: 3.0,
@@ -116,7 +120,7 @@
         beat_hz: 9.0,
         bout_s: (0.4, 0.5),
         speed: 1.8,
-        over_m: (0.6, 2.0),
+        over_m: (0.9, 2.0),
         seen_m: 50.0,
         realms: ["world"],
     ),
@@ -124,7 +128,7 @@
         // Small and sky blue, low over the grass of open ground, a few together.
         name: "Common blue",
         model: "props/ButterflyCommonBlue.glb",
-        span_m: (0.032, 0.037),
+        span_m: (0.051, 0.059),
         group: (3, 5),
         spread_m: 2.0,
         roams_m: 2.0,
@@ -138,7 +142,7 @@
         beat_hz: 12.0,
         bout_s: (0.6, 0.2),
         speed: 1.2,
-        over_m: (0.5, 1.0),
+        over_m: (0.8, 1.3),
         seen_m: 30.0,
         realms: ["world"],
     ),
