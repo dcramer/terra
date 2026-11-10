@@ -52,8 +52,6 @@ pub enum Sound {
     Croak,
     /// A dog's or a fox's bark.
     Bark,
-    /// Wings beating hard as a bird takes off.
-    Wings,
     /// A foot in shallow water.
     Splash,
     /// A golden plover's call over the fells: one plaintive whistle, falling.
@@ -119,7 +117,6 @@ impl Decodable for Synth {
                 Sound::Quack => one_shot(0.75, quack(&mut dice)),
                 Sound::Croak => one_shot(0.5, croak(&mut dice)),
                 Sound::Bark => one_shot(0.3, bark(&mut dice)),
-                Sound::Wings => one_shot(0.6, wings(&mut dice)),
                 Sound::Splash => one_shot(0.32, splash(&mut dice)),
                 Sound::Whistle => one_shot(0.6, whistle(&mut dice)),
                 Sound::Drum => one_shot(0.8, drum(&mut dice)),
@@ -701,18 +698,6 @@ fn bark(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
     }
 }
 
-fn wings(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
-    let mut dice = *dice;
-    let mut air = Smooth::default();
-    let beat = dice.range(14.0, 19.0);
-    move |t| {
-        // A burst of beats, each a rush of air, slowing and fading as it climbs away.
-        let stroke = 0.5 + 0.5 * libm::sinf(TAU * beat * t * (1.0 - 0.3 * t));
-        (air.low(dice.noise(), 1500.0) * stroke * stroke * libm::expf(-t * 4.0) * 2.0)
-            .clamp(-1.0, 1.0)
-    }
-}
-
 fn splash(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
     let mut dice = *dice;
     let mut band = Band::default();
@@ -955,7 +940,6 @@ pub mod tests {
             Sound::Quack,
             Sound::Croak,
             Sound::Bark,
-            Sound::Wings,
             Sound::Splash,
             Sound::Whistle,
             Sound::Drum,
@@ -1002,7 +986,6 @@ pub mod tests {
             Sound::Quack,
             Sound::Croak,
             Sound::Bark,
-            Sound::Wings,
             Sound::Splash,
             Sound::Whistle,
             Sound::Drum,
@@ -1030,7 +1013,6 @@ pub mod tests {
                 | Sound::Quack
                 | Sound::Croak
                 | Sound::Bark
-                | Sound::Wings
                 | Sound::Splash
                 | Sound::Whistle
                 | Sound::Drum
