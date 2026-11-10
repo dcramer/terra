@@ -13,6 +13,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | Note | Dated |
 |---|---|
 | [Holding and carrying items programmatically: how others do it, and whether we are doing it right](2026-11-09-holding-items-programmatically.md) | 2026-11-09 |
+| [The lighting system: is the way we are building it correct](2026-11-09-lighting-system-review.md) | 2026-11-09 |
 | [Natural caves: how shipped games make them, and what fits our ground](natural-caves.md) | 2026-11-08 |
 | [Netcode: how shipped server-authoritative games do it, and what Rust and Bevy offer today](2026-11-06-netcode.md) | 2026-11-06 |
 | [What it costs an agent to drive the character pipeline, and how to make it cheap](2026-11-05-agent-pipeline-tokens.md) | 2026-11-05 |
