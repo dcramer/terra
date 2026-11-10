@@ -10,7 +10,9 @@ use terra_world::daylight::Clock;
 use terra_world::sky_occlusion::{self, SkyOccluders};
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(
+    use terra_world::instance::InstanceApp;
+    // The crowns are the world's forest's: another world's are found afresh.
+    app.world_resource::<Crowns>().add_systems(
         Update,
         follow_leaves.run_if(terra_world::instance::in_world),
     );
@@ -79,7 +81,10 @@ fn follow_leaves(
         });
         return;
     };
-    if !maps.is_some_and(|maps| maps.is_changed()) {
+    // Each time the maps are painted, and once when the crowns are first known: the floor,
+    // and the crowns with it, come some frames after the world is entered (`lay_floor`), by
+    // when the maps' first painting may be past and the next an hour or a walk away.
+    if !(crowns.is_added() || maps.is_some_and(|maps| maps.is_changed())) {
         return;
     }
     let Some(oak) = fields.years.iter().find(|year| year.kind == "oak") else {
@@ -108,4 +113,88 @@ fn follow_leaves(
             ..*crown
         })
         .collect();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The day on which the oaks at the start are least in leaf, and how far, found from the
+    /// climate itself.
+    fn a_bare_day(fields: &ClimateFields) -> (Clock, f32) {
+        let oak = fields
+            .years
+            .iter()
+            .find(|year| year.kind == "oak")
+            .expect("plant_years.ron has an oak");
+        let mut cache = PastCache::new(4);
+        let (clock, on) = (0..2000)
+            .step_by(7)
+            .map(|day| {
+                let clock = Clock { day, hour: 12.0 };
+                let time = clock.time();
+                let past = fields.past_at(&mut cache, Vec3::Y, time);
+                let hours = fields
+                    .fields
+                    .daylight(fields.frame.latitude(Vec3::Y), time.day())
+                    .day_hours;
+                (clock, oak.leaves(&past, hours, 0.0).on)
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .expect("some day");
+        // Far enough out of leaf that the crowns are shaded again (`RESHADE_BY`).
+        assert!(on < 0.7, "the oaks are at least {on} in leaf all year");
+        (clock, on)
+    }
+
+    /// The fault planted: the crowns arrive frames after the maps' first painting, as they
+    /// do when the floor is decided behind the loading screen. The bare oak's crown must
+    /// still let the winter sky through, without waiting for the maps' next painting.
+    #[test]
+    fn crowns_that_come_after_the_maps_are_painted_are_thinned_for_bare_oaks() {
+        let years = terra_world::data::read(terra_world::climate::YEARS_FILE);
+        let fields = ClimateFields::for_tests(years);
+        let (clock, on) = a_bare_day(&fields);
+        let mut app = App::new();
+        app.insert_resource(fields)
+            .insert_resource(clock)
+            .insert_resource(ClimateMaps::default())
+            .add_systems(Update, follow_leaves);
+        let foot = Vec3::Y;
+        app.world_mut()
+            .spawn((Name::new("Oak"), GlobalTransform::from_translation(foot)));
+        app.world_mut().spawn((
+            Name::new("Pine"),
+            GlobalTransform::from_translation(foot + Vec3::X * 20.0),
+        ));
+        // The maps are painted and seen, the forest's floor still being decided.
+        app.update();
+        app.update();
+        let crown = |at: Vec3| sky_occlusion::Crown {
+            middle: at + Vec3::Y * 8.0,
+            half: Vec3::splat(4.0),
+            closes: 0.8,
+        };
+        app.insert_resource(SkyOccluders {
+            middle: foot,
+            up: Vec3::Y,
+            east: Vec3::X,
+            half_m: 40.0,
+            below_m: 5.0,
+            above_m: 35.0,
+            crowns: vec![crown(foot), crown(foot + Vec3::X * 20.0)],
+            shadows: Vec::new(),
+        });
+        app.update();
+        app.update();
+        let crowns = &app.world().resource::<SkyOccluders>().crowns;
+        let thin = BARE_CROWN + (1.0 - BARE_CROWN) * on;
+        assert!(
+            (crowns[0].closes - 0.8 * thin).abs() < 1e-4,
+            "the bare oak's crown closes {} of the sky, not {} ({on} in leaf)",
+            crowns[0].closes,
+            0.8 * thin
+        );
+        assert_eq!(crowns[1].closes, 0.8, "the pine keeps its needles");
+    }
 }

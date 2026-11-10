@@ -114,14 +114,14 @@ impl ClimateFields {
     }
 
     /// The start's climate with these kinds' years, for tests.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     pub fn for_tests(years: Vec<LeafYear>) -> Self {
         Self::for_tests_round(years, 2000.0)
     }
 
     /// [`ClimateFields::for_tests`] on a world whose sea is so far from its middle: 30 km and
     /// over has latitudes, as the demos' worlds do.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     pub fn for_tests_round(years: Vec<LeafYear>, sea_radius_m: f32) -> Self {
         let climate: terra_climate::Climate = crate::data::read(WorldClimate::FILE);
         Self {

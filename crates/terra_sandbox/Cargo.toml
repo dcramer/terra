@@ -35,6 +35,8 @@ terra_world.workspace = true
 # A player with the starting kit, for gathering's tests (lush::felled).
 terra_survival = { workspace = true, features = ["testing"] }
 terra_walker = { workspace = true, features = ["testing"] }
+# The start's climate with the kinds' years, for the seasons' tests (lush::seasons).
+terra_world = { workspace = true, features = ["testing"] }
 
 [features]
 # The frame recorder's freeze lines (terra_world's `hitch-log`, D576).
