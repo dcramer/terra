@@ -46,11 +46,37 @@ const WAYS: [(f32, f32); 9] = [
     (1.1, -1.1),
     (-1.1, -1.1),
 ];
+/// The first so many of [`WAYS`], straight up and a little off it, say whether a cell is in
+/// the open air: with all of them clear nothing is over it.
+const OVERHEAD: usize = 5;
+
+/// Whose light a cell holds. The den's box is one upright box, so it holds the land over the
+/// den and the air above that too, and a fragment there takes its diffuse light from these
+/// cells (D485): what stands in the open air must be lit as outside the box, by the whole
+/// open sky. Shipped engines keep an interior's volume from the outdoors by bounding it to
+/// the interior (Godot 4's VoxelGI extents, Unreal's Lightmass importance volume); a box
+/// cannot follow the land, so here the cells outside the interior are given the outdoors'
+/// own light, and the cells in the rock, which nothing is drawn in but which the blend
+/// between cells reads, are filled from the valid cells beside them, as probes inside
+/// geometry are (Unity's Adaptive Probe Volumes' dilation, Unreal's volumetric lightmap).
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Whose {
+    /// The den's: each side by the share of sky it sees, and what the rock throws on.
+    Den,
+    /// The open air's, or rock under it alone: every side the open sky's whole light.
+    Open,
+    /// Rock between the open air and the den, a roof a cell or two thick: the sides that
+    /// face up, which the land over it blends with, the open sky's; those that face down,
+    /// which the den's ceiling blends with, the den's.
+    Roof,
+}
 
 /// A den's cells and how much of the sky each side of each sees.
 struct Seen {
     cells: UVec3,
     sides: Vec<[f32; 6]>,
+    /// Whose light each cell holds.
+    whose: Vec<Whose>,
     /// How much light is about in each cell, of the open sky's: what it sees of the sky,
     /// or what the cells beside it throw on, whichever is more.
     about: Vec<f32>,
@@ -174,6 +200,7 @@ fn seen(ground: &(impl Fn(Vec3) -> f32 + Sync), parts: &[Part]) -> Seen {
         }
         true
     };
+    let up = frame.y_axis;
     let slabs: Vec<u32> = (0..cells.z).collect();
     let sides = terra_gen::par::map(&slabs, |&z| {
         let mut slab = Vec::with_capacity((cells.x * cells.y) as usize);
@@ -182,30 +209,48 @@ fn seen(ground: &(impl Fn(Vec3) -> f32 + Sync), parts: &[Part]) -> Seen {
                 let local = (UVec3::new(x, y, z).as_vec3() + 0.5) * step - size * 0.5;
                 let at = middle + frame * local;
                 // In the rock nothing is drawn; a cell at a wall is asked from in the open.
-                if ground(at) < -CELL_M {
-                    slab.push([0.0; 6]);
+                let depth = ground(at);
+                if depth < -CELL_M {
+                    slab.push(([0.0; 6], Air::Rock));
                     continue;
                 }
-                slab.push(axes.map(|axis| {
+                let reached = |axis: Vec3, ways: &[(f32, f32)]| {
                     let (a, b) = (
                         axis.any_orthonormal_vector(),
                         axis.cross(axis.any_orthonormal_vector()),
                     );
-                    let reached = WAYS
-                        .iter()
+                    ways.iter()
                         .filter(|(u, v)| open(at, (axis + a * *u + b * *v).normalize()))
-                        .count();
-                    reached as f32 / WAYS.len() as f32
-                }));
+                        .count()
+                };
+                // The open air: nothing over it, straight up or a little off.
+                let air = if depth <= 0.0 {
+                    Air::Rock
+                } else if reached(up, &WAYS[..OVERHEAD]) == OVERHEAD {
+                    Air::Open
+                } else {
+                    Air::Den
+                };
+                let shares = axes.map(|axis| reached(axis, &WAYS) as f32 / WAYS.len() as f32);
+                slab.push((shares, air));
             }
         }
         slab
     });
-    let sides: Vec<[f32; 6]> = sides.into_iter().flatten().collect();
-    let about = thrown_on(cells, &sides);
+    let (sides, air): (Vec<[f32; 6]>, Vec<Air>) = sides.into_iter().flatten().unzip();
+    // The den's own light is passed on as if the open air were its own too, so its inside
+    // is as dark as it was; then the open air is said to be wholly lit.
+    let mut about = thrown_on(cells, &sides);
+    let whose = whose(cells, &air);
+    for (about, whose) in about.iter_mut().zip(&whose) {
+        if *whose == Whose::Open {
+            *about = 1.0;
+        }
+    }
     Seen {
         cells,
         sides,
+        whose,
         about,
         middle,
         axes: Mat3::from_cols(
@@ -214,6 +259,52 @@ fn seen(ground: &(impl Fn(Vec3) -> f32 + Sync), parts: &[Part]) -> Seen {
             frame.z_axis * size.z,
         ),
     }
+}
+
+/// What a cell's middle is in: the rock, the open air with nothing over it, or the air of
+/// the den (or under an overhang).
+#[derive(Clone, Copy, PartialEq)]
+enum Air {
+    Rock,
+    Open,
+    Den,
+}
+
+/// Whose light each cell holds: the open air its own; rock by the cells round it (the
+/// twenty-six that a blend through it can reach), the open air's where only that is beside
+/// it, a roof's where the den's air is too, and the den's dark otherwise.
+fn whose(cells: UVec3, air: &[Air]) -> Vec<Whose> {
+    let cells = cells.as_ivec3();
+    let at = |c: IVec3| ((c.z * cells.y + c.y) * cells.x + c.x) as usize;
+    let mut whose = Vec::with_capacity(air.len());
+    for z in 0..cells.z {
+        for y in 0..cells.y {
+            for x in 0..cells.x {
+                let here = IVec3::new(x, y, z);
+                whose.push(match air[at(here)] {
+                    Air::Open => Whose::Open,
+                    Air::Den => Whose::Den,
+                    Air::Rock => {
+                        let (mut open, mut den) = (false, false);
+                        for k in 0..27 {
+                            let beside = here + IVec3::new(k % 3, k / 3 % 3, k / 9) - 1;
+                            if beside.cmplt(IVec3::ZERO).any() || beside.cmpge(cells).any() {
+                                continue;
+                            }
+                            open |= air[at(beside)] == Air::Open;
+                            den |= air[at(beside)] == Air::Den;
+                        }
+                        match (open, den) {
+                            (true, false) => Whose::Open,
+                            (true, true) => Whose::Roof,
+                            _ => Whose::Den,
+                        }
+                    }
+                });
+            }
+        }
+    }
+    whose
 }
 
 /// The light about in each cell: its own share of the sky, or [`THROWN_ON`] of the brightest
@@ -252,9 +343,36 @@ fn thrown_on(cells: UVec3, sides: &[[f32; 6]]) -> Vec<f32> {
     about
 }
 
+/// The light one side of a cell holds, of the open sky's toward each side of the world: in
+/// the den the sky's for the share the side sees, the ground's bounce and the rock's for as
+/// much of the sky as the cell sees at all, and a trace where it sees none; in the open air
+/// what the environment map gives there, the sky's and the ground's whole.
+fn lit(seen: &Seen, sides: &[(Vec3, Vec3); 6], cell: usize, side: usize) -> Vec3 {
+    const AXES: [Vec3; 6] = [
+        Vec3::X,
+        Vec3::NEG_X,
+        Vec3::Y,
+        Vec3::NEG_Y,
+        Vec3::Z,
+        Vec3::NEG_Z,
+    ];
+    let (sky, ground) = sides[side];
+    let open = match seen.whose[cell] {
+        Whose::Open => true,
+        Whose::Roof => AXES[side].dot(seen.axes.y_axis) > 0.0,
+        Whose::Den => false,
+    };
+    if open {
+        return sky + ground;
+    }
+    let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+    let trace = Vec3::splat(luma(sides[2].0) * DARK);
+    let thrown = (ground + Vec3::splat(luma(sky) * ROCK_THROWS)) * seen.about[cell];
+    sky * seen.sides[cell][side] + thrown + trace
+}
+
 /// The volume's texture, laid out as Bevy's shader reads it (`sky_occlusion::texels` says
-/// how): each side of each cell the open sky's light for the share it sees, the ground's
-/// bounce for as much of the sky as the cell sees at all, and a trace where it sees none.
+/// how), each side of each cell as [`lit`] says.
 fn texels(seen: &Seen, sides: &[(Vec3, Vec3); 6]) -> Vec<u8> {
     let (nx, ny, nz) = (
         seen.cells.x as usize,
@@ -262,16 +380,12 @@ fn texels(seen: &Seen, sides: &[(Vec3, Vec3); 6]) -> Vec<u8> {
         seen.cells.z as usize,
     );
     let mut data = vec![0u8; nx * ny * 2 * nz * 3 * 4];
-    let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
-    let trace = Vec3::splat(luma(sides[2].0) * DARK);
     for z in 0..nz {
         for y in 0..ny {
             for x in 0..nx {
                 let cell = (z * ny + y) * nx + x;
-                let (shares, about) = (seen.sides[cell], seen.about[cell]);
-                for (side, &(sky, ground)) in sides.iter().enumerate() {
-                    let thrown = (ground + Vec3::splat(luma(sky) * ROCK_THROWS)) * about;
-                    let light = sky * shares[side] + thrown + trace;
+                for side in 0..6 {
+                    let light = lit(seen, sides, cell, side);
                     let t = y + if side % 2 == 1 { ny } else { 0 };
                     let p = z + side / 2 * nz;
                     let at = ((p * ny * 2 + t) * nx + x) * 4;
@@ -383,6 +497,7 @@ mod tests {
         let seen = Seen {
             cells: UVec3::splat(2),
             sides: vec![[1.0; 6]; 8],
+            whose: vec![Whose::Den; 8],
             about: vec![1.0; 8],
             middle: Vec3::Y * 1000.0,
             axes: Mat3::from_diagonal(Vec3::splat(6.0)),
@@ -413,12 +528,11 @@ mod tests {
         assert_eq!(lit_volumes(&mut app).len(), 1);
     }
 
-    /// A level ground with a chamber under it and a shaft up to the air at one end: sky
-    /// reaches down the shaft and a little way in, the chamber's far end sees none, and the
-    /// open air over the ground sees all of it upward.
-    #[test]
-    fn the_sky_reaches_in_at_the_mouth_and_not_the_far_end() {
-        let base = Vec3::Y * 1000.0;
+    /// A level ground at `BASE` with a passage twelve metres under it and a shaft up to the
+    /// air at one end, baked.
+    const BASE: Vec3 = Vec3::new(0.0, 1000.0, 0.0);
+    fn a_den_under_level_ground() -> Seen {
+        let base = BASE;
         let parts = vec![
             Part::Passage {
                 from: base + Vec3::new(0.0, -12.0, 0.0),
@@ -445,22 +559,32 @@ mod tests {
             let cave = capsule(p, a, b, 3.0).min(capsule(p, a, c, 3.0));
             (p.y - 1000.0).max(-cave)
         };
-        let seen = seen(&ground, &parts);
-        let at = |p: Vec3| {
-            let local = Mat3::from_cols(
-                seen.axes.x_axis / seen.axes.x_axis.length_squared(),
-                seen.axes.y_axis / seen.axes.y_axis.length_squared(),
-                seen.axes.z_axis / seen.axes.z_axis.length_squared(),
-            )
-            .transpose()
-                * (p - seen.middle)
-                + 0.5;
-            let cell = (local * seen.cells.as_vec3())
-                .floor()
-                .as_uvec3()
-                .min(seen.cells - 1);
-            seen.sides[((cell.z * seen.cells.y + cell.y) * seen.cells.x + cell.x) as usize]
-        };
+        seen(&ground, &parts)
+    }
+
+    /// The cell a place is in.
+    fn cell_at(seen: &Seen, p: Vec3) -> usize {
+        let local = Mat3::from_cols(
+            seen.axes.x_axis / seen.axes.x_axis.length_squared(),
+            seen.axes.y_axis / seen.axes.y_axis.length_squared(),
+            seen.axes.z_axis / seen.axes.z_axis.length_squared(),
+        )
+        .transpose()
+            * (p - seen.middle)
+            + 0.5;
+        let cell = (local * seen.cells.as_vec3())
+            .floor()
+            .as_uvec3()
+            .min(seen.cells - 1);
+        ((cell.z * seen.cells.y + cell.y) * seen.cells.x + cell.x) as usize
+    }
+
+    /// Sky reaches down the shaft and a little way in, the passage's far end sees none, and
+    /// the open air over the ground sees all of it upward.
+    #[test]
+    fn the_sky_reaches_in_at_the_mouth_and_not_the_far_end() {
+        let (base, seen) = (BASE, a_den_under_level_ground());
+        let at = |p: Vec3| seen.sides[cell_at(&seen, p)];
         // +Y is side 2. Under the shaft the sky is seen overhead; at the far end not at all.
         assert!(at(base + Vec3::new(0.0, -12.0, 0.0))[2] > 0.1);
         assert_eq!(at(base + Vec3::new(36.0, -12.0, 0.0)), [0.0; 6]);
@@ -470,11 +594,81 @@ mod tests {
         // The light about at a point: little at the far end, all of it over the ground, and
         // nothing said of a place outside the den's box.
         assert!(seen.about_at(base + Vec3::new(36.0, -12.0, 0.0)).unwrap() < 0.2);
-        assert!(seen.about_at(base + Vec3::new(20.0, 3.0, 0.0)).unwrap() > 0.4);
+        assert_eq!(seen.about_at(base + Vec3::new(20.0, 3.0, 0.0)), Some(1.0));
         assert_eq!(seen.about_at(base + Vec3::new(500.0, 0.0, 0.0)), None);
         // Lit, the far end keeps a trace and the open air is many times brighter.
         let sky = [(Vec3::ONE, Vec3::splat(0.2)); 6];
         let data = texels(&seen, &sky);
         assert!(data.iter().any(|&byte| byte != 0));
+    }
+
+    /// The den's box holds the land over the den and the air above it, and what stands
+    /// there takes its diffuse light from the box's cells (D485): a trunk over a den must be
+    /// lit as one beside it, by the whole open sky. Before, the air's cells counted the
+    /// land as hiding the sky (two thirds of it seen sideways, none downward) and the rock
+    /// under the grass was dark, so a trunk in the box measured 20% darker than out of it.
+    #[test]
+    fn what_is_in_the_open_air_over_a_den_has_the_open_skys_light() {
+        let (base, seen) = (BASE, a_den_under_level_ground());
+        // A sky that differs side by side, and a ground's bounce, so no two sides agree.
+        let sides: [(Vec3, Vec3); 6] = std::array::from_fn(|k| {
+            let k = k as f32;
+            (
+                Vec3::new(0.3 + k * 0.1, 0.5, 0.9 - k * 0.1),
+                Vec3::splat(0.05 + k * 0.02),
+            )
+        });
+        let light = |p: Vec3| {
+            let cell = cell_at(&seen, p);
+            std::array::from_fn::<Vec3, 6, _>(|side| lit(&seen, &sides, cell, side))
+        };
+        let open = sides.map(|(sky, ground)| sky + ground);
+        // Up a column from the grass, twenty metres from the shaft; and the rock just under
+        // the grass, which the land's own surface blends with.
+        for y in [-2.5, 0.5, 2.0, 4.0, 7.0, 10.0] {
+            assert_eq!(
+                light(base + Vec3::new(20.0, y, 0.0)),
+                open,
+                "{y} m over the land"
+            );
+        }
+        // The den keeps its dark: in the passage under that column, and in the rock of its
+        // roof, no side has a quarter of the open air's light.
+        for y in [-12.0, -8.0] {
+            for (side, lit) in light(base + Vec3::new(20.0, y, 0.0))
+                .into_iter()
+                .enumerate()
+            {
+                assert!(
+                    lit.max_element() < 0.25 * open[side].max_element(),
+                    "{y} m, side {side}: {lit}"
+                );
+            }
+        }
+    }
+
+    /// Rock takes the light of the air beside it: the open air's under the land, the den's
+    /// dark by the den, and under a thin roof the open air's on the sides that face up and
+    /// the den's on those that face down.
+    #[test]
+    fn rock_holds_the_light_of_the_air_beside_it() {
+        use Air::*;
+        let column = |air: [Air; 4]| whose(UVec3::new(1, 4, 1), &air);
+        assert_eq!(
+            column([Den, Rock, Rock, Open]),
+            [Whose::Den, Whose::Den, Whose::Open, Whose::Open]
+        );
+        assert_eq!(column([Rock, Den, Rock, Open])[2], Whose::Roof);
+        let seen = Seen {
+            cells: UVec3::ONE,
+            sides: vec![[0.0; 6]],
+            whose: vec![Whose::Roof],
+            about: vec![0.0],
+            middle: Vec3::ZERO,
+            axes: Mat3::from_diagonal(Vec3::splat(3.0)),
+        };
+        let sides = [(Vec3::ONE, Vec3::splat(0.2)); 6];
+        assert_eq!(lit(&seen, &sides, 0, 2), Vec3::splat(1.2));
+        assert!(lit(&seen, &sides, 0, 3).max_element() < 0.1);
     }
 }
