@@ -12,6 +12,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 
 | Note | Dated |
 |---|---|
+| [Great fungi: what a cap, its gills and its stalk are, and how ours was flat](2026-11-09-great-fungi.md) | 2026-11-09 |
 | [Holding and carrying items programmatically: how others do it, and whether we are doing it right](2026-11-09-holding-items-programmatically.md) | 2026-11-09 |
 | [The lighting system: is the way we are building it correct](2026-11-09-lighting-system-review.md) | 2026-11-09 |
 | [Natural caves: how shipped games make them, and what fits our ground](natural-caves.md) | 2026-11-08 |
