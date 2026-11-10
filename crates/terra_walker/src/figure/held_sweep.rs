@@ -1,7 +1,8 @@
 //! The held sweep: the man's figure (male.glb and the game's own clips, as the animation
 //! course poses it, with no GPU) holding each look in turn, driven through every clip it has
 //! at frame times a game meets (none, a hitch, a pause's clamp), its clip changed every few
-//! frames and its look swapped and put away mid-clip; after every frame every bone is finite,
+//! frames, its clips stopped (no clip posing it again for up to 14 frames) and its look
+//! swapped and put away mid-clip; after every frame every bone is finite,
 //! its rotation a unit quaternion and its scale its rest's, and each hand within an arm's reach
 //! of its shoulder. What it holds: the developer's still of 2026-11-09, the right arm's skin
 //! stretched tens of metres from a crouched body with the hammer in hand.
@@ -39,7 +40,7 @@ impl Draws {
 }
 
 /// What a bone must still be: its name, itself and its scale at rest.
-type Bones = Vec<(String, Entity, Vec3)>;
+pub(super) type Bones = Vec<(String, Entity, Vec3)>;
 
 /// Every named thing under the figure with a transform, before anything is held.
 fn bones(world: &mut World, root: Entity) -> Bones {
@@ -138,7 +139,7 @@ fn run(look: &str, seed: u32) -> Option<String> {
 }
 
 /// Updates the app until `done`.
-fn waited(app: &mut App, what: &str, done: &mut dyn FnMut(&mut World) -> bool) {
+pub(super) fn waited(app: &mut App, what: &str, done: &mut dyn FnMut(&mut World) -> bool) {
     let start = std::time::Instant::now();
     while !done(app.world_mut()) {
         app.update();
@@ -151,7 +152,7 @@ type Models = Vec<Handle<bevy::world_serialization::WorldAsset>>;
 
 /// The app with the man stood in it and every look loaded: his body, bones, hand sockets
 /// (right, left), clips by name and the looks' models.
-fn stood() -> (App, Entity, Bones, [Entity; 2], Vec<String>, Models) {
+pub(super) fn stood() -> (App, Entity, Bones, [Entity; 2], Vec<String>, Models) {
     let mut app = app();
     let body = app
         .world_mut()
@@ -216,7 +217,17 @@ fn swept(
                 motion.on_ground = true;
             }
             speed = 0.0;
-            let what = match draws.next(14) {
+            let what = match draws.next(15) {
+                // No clip poses the body again until its next change of clip: every clip
+                // stopped, so each layer turns the pose its own last write left (`held_still`
+                // holds how far).
+                12 => {
+                    let mut players = world.query::<&mut AnimationPlayer>();
+                    for mut player in players.iter_mut(world) {
+                        player.stop_all();
+                    }
+                    "no clip poses it".into()
+                }
                 0..=4 => {
                     let clip = &clips[draws.next(clips.len() as u32) as usize];
                     let mut act = Act::looping(clip, [1.0, 1.0, 0.0, 3.0][draws.next(4) as usize]);
@@ -316,8 +327,19 @@ fn swept(
     None
 }
 
+/// Held by a test that stands many figures at once (one a core), so two such tests take
+/// turns: together their loads overflowed the stack of the asset threads all their apps share.
+pub(super) static MANY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The turn of a test that stands many figures at once.
+pub(super) fn turn() -> std::sync::MutexGuard<'static, ()> {
+    MANY.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[test]
 fn no_clip_look_or_frame_time_leaves_a_bone_that_is_not_a_unit_turn() {
+    let _turn = turn();
     let cases: Vec<(&str, u32)> = LOOKS
         .iter()
         .flat_map(|look| (0..RUNS).map(move |seed| (*look, seed)))
