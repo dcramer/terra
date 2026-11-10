@@ -36,6 +36,20 @@ fn parse(args: &[&str]) -> Result<Options, String> {
     Options::from_args(args.iter().map(|a| a.to_string()))
 }
 
+/// A clean picture carries no interface (every desk still carried the action bar, the hints
+/// and "Click to take control" under `--clean`), yet its player still aims by the view, as
+/// the scripts that build under it need; a fixed camera has neither.
+#[test]
+fn a_clean_picture_has_no_interface_and_still_aims() {
+    let plain = parse(&[]).unwrap();
+    assert!(plain.shows_interface() && plain.aims_by_view());
+    let clean = parse(&["--clean"]).unwrap();
+    assert!(!clean.shows_interface());
+    assert!(clean.aims_by_view());
+    let fixed = parse(&["--vantage", "4,3,20,6,2,0"]).unwrap();
+    assert!(!fixed.shows_interface() && !fixed.aims_by_view());
+}
+
 #[test]
 fn reads_the_workbench_options() {
     let options = parse(&[

@@ -61,7 +61,8 @@ usage: terra_sandbox [options]
   --flame-matte         with each of --shots, the flames' share of each pixel as the
                         tonemapper had it, white in <prefix>-<frame>.matte.png: an ID
                         matte the fire sheet measures the flame on (D433); full size only
-  --clean               leave the frame-time readout off the screen, for pictures
+  --clean               leave the interface and the frame-time readout off the screen,
+                        for pictures
   --mute                no sound
   --sound               sound under WSL too, where it is off by default
   --bench               measure frame times with vsync off, print them and how they hold
@@ -339,7 +340,7 @@ pub struct Options {
     pub remote_token: String,
     /// Tunables set at the start (`--tune NAME=VALUE`, D547).
     pub tunes: Vec<(String, f32)>,
-    /// No readout on screen.
+    /// No interface and no readout on screen (`shows_interface`).
     pub clean: bool,
     /// With each of `shots`, a picture of what the lakes cover (`--water-mask`, D429).
     pub water_mask: bool,
@@ -888,9 +889,16 @@ impl Options {
             || self.film.is_some()
     }
 
-    /// Whether the game draws its interface: not for pictures, from a fixed camera or in a
-    /// shot (`--cine`), which show the scene alone.
+    /// Whether the game draws its interface: not for pictures (`--clean`), from a fixed
+    /// camera or in a shot (`--cine`), which show the scene alone.
     pub fn shows_interface(&self) -> bool {
+        !self.clean && self.aims_by_view()
+    }
+
+    /// Whether the view's middle is the player's aim: not from a fixed camera or in a shot
+    /// (`--cine`). A clean picture's player still aims: the scripts that build under
+    /// `--clean` (qa, groundlight, the fire sheet) aim as a person does.
+    pub fn aims_by_view(&self) -> bool {
         self.vantage.is_none() && self.cine.is_none()
     }
 

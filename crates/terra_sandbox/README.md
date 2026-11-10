@@ -23,7 +23,7 @@ cargo xtask win -p terra_sandbox -- --experiment scatter
 | `--radius <metres>` | Planet radius: a world made takes it, 30000 by default (D13); a kept world keeps its own; a run keeping no world, 2000 unless given |
 | `--shot <file.png>` | Save a screenshot once the scene has settled, then exit |
 | `--shots <prefix>@<frames>` | Save a screenshot on each of those frames, counted as `--press` counts them, as `<prefix>-<frame>.png`, then exit: a list and ranges, like `out/walk@300-320,600`, so what pops in or out shows from one frame to the next |
-| `--clean` | Leave the frame-time readout off the screen, for pictures |
+| `--clean` | Leave the interface (bars, hints, crosshair) and the frame-time readout off the screen, for pictures; the player still aims and acts |
 | `--mute` | No sound. Scripted runs are always silent, and print what they would have played: `SANDBOX heard: step.grass 4` |
 | `--sound` | Sound under WSL, where it is off by default because WSL usually has no sound device |
 | `--bench` | Measure frame times with vsync off and no frame-rate limit, print them, the median game, render-CPU and GPU parts of a frame, and when the slowest frames came, then exit. `cargo xtask bench` runs the benchmark scenes this way ([development.md](../../docs/development.md#measuring-performance)) |

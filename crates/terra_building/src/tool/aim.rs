@@ -97,8 +97,7 @@ pub(super) fn aim(
         }
         // A fixed camera, or one a script holds, is for taking pictures, and an open dial is
         // for choosing: the view's middle is not the player's aim.
-        if !options.shows_interface() || held.as_ref().is_some_and(|h| h.held()) || intent.choosing
-        {
+        if !options.aims_by_view() || held.as_ref().is_some_and(|h| h.held()) || intent.choosing {
             builder.target = Target::Nothing;
             continue;
         }
