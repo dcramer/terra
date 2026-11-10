@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aspect, fingerprint, formatManifest, parseManifest, parseNotes } from "./paint.ts";
+import { aspect, bakeCommand, fingerprint, formatManifest, parseManifest, parseNotes } from "./paint.ts";
 
 test("fingerprints a file as the sandbox does (FNV-1a, 64 bits)", () => {
   assert.equal(fingerprint(new Uint8Array()), "cbf29ce484222325");
@@ -25,4 +25,9 @@ test("asks for the aspect nearest the item's cells", () => {
   assert.equal(aspect(2, 1), "16:9");
   assert.equal(aspect(1, 2), "9:16");
   assert.equal(aspect(2, 2), "1:1");
+});
+
+test("off WSL the renders are baked windowless through the GPU scheduler; under it by the baker as it is", () => {
+  assert.deepEqual(bakeCommand(false, "d"), ["xtask", "gpu", "bake", "--", "cargo", "xtask", "icons", "--offscreen", "--background", "--renders", "d"]);
+  assert.deepEqual(bakeCommand(true, "d"), ["xtask", "icons", "--renders", "d"]);
 });

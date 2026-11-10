@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { onWsl } from "../sandbox/client.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HERE = join(ROOT, "tools", "icons");
@@ -215,11 +216,19 @@ async function main(argv: string[]) {
   }
 }
 
+/** Cargo's words for baking the renders: under WSL the baker as it is (the Windows build's
+ * window); elsewhere windowless through the GPU scheduler (D319, D417), because the windowed
+ * baker panics on an X display with no DRI3 and `--offscreen` alone still opens a window. */
+export function bakeCommand(wsl: boolean, renders: string): string[] {
+  const icons = ["xtask", "icons", "--renders", renders];
+  return wsl ? icons : ["xtask", "gpu", "bake", "--", "cargo", "xtask", "icons", "--offscreen", "--background", "--renders", renders];
+}
+
 async function paintAll(values: Record<string, unknown>, positionals: string[], notes: Notes, work: string) {
   let renders = values.renders as string | undefined;
   if (!renders) {
     renders = join(work, "renders");
-    const baked = spawnSync("cargo", ["xtask", "icons", "--renders", renders], { cwd: ROOT, stdio: "inherit" });
+    const baked = spawnSync("cargo", bakeCommand(onWsl, renders), { cwd: ROOT, stdio: "inherit" });
     if (baked.status !== 0) throw new Error("baking the renders failed");
   }
   const out = (values.sheet as string | undefined) ?? join(ROOT, "shots", "icons", "review.png");
