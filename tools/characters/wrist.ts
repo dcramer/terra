@@ -10,10 +10,13 @@
 // turn counts the whole of the hand's turn in the forearm's frame.
 
 import { type Pose, type Q, type V3, dot, len, qinv, qmul, rot, sub } from "./glb.ts";
+import { rustConst } from "./rust_const.ts";
 
+const wristOf = (name: string) => rustConst("crates/terra_walker/src/carry_clear.rs", `WRIST_${name}_DEG`);
 /** A person's wrist (AAOS ranges, adult averages): degrees of flexion, extension, radial and
- * ulnar deviation, and the most a hand turns off its forearm in one key at 24 a second. */
-export const WRIST = { flex: 80, ext: 70, radial: 20, ulnar: 35, key: 45, fps: 24 } as const;
+ * ulnar deviation, read from the game's own (terra_walker::carry_clear's `WRIST_*_DEG`, the one
+ * definition), and the most a hand turns off its forearm in one key at 24 a second. */
+export const WRIST = { flex: wristOf("FLEX"), ext: wristOf("EXT"), radial: wristOf("RADIAL"), ulnar: wristOf("ULNAR"), key: 45, fps: 24 } as const;
 /** The share of a blow's tip motion across the handle its working edge must lead at speed
  * (attachment.md: a one-sided head's -Z), and the most a blade's flat may. */
 export const EDGE = { lead: 0.7, flat: 0.5 } as const;

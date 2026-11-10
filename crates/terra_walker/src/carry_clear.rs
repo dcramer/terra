@@ -93,8 +93,8 @@ pub fn turns(arm: &Arm, by: Vec3) -> (Quat, Quat) {
 }
 
 /// A person's wrist, degrees of flexion, extension, radial and ulnar deviation from the hand's
-/// rest (AAOS ranges, adult averages): the Rust home of `tools/characters/wrist.ts`'s `WRIST`,
-/// its twin; change both.
+/// rest (AAOS ranges, adult averages): the one definition, which `tools/characters/wrist.ts`'s
+/// `WRIST` reads from this file (`rust_const.ts`; `wrist.test.ts` holds it).
 pub const WRIST_FLEX_DEG: f32 = 80.0;
 pub const WRIST_EXT_DEG: f32 = 70.0;
 pub const WRIST_RADIAL_DEG: f32 = 20.0;

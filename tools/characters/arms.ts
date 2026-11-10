@@ -62,6 +62,13 @@ export function reach(points: V3[]): V3[] {
   return slices.flat().filter((p): p is V3 => p !== undefined);
 }
 
+/** A held look's two ends along its handle (terra_walker::arms::ends): of its points in its own
+ * frame, the first lowest and the first highest along +Y; none for no points. */
+export function ends(points: V3[]): V3[] {
+  if (!points.length) return [];
+  return [points.reduce((a, b) => (b[1] < a[1] ? b : a)), points.reduce((a, b) => (b[1] > a[1] ? b : a))];
+}
+
 /** What a hand holds, for keptOff: its socket's name and its reach in the socket's frame, as
  * the game poses it. */
 export type Holding = { socket: string; points: V3[] };
