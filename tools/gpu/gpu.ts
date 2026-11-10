@@ -5,10 +5,17 @@
 // runs, so it is never starved. A run that makes no progress for its class's limit is stopped.
 // `cargo xtask gpu --status` lists what runs and waits.
 //
+// The game runs one copy a machine and refuses a second (terra_world::single_instance), so a
+// command that starts it waits its turn first, first come first served: behind the wrapper's
+// other game runs (a queue: a lock a helper of this wrapper holds, gpu.game/ beside the lock),
+// then for any copy started outside it (its record beating in the instance folder). Other
+// commands (`--no-game`, a Blender run, a `--multirun` copy) start at once, as before.
+//
 // State lives in ~/.cache/terra/gpu/runs (TERRA_GPU_DIR): a file a run, its wrapper's pid and its
 // command's, removed when it ends or by whoever reads next once its processes are gone. The
 // want-files sit beside the lock, in gpu.want/, one a benchmark, named by its wrapper's pid.
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,6 +29,12 @@ const LOCK = process.env.TERRA_GPU_LOCK || path.join(CACHE, "gpu.lock");
 const WANT = path.join(path.dirname(LOCK), "gpu.want");
 const POLL_MS = 1000;
 const SAY_EVERY_MS = 5 * 60000;
+/// How often a run waiting for the game's one copy says so and who holds it: under the 5 minutes
+/// of silence an agent's background run is ended at (TERRA_GPU_SAY_S for the tests).
+const SAY_GAME_MS = Number(process.env.TERRA_GPU_SAY_S) * 1000 || 2 * 60000;
+/// How many times a game run the game refused all the same (a copy started outside the wrapper
+/// took the machine as this one built) waits and starts again.
+const TRIES = 3;
 /// How long a holder no run owns holds the lock before it is named with what to do (plan.ts;
 /// TERRA_GPU_OUTSIDE_S for the tests).
 const OUTSIDE_MS = Number(process.env.TERRA_GPU_OUTSIDE_S) * 1000 || plan.OUTSIDE_MS;
@@ -38,6 +51,11 @@ interface Run {
   started?: number;
   /// When it last made progress (output, CPU or GPU use), ms since the epoch.
   progress?: number;
+  /// A game run's place in the queue for the one copy a machine (plan.Queued), and whom it waits for.
+  game?: string;
+  queued?: number;
+  turn?: number;
+  waitsFor?: string;
 }
 
 const say = (line: string) => process.stderr.write(`gpu: ${line}\n`);
@@ -224,6 +242,79 @@ async function clear(run: Run) {
   }
 }
 
+// ---- one game copy a machine -----------------------------------------------------------------
+
+const FLOCK = spawnSync("flock", ["--version"]).status === 0;
+
+/// The folder the game keeps its one-copy slots and their records in, as it finds it itself
+/// (terra_world::single_instance::folders): TERRA_INSTANCE_DIR, under WSL the Windows
+/// %LOCALAPPDATA%\terra the game noted in the cache folder, else the cache folder.
+function instanceDir(): string {
+  if (process.env.TERRA_INSTANCE_DIR) return process.env.TERRA_INSTANCE_DIR;
+  if (/microsoft/i.test(readText("/proc/version"))) {
+    const local = readText(path.join(CACHE, "windows-local-app-data")).trim();
+    if (local && fs.existsSync(local)) return path.join(local, "terra");
+  }
+  return CACHE;
+}
+
+const describe = (r: Run) => `the ${r.class} of wrapper pid ${r.pid} in ${path.basename(r.cwd)} (\`${r.cmd.join(" ").slice(0, 80)}\`, ${r.turn !== undefined ? `running ${plan.age(Date.now() - r.turn)}` : "waiting before this one"})`;
+
+/// Takes the queue's lock in a helper of this wrapper's, `flock` running `cat` on a pipe from
+/// here: the kernel frees it when this wrapper ends however it ends, and the command, no child of
+/// the helper, never inherits it (as a run's background process inherits gpu.lock).
+function holdQueue(file: string): { held: Promise<void>; release: () => void } {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const child = spawn("flock", ["-x", file, "sh", "-c", "echo held; exec cat"], { stdio: ["pipe", "pipe", "ignore"] });
+  child.stdin.on("error", () => {});
+  const held = new Promise<void>((done) => {
+    child.stdout.once("data", () => done());
+    child.once("error", () => done());
+    child.once("close", () => done());
+  });
+  return { held, release: () => child.stdin.end() };
+}
+
+/// Waits for the game's one copy a machine (D319), then holds the queue until the returned
+/// function is called: behind the wrapper's game runs that asked first, then for any copy the
+/// instance folder's records show alive, saying whom it waits for at first and every 2 minutes.
+async function turn(run: Run): Promise<() => void> {
+  const folder = instanceDir();
+  Object.assign(run, { game: folder, queued: Date.now(), turn: undefined, started: undefined, child: undefined });
+  save(run);
+  let said = 0;
+  const waitFor = (who: string) => {
+    const now = Date.now();
+    if (run.waitsFor !== who) (run.waitsFor = who), save(run);
+    if (now - said < SAY_GAME_MS) return;
+    say(`${run.class} waits for the game's one copy a machine (D319), held by ${who}${said ? `, ${plan.age(now - run.queued!)} so far` : ""}`);
+    said = now;
+  };
+  for (let before = plan.ahead(runs(), run); before.length > 0; before = plan.ahead(runs(), run)) {
+    waitFor(describe(before[0]));
+    await sleep(POLL_MS / 2);
+  }
+  const queue = holdQueue(path.join(path.dirname(LOCK), "gpu.game", `${createHash("sha1").update(folder).digest("hex").slice(0, 12)}.lock`));
+  await queue.held;
+  // A copy started outside the wrapper (someone playing, a run by hand): either slot's record beating.
+  const slots = [0, 1].map((n) => ({ file: path.join(folder, `instance-${n}.txt`), beat: new plan.Beat() }));
+  for (;;) {
+    const now = Date.now();
+    const read = slots.map((s) => {
+      const text = fs.existsSync(s.file) ? readText(s.file) : null;
+      return { state: s.beat.read(now, text), text };
+    });
+    if (read.every((r) => r.state === "free")) break;
+    const held = read.find((r) => r.state === "held");
+    const copy = held && plan.parseRecord(held.text ?? "");
+    if (held) waitFor(copy ? `the game copy pid ${copy.pid} (${copy.os}) of ${copy.worktree}, started outside this queue (\`${copy.command.slice(0, 80)}\`)` : `a game copy whose record in ${folder} could not be read`);
+    await sleep(POLL_MS / 2);
+  }
+  Object.assign(run, { turn: Date.now(), waitsFor: undefined });
+  save(run);
+  return queue.release;
+}
+
 function kill(root: number, signal: NodeJS.Signals) {
   for (const pid of plan.descendants(root, processes().parents)) {
     try {
@@ -236,8 +327,9 @@ function kill(root: number, signal: NodeJS.Signals) {
 /// and stopping it once it has the lock and its whole process tree has made no progress for its
 /// stall limit: no output (its own, or growth of a watched file), no CPU time and nothing on the
 /// card's cores (plan.Progress). Time spent waiting for the lock is not a stall.
-function execute(run: Run, stallMin: number, watch: string[]): Promise<number> {
-  const flock = spawnSync("flock", ["--version"]).status === 0;
+/// `again`: a start the game refused will be tried again, so it is said as that, not as a failure.
+function execute(run: Run, stallMin: number, watch: string[], again: boolean): Promise<{ exit: number; refused: boolean }> {
+  const flock = FLOCK;
   fs.mkdirSync(path.dirname(LOCK), { recursive: true });
   const argv = flock ? ["flock", run.class === "bench" ? "-x" : "-s", LOCK, ...run.cmd] : run.cmd;
   const env = { ...process.env, TERRA_GPU_JOB: String(process.pid) };
@@ -295,17 +387,19 @@ function execute(run: Run, stallMin: number, watch: string[]): Promise<number> {
       clearInterval(sample);
       const exit = why ? 124 : code ?? 128 + (signal ? os.constants.signals[signal] : 1);
       const took = plan.age(Date.now() - (run.started ?? Date.now()));
+      const refused = !why && exit !== 0 && plan.refused(tail) !== null;
       if (exit === 0) say(`${run.class} done in ${took}`);
+      else if (refused && again) say(`${run.class}: the game refused to start, as a copy started outside this queue took the machine first (the lines above name it); waiting for it, then starting again`);
       else {
         const reason = why ?? plan.refused(tail);
         say(`✗ ${run.class} exit ${exit} after ${took}${reason ? `: ${reason}` : ""}`);
       }
-      done(exit);
+      done({ exit, refused });
     });
     child.on("error", (error) => {
       clearInterval(sample);
       say(`✗ could not start ${argv[0]}: ${error.message}`);
-      done(127);
+      done({ exit: 127, refused: false });
     });
   });
 }
@@ -315,6 +409,8 @@ interface Options {
   stallMin: number;
   watch: string[];
   cmd: string[];
+  /// Whether the command starts the game, and so waits for its one copy a machine.
+  game: boolean;
 }
 
 /// The run this wrapper holds, so a signal to it stops the command's processes and clears its files.
@@ -342,9 +438,16 @@ async function wrap(o: Options): Promise<number> {
     fs.writeFileSync(want(), "");
     const shared = holders().filter((h) => !h.waiting).length;
     if (shared > 0) say(`bench waits for ${shared} run${shared > 1 ? "s" : ""} holding the GPU to end; new ones hold back meanwhile`);
-  } else await clear(run);
+  }
   try {
-    return await execute(run, o.stallMin, o.watch);
+    for (let tries = 1; ; tries++) {
+      if (o.cls !== "bench") await clear(run);
+      // Without flock (macOS) there is no queue, as there is no lock: the game refuses as it did.
+      const release = o.game && FLOCK ? await turn(run) : () => {};
+      const again = o.game && FLOCK && tries < TRIES;
+      const { exit, refused } = await execute(run, o.stallMin, o.watch, again).finally(release);
+      if (!(refused && again)) return exit;
+    }
   } finally {
     tidy();
   }
@@ -364,8 +467,8 @@ function status(): number {
   console.log(`gpu: ${parts.join(", ")}`);
   for (const r of ours.sort((a, b) => a.asked - b.asked)) {
     const state = r.started !== undefined ? `running ${plan.age(now - r.started).padStart(6)}` : `waiting ${plan.age(now - r.asked).padStart(6)}`;
-    const out = r.progress ? `, progress ${plan.age(now - r.progress)} ago` : "";
-    console.log(`  ${state} ${r.class.padEnd(5)}${out}  pid ${r.pid}  ${path.basename(r.cwd)}  ${r.cmd.join(" ").slice(0, 100)}`);
+    const out = r.started === undefined && r.waitsFor ? `, for the game's one copy, held by ${r.waitsFor}` : r.progress ? `, progress ${plan.age(now - r.progress)} ago` : "";
+    console.log(`  ${state} ${r.class.padEnd(5)}  pid ${r.pid}  ${path.basename(r.cwd)}  ${r.cmd.join(" ").slice(0, 100)}${out}`);
   }
   const children = new Set(ours.map((r) => r.child));
   // With /proc, holders are read from who has the lock's file open, since /proc/locks names
@@ -383,18 +486,22 @@ function status(): number {
 
 // ---- the command line ------------------------------------------------------------------------
 
-const USAGE = `usage: cargo xtask gpu <${Object.keys(plan.CLASSES).join("|")}> [--stall MIN] [--watch FILE]... -- <command…>
+const USAGE = `usage: cargo xtask gpu <${Object.keys(plan.CLASSES).join("|")}> [--stall MIN] [--watch FILE]... [--no-game] -- <command…>
        cargo xtask gpu --status
 ${Object.entries(plan.CLASSES)
   .map(([name, c]) => `  ${name.padEnd(6)} ${c.does}; stopped after ${c.stallMin} min without output, CPU or GPU use`)
-  .join("\n")}`;
+  .join("\n")}
+  A command that starts the game waits for the game's one copy a machine (D319), first come first
+  served; every command is taken for one but a Blender run and a --multirun copy. --no-game: this
+  command starts no game, so it does not wait.`;
 
 function parse(args: string[]): Options | string {
   const dash = args.indexOf("--");
-  const [cls, ...flags] = dash < 0 ? args : args.slice(0, dash);
+  const [cls, ...given] = dash < 0 ? args : args.slice(0, dash);
+  const flags = given.filter((flag) => flag !== "--no-game");
   const cmd = dash < 0 ? [] : args.slice(dash + 1);
   if (!cls || !plan.isClass(cls) || cmd.length === 0) return USAGE;
-  const o: Options = { cls, stallMin: plan.CLASSES[cls].stallMin, watch: [], cmd };
+  const o: Options = { cls, stallMin: plan.CLASSES[cls].stallMin, watch: [], cmd, game: flags.length === given.length && plan.isGame(cmd) };
   for (let i = 0; i < flags.length; i += 2) {
     const value = flags[i + 1];
     if (flags[i] === "--stall" && Number(value) > 0) o.stallMin = Number(value);

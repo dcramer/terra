@@ -1,6 +1,7 @@
 // The GPU wrapper's readings of the machine and its stall rule, on made-up input whose answers are known by hand.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { ahead, Beat, isGame, parseRecord, SETTLE_MS } from "./plan.ts";
 import { advise, byGroup, cpuGrowth, descendants, type Holding, outside, parseCard, parseCpu, parseFdinfo, parseLocks, parsePmon, parsePs, parseStat, Progress, refused } from "./plan.ts";
 
 test("a run the game refused, as another copy runs, is told apart and says what to do", () => {
@@ -107,4 +108,48 @@ test("a child's work counts once it has ended and its time is in its parent's", 
   assert.equal(cpuGrowth(new Map([[7, 10], [8, 500]]), new Map([[7, 510]])), 500);
   // A new process counts all its ticks; a gone one takes nothing away.
   assert.equal(cpuGrowth(new Map([[7, 10]]), new Map([[7, 10], [9, 40]])), 40);
+});
+
+test("a command is taken to start the game unless it is a Blender run or a --multirun copy", () => {
+  assert.ok(isGame(["target/release/terra_sandbox", "--offscreen", "--shot", "a.png"]));
+  assert.ok(isGame(["cargo", "xtask", "duel"]));
+  assert.ok(isGame(["node", "tools/sandbox/trailer.ts", "--cut", "lake"]), "a script names no game, and starts one");
+  assert.ok(!isGame(["target/release/terra_sandbox", "--multirun", "--join", "localhost"]), "the second copy of a two-player test");
+  assert.ok(!isGame(["tools/characters/build_bodies.sh"]));
+  assert.ok(!isGame(["tools/blender/run.sh", "render.py"]));
+});
+
+test("a game run waits behind the one with the turn and those that asked first, in its instance folder only", () => {
+  const runs = [
+    { pid: 5, game: "a", queued: 300 },
+    { pid: 4, game: "a", queued: 100, turn: 150 },
+    { pid: 3, game: "a", queued: 200 },
+    { pid: 2, game: "b", queued: 50, turn: 60 },
+    { pid: 1 },
+  ];
+  assert.deepEqual(ahead(runs, runs[0]).map((r) => r.pid), [4, 3], "the holder first, then the earlier waiter");
+  assert.deepEqual(ahead(runs, runs[2]).map((r) => r.pid), [4]);
+  assert.deepEqual(ahead(runs, runs[1]), [], "the holder waits for none");
+  assert.deepEqual(ahead(runs, { pid: 9, game: "c", queued: 400 }), [], "another folder's copy is another machine's (a render slot)");
+  assert.deepEqual(ahead([{ pid: 7, game: "a", queued: 300 }], { pid: 8, game: "a", queued: 300 }).map((r) => r.pid), [7], "the lower pid on a tie");
+  assert.deepEqual(ahead([{ pid: 8, game: "a", queued: 300 }], { pid: 7, game: "a", queued: 300 }), []);
+});
+
+test("a slot is held while its record beats, free once it is gone or has stopped for the settle", () => {
+  const record = (beat: number) => `pid=41\nos=windows\nworktree=C:\\terra\ncommand=terra_sandbox --shot a.png\nsince=1\nbeat=${beat}\n`;
+  assert.deepEqual(parseRecord(record(3)), { pid: 41, os: "windows", worktree: "C:\\terra", command: "terra_sandbox --shot a.png" });
+  assert.equal(parseRecord("pid="), null);
+  const live = new Beat();
+  assert.equal(live.read(0, null), "free", "no record, no copy");
+  assert.equal(live.read(100, record(1)), "unknown", "a record alone may be a dead copy's");
+  assert.equal(live.read(1100, record(2)), "held");
+  assert.equal(live.read(1600, ""), "held", "read as it is rewritten");
+  assert.equal(live.read(2100, record(3)), "held");
+  assert.equal(live.read(2100 + SETTLE_MS, record(3)), "free", "it stopped beating: dead");
+  assert.equal(live.read(9000, record(4)), "held");
+  assert.equal(live.read(9500, null), "free", "closed cleanly");
+  const dead = new Beat();
+  assert.equal(dead.read(0, record(7)), "unknown");
+  assert.equal(dead.read(SETTLE_MS - 1, record(7)), "unknown");
+  assert.equal(dead.read(SETTLE_MS, record(7)), "free");
 });

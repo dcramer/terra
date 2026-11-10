@@ -22,6 +22,8 @@ function machine() {
     PATH: `${bin}:${process.env.PATH}`,
     TERRA_GPU_DIR: path.join(dir, "gpu"),
     TERRA_GPU_LOCK: path.join(dir, "gpu.lock"),
+    // The game's one-copy slots (terra_world::single_instance), which a game run waits for.
+    TERRA_INSTANCE_DIR: path.join(dir, "instance"),
   };
   delete env.TERRA_GPU_JOB;
   const log = path.join(dir, "order.log");
@@ -46,10 +48,10 @@ function machine() {
 
 const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-test("two stills start at once, side by side", async () => {
+test("two stills that start no game start at once, side by side", async () => {
   const m = machine();
   const launched = Date.now();
-  const [a, b] = await Promise.all([m.run(["still", "--", ...m.step("a", 2)]), m.run(["still", "--", ...m.step("b", 2)])]);
+  const [a, b] = await Promise.all([m.run(["still", "--no-game", "--", ...m.step("a", 2)]), m.run(["still", "--no-game", "--", ...m.step("b", 2)])]);
   assert.equal(a.code, 0, a.err);
   assert.equal(b.code, 0, b.err);
   const starts = m.lines().filter((l) => l.at === "start");
@@ -113,13 +115,79 @@ test("a holder left by an ended run is named, with its folder and what to do, by
 test("a silent job that burns CPU runs to its end; a silent sleep is stopped at the limit", async () => {
   // A 3 s limit: the busy loop is silent for twice that, the sleep would last far longer.
   const m = machine();
-  const busy = m.run(["still", "--stall", "0.05", "--", process.execPath, "-e", "const end = Date.now() + 6000; while (Date.now() < end);"]);
-  const idle = m.run(["still", "--stall", "0.05", "--", "sleep", "60"]);
+  const busy = m.run(["still", "--no-game", "--stall", "0.05", "--", process.execPath, "-e", "const end = Date.now() + 6000; while (Date.now() < end);"]);
+  const idle = m.run(["still", "--no-game", "--stall", "0.05", "--", "sleep", "60"]);
   const [b, i] = await Promise.all([busy, idle]);
   assert.equal(b.code, 0, b.err);
   assert.ok(b.seconds >= 6, `the busy job ran ${b.seconds} s`);
   assert.equal(i.code, 124, i.err);
   assert.match(i.err, /no progress for 0.05 min/);
   assert.ok(i.seconds < 20, `the sleep was stopped after ${i.seconds} s`);
+  m.done();
+});
+
+// One game copy a machine (D319): the stand-ins below are commands the wrapper takes for the game
+// (any command but a Blender run, a --multirun copy or one under --no-game); none starts it.
+
+test("two game runs asked for together both finish, the second after the first, and a run that starts no game does not wait", { skip: noFlock }, async () => {
+  const m = machine();
+  m.env.TERRA_GPU_SAY_S = "1";
+  const launched = Date.now();
+  const first = m.run(["still", "--", ...m.step("first", 3)]);
+  await pause(300);
+  const second = m.run(["film", "--", ...m.step("second", 1)]);
+  const other = m.run(["still", "--no-game", "--", ...m.step("other", 1)]);
+  await pause(1500);
+  const status = spawnSync(process.execPath, [GPU, "--status"], { env: m.env, encoding: "utf8" });
+  const [f, s, o] = await Promise.all([first, second, other]);
+  for (const r of [f, s, o]) assert.equal(r.code, 0, r.err);
+  const at = (name: string, when: string) => m.lines().find((l) => l.name === name && l.at === when)!.ms;
+  assert.ok(at("second", "start") >= at("first", "end"), "the second game run started after the first ended");
+  assert.ok(at("other", "start") - launched < 1800, `the run that starts no game started ${at("other", "start") - launched} ms after launch`);
+  assert.ok(at("other", "end") < at("first", "end"), "and ran beside the first game run");
+  assert.match(s.err, /gpu: film waits for the game's one copy a machine \(D319\), held by the still of wrapper pid \d+ in .*running \d+s/);
+  assert.ok((s.err.match(/waits for the game's one copy/g) ?? []).length >= 2, "it says so again while it waits, so its silence is not taken for a hang");
+  assert.doesNotMatch(o.err, /waits/);
+  assert.match(status.stdout, /1 waiting/);
+  assert.match(status.stdout, /waiting +\d+s film .*for the game's one copy, held by the still of wrapper pid \d+/);
+  m.done();
+});
+
+test("a game run waits for a copy started outside the wrapper, named from its record, and for no dead copy's record", { skip: noFlock }, async () => {
+  const m = machine();
+  const folder = m.env.TERRA_INSTANCE_DIR!;
+  fs.mkdirSync(folder);
+  // A copy that died left its record, unchanged; one that runs rewrites its own every beat.
+  fs.writeFileSync(path.join(folder, "instance-1.txt"), "pid=7\nos=linux\nworktree=/dead\ncommand=terra_sandbox\nsince=1\nbeat=9\n");
+  const record = path.join(folder, "instance-0.txt");
+  const copy = spawn(process.execPath, ["-e", `
+    const fs = require("node:fs");
+    let beat = 0;
+    const write = () => fs.writeFileSync(${JSON.stringify(record)}, "pid=" + process.pid + "\\nos=windows\\nworktree=C:/played\\ncommand=terra_sandbox --experiment play\\nsince=1\\nbeat=" + beat++ + "\\n");
+    write();
+    const beating = setInterval(write, 250);
+    setTimeout(() => { clearInterval(beating); fs.rmSync(${JSON.stringify(record)}); }, 4000);
+  `]);
+  const closed = new Promise<number>((done) => copy.on("close", () => done(Date.now())));
+  await pause(500);
+  const run = await m.run(["still", "--", ...m.step("run", 0)]);
+  assert.equal(run.code, 0, run.err);
+  assert.ok(m.lines()[0].ms >= (await closed) - 300, "the run started once the copy had closed");
+  assert.match(run.err, new RegExp(`held by the game copy pid ${copy.pid} \\(windows\\) of C:/played, started outside this queue \\(\`terra_sandbox --experiment play\`\\)`));
+  assert.ok(run.seconds < 12, `the dead copy's record held it ${run.seconds} s`);
+  m.done();
+});
+
+test("a game run the game refused all the same is started again", { skip: noFlock }, async () => {
+  const m = machine();
+  const once = path.join(m.dir, "refused-once");
+  const game = `if [ ! -e ${once} ]; then touch ${once}; echo 'SANDBOX ✗ refused to start: another copy runs' >&2; exit 75; fi; echo ran > ${path.join(m.dir, "ran")}`;
+  const run = await m.run(["still", "--", "sh", "-c", game]);
+  assert.equal(run.code, 0, run.err);
+  assert.match(run.err, /the game refused to start, .* then starting again/);
+  assert.ok(fs.existsSync(path.join(m.dir, "ran")));
+  const never = await m.run(["still", "--", "sh", "-c", "echo 'SANDBOX ✗ refused to start' >&2; exit 75"]);
+  assert.equal(never.code, 75, "a start refused every time fails as it did");
+  assert.match(never.err, /✗ still exit 75 .*one copy a machine/);
   m.done();
 });

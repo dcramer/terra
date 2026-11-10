@@ -6,8 +6,8 @@ use crate::{Task, root};
 pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "gpu",
-        takes: "<still|sheet|film|bake|bench> [--stall MIN] [--watch FILE] -- <command…> | --status",
-        does: "run a command on the GPU at once, beside other runs; a bench waits for the card alone and holds back new runs meanwhile; stopped after so long without progress; --status lists running and waiting runs (D319, tools/gpu)",
+        takes: "<still|sheet|film|bake|bench> [--stall MIN] [--watch FILE] [--no-game] -- <command…> | --status",
+        does: "run a command on the GPU at once, beside other runs; one that starts the game waits for the game's one copy a machine, first come first served; a bench waits for the card alone and holds back new runs meanwhile; stopped after so long without progress; --status lists running and waiting runs (D319, tools/gpu)",
         group: "This machine",
         run: |args| node_exit("tools/gpu/gpu.ts", args),
     },

@@ -228,3 +228,83 @@ export function refused(tail: string): string | null {
     "Run this again once that one has ended; start game runs one after another, never side by side, and pass --multirun only for a two-player test"
   );
 }
+
+// ---- one game copy a machine: the wrapper's queue for it --------------------------------------
+
+/// Whether a command starts the game, which runs one copy a machine (D319,
+/// terra_world::single_instance), so the wrapper has it wait its turn. Nearly every run under the
+/// wrapper does, most through a script or a task that names no game, so a command is taken for
+/// one unless it says otherwise: `--no-game` to the wrapper, the game's own `--multirun` (one more
+/// copy, for a two-player test), or a Blender run (the body and clip sheets of tools/characters).
+/// A wrong yes costs a wait behind another game run, a wrong no the run, refused by the game.
+export function isGame(cmd: string[]): boolean {
+  if (cmd.includes(MULTIRUN)) return false;
+  return !cmd.some((arg) => /blender|tools\/characters\//i.test(arg));
+}
+
+/// The game's switch for one more copy (terra_world::single_instance::SWITCH).
+export const MULTIRUN = "--multirun";
+
+/// A run in the game's queue: when it joined, and when it got the turn.
+export interface Queued {
+  pid: number;
+  /// The instance folder whose one copy it waits for (render slots have one each).
+  game?: string;
+  queued?: number;
+  turn?: number;
+}
+
+/// The runs a run waits behind, first come first served: those of its instance folder that have
+/// the turn, then those that joined the queue before it (the lower pid on a tie).
+export function ahead<R extends Queued>(runs: R[], me: Queued): R[] {
+  const before = (r: R) => r.turn !== undefined || r.queued! < me.queued! || (r.queued === me.queued && r.pid < me.pid);
+  return runs
+    .filter((r) => r.pid !== me.pid && r.game === me.game && r.queued !== undefined && before(r))
+    .sort((a, b) => (a.turn === undefined ? 1 : 0) - (b.turn === undefined ? 1 : 0) || a.queued! - b.queued! || a.pid - b.pid);
+}
+
+/// Who holds a slot of the game's, from its record (`instance-<n>.txt`, key=value lines).
+export interface Copy {
+  pid: number;
+  os: string;
+  worktree: string;
+  command: string;
+}
+
+export function parseRecord(text: string): Copy | null {
+  const field = (key: string) => text.split("\n").find((line) => line.startsWith(`${key}=`))?.slice(key.length + 1).trim();
+  const pid = Number(field("pid"));
+  return Number.isInteger(pid) && pid > 0 ? { pid, os: field("os") ?? "?", worktree: field("worktree") ?? "?", command: field("command") ?? "?" } : null;
+}
+
+/// How long a slot's record is watched for a change before its copy is taken for dead: the game
+/// rewrites it every second (single_instance::TIMING), and watches 2.5 s itself.
+export const SETTLE_MS = 3000;
+
+/// Whether a slot of the game's is held, read from its record alone, as the game itself reads a
+/// copy on the other side of the WSL line (whose lock it cannot see): a live copy rewrites its
+/// record every beat, a copy that closed removed it, and one that died left it unchanged.
+export class Beat {
+  private text: string | null = null;
+  private since = 0;
+  private beats = false;
+
+  /// A reading of the record (null when there is none): "held" once it has been seen to change,
+  /// "free" with no record or one unchanged for the settle, "unknown" while that is watched.
+  read(now: number, text: string | null): "held" | "free" | "unknown" {
+    if (text === null) {
+      this.text = null;
+      this.beats = false;
+      return "free";
+    }
+    // Read as its holder rewrites it, a record may come out empty: no reading.
+    if (text === "") text = this.text ?? "";
+    if (this.text === null) (this.text = text), (this.since = now), (this.beats = false);
+    else if (text !== this.text) (this.text = text), (this.since = now), (this.beats = true);
+    if (now - this.since >= SETTLE_MS) {
+      this.beats = false;
+      return "free";
+    }
+    return this.beats ? "held" : "unknown";
+  }
+}

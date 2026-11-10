@@ -12,7 +12,7 @@ The people of v0: the player's body, what it wears, how it stands and moves, as 
 - **The starting kit's clothes are the Ranger outfit** (D602): coat = its body and arms, its leggings, its boots.
 - **Composed per slot from a wardrobe catalogue** (D611, agent): bodies, pieces and looks as data (`assets/models/character/wardrobe.json`), the game showing a piece a slot and the bare piece where one is empty.
 - **Their elbows and wrists hold without twist bones**: shown their man through our clips, the developer: "looks good".
-- **One game copy a machine** (D319): the game refuses a second copy, naming the one running and what to do; `--multirun` allows exactly one more for a two-player test; the filming tools film in turn, the render box keeps its three slots. Built (`terra_world::single_instance`, one-copy j2).
+- **One game copy a machine** (D319): the game refuses a second copy, naming the one running and what to do, and under `cargo xtask gpu` a game run waits its turn; `--multirun` allows exactly one more for a two-player test; the filming tools film in turn, the render box keeps its three slots. Built (`terra_world::single_instance`, one-copy j2).
 - **The paint direction holds**: shown the repainted Ranger beside theirs, the developer: "looks the same tbqh so i guess thats good?" At play distance our paint reads as theirs does, so job 4 refines, it does not push.
 
 ## Licences
