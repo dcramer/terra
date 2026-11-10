@@ -26,6 +26,12 @@
     "minutes": 20
   },
   {
+    "name": "volumelight",
+    "does": "a trunk on the land over seed 3's den is lit the same with the den's light volume as without it (within 0.1; 1.06 on main, 0.86 with the open air's cells lit as the den's), and the den's chamber stays dark and not blue: a volume's box holds the open sky's light in its open air (D485; tools/sandbox/volumelight.ts)",
+    "run": ["cargo", "xtask", "gpu", "still", "--", "node", "tools/sandbox/volumelight.ts"],
+    "minutes": 20
+  },
+  {
     "name": "indoorlight",
     "does": "a closed dungeon room and corridor are as bright at noon as at midnight and their unlit corners near black: their rooms' probes, not the forest's sky volume, light them (D485, D486; tools/sandbox/indoorlight.ts)",
     "run": ["node", "tools/sandbox/indoorlight.ts"],

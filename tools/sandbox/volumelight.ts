@@ -51,7 +51,7 @@ const WHOLE: Box = [0, 0, 1, 1];
 /// put back from its first (a run less steady than that has measured nothing). The trunk
 /// reads 1.05 on main (two runs, 2026-11-09): what stands in the den's box under trees is a
 /// little brighter than outside it, a fault not yet fixed and not this bar's to hide if it
-/// grows; with the open air's cells lit as the den's (the fault planted, D632) it reads PLANTED.
+/// grows; with the open air's cells lit as the den's (the fault planted, D632) it reads 0.857.
 const SAME = 0.1;
 const STEADY = 0.05;
 /// The chamber toward the mouth with the volume: its luma and blue share at most these, and
