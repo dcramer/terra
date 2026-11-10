@@ -13,11 +13,15 @@ use super::footing::{Shapes, SolidShape};
 use super::{
     BARKS, Foliage, FoliageExtension, KINDS, Leaf, Looks, SHADOW_LUMP, Species, TreeModel,
     VETERAN_M, VETERAN_TRUNK_M, VETERANS, bark_material, crown_clumps, crown_far, crown_near,
-    crown_stand_in, floor, grow, lumps_of, species,
+    crown_stand_in, floor, forest_seed_of, grow_bare, ivy_leaves, leaf_of, lumps_of, species,
 };
 use bevy::prelude::*;
 use std::sync::Arc;
+use std::thread::JoinHandle;
 use terra_gen::Seed;
+use terra_world::grown::Cards;
+use terra_world::instance::{Generating, WorldSpec};
+use terra_world::loading::Screen;
 use terra_world::mesh_sink::MeshSink;
 use terra_world::sky_occlusion;
 
@@ -31,6 +35,91 @@ pub(super) struct Grown(Vec<(Seed, Vec<TreeModel>)>);
 /// crossing back (the way a portal is used, D470) grows nothing again, a third of a second
 /// of every crossing's cover (D501) before.
 const WORLDS_KEPT: usize = 2;
+
+/// Each grown kind's model without its materials, and what stops a walker at its trunk and
+/// its crown.
+type Kinds = Vec<(TreeModel, SolidShape, SolidShape)>;
+
+/// The kinds of the world being entered, grown on a thread of their own while its land is
+/// made behind the loading screen (D623), with the meshes to put in when the forest is
+/// planted: grown in `plant` they were 368 to 448 ms of the frame a realm is first entered
+/// in, the loading screen's ring standing still (portal-freeze j2).
+#[derive(Resource)]
+pub(super) struct Ahead {
+    seed: Seed,
+    thread: Option<JoinHandle<(Kinds, Vec<(AssetId<Mesh>, Mesh)>)>>,
+}
+
+/// Every grown kind at once, over every core, as the woods' conifers are grown.
+fn grow_kinds(seed: Seed, leaf_of: &[Leaf; 3], ivy_leaves: &[Leaf; 3], sink: &MeshSink) -> Kinds {
+    let kinds: Vec<usize> = (0..KINDS.len()).collect();
+    terra_gen::par::map(&kinds, |&kind| {
+        grow_bare(kind, seed, leaf_of, Some(ivy_leaves), sink)
+    })
+}
+
+/// Starts growing the kinds of the world about to be entered, unless they are kept, where a
+/// loading screen is drawn meanwhile; with none they are grown as the forest is planted.
+pub(super) fn ahead(
+    mut commands: Commands,
+    spec: Option<Res<WorldSpec>>,
+    screen: Option<Res<State<Screen>>>,
+    grown: Res<Grown>,
+    meshes: Res<Assets<Mesh>>,
+    mut generating: ResMut<Generating>,
+) {
+    commands.remove_resource::<Ahead>();
+    let (Some(spec), Some(_)) = (spec, screen) else {
+        return;
+    };
+    let seed = forest_seed_of(Seed(spec.seed));
+    if grown.0.iter().any(|(kept, _)| *kept == seed) {
+        return;
+    }
+    let (handles, kind) = (meshes.get_handle_provider(), spec.kind.clone());
+    let thread = std::thread::Builder::new()
+        .name("terra-kinds".into())
+        .spawn(move || {
+            let began = std::time::Instant::now();
+            let cards = Cards::of(&kind);
+            let litter = Cards::read_file(terra_world::cover::litter::FILE);
+            let sink = MeshSink::apart(handles);
+            let kinds = grow_kinds(seed, &leaf_of(&cards), &ivy_leaves(&litter), &sink);
+            info!(
+                "lush: the kinds of tree grown in {:.2} s on their own thread, ahead of the \
+                 forest's planting.",
+                began.elapsed().as_secs_f32()
+            );
+            (kinds, sink.made())
+        })
+        .unwrap_or_else(|why| {
+            panic!(
+                "the thread growing the forest's kinds could not be started ({why}); the \
+                 machine is out of threads or memory"
+            )
+        });
+    commands.insert_resource(Ahead {
+        seed,
+        thread: Some(thread),
+    });
+    // The world is entered once they are grown, as once its land is made (D623): joined
+    // in `plant` while still growing, they held the frame it is entered in all the same,
+    // 207 ms of it with the land made ahead of the crossing.
+    generating.begin(AHEAD);
+}
+
+/// What the world waits on while its kinds of tree are grown, by name.
+const AHEAD: &str = "the forest's kinds of tree";
+
+/// Says the kinds are grown once their thread has ended, so the world is entered.
+pub(super) fn grown_ahead(ahead: Option<Res<Ahead>>, mut generating: ResMut<Generating>) {
+    let growing = ahead
+        .and_then(|ahead| ahead.thread.as_ref().map(JoinHandle::is_finished))
+        .is_some_and(|finished| !finished);
+    if !growing {
+        generating.done(AHEAD);
+    }
+}
 
 /// Which of `BARKS` a grown kind's wood is drawn in, and which species' leaves, tint and far
 /// crown it takes (0 oak, 1 pine, 2 spruce).
@@ -57,7 +146,7 @@ pub(super) struct Grow<'a> {
 /// Every kind of tree in this world's materials, grown first if the app has not yet: the
 /// grown kinds, then the veterans.
 pub(super) fn trees(
-    grown: &mut Grown,
+    (grown, ahead): (&mut Grown, Option<&mut Ahead>),
     with: &Grow,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<Foliage>,
@@ -68,19 +157,29 @@ pub(super) fn trees(
     let models = match kept {
         Some(kept) => grown.0.remove(kept).1,
         None => {
-            // Every kind at once, over every core, as the woods' conifers are grown.
-            let kinds: Vec<usize> = (0..KINDS.len()).collect();
             let (seed, looks, ivy_leaves) = (with.seed, with.looks, with.ivy_leaves);
-            let grown_kinds = MeshSink::making(meshes, |sink| {
-                terra_gen::par::map(&kinds, |&kind| {
-                    grow(kind, seed, looks, Some(ivy_leaves), sink)
-                })
-            });
+            let ahead = ahead
+                .filter(|ahead| ahead.seed == seed)
+                .and_then(|ahead| ahead.thread.take());
+            let grown_kinds = match ahead {
+                // Grown ahead, or nearly: waited for here, it is no longer than growing them.
+                Some(thread) => {
+                    // A panic growing them goes on on the main thread, as it did there.
+                    let (kinds, made) = thread
+                        .join()
+                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+                    MeshSink::put_in(made, meshes);
+                    kinds
+                }
+                None => MeshSink::making(meshes, |sink| {
+                    grow_kinds(seed, &looks.leaf_of, ivy_leaves, sink)
+                }),
+            };
             let mut models = Vec::new();
             for (model, trunk, seen) in grown_kinds {
                 shapes.remember(&model.wood[0], trunk);
                 shapes.remember(&model.crown_near, seen);
-                models.push(model.bare());
+                models.push(model);
             }
             for n in 0..VETERANS.len() {
                 models.push(veteran(n, with, meshes, shapes));
@@ -107,17 +206,6 @@ pub(super) fn trees(
         }
     }
     trees
-}
-
-impl TreeModel {
-    /// Its meshes and measures alone, its materials left for each world to give it.
-    fn bare(self) -> Self {
-        Self {
-            bark: Handle::default(),
-            far: Handle::default(),
-            ..self
-        }
-    }
 }
 
 /// A veteran oak's bark, `BARKS[which]`, laid on by where each point is.

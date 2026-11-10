@@ -10,21 +10,35 @@ use std::sync::Mutex;
 
 /// Where meshes go while they are made off the main thread, for [`MeshSink::put_in`].
 pub struct MeshSink<'a> {
-    assets: &'a Assets<Mesh>,
+    handles: bevy::asset::AssetHandleProvider,
+    /// Made over the assets themselves, it holds them until its meshes can be put in.
+    assets: std::marker::PhantomData<&'a Assets<Mesh>>,
     made: Mutex<Vec<(AssetId<Mesh>, Mesh)>>,
 }
 
 impl<'a> MeshSink<'a> {
     pub fn new(assets: &'a Assets<Mesh>) -> Self {
         Self {
-            assets,
+            handles: assets.get_handle_provider(),
+            assets: std::marker::PhantomData,
+            made: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// A sink for a thread that outlives the frame, with only the meshes' handles to give
+    /// (`Assets::get_handle_provider`): what it makes is put in ([`MeshSink::put_in`]) when
+    /// the thread's work is taken up, frames later.
+    pub fn apart(handles: bevy::asset::AssetHandleProvider) -> MeshSink<'static> {
+        MeshSink {
+            handles,
+            assets: std::marker::PhantomData,
             made: Mutex::new(Vec::new()),
         }
     }
 
     /// A mesh made, with the handle it will be found by once put in.
     pub fn add(&self, mesh: impl Into<Mesh>) -> Handle<Mesh> {
-        let handle = self.assets.reserve_handle();
+        let handle = self.handles.reserve_handle().typed::<Mesh>();
         let mut made = self
             .made
             .lock()

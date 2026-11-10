@@ -243,6 +243,14 @@ pub fn plugin(app: &mut App) {
             lay_floor::waited.in_set(terra_world::loading::Track),
         )
         .add_systems(
+            OnEnter(terra_world::instance::Travel::Generating),
+            kinds::ahead,
+        )
+        .add_systems(
+            Update,
+            kinds::grown_ahead.run_if(in_state(terra_world::instance::Travel::Generating)),
+        )
+        .add_systems(
             Update,
             (
                 // The forest is the world's: planted once its land is made (D623), its
@@ -720,7 +728,31 @@ fn bark_material(
 /// The seed the forest grows from: its kinds of tree, where they stand, and all the rest; the
 /// world's own, derived for the forest (D596).
 fn forest_seed(planet: &Planet) -> Seed {
-    planet.seed().derive("lush forest")
+    forest_seed_of(planet.seed())
+}
+
+/// [`forest_seed`] of a world of this seed, before its planet is made (`kinds::ahead`).
+fn forest_seed_of(world: Seed) -> Seed {
+    world.derive("lush forest")
+}
+
+/// Each species' leaves in the atlas: oak, pine, spruce.
+fn leaf_of(cards: &Cards) -> [Leaf; 3] {
+    [
+        Leaf::of(cards, "oakbranch"),
+        // A Scots pine's shoots drawn needle by needle (D318).
+        Leaf::of(cards, "scots"),
+        Leaf::of(cards, "spruce"),
+    ]
+}
+
+/// The ivies a trunk may wear, of the forest floor's cards (litter.ron, D275, D309).
+fn ivy_leaves(litter: &Cards) -> [Leaf; 3] {
+    [
+        Leaf::of(litter, "ivy"),
+        Leaf::of(litter, "ivydark"),
+        Leaf::of(litter, "ivydark"),
+    ]
 }
 
 /// The foliage shader's settings every material of the forest starts from: the wind blowing
@@ -792,12 +824,7 @@ impl Looks {
             shadow_lumps: Handle::default(),
             far_crowns: default(),
             barks: Vec::new(),
-            leaf_of: [
-                Leaf::of(cards, "oakbranch"),
-                // A Scots pine's shoots drawn needle by needle (D318).
-                Leaf::of(cards, "scots"),
-                Leaf::of(cards, "spruce"),
-            ],
+            leaf_of: leaf_of(cards),
         };
         looks.crown_leaves = materials.add(looks.crown(Vec3::ZERO, LEAF, BEVY_THROUGH));
         looks.dropping_leaves =
@@ -917,8 +944,24 @@ fn grow(
     ivy_leaves: Option<&[Leaf; 3]>,
     meshes: &MeshSink,
 ) -> (TreeModel, SolidShape, SolidShape) {
+    let (mut model, trunk, seen) = grow_bare(kind, seed, &looks.leaf_of, ivy_leaves, meshes);
+    let (which, s) = kinds::materials_of(kind);
+    model.bark = looks.barks[which].0.clone();
+    model.far = looks.far_crowns[s].clone();
+    (model, trunk, seen)
+}
+
+/// [`grow`] without its materials, which are a world's (`Looks`): what needs nothing of the
+/// app but handles for its meshes, so it is grown before the world is entered
+/// (`kinds::ahead`).
+fn grow_bare(
+    kind: usize,
+    seed: Seed,
+    leaf_of: &[Leaf; 3],
+    ivy_leaves: Option<&[Leaf; 3]>,
+    meshes: &MeshSink,
+) -> (TreeModel, SolidShape, SolidShape) {
     let (species, form, young, (low, high)) = KINDS[kind];
-    let (leaf_of, far_crowns, barks) = (&looks.leaf_of, &looks.far_crowns, &looks.barks);
     let mut dice = seed.derive("tree").index(kind as u64).rng();
     let height = dice.range(low, high);
     let tree = match species {
@@ -926,9 +969,9 @@ fn grow(
         _ => species::conifer(&mut dice, height, species, form, young),
     };
     let (which, s) = kinds::materials_of(kind);
-    let (leaf, tint, far_material) = (leaf_of[s], CROWN_TINTS[s], &far_crowns[s]);
-    let (bark, bark_m) = barks[which].clone();
-    let bark_m = bark_m * (tree.trunk_m / BARK_FOR_M).clamp(0.8, 1.5);
+    let (leaf, tint) = (leaf_of[s], CROWN_TINTS[s]);
+    // How many metres its bark's picture covers (`Looks::barks`).
+    let bark_m = Vec2::splat(BARKS[which].1) * (tree.trunk_m / BARK_FOR_M).clamp(0.8, 1.5);
     // Each limb's and clump's pivot, for wind in levels (D597).
     let pivots = pivots::of(&tree);
     let wood = [0, 1, 2, FINE].map(|detail| wood(&tree, detail, height, bark_m, &pivots.limbs));
@@ -1014,8 +1057,8 @@ fn grow(
         skirt_m: skirt(&tree),
         species,
         young,
-        bark,
-        far: far_material.clone(),
+        bark: Handle::default(),
+        far: Handle::default(),
         modelled: false,
     };
     (model, trunk, seen)
@@ -1191,7 +1234,7 @@ fn plant(
     assets: Res<AssetServer>,
     (mut shapes, mut grown, mut variants, kept_clear): (
         ResMut<Shapes>,
-        ResMut<kinds::Grown>,
+        (ResMut<kinds::Grown>, Option<ResMut<kinds::Ahead>>),
         ResMut<floor::Variants>,
         Option<Res<terra_world::flora::KeptClear>>,
     ),
@@ -1277,11 +1320,7 @@ fn plant(
     // material, shaded as the middle layer's leaves are but lit through less, as ivy's leaves
     // are thick, and less dark inside, as it lies on the outside of its trunk.
     let litter = Cards::read_file(terra_world::cover::litter::FILE);
-    let ivy_leaves = [
-        Leaf::of(&litter, "ivy"),
-        Leaf::of(&litter, "ivydark"),
-        Leaf::of(&litter, "ivydark"),
-    ];
+    let ivy_leaves = ivy_leaves(&litter);
     let ivy_material = materials.add(Foliage {
         base: StandardMaterial {
             base_color_texture: Some(terra_world::grown::atlas(&litter, &assets)),
@@ -1304,7 +1343,7 @@ fn plant(
     // The kinds of tree, then the veteran oaks (`kinds`), in this world's materials.
     let _part = info_span!("lush plant", name = "growing kinds").entered();
     let trees = kinds::trees(
-        &mut grown,
+        (&mut grown.0, grown.1.as_deref_mut()),
         &kinds::Grow {
             seed,
             looks: &looks,
