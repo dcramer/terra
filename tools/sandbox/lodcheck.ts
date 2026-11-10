@@ -7,7 +7,7 @@
 // few scattered pixels a frame, which a morphological opening removes; a pop is a patch that
 // appears or goes at once, which survives it.
 //
-//   node tools/sandbox/lodcheck.ts [--views floor,path,clearing,village,town,woods] [--time 17] [--limit 0.5]
+//   node tools/sandbox/lodcheck.ts [--views floor,path,clearing,village,town,woods,farwoods] [--time 17] [--limit 0.5]
 //
 // Prints each view's worst frames, with the share of the picture that popped and the detail
 // scale it popped at (1 is as played: a pop at 1.3 happens 1.3 times as far off as the
@@ -37,6 +37,9 @@ const VIEWS: Record<string, string> = {
   town: "-170,25,-170,150,0,-170",
   // Under the round world's woods at the 30 km start, its floor laid round their trees (D619).
   woods: "-24,1.7,10,-60,1.2,70",
+  // The same place in the far realm (D642): its own ground plants' models handing over to
+  // their far levels and fading out, among its cap trees.
+  farwoods: "-24,1.7,10,-60,1.2,70",
 };
 /// What each view draws: the lush forest with the walker alone, or a view's own scene.
 const WALK = ["--experiment", "walk", "--experiment", "lush", "--level", "yard"];
@@ -44,6 +47,7 @@ const SCENES: Record<string, string[]> = {
   village: ["--experiment", "play", "--level", "yard", "--village"],
   town: ["--experiment", "play", "--level", "yard", "--radius", "30000", "--town", "40"],
   woods: ["--experiment", "play", "--radius", "30000"],
+  farwoods: ["--experiment", "play", "--radius", "30000", "--realm", "industrial"],
 };
 const SWEEP = { from: 0.5, to: 2.0, first: 300, last: 480 };
 /// Frames after the clock stops before comparing, for the wind and anything easing to settle.

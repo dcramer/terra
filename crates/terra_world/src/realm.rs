@@ -82,6 +82,44 @@ pub struct Realm {
     /// What stands on its land by rule (the game's to stand, `terra_game::play::realm_parts`).
     #[serde(default)]
     pub parts: Vec<Part>,
+    /// Its own undergrowth, what its floor lays; the first realm's if not given.
+    #[serde(default)]
+    pub undergrowth: Option<Undergrowth>,
+}
+
+/// A realm's own undergrowth (D642, D136): the kinds its floor lays, each a row, in place of
+/// the first realm's, of which only those it names still grow (`keeps`, by their names on
+/// the floor: "Bush", "Bramble").
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct Undergrowth {
+    #[serde(default)]
+    pub keeps: Vec<String>,
+    pub kinds: Vec<GroundPlant>,
+}
+
+/// A kind of a realm's undergrowth: a modelled plant laid in drifts and clumps, as the first
+/// realm's grown kinds are.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+pub struct GroundPlant {
+    pub name: String,
+    /// Its models, files of `assets/models/nature/far`, one chosen a plant by the dice.
+    pub models: Vec<String>,
+    /// How many clumps of it are tried a hectare; about half fall outside its drifts, and
+    /// of the rest as many start as it likes the place.
+    pub tries_ha: f32,
+    /// How many plants a clump has, from and to, and how far they spread from its middle.
+    pub clump: (u32, u32),
+    pub spread_m: f32,
+    /// How much of its model's size a plant has grown to, from and to.
+    pub grown: (f32, f32),
+    /// From how far off it is drawn, where its model hands over to its far level
+    /// (`<model>_far.glb`), and how broad its drifts are, in metres.
+    pub seen_m: f32,
+    pub near_m: f32,
+    pub drift_m: f32,
+    /// How much it likes dry ground and the damp hollows, 0 to 1 each.
+    pub dry: f32,
+    pub wet: f32,
 }
 
 /// A part of a realm: a catalogue item's model or a grown kind, how many a square kilometre
@@ -272,6 +310,42 @@ mod tests {
         let light = industrial.light().expect("it has its own light");
         // Not the first realm's light: its sun is not white.
         assert!(light.sun != Vec3::ONE, "{light:?}");
+    }
+
+    /// A realm's own undergrowth is rows the floor can lay: each kind's models there with
+    /// their far levels, and its numbers ones a plant can be placed by. The first realm has
+    /// none: its floor is the grown kinds'.
+    #[test]
+    fn a_realms_own_undergrowth_names_models_that_are_there_with_their_far_levels() {
+        let realms = Realms::read();
+        assert_eq!(realms.of("world").unwrap().undergrowth, None);
+        let own = realms.of("industrial").unwrap().undergrowth.clone();
+        let own = own.expect("the far realm's floor is its own");
+        assert!(own.kinds.len() >= 3, "{} kinds", own.kinds.len());
+        let models = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/models");
+        for kind in &own.kinds {
+            assert!(!kind.models.is_empty(), "{} has no model", kind.name);
+            for model in &kind.models {
+                for file in [format!("{model}.glb"), format!("{model}_far.glb")] {
+                    let path = models.join("nature/far").join(&file);
+                    assert!(
+                        path.exists(),
+                        "{}: {} is missing",
+                        kind.name,
+                        path.display()
+                    );
+                }
+            }
+            let name = &kind.name;
+            assert!(kind.tries_ha > 0.0 && kind.spread_m > 0.0, "{name}");
+            assert!(kind.clump.0 >= 1 && kind.clump.0 <= kind.clump.1, "{name}");
+            assert!(0.0 < kind.grown.0 && kind.grown.0 <= kind.grown.1, "{name}");
+            assert!(0.0 < kind.near_m && kind.near_m < kind.seen_m, "{name}");
+            for likes in [kind.dry, kind.wet] {
+                assert!((0.0..=1.0).contains(&likes), "{name}: {likes}");
+            }
+            assert!(kind.dry.max(kind.wet) > 0.5, "{name} likes no ground");
+        }
     }
 
     /// A realm's own creatures are its alone: the far realm's deer are not met in the first

@@ -120,6 +120,8 @@ pub struct Planet {
     /// the realm says nothing.
     plants: f32,
     trees: Option<f32>,
+    /// Its realm's own undergrowth (`realm::Realm::undergrowth`); the first realm's if none.
+    undergrowth: Option<&'static crate::realm::Undergrowth>,
 }
 
 /// What grows at a place, each from 0 to 1.
@@ -181,6 +183,7 @@ impl Planet {
             round: None,
             plants: 1.0,
             trees: None,
+            undergrowth: None,
             start,
             den,
         }
@@ -196,6 +199,7 @@ impl Planet {
             round: None,
             plants: 1.0,
             trees: None,
+            undergrowth: None,
             start: START,
             den: None,
         }
@@ -211,6 +215,7 @@ impl Planet {
             round: None,
             plants: 1.0,
             trees: None,
+            undergrowth: None,
             start: START,
             den: None,
         }

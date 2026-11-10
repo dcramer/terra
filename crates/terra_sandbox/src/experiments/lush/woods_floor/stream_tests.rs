@@ -22,15 +22,25 @@ struct Laid(Kit, Frame);
 /// A world to lay pieces in: a smooth planet, the flora's kinds, the floor's looks and a kit
 /// with nothing to load, and the woods' floor with oaks every 6 m over the row.
 fn app() -> App {
-    let planet = Planet::smooth(PlanetSpec {
+    app_of(true, None)
+}
+
+/// The same world as a realm has it: with the first realm's oaks over the row or none of its
+/// trees (`trees: 0`), and the realm's own undergrowth if it has any.
+fn app_of(trees: bool, own: Option<&'static terra_world::realm::Undergrowth>) -> App {
+    let mut planet = Planet::smooth(PlanetSpec {
         seed: Seed(1),
         radius_m: 2000.0,
     });
+    if !trees {
+        planet.set_plants(1.0, Some(0.0));
+    }
+    planet.set_undergrowth(own);
     let start = planet.start();
     let up = start.normalize();
     let east = up.any_orthonormal_vector();
     let mut canopy = Crowns::default();
-    for k in 0..(ROW.end * 3 * 7) {
+    for k in 0..(ROW.end * 3 * 7 * i32::from(trees)) {
         let at = Vec2::new(
             ROW.start as f32 * PIECE_M - 10.0 + (k / 7) as f32 * 6.0,
             -10.0 + (k % 7) as f32 * 6.0,
@@ -56,8 +66,85 @@ fn app() -> App {
             spruce_bark: default(),
         })
         .insert_resource(Map(Floor::new(Wild, canopy, Seed(4))))
-        .insert_resource(Laid(Kit::bare(), (start, east, east.cross(up))));
+        .insert_resource(Laid(Kit::bare_of(own), (start, east, east.cross(up))));
     app
+}
+
+/// How many plants of each kind the row's first twenty pieces lay, by the kinds' names.
+fn plants_laid(app: &mut App) -> HashMap<&'static str, u32> {
+    let mut laid: HashMap<&'static str, u32> = HashMap::default();
+    for x in ROW.take(20) {
+        let (put, _) = lay(app, (x, 0), &HashSet::default(), &[]);
+        for &(name, count, _) in &put.undergrowth {
+            *laid.entry(name).or_default() += count;
+        }
+    }
+    laid
+}
+
+/// The far realm's floor was bare (the developers, 2026-11-09: "its not lush"): the woods'
+/// floor is laid only among the trees on its map, the first realm's, and the far realm grows
+/// none of them, its forest being its own parts. A realm with none of the first realm's
+/// trees lays its floor on open ground; the first realm's still keeps to its trees.
+#[test]
+fn a_realm_with_none_of_the_first_realms_trees_still_lays_its_floor() {
+    let count = |laid: HashMap<&'static str, u32>| laid.values().sum::<u32>();
+    let wooded = count(plants_laid(&mut app_of(true, None)));
+    let treeless_first = {
+        // The first realm's own rule: no trees on the map, no floor (the land's heath).
+        let mut app = app_of(true, None);
+        app.world_mut().resource_mut::<Map>().0.canopy = Crowns::default();
+        count(plants_laid(&mut app))
+    };
+    let far = count(plants_laid(&mut app_of(false, None)));
+    assert!(wooded > 1000, "the first realm's row under oaks: {wooded}");
+    assert_eq!(treeless_first, 0, "the first realm's open ground");
+    // Fewer than under oaks, as only the first realm's kinds of open ground grow where no
+    // crown shades it (877 for 2,071): a realm's floor is full by its own kinds (below).
+    assert!(
+        far > wooded / 4,
+        "a realm of its own trees lays its floor without the first realm's: {far} plants \
+         for the first realm's {wooded}"
+    );
+}
+
+/// A realm's own undergrowth is what its floor lays (D642, D136): every kind of its row, and
+/// of the first realm's only those it keeps; the first realm lays none of another's.
+#[test]
+fn a_realms_floor_lays_its_own_kinds_and_only_the_first_realms_it_keeps() {
+    let realms = terra_world::realm::Realms::shared();
+    let own = realms
+        .of("industrial")
+        .and_then(|realm| realm.undergrowth.as_ref())
+        .expect("the far realm has undergrowth of its own");
+    let laid = plants_laid(&mut app_of(false, Some(own)));
+    for kind in &own.kinds {
+        let count = laid.get(kind.name.as_str()).copied().unwrap_or(0);
+        assert!(count > 20, "{}: {count} over twenty pieces", kind.name);
+    }
+    for (name, count) in &laid {
+        let its_own = own.kinds.iter().any(|kind| kind.name == *name);
+        let kept = own.keeps.iter().any(|kept| kept == name);
+        assert!(
+            its_own || kept || *count == 0,
+            "{count} {name} in a realm that does not keep it"
+        );
+    }
+    for name in ["Bracken", "Fern", "Herb", "Hazel", "Holly", "Young spruce"] {
+        assert!(!laid.contains_key(name), "{name} is still on its floor");
+    }
+    let first = plants_laid(&mut app_of(true, None));
+    for kind in &own.kinds {
+        assert!(!first.contains_key(kind.name.as_str()), "{}", kind.name);
+    }
+    assert!(first.get("Bracken").copied().unwrap_or(0) > 0);
+    // And it is as full as the first realm's floor under its oaks, within a tenth.
+    let (far, wooded) = (laid.values().sum::<u32>(), first.values().sum::<u32>());
+    println!("the far realm's floor: {laid:?}; the first realm's: {first:?}");
+    assert!(
+        far * 10 >= wooded * 9,
+        "{far} plants for the first realm's {wooded}"
+    );
 }
 
 /// Lays a piece as the stream does, beside the pieces `around` it laid before, leaving out

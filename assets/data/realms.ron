@@ -18,6 +18,14 @@
 //   parts         what stands on its land by rule, each a catalogue item's model file
 //                 (data/builds.ron), how many of it a square kilometre holds, and from how
 //                 many metres off it is drawn (seen_m, by its size)
+//   undergrowth   its own undergrowth, in place of the first realm's: `keeps`, the first
+//                 realm's kinds that still grow there, by their names on the floor, and
+//                 `kinds`, its own, each a row: its models (files of models/nature/far, each
+//                 with its far level <file>_far.glb, tools/props' `far`), how many clumps
+//                 are tried a hectare, how many plants a clump has and how far they spread,
+//                 how much of the model's size a plant has grown to, from how far it is
+//                 drawn and where its far level takes over, how broad its drifts are, and
+//                 how much it likes dry ground and damp hollows, 0 to 1 each
 [
     (kind: "world", name: "the first realm", beyond: "industrial"),
     (
@@ -69,5 +77,22 @@
             (file: "IndustrialPylon", a_km2: 5.0, seen_m: Some(420.0)),
             (file: "IndustrialSign", a_km2: 6.0, seen_m: Some(250.0)),
         ],
+        // Its floor is its own (the developers, 2026-11-09: "the scifi realm shoudl be exotic
+        // too", "mostly normal realm stuff"): lantern bulbs and spore pods in the damp
+        // hollows, coral fans on the dry ground, coil tendrils over both, head high; of the
+        // first realm's kinds only the scrub and bramble its own leaf atlas turns plum.
+        undergrowth: Some((
+            keeps: ["Bush", "Bramble"],
+            kinds: [
+                (name: "Lantern bulb", models: ["FarLanternBulb"], tries_ha: 600.0, clump: (4, 10), spread_m: 1.2,
+                 grown: (0.7, 1.3), seen_m: 55.0, near_m: 14.0, drift_m: 12.0, dry: 0.4, wet: 1.0),
+                (name: "Spore pods", models: ["FarSporePods"], tries_ha: 520.0, clump: (2, 6), spread_m: 1.6,
+                 grown: (0.6, 1.3), seen_m: 65.0, near_m: 16.0, drift_m: 16.0, dry: 0.3, wet: 1.0),
+                (name: "Coral fan", models: ["FarCoralFan"], tries_ha: 520.0, clump: (2, 7), spread_m: 1.8,
+                 grown: (0.7, 1.4), seen_m: 75.0, near_m: 18.0, drift_m: 18.0, dry: 1.0, wet: 0.25),
+                (name: "Coil tendril", models: ["FarCoilTendril"], tries_ha: 380.0, clump: (2, 5), spread_m: 2.0,
+                 grown: (0.7, 1.35), seen_m: 90.0, near_m: 22.0, drift_m: 22.0, dry: 0.9, wet: 0.6),
+            ],
+        )),
     ),
 ]

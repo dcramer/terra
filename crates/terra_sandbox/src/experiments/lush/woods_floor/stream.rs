@@ -201,7 +201,8 @@ fn lay_piece<W: Ways>(
         to_m: 0.0,
         inner_m: 0.0,
         outer_m: 0.0,
-        among_trees: true,
+        among_trees: super::among_its_trees(lay.planet),
+        off_water: true,
         square: Some((low(key), PIECE_M)),
         skip_within_m: REACH_M,
     };

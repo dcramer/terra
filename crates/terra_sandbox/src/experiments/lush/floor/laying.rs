@@ -56,12 +56,12 @@ impl Ground<'_> {
     /// sun's test, each a line through every crown's shadow lumps (0.2 to 1 s of the floor's
     /// laying when every try asked it, instances j10). The same places are kept, by the same
     /// dice: the test only decides, it rolls none.
-    pub(super) fn likes_at_most(&self, kind: Under, here: &mut Here) -> f32 {
-        if kind != Under::Verge || self.sun.is_none() {
-            return kind.likes(here);
+    pub(super) fn likes_at_most(&self, placement: &Placement, here: &mut Here) -> f32 {
+        if placement.kind != Under::Verge || self.sun.is_none() {
+            return placement.likes(here);
         }
         let sun = std::mem::replace(&mut here.sun, 1.0);
-        let most = kind.likes(here);
+        let most = placement.likes(here);
         here.sun = sun;
         most
     }
@@ -70,23 +70,23 @@ impl Ground<'_> {
     /// how much it likes the place times its drifts.
     pub(super) fn starts(
         &self,
-        kind: Under,
+        placement: &Placement,
         at: Vec2,
         mut here: Here,
         roll: f32,
         drifts: f32,
     ) -> bool {
-        if roll > self.likes_at_most(kind, &mut here) * drifts {
+        if roll > self.likes_at_most(placement, &mut here) * drifts {
             return false;
         }
-        roll <= kind.likes(&self.in_sun(kind, at, here)) * drifts
+        roll <= placement.likes(&self.in_sun(placement.kind, at, here)) * drifts
     }
 
     /// What a place is for a clump's member, if it is clear of the bark, what lies and the
     /// path by `clear` (`Under::clear_of`) and liked enough to stand there.
     pub(super) fn member(
         &self,
-        kind: Under,
+        placement: &Placement,
         p: Vec2,
         mut here: Here,
         clear: (f32, f32, f32),
@@ -95,12 +95,12 @@ impl Ground<'_> {
         if here.bark < bark_m
             || here.lying < lying_m
             || here.path < path_m
-            || self.likes_at_most(kind, &mut here) < 0.1
+            || self.likes_at_most(placement, &mut here) < 0.1
         {
             return None;
         }
-        let here = self.in_sun(kind, p, here);
-        (kind.likes(&here) >= 0.1).then_some(here)
+        let here = self.in_sun(placement.kind, p, here);
+        (placement.likes(&here) >= 0.1).then_some(here)
     }
 
     /// A place on the ground, `at` east and south of the start, turned at random about its
@@ -126,13 +126,13 @@ impl Ground<'_> {
     }
 
     /// Whether nothing is laid at a place in an area: on dug ground (`dug`), where the world
-    /// keeps a place clear (a gate's foot), or where the area keeps among trees, under a
+    /// keeps a place clear (a gate's foot), or where the area keeps off water, under a
     /// lake's or a pool's water.
     pub(super) fn off(&self, area: &Area, place: &Transform) -> bool {
         let ground = place.translation;
         self.dug(place)
             || self.kept_clear.is_some_and(|kept| kept.holds(ground))
-            || (area.among_trees && ground.length() < self.planet.water_near_m(ground) + 0.05)
+            || (area.off_water && ground.length() < self.planet.water_near_m(ground) + 0.05)
     }
 
     /// Where a direction in the world points on the map.
@@ -284,6 +284,7 @@ impl Lay<'_, '_, '_> {
             match &part.look {
                 Look::Foliage(material) => entity.insert(MeshMaterial3d(material.clone())),
                 Look::Scan(material) => entity.insert(MeshMaterial3d(material.clone())),
+                Look::Model(material) => entity.insert(MeshMaterial3d(material.clone())),
             };
             if part.solid {
                 entity.insert(Footing);

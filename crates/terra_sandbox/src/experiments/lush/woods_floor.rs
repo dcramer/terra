@@ -32,6 +32,17 @@ const CLEAR_M: f32 = 14.0;
 const STUMP_AT: Vec2 = Vec2::new(1.0, 11.0);
 const LOG_AT: Vec2 = Vec2::new(-2.5, 12.5);
 
+/// Whether the woods' floor is laid only among the trees on the floor's map: where the first
+/// realm's trees stand, which are the ones it holds. A realm that grows none of them
+/// (`trees: 0`, the far realm's, D642) has its forest in its own parts, which stand on all
+/// its dry level ground and are not on the map: laid only among trees its floor was bare
+/// (no plant on a row of pieces the first realm lays 2,071 on under oaks, `stream_tests`;
+/// the first realm's floor has 43,058 within 220 m of seed 3's start), so it is laid
+/// wherever the ground is dry.
+pub(super) fn among_its_trees(planet: &Planet) -> bool {
+    planet.trees() > 0.0
+}
+
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(InWorld), lay_woods_floor.in_set(LayingFloor));
     stream::plugin(app);
@@ -93,7 +104,8 @@ fn lay_woods_floor(
         to_m: REACH_M,
         inner_m: CLEAR_M,
         outer_m: REACH_M,
-        among_trees: true,
+        among_trees: among_its_trees(&planet),
+        off_water: true,
         square: None,
         skip_within_m: 0.0,
     };

@@ -26,6 +26,9 @@ pub(super) enum Under {
     /// way that lead the eye down it (the forest walk of 10-19). Last, so its dice leave every
     /// other kind where it was.
     Verge,
+    /// A realm's own kind, a modelled plant placed by its row of `data/realms.ron` (D642,
+    /// D136): where it likes to grow is its row's (`Placement::likes`), not a rule here.
+    Placed,
 }
 
 /// A shrub or young tree, above knee height, stands at least so far from a path's edge, so
@@ -128,6 +131,8 @@ impl Under {
             // On a path's verge, in the sun's patches where the floor is told where the sun
             // falls, else where the sky's light comes down the path's corridor.
             Under::Verge => smoothstep(0.35, 0.8, here.sun) * near(here.path, 0.4, 2.2),
+            // Anywhere, as far as its kind goes: its row says how it likes the ground.
+            Under::Placed => 1.0,
         }
     }
 

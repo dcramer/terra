@@ -18,13 +18,21 @@ use crate::experiments::lush::warmed;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use terra_gen::{Rng, Seed};
+use terra_survival::props;
 use terra_world::grown::{Cards, build as grown_build, plants};
 use terra_world::mesh_sink::MeshSink;
 
 /// Each kind's variants, by kind, without the world's materials; a kind is grown the first
-/// time the forest is planted.
+/// time the forest is planted. And a realm's own kinds' (`Lay::models`), by name, as they
+/// are drawn: a model's materials are its own in every world.
 #[derive(Resource, Default)]
-pub(in crate::experiments::lush) struct Variants(HashMap<u64, Vec<Bare>>);
+pub(in crate::experiments::lush) struct Variants(
+    HashMap<u64, Vec<Bare>>,
+    HashMap<&'static str, Vec<Drawn>>,
+);
+
+/// Where a realm's ground plants' models are, among `assets/models`.
+const MODELS: &str = "nature/far";
 
 /// Which of the world's materials a part is drawn in.
 #[derive(Clone, Copy)]
@@ -63,6 +71,9 @@ impl Lay<'_, '_, '_> {
             let (mesh, material) = self.plant_scan("fern", Color::srgb(0.6, 0.64, 0.58));
             return vec![Drawn::one(mesh, Look::Scan(material))];
         }
+        if let Some(row) = placement.own {
+            return self.models(row);
+        }
         let key = placement.kind as u64;
         let bare = match self.variants.0.get(&key) {
             Some(bare) => bare.clone(),
@@ -79,6 +90,79 @@ impl Lay<'_, '_, '_> {
             .collect()
     }
 
+    /// A realm's own kind's variants (D642, D136): each of its row's models in its own
+    /// textures, as its file has them (`terra_survival::props`, the one reading of a model),
+    /// and past the row's `near_m` its far level (`<model>_far.glb`, tools/props' `far`) in
+    /// the near level's materials, whose textures it shares. Read once for the app. A model
+    /// the row names that cannot be read is said and left out.
+    fn models(&mut self, row: &'static terra_world::realm::GroundPlant) -> Vec<Drawn> {
+        if let Some(drawn) = self.variants.1.get(row.name.as_str()) {
+            return drawn.clone();
+        }
+        let lit = self.plain.add(props::lit());
+        let glowing = self.plain.add(props::glowing());
+        let mut making = props::Making {
+            meshes: &mut *self.meshes,
+            materials: &mut *self.plain,
+            assets: self.assets,
+            lit,
+            glowing,
+        };
+        let mut read = |file: String| {
+            props::read_look(&file, &mut making)
+                .map_err(|problem| {
+                    error!(
+                        "{} names a model that could not be read: {problem} Its row of \
+                         data/realms.ron's undergrowth names files of assets/models/{MODELS}, \
+                         each with its far level beside it (tools/props, `far`): make it with \
+                         `node tools/props/props.ts refine <prop>`, or take it out of the row.",
+                        row.name
+                    )
+                })
+                .ok()
+        };
+        let mut drawn = Vec::new();
+        for model in &row.models {
+            let Some(near) = read(format!("{MODELS}/{model}.glb")) else {
+                continue;
+            };
+            let far = (row.near_m > 0.0)
+                .then(|| read(format!("{MODELS}/{model}_far.glb")))
+                .flatten();
+            let part = |piece: &props::Piece, material: &Handle<StandardMaterial>, band| Part {
+                mesh: piece.mesh.clone(),
+                look: Look::Model(material.clone()),
+                band,
+                solid: false,
+            };
+            let near_band = if far.is_some() { Band::Near } else { Band::All };
+            let mut parts: Vec<Part> = near
+                .pieces
+                .iter()
+                .map(|piece| part(piece, &piece.material, near_band))
+                .collect();
+            if let Some(far) = &far {
+                // In the near level's materials where it has the same parts, so its
+                // textures are loaded once.
+                let same = far.pieces.len() == near.pieces.len();
+                for (k, piece) in far.pieces.iter().enumerate() {
+                    let material = if same {
+                        &near.pieces[k].material
+                    } else {
+                        &piece.material
+                    };
+                    parts.push(part(piece, material, Band::Far));
+                }
+            }
+            drawn.push(Drawn {
+                parts,
+                shadow_set: None,
+            });
+        }
+        self.variants.1.insert(row.name.as_str(), drawn.clone());
+        drawn
+    }
+
     /// Grows the variants of every kind of `placements` the app has not grown yet, all the
     /// kinds at once on every core: one after the next they were most of the woods' floor's
     /// laying, in the frame the world is entered in (crossing-freeze j2).
@@ -87,6 +171,7 @@ impl Lay<'_, '_, '_> {
         for placement in placements {
             let kind = placement.kind;
             if kind != Under::Fern
+                && kind != Under::Placed
                 && !kinds.contains(&kind)
                 && !self.variants.0.contains_key(&(kind as u64))
             {
@@ -239,6 +324,7 @@ fn grow_bare(seed: Seed, cards: &Cards, kind: Under, meshes: &MeshSink) -> Vec<B
                 Bare::one(meshes.add(build.mesh(false)), atlas)
             }
             Under::Fern => unreachable!("the fern is its scan, loaded in each world"),
+            Under::Placed => unreachable!("a realm's own kind is its models, read once"),
             Under::Frond | Under::Herb => rosette(cards, meshes, kind, n, &mut dice),
             Under::Hazel => {
                 // Young stools on the floor, a metre or two: rods, a vase, a fan, each

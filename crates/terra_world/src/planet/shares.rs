@@ -20,4 +20,13 @@ impl Planet {
         self.plants = share.clamp(0.0, 1.0);
         self.trees = trees.map(|share| share.clamp(0.0, 1.0));
     }
+
+    /// Its realm's own undergrowth, which its floor lays in place of the first realm's.
+    pub fn undergrowth(&self) -> Option<&'static crate::realm::Undergrowth> {
+        self.undergrowth
+    }
+
+    pub fn set_undergrowth(&mut self, own: Option<&'static crate::realm::Undergrowth>) {
+        self.undergrowth = own;
+    }
 }

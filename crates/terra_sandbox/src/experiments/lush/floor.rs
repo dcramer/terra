@@ -41,7 +41,7 @@ use bevy::{
 use builds::*;
 pub(super) use kit::{Kit, Put, lay_with};
 pub(super) use laying::Ground;
-use placements::{PLACEMENTS, Placement};
+use placements::{Placement, placements};
 use std::f32::consts::{PI, TAU};
 use terra_gen::{Noise, Rng, Seed};
 pub(super) use terra_world::cover::forest::{Crowns, Floor, Here, Stand, Ways, crown_of};
@@ -265,7 +265,9 @@ const VARIANTS: u64 = 6;
 /// `middle`, the undergrowth from `inner_m` to `outer_m`, each as thickly as the forest walk
 /// lays its own (`YARD`), its tries in proportion to the ground; and whether only among
 /// trees and off water, as round the woods' trees of a world with land (D619), where past
-/// them is the land's own heath, lake or rock.
+/// them is the land's own heath, lake or rock. The trees are the first realm's, which the
+/// floor's map holds: a realm that grows none of them (`Planet::trees`), its forest its own
+/// parts on all its dry ground, lays its floor off water alone (`woods_area`).
 ///
 /// Or, with `square` (its south-west corner and side), a square piece of a floor streamed
 /// round the camera (`floor_stream`): everything tried uniformly in it, as thickly as the
@@ -277,6 +279,8 @@ pub(super) struct Area {
     pub inner_m: f32,
     pub outer_m: f32,
     pub among_trees: bool,
+    /// Whether nothing is laid under a lake's or a pool's water: on a world with land.
+    pub off_water: bool,
     pub square: Option<(Vec2, f32)>,
     pub skip_within_m: f32,
 }
@@ -290,6 +294,7 @@ impl Area {
         inner_m: 3.0,
         outer_m: FOREST_M + MEADOW_M * 0.6,
         among_trees: false,
+        off_water: false,
         square: None,
         skip_within_m: 0.0,
     };
@@ -316,6 +321,12 @@ impl Area {
         let many = f64::from(yard) * f64::from(side * side) / (std::f64::consts::PI * there);
         let whole = many.floor();
         whole as u32 + u32::from(f64::from(dice.unit()) < many - whole)
+    }
+
+    /// The ground its undergrowth is tried over, in hectares: what the forest walk's tries
+    /// are counted over (`YARD`), for a kind whose data says how many a hectare.
+    fn undergrowth_ha(&self) -> f32 {
+        std::f32::consts::PI * (self.outer_m * self.outer_m - self.inner_m * self.inner_m) / 1.0e4
     }
 
     /// A place for a rock, log or stump.
@@ -506,6 +517,9 @@ enum Look {
     Foliage(Handle<Foliage>),
     /// A plant's scan, under the season (`Lay::plant_scan`).
     Scan(Handle<Mossy>),
+    /// A modelled plant's part in its own textures, as its file has them (a realm's own
+    /// undergrowth, `variants::Lay::models`).
+    Model(Handle<StandardMaterial>),
 }
 
 /// Which distances a part is drawn over: all its kind's, or only near or only past where
@@ -592,7 +606,7 @@ pub(super) fn put_down(lay: &mut Lay, kit: &Kit, put: &mut Put, most: usize) -> 
         .iter()
         .map(|(kind, count, closest)| {
             format!(
-                "{count} {kind:?} (the nearest at {:.1},{:.1})",
+                "{count} {kind} (the nearest at {:.1},{:.1})",
                 closest.x, closest.y
             )
         })

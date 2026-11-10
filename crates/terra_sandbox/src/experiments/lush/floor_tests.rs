@@ -225,6 +225,7 @@ fn a_squares_tries_are_as_thick_as_the_rings() {
         inner_m: 14.0,
         outer_m: 220.0,
         among_trees: true,
+        off_water: true,
         square: None,
         skip_within_m: 0.0,
     };

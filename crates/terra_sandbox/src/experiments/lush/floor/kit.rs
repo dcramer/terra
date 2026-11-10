@@ -12,14 +12,16 @@ type LogMeshes = (Handle<Mesh>, Option<Handle<Mesh>>, f32, f32);
 type StumpMeshes = (Handle<Mesh>, Option<Handle<Mesh>>, f32);
 
 /// What a floor is laid with: the rocks' and boulders' scans (each scan a material of its
-/// own), the logs' and stumps' meshes, the cut ends' grain, and each kind of undergrowth's
-/// variants and drifts, in `PLACEMENTS`' order. Making it rolls none of the laying's dice.
+/// own), the logs' and stumps' meshes, the cut ends' grain, and the kinds of undergrowth
+/// its world lays (`placements`: the first realm's, or its realm's own, D642), each with its
+/// variants and drifts. Making it rolls none of the laying's dice.
 pub(in crate::experiments::lush) struct Kit {
     rocks: Vec<Scan>,
     boulders: Vec<Scan>,
     end_grain: Handle<StandardMaterial>,
     logs: Vec<LogMeshes>,
     stumps: Vec<StumpMeshes>,
+    placements: Vec<Placement>,
     undergrowth: Vec<(Vec<Drawn>, Noise)>,
 }
 
@@ -58,8 +60,9 @@ impl Kit {
                 (bark, end, stump.radius)
             })
             .collect();
-        lay.grow_all(&PLACEMENTS);
-        let undergrowth = PLACEMENTS
+        let placements = placements(lay.planet.undergrowth());
+        lay.grow_all(&placements);
+        let undergrowth = placements
             .iter()
             .map(|placement| {
                 let variants = lay.grow(placement);
@@ -73,6 +76,7 @@ impl Kit {
             end_grain,
             logs,
             stumps,
+            placements,
             undergrowth,
         }
     }
@@ -81,20 +85,30 @@ impl Kit {
     /// for laying in a test with no assets to load.
     #[cfg(test)]
     pub(in crate::experiments::lush) fn bare() -> Kit {
+        Self::bare_of(None)
+    }
+
+    /// A bare kit of a realm's undergrowth, the first realm's if it has none of its own.
+    #[cfg(test)]
+    pub(in crate::experiments::lush) fn bare_of(
+        own: Option<&'static terra_world::realm::Undergrowth>,
+    ) -> Kit {
         let scan = || vec![(Handle::default(), Handle::default())];
+        let placements = placements(own);
         Kit {
             rocks: scan(),
             boulders: scan(),
             end_grain: Handle::default(),
             logs: vec![(Handle::default(), Some(Handle::default()), 4.0, 0.25); LOG_KINDS as usize],
             stumps: vec![(Handle::default(), Some(Handle::default()), 0.3); STUMP_KINDS as usize],
-            undergrowth: PLACEMENTS
+            undergrowth: placements
                 .iter()
                 .map(|placement| {
                     let drawn = Drawn::one(Handle::default(), Look::Foliage(Handle::default()));
                     (vec![drawn], Noise::new(Seed(7).derive(placement.name)))
                 })
                 .collect(),
+            placements,
         }
     }
 }
@@ -116,7 +130,7 @@ pub(in crate::experiments::lush) struct Put {
     pub(super) wood: [u32; 4],
     pub(super) nearest: [Vec2; 4],
     /// Each kind of undergrowth's count, and the nearest to the start.
-    pub(super) undergrowth: Vec<(Under, u32, Vec2)>,
+    pub(in crate::experiments::lush) undergrowth: Vec<(&'static str, u32, Vec2)>,
     plants: u32,
     /// What was decided and is not spawned yet, in the order decided (`Put::spawn`).
     laid: Vec<Laid>,
@@ -285,7 +299,7 @@ impl Put {
                 } => {
                     let drawn = &kit.undergrowth[placement].0[pick];
                     if let Some((plant, cuttable)) =
-                        lay.plant(&PLACEMENTS[placement], drawn, at, place)
+                        lay.plant(&kit.placements[placement], drawn, at, place)
                     {
                         self.things.push(plant);
                         if cuttable {
@@ -480,14 +494,14 @@ fn undergrowth<W: Ways>(
     put: &mut Put,
 ) {
     for (which, (placement, (variants, drift))) in
-        PLACEMENTS.iter().zip(&kit.undergrowth).enumerate()
+        kit.placements.iter().zip(&kit.undergrowth).enumerate()
     {
         let clear = placement.kind.clear_of();
         let mut count = 0;
         let mut closest = Vec2::splat(f32::MAX);
-        // Its realm's share of plants (D642): so many fewer tries.
-        let tries =
-            (area.tries(placement.tries, true, dice) as f32 * ground.planet.plants()) as u32;
+        // Its realm's share of the first realm's plants (D642): so many fewer tries.
+        let share = placement.share(ground.planet.plants());
+        let tries = (area.tries(placement.tries, true, dice) as f32 * share) as u32;
         for _ in 0..tries {
             let Some(at) = placement.kind.tried_at(&map.ways, area, dice) else {
                 continue;
@@ -508,7 +522,7 @@ fn undergrowth<W: Ways>(
             if roll > drifts {
                 continue;
             }
-            if !ground.starts(placement.kind, at, map.here(at), roll, drifts) {
+            if !ground.starts(placement, at, map.here(at), roll, drifts) {
                 continue;
             }
             let many = placement.clump.0 + dice.below(placement.clump.1 - placement.clump.0 + 1);
@@ -518,7 +532,7 @@ fn undergrowth<W: Ways>(
                 } else {
                     round(dice, at, placement.spread_m)
                 };
-                let member = ground.member(placement.kind, p, map.here(p), clear);
+                let member = ground.member(placement, p, map.here(p), clear);
                 let Some(here) = member.filter(|here| area.holds(here)) else {
                     continue;
                 };
@@ -554,6 +568,6 @@ fn undergrowth<W: Ways>(
                 }
             }
         }
-        put.undergrowth.push((placement.kind, count, closest));
+        put.undergrowth.push((placement.name, count, closest));
     }
 }
