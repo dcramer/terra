@@ -61,7 +61,7 @@ One move, one owner. Each step says what stops the job.
 ## What exists
 
 - `tools/characters/key.ts`: keys to a take (the body with that one clip), solved on the body the keys name (the mannequin unless they say), from a guard that is a clip of it or a kept pose file. It sets the hips, chest, head, shoulders, sword hand and its blade, the shield's offset, and each foot and heel, and solves the arms and legs to reach them. Tested in `key.test.ts`.
-- `key.ts`'s `fists`: two empty fists keyed by place on any body of our skeleton, a creature's own (`troll_smash.json` on the 4 m troll, solved and measured by `tools/characters/blow.ts`, not yet looked at or in the game); a reach past the arm's length is named with its moment.
+- `key.ts`'s `fists`: two empty fists keyed by place on any body of our skeleton, a creature's own (`troll_smash.json` on the 4 m troll, measured by `tools/characters/blow.ts`, in `troll.glb` by the build's `creature:troll` step: bodies.json's `keyed` names a creature's keyed clips, solved on its game file and put in last); a reach past the arm's length is named with its moment.
 - `tools/characters/sheet_stills.py`: the stills for step 5.
 - `art/animation/keyed/`, the keys and their sheets, the source: `slash.json` and `slash-sheet.jpg`, the worked blow, keyed on `fight.glb`; `idle.json` and `idle-sheet.jpg`, a loop with `loop`, `hang`, `rest_arm` and a neutral `start`, keyed from a sheet drawn from the brief alone, starting from `idle-start.json` (Uthana's idle's first frame with the walk's shoulders, kept so the idle no longer depends on the clip it replaces).
 - `tools/characters/rest.ts` and `blend.ts`: empty hands hanging as a person's do, and a start's distance from the clips the game blends into; tested beside them.

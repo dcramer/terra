@@ -221,6 +221,15 @@ test("a creature's keyed clip is solved on its game file and put in after everyt
       const k = JSON.parse(readFileSync(join(ROOT, path), "utf8"));
       assert.equal(k.name, clip, `${path} makes ${k.name}, bodies.json says ${clip}`);
       assert.equal(k.body, `assets/models/characters/${c.name}.glb`, `${path} is keyed on ${k.body}`);
+      // The game's file holds the clip its keys make today: the step's two lines run on a copy
+      // change no byte of it (glb_clips.ts writes the same clip again to the same bytes).
+      const dir = mkdtempSync(join(tmpdir(), "keyed-"));
+      const [take, copy] = [join(dir, "take.glb"), join(dir, "game.glb")];
+      writeFileSync(copy, readFileSync(join(ROOT, k.body)));
+      execFileSync("node", ["tools/characters/key.ts", path, take], { cwd: ROOT, stdio: "pipe" });
+      execFileSync("node", ["tools/characters/glb_clips.ts", copy, take, clip], { cwd: ROOT, stdio: "pipe" });
+      assert.ok(readFileSync(copy).equals(readFileSync(join(ROOT, k.body))), `${k.body}'s ${clip} is not what ${path} makes: run node tools/characters/key.ts ${path} take.glb, then glb_clips.ts ${k.body} take.glb ${clip}`);
+      rmSync(dir, { recursive: true });
     }
 });
 
