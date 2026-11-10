@@ -359,6 +359,15 @@ pub trait LightProbeComponent: Send + Sync + Component + Sized {
         image_assets: &RenderAssets<GpuImage>,
     ) -> RenderViewLightProbes<Self>;
 
+    /// Terra (D485): whether every 3D view keeps its list of these probes, empty
+    /// or not. Bevy 0.20 removes an empty list from the view, and the list's
+    /// presence is the view's pipeline key bit and bind group layout bit
+    /// (`MeshPipelineKey::IRRADIANCE_VOLUME`), so a probe entering or leaving the
+    /// frustum specialised every material's pipeline again in the middle of a
+    /// turn of the camera, and what was not yet made drew black. A permutation is
+    /// fixed for a view, not chosen by what a frame's frustum holds.
+    const HELD_BY_EVERY_VIEW: bool = false;
+
     /// Given the matrix value of the `GlobalTransform` of the light probe,
     /// returns the matrix that transforms world positions into light probe
     /// space.
@@ -462,7 +471,10 @@ fn gather_light_probes<C>(
         render_view_light_probes.maybe_gather_light_probes(&view_light_probe_info);
 
         // Record the per-view light probes.
-        if render_view_light_probes.is_empty() {
+        // Terra (D485): an empty list stays on the view where the kind asks it
+        // (`HELD_BY_EVERY_VIEW`), so the view's pipelines do not change with
+        // what its frustum holds.
+        if render_view_light_probes.is_empty() && !C::HELD_BY_EVERY_VIEW {
             commands
                 .get_entity(view_entity)
                 .expect("View entity wasn't synced.")

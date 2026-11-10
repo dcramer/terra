@@ -302,6 +302,11 @@ impl LightProbeComponent for IrradianceVolume {
 
     type QueryData = ();
 
+    // Terra (D485): the irradiance volume path is on for every 3D view where
+    // the platform has it; with no volume in the picture a fragment's weight is
+    // 0 and the environment map lights it (`irradiance_volume_light_held`).
+    const HELD_BY_EVERY_VIEW: bool = IRRADIANCE_VOLUMES_ARE_USABLE;
+
     fn id(&self, image_assets: &RenderAssets<GpuImage>) -> Option<Self::AssetId> {
         if image_assets.get(&self.voxels).is_none() {
             None
