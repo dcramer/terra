@@ -177,7 +177,10 @@ fn cap_skin(tint: vec3<f32>, uv: vec2<f32>, stood: vec3<f32>, gills: vec4<f32>, 
     skin.colour = mix(below, above, top);
     skin.rough = mix(0.85, above_rough, top);
     skin.height = mix(gill * 0.06, above_height, top);
-    skin.glow = gills.rgb * gills.a * lit * (1.0 - top);
+    // In their own hue, deeper: twice as far from grey as they are by day.
+    let grey = vec3<f32>((gills.r + gills.g + gills.b) / 3.0);
+    let shine = max(grey + (gills.rgb - grey) * 2.2, vec3<f32>(0.0));
+    skin.glow = shine * gills.a * lit * (1.0 - top);
     skin.open = mix(mix(0.4, 1.0, gill) * deep, 1.0, top);
     return skin;
 }

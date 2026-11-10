@@ -75,9 +75,12 @@
                 leaves: "oak",
                 clump_m: 1.0,
                 trunk: 0.045,
-                // Drawn blue-violet, which the realm's turn of every hue brings out plum.
-                // Its stalk and ring, drawn rose, come out a warm ivory by the same turn.
-                cap: (across: 0.85, depth: 0.2, tiers: 2, young: 2, tint: (0.42, 0.34, 0.85), gills: (0.3, 0.9, 0.45), glow: 120.0, stalk: (0.865, 0.703, 0.792)),
+                // Drawn a greyed blue, which the realm's turn of every hue (1.25 rad) brings
+                // out a dusty plum, (0.72, 0.43, 0.68), a wood blewit's more than a paint's:
+                // at (0.42, 0.34, 0.85) it came out hot pink. Its gills, drawn sea green,
+                // come out a slate blue, (0.5, 0.6, 0.78), and shine a deeper blue of the
+                // same hue; its stalk and ring, drawn rose, a warm ivory.
+                cap: (across: 0.85, depth: 0.2, tiers: 2, young: 2, tint: (0.508, 0.531, 0.791), gills: (0.488, 0.772, 0.62), glow: 260.0, stalk: (0.865, 0.703, 0.792)),
             )),
             variants: 5,
             sway: Still,
