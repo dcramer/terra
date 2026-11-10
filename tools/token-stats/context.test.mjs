@@ -173,6 +173,9 @@ test("reads a job's bound from its brief, and only from a sentence that sets one
   assert.equal(briefBound("Task: x. Bound: stop at 150k context or once 1-4 land."), 150e3);
   assert.equal(briefBound("Stop at the brief's bound, or at a context of about 200k, whichever first."), 200e3);
   assert.equal(briefBound("Jobs ended at 215k context last time. Do the thing."), null, "a number of context in passing is no bound");
+  assert.equal(briefBound("Stop when three cuts landed; or at a context bound of 250k; whichever comes first."), 250e3);
+  assert.equal(briefBound("Stop at the context hook's warning (the bound is 300k)."), 300e3);
+  assert.equal(briefBound("Bound: 400k."), 400e3);
   assert.equal(briefBound(undefined), null);
   const head = [JSON.stringify({ type: "user", message: { content: "Task: y. Bound: 120k context." } }), '{"type":"assis'].join("\n");
   assert.equal(briefBound(firstPrompt(head)), 120e3);

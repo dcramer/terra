@@ -32,6 +32,9 @@ const TTL_MS = { "5m": 5 * 60 * 1000, "1h": 60 * 60 * 1000 };
 // (the developers, 2026-11-08), so from DEFAULT_BOUND and at each LEAD_STEP more it is told
 // its size once and how to keep each turn cheap, and goes on.
 export const DEFAULT_BOUND = 150_000;
+// A job whose brief names no bound (the developers, 2026-11-09: "400k is fine"): 150k
+// stopped portal-freeze j1 after one cut of three, its first edit at 119k.
+export const JOB_BOUND = 400_000;
 export const WARN_AT = 0.8;
 export const STEP_PAST = 20_000;
 export const LEAD_STEP = 100_000;
@@ -482,13 +485,17 @@ export function lastContext(tail) {
 }
 
 // The context bound a brief names, in tokens, or null: the first "<n>k context" (or
-// "context of about <n>k") in a sentence that says bound or stop.
+// "context of about <n>k") in a sentence that says bound or stop, or "bound of <n>k".
 export function briefBound(prompt) {
   if (typeof prompt !== "string") return null;
   for (const sentence of prompt.split(/(?<=[.;])\s+|\n/)) {
     if (!/\b(bound|stop)/i.test(sentence)) continue;
     const m = sentence.match(/(\d{2,3})\s*k\s+(?:tokens\s+)?(?:of\s+)?context|context\s+(?:of\s+)?(?:about\s+)?(\d{2,3})\s*k\b/i);
     if (m) return Number(m[1] ?? m[2]) * 1000;
+    // "a context bound of 250k", "the bound is 150k", "Bound: 300k": portal-freeze j1 was
+    // briefed "a context bound of 250k", which read as no bound, and was stopped at 150k.
+    const named = sentence.match(/\bbound\s*(?:of|is|at|:)?\s*(?:about\s+)?(\d{2,3})\s*k\b/i);
+    if (named) return Number(named[1]) * 1000;
   }
   return null;
 }
@@ -616,7 +623,7 @@ function hook() {
     }
     if (!kept || !Number.isInteger(kept.seen) || !(kept.bound > 0)) {
       // A job's bound is in its brief, read once from the transcript's head and kept.
-      kept = { seen: Number.isInteger(kept) ? kept : -1, bound: (job && briefBound(firstPrompt(readHead(path)))) || DEFAULT_BOUND };
+      kept = { seen: Number.isInteger(kept) ? kept : -1, bound: job ? briefBound(firstPrompt(readHead(path))) ?? JOB_BOUND : DEFAULT_BOUND };
     }
     const { keep, text } = decide(context, kept.seen, kept.bound, { job });
     if (keep !== kept.seen || !existsSync(state)) {

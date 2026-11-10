@@ -31,7 +31,7 @@ The worktree guard refuses a command it cannot prove stays in your worktree, at 
 - What the developer saw in play is proven in the game's composed pose or frame, not on a clip or the course alone: the check fails on main first, then passes (the skill says which).
 - Check a premise before working round it: a fix for "X does not work here" starts with the one command that shows X failing. Change nothing outside the repository (crontab, services, packages, shell profiles, Windows settings): name it in your report.
 - A second attempt at one failure: step back (AGENTS.md). Two without a gain: stop and hand off what was tried.
-- Your context bound is the brief's, else 150k (D627). The context hook warns at 80%: finish and land the step, start no new one. Its STOP means stop: no further read or step, straight to End. Read by grep or line range, never a whole large file; long output to `target/job/`, its tail read.
+- Your context bound is the brief's, else 400k (D627). The context hook warns at 80%: finish and land the step, start no new one. Its STOP means stop: no further read or step, straight to End. Read by grep or line range, never a whole large file; long output to `target/job/`, its tail read.
 
 ## End
 
