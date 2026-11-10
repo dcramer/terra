@@ -154,7 +154,7 @@ fn shut_in(
 }
 
 /// The box that holds a den's parts and a margin, upright as the planet is at its middle.
-fn bounds(parts: &[Part]) -> (Vec3, Mat3, Vec3) {
+pub(crate) fn bounds(parts: &[Part]) -> (Vec3, Mat3, Vec3) {
     let balls: Vec<(Vec3, f32)> = parts
         .iter()
         .flat_map(|part| match *part {

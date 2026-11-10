@@ -50,24 +50,47 @@ fn state(
     In(_): In<Option<serde_json::Value>>,
     planet: Option<Res<Planet>>,
     start: Option<Res<Start>>,
-    eye: Query<&GlobalTransform, With<crate::planet::MainCamera>>,
+    eye: Query<(&GlobalTransform, Option<&Projection>), With<crate::planet::MainCamera>>,
 ) -> bevy::remote::BrpResult {
+    let pose = eye.iter().next();
+    let eye = pose.map(|(eye, _)| eye);
     let (Some(planet), Some(start)) = (planet, start) else {
         return Err(crate::remote::refused("No world is made yet."));
     };
     // How far the camera is from the ground round it, in metres: under nought, it is in
     // the rock and the picture is of the ground's inside (a camera in a tight place).
-    let eye_clear_m = eye
-        .iter()
-        .next()
-        .map(|eye| planet.distance(eye.translation()));
+    let eye_clear_m = eye.map(|eye| planet.distance(eye.translation()));
     let Some(den) = planet.den() else {
         return Ok(serde_json::json!({ "den": null, "eye_clear_m": eye_clear_m }));
     };
     let local = |point: Vec3| start.local(point).to_array();
+    // A direction in the start's terms, as long as it was.
+    let way = |way: Vec3| (start.local(den.mouth + way) - start.local(den.mouth)).to_array();
+    // Where the camera is, which way it looks and its up, and its upright field of view in
+    // radians: what a script checks its still was shot from and finds a place in the picture
+    // by (tools/sandbox/volumelight.ts).
+    let camera = pose.map(|(eye, lens)| {
+        serde_json::json!({
+            "at": local(eye.translation()),
+            "toward": way(*eye.forward()),
+            "up": way(*eye.up()),
+            "fov": match lens {
+                Some(Projection::Perspective(lens)) => Some(lens.fov),
+                _ => None,
+            },
+        })
+    });
+    // The box its light volume fills (`den_light`): its middle, and its three sides each as
+    // long as the box is that way.
+    let (middle, frame, size) = crate::den_light::bounds(&den.parts);
     Ok(serde_json::json!({
         "eye_clear_m": eye_clear_m,
+        "camera": camera,
         "den": {
+            "light_box": {
+                "middle": local(middle),
+                "sides": [way(frame.x_axis * size.x), way(frame.y_axis * size.y), way(frame.z_axis * size.z)],
+            },
             "mouth": local(den.mouth),
             "floor": local(den.floor),
             "ahead": local(den.mouth + den.heading * 10.0),

@@ -27,7 +27,7 @@
   },
   {
     "name": "volumelight",
-    "does": "a trunk on the land over seed 3's den is lit the same with the den's light volume as without it (within 0.05; 0.98 to 0.99 on main, 0.80 with the open air's cells lit as the den's), and the den's chamber stays dark and not blue: a volume's box holds the open sky's light in its open air (D485; tools/sandbox/volumelight.ts)",
+    "does": "a trunk on the land over seed 3's den is lit the same with the den's light volume as without it (within 0.05, over ground outside the volume's box in the same stills, the clock stopped; 0.998 in the one run of this view, 2026-11-10, the planted fault not yet shown against it: it read 0.80 on the view before; grass and the bare ground in the box read only), and the den's chamber stays dark and not blue: a volume's box holds the open sky's light in its open air (D485; tools/sandbox/volumelight.ts)",
     "run": ["cargo", "xtask", "gpu", "still", "--", "node", "tools/sandbox/volumelight.ts"],
     "minutes": 20
   },
