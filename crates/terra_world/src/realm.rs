@@ -46,6 +46,11 @@ pub struct Realm {
     /// do not reach.
     #[serde(default)]
     pub plants_hue: Option<f32>,
+    /// How much further its grass and ground cover are turned than `plants_hue`, radians
+    /// (`Tweaks::grass_hue`): set so the blades come out the colours `grass_dry` and
+    /// `grass_lush` give the ground past them.
+    #[serde(default)]
+    pub grass_hue: Option<f32>,
     /// The share of the first realm's trees and undergrowth that grow here, 0 to 1.
     #[serde(default)]
     pub plants: Option<f32>,
@@ -169,6 +174,9 @@ impl Realm {
         }
         if let Some(turn) = self.plants_hue {
             tweaks.foliage_hue = turn;
+        }
+        if let Some(turn) = self.grass_hue {
+            tweaks.grass_hue = turn;
         }
     }
 }

@@ -59,7 +59,8 @@ struct Parting {
     wind: vec4<f32>,
     // From a point in the world to its place on the climate's maps (climate.rs, D327).
     climate_from_world: mat4x4<f32>,
-    // The world's look: in x how far round the hue circle its plants are turned (hue.wesl).
+    // The world's look: in x how far round the hue circle its plants are turned (hue.wesl),
+    // in y how much further its grass and ground cover are.
     look: vec4<f32>,
 }
 
@@ -290,7 +291,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         }
     }
     // A realm's plants in its own colours, as its leaves are (hue.wesl), before rime and snow.
-    colour = hue_turned(colour, parting.look.x);
+    colour = hue_turned(colour, parting.look.x + parting.look.y);
     if grass.climate_on != 0u {
         let at = climate_place(world.xyz);
 @if(VERTEX_UVS_B) {

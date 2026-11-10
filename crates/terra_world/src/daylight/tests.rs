@@ -420,6 +420,7 @@ fn tweaks() -> Tweaks {
         grass_lush: Color::WHITE,
         sand: Color::WHITE,
         foliage_hue: 0.0,
+        grass_hue: 0.0,
     }
 }
 

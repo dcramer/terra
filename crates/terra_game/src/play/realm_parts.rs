@@ -27,13 +27,13 @@ use terra_world::start::Start;
 
 /// The side of a cell, which holds one part at most, in metres, and how many cells round the
 /// player's the parts stand in: 520 m, past where the haze takes a part this size. A realm's
-/// parts are at most 2,500 a square kilometre in all, one a cell: at 30 m a cell a forest of
-/// 1,500 stood 1,100.
-const CELL_M: f32 = 20.0;
-const REACH_CELLS: i32 = 26;
+/// parts are at most 10,000 a square kilometre in all, one a cell: at 20 m a cell, 2,500, the
+/// far realm's forest stood a tenth as close as the first realm's and read as a meadow.
+const CELL_M: f32 = 10.0;
+const REACH_CELLS: i32 = 52;
 /// A cell is let go this many cells past the reach, so a player pacing a cell's edge does
 /// not stand and fell the same ring.
-const SLACK_CELLS: i32 = 2;
+const SLACK_CELLS: i32 = 4;
 /// A part is stood this far past where it is first drawn from, so it is there before it
 /// fades in.
 const STOOD_PAST_M: f32 = 40.0;
@@ -360,9 +360,10 @@ mod tests {
     #[test]
     fn the_seed_scatters_the_parts_by_their_shares_and_clear_of_the_start() {
         let shares = [20.0, 25.0, 25.0, 30.0, 20.0];
+        assert_eq!(REACH_CELLS as f32 * CELL_M, 520.0);
         let held = round_the_start(7, &shares);
         // About as many as the land in reach holds at those shares: 120 a square kilometre
-        // over a disc of 510 m, 0.82 km2: some 98.
+        // over a disc of 520 m, 0.85 km2: some 100.
         assert!((60..135).contains(&held.len()), "{} parts", held.len());
         // Each kind stands, none within the start's clearing.
         for part in 0..shares.len() {

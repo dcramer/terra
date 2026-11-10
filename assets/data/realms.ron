@@ -5,6 +5,7 @@
 //   name          what a player is told it is
 //   beyond        the kind of the realm its gate leads to (D641)
 //   plants_hue    how far its plants' own colours are turned round the hue circle, radians
+//   grass_hue     how much further its grass and ground cover are turned, radians
 //   ground        its ground's layers, a stack among the materials; the first realm's if not given
 //   animals       the kinds of creature that live in it, by name; every kind if not given
 //   sun, sky      its light against the first realm's: the sun's colour and the sky's (the
@@ -42,24 +43,28 @@
         // And every leaf and blade is turned a fifth of the way round the hue circle: its
         // greens are teal, and the atlas's blue-violet bushes come out magenta and plum.
         plants_hue: Some(1.25),
+        // Its grass is turned further, to the rose and plum its ground is past the blades
+        // (the blades were teal on a magenta land): green's 100 degrees to rose's 310.
+        grass_hue: Some(2.42),
         // Its own deer and hare, the first realm's bodies in coats of this one (D642), and its
         // monster, the Drillhog (D250; here for now, D650).
         animals: Some(["Glimmerhorn", "Glimmerdoe", "Moonhare", "Drillhog"]),
         // No bird of the first realm sings here: its cap forest rings.
         birdsong: Some(0.0),
         chimes: Some(0.45),
-        // Half the first realm's undergrowth and a rare one of its trees: its cap
-        // trees are its forest.
-        plants: Some(0.5),
-        trees: Some(0.06),
+        // All the first realm's undergrowth and none of its trees: its cap trees, spires
+        // and fans are its forest (the developers, 2026-11-09: "its not lush", "mostly
+        // normal realm stuff").
+        plants: Some(1.0),
+        trees: Some(0.0),
         // Cap trees through the forest with small great fungi under them, crystal here and there, a monolith now and then,
         // and the few machines of an older making that still stand.
         parts: [
-            (grown: Some("Cap tree"), tall_m: Some((9.0, 22.0)), a_km2: 900.0, seen_m: Some(450.0)),
-            (grown: Some("Frond spire"), tall_m: Some((7.0, 15.0)), a_km2: 500.0, seen_m: Some(320.0)),
-            (grown: Some("Fan tree"), tall_m: Some((5.0, 10.0)), a_km2: 300.0, seen_m: Some(280.0)),
-            (file: "FarGiantFungus", a_km2: 70.0, seen_m: Some(190.0)),
-            (file: "FarCrystalSpire", a_km2: 50.0, seen_m: Some(230.0)),
+            (grown: Some("Cap tree"), tall_m: Some((9.0, 22.0)), a_km2: 2600.0, seen_m: Some(450.0)),
+            (grown: Some("Frond spire"), tall_m: Some((7.0, 15.0)), a_km2: 1500.0, seen_m: Some(320.0)),
+            (grown: Some("Fan tree"), tall_m: Some((5.0, 10.0)), a_km2: 1200.0, seen_m: Some(280.0)),
+            (file: "FarGiantFungus", a_km2: 300.0, seen_m: Some(190.0)),
+            (file: "FarCrystalSpire", a_km2: 120.0, seen_m: Some(230.0)),
             (file: "FarMonolith", a_km2: 12.0, seen_m: Some(280.0)),
             (file: "IndustrialPylon", a_km2: 5.0, seen_m: Some(420.0)),
             (file: "IndustrialSign", a_km2: 6.0, seen_m: Some(250.0)),

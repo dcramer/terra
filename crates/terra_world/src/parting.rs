@@ -76,7 +76,8 @@ const fn layout_len() -> usize {
 }
 
 /// The world's look, last, so a shader that reads none of it declares less: in x how far
-/// round the hue circle its plants are turned (`Tweaks::foliage_hue`).
+/// round the hue circle its plants are turned (`Tweaks::foliage_hue`), in y how much further
+/// its grass is (`Tweaks::grass_hue`).
 const LOOK: usize = CLIMATE + 4;
 
 /// Where the wind is in the buffer: which way it blows, and in w how hard as a share of the
@@ -422,7 +423,10 @@ fn write(
     data[WIND] = wind_entry(wind.as_deref());
     let from_world = maps.map_or(Mat4::IDENTITY, |maps| maps.from_world);
     data[CLIMATE..CLIMATE + 4].copy_from_slice(&from_world.to_cols_array_2d());
-    data[LOOK][0] = tweaks.map_or(0.0, |tweaks| tweaks.foliage_hue);
+    if let Some(tweaks) = tweaks {
+        data[LOOK][0] = tweaks.foliage_hue;
+        data[LOOK][1] = tweaks.grass_hue;
+    }
     if let Some(mut buffer) = buffers.get_mut(&parting.0) {
         *buffer = ShaderBuffer::new(data, default());
     }

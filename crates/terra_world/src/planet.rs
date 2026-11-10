@@ -497,6 +497,11 @@ pub struct Tweaks {
     /// rather than the picture, so whoever walks through it keeps their colours (instances j7).
     #[inspector(min = -3.2, max = 3.2)]
     pub foliage_hue: f32,
+    /// How much further its grass and ground cover are turned than its other plants, radians:
+    /// a realm whose grass is another colour than its leaves (D642: rose grass under teal
+    /// leaves), as its far ground's colours already are.
+    #[inspector(min = -3.2, max = 3.2)]
+    pub grass_hue: f32,
 }
 
 #[derive(Component)]
