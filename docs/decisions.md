@@ -635,6 +635,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D644](decisions/D644.md) | Each layer speaks across the network in words of its own, told apart by their first byte | Tech | Agent | Decided | What crosses the network above `terra_net` is each… |
 | [D651](decisions/D651.md) | The server's tick answers intent; a client predicts its own body and shows the rest in the past | Tech | Agent | Decided | A client sends its intent for each numbered tick (D138)… |
 | [D652](decisions/D652.md) | State is sent as the most recent, by area and priority within a byte budget; world changes as ordered operations kept by region | Tech | Agent | Decided | A thing on the wire is an entity made of parts… |
+| [D658](decisions/D658.md) | Sky visibility is a clipmap round the camera, filled as the world streams | Tech | Agent | Leaning | Proposed in sky-visibility.md, not built… |
 
 ## Tools and workflow
 

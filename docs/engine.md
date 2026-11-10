@@ -27,7 +27,7 @@ Worlds are reached probably by portals (D72), which is a part not yet designed: 
 | 0 | Generation toolkit | Seeds, noise, repeatable random streams keyed by place and purpose, sampling on a sphere. The same result on every machine. | Nothing |
 | 1 | Terrain core | Shape and material at every point, edits, chunks at several detail levels, meshing, ground queries, harvest yields | Part 0 |
 | 2 | Terrain on screen | Streaming chunks as the camera moves, uploading meshes, a ground material that blends voxel materials | Part 1's mesh output |
-| 3 | World rendering | Sky and atmosphere from the ground, sea, sun and lighting | A radius and a few numbers |
+| 3 | World rendering | Sky and atmosphere from the ground, sea, sun and lighting; proposed, how much sky reaches a spot ([sky-visibility.md](sky-visibility.md), D658) | A radius and a few numbers |
 | 4 | World frame | Planet-centred coordinates relative to a moving origin, gravity toward the centre | Nothing |
 | 5 | Player and camera | Walking and flying on a round world, colliding with the ground, a dig tool | A ground query |
 | 6 | App shell | Window, settings and the options menu (D80), input with remapping, frame-time readout (D77), debug menu (D81), scripted camera paths, frame-time capture, screenshots | Nothing |
