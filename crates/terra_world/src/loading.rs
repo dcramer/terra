@@ -26,11 +26,16 @@
 //! Another screen, such as a title screen, enters `Screen::Loading` to get the same screen
 //! for whatever it starts.
 //!
-//! A crossing to another world (D470) is covered by a short fade instead (D501, D72): the
-//! window goes dark ([`cross_in_the_dark`]), the world is crossed, the same screen waits on
-//! the next world with nothing on it but the dark, and fades away as at the start.
+//! A crossing to another world (D470) is covered by a short fade (D501, D72): the window
+//! goes dark ([`cross_in_the_dark`]), the world is crossed, the same screen waits on the
+//! next world, and fades away as at the start. A crossing over in under a second is the dark
+//! alone; one that takes longer shows what it waits for, the bar and the turning ring
+//! ([`SHOW_AFTER_S`]), so a wait never reads as the game having stopped (D501 as amended).
+//!
+//! The ring of dots ([`Spinner`]) turns by the real clock on every loading screen: while it
+//! turns, frames are being drawn, whatever the bar says.
 
-use crate::instance::{Cross, Entered, WorldSpec};
+use crate::instance::{Cross, WorldSpec};
 use crate::shell::Options;
 use bevy::platform::time::Instant;
 use bevy::{
@@ -58,6 +63,15 @@ const QUIET_FRAMES: u32 = 10;
 const FADE_S: f32 = 0.4;
 /// How long the window takes to go dark before a crossing (D501: the whole fade under 3 s).
 const DARKEN_S: f32 = 0.3;
+/// How long a crossing's cover is the dark alone before it shows what it waits for, as a
+/// shipped game's spinner comes up only on a wait worth one: the aim for a warmed realm is a
+/// cover under a second (docs/instances.md), which never shows it.
+const SHOW_AFTER_S: f32 = 0.75;
+/// The ring's dots, how wide it is and each dot, px, and its turns a second.
+const DOTS: usize = 10;
+const RING_PX: f32 = 40.0;
+const DOT_PX: f32 = 5.0;
+const TURNS_A_SECOND: f32 = 0.9;
 /// Something that never loads should not keep the player out for good.
 const GIVE_UP: Duration = Duration::from_secs(60);
 /// A scripted run's pictures and films must not start with anything missing, as pines
@@ -282,6 +296,18 @@ struct Bar;
 #[derive(Component)]
 struct Status;
 
+/// A dot of the turning ring, by its place round it.
+#[derive(Component)]
+struct Spinner(usize);
+
+/// A part of a crossing's screen that waits to be shown ([`SHOW_AFTER_S`]).
+#[derive(Component)]
+struct Late;
+
+/// On a crossing's screen: the seconds left before its late parts show.
+#[derive(Component)]
+struct ShowsIn(f32);
+
 /// The screen fading away, with how far it has gone, from 0 to 1.
 #[derive(Component)]
 struct Fading(f32);
@@ -357,6 +383,7 @@ pub fn plugin(app: &mut App) {
             (
                 (files, models, pictures, drawables, shaders).in_set(Track),
                 watch.run_if(in_state(Screen::Loading)),
+                (spin, show_late).run_if(in_state(Screen::Loading)),
                 fade.run_if(not(in_state(Screen::Loading))),
                 darken,
             ),
@@ -525,21 +552,22 @@ fn cover(
     mut commands: Commands,
     mut loading: ResMut<Loading>,
     mut drawables: ResMut<Drawables>,
-    old: Query<Entity, With<Cover>>,
+    old: Query<(Entity, Has<Darkening>), With<Cover>>,
     recorder: Option<Res<crate::recorder::Recorder>>,
-    entered: Option<Res<Entered>>,
 ) {
-    // A crossing's cover is the dark alone (D501); the title and bar are the start's.
-    let shown = if entered.is_some_and(|entered| entered.0 > 1) {
-        Visibility::Hidden
+    // A crossing's cover (the window went dark for it, D501) is the dark alone at first,
+    // then what it waits for; the title is the start's.
+    let crossing = old.iter().any(|(_, darkened)| darkened);
+    let (title, shown) = if crossing {
+        (Visibility::Hidden, Visibility::Hidden)
     } else {
-        Visibility::Inherited
+        (Visibility::Inherited, Visibility::Inherited)
     };
     if loading.ended_once && !loading.timed {
         begin(&mut loading, recorder.as_deref());
     }
     // Loading again while the last screen is still fading.
-    for entity in &old {
+    for (entity, _) in &old {
         commands.entity(entity).despawn();
     }
     loading.asked = loading.files.len();
@@ -549,8 +577,17 @@ fn cover(
     loading.up_for = Duration::ZERO;
     // What the render world said when last loading is no longer so.
     *drawables = Drawables::default();
-    commands
-        .spawn((
+    let mut screen = commands.spawn_empty();
+    if crossing {
+        screen.insert(ShowsIn(SHOW_AFTER_S));
+    }
+    let late = |part: &mut EntityCommands| {
+        if crossing {
+            part.insert(Late);
+        }
+    };
+    screen
+        .insert((
             Name::new("Loading screen"),
             Cover,
             Node {
@@ -581,34 +618,64 @@ fn cover(
                 },
                 TextColor(TITLE),
                 Fades(TITLE),
+                title,
+            ));
+            // The turning ring: dots round a circle, the brightest going round (`spin`).
+            let mut ring = screen.spawn((
+                Node {
+                    width: px(RING_PX),
+                    height: px(RING_PX),
+                    ..default()
+                },
                 shown,
             ));
-            screen
-                .spawn((
+            late(&mut ring);
+            ring.with_children(|ring| {
+                for dot in 0..DOTS {
+                    let angle = std::f32::consts::TAU * dot as f32 / DOTS as f32;
+                    let reach = (RING_PX - DOT_PX) / 2.0;
+                    ring.spawn((
+                        Spinner(dot),
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: px(reach + reach * libm::sinf(angle)),
+                            top: px(reach - reach * libm::cosf(angle)),
+                            width: px(DOT_PX),
+                            height: px(DOT_PX),
+                            border_radius: BorderRadius::MAX,
+                            ..default()
+                        },
+                        BackgroundColor(TITLE.with_alpha(0.0)),
+                        Fades(QUIET),
+                    ));
+                }
+            });
+            let mut track = screen.spawn((
+                Node {
+                    width: px(320),
+                    height: px(3),
+                    border_radius: BorderRadius::all(px(2)),
+                    ..default()
+                },
+                BackgroundColor(TRACK),
+                Fades(TRACK),
+                shown,
+            ));
+            late(&mut track);
+            track.with_children(|track| {
+                track.spawn((
+                    Bar,
                     Node {
-                        width: px(320),
-                        height: px(3),
+                        width: percent(0),
+                        height: percent(100),
                         border_radius: BorderRadius::all(px(2)),
                         ..default()
                     },
-                    BackgroundColor(TRACK),
-                    Fades(TRACK),
-                    shown,
-                ))
-                .with_children(|track| {
-                    track.spawn((
-                        Bar,
-                        Node {
-                            width: percent(0),
-                            height: percent(100),
-                            border_radius: BorderRadius::all(px(2)),
-                            ..default()
-                        },
-                        BackgroundColor(FILL),
-                        Fades(FILL),
-                    ));
-                });
-            screen.spawn((
+                    BackgroundColor(FILL),
+                    Fades(FILL),
+                ));
+            });
+            let mut status = screen.spawn((
                 Status,
                 Text::new("Loading"),
                 TextFont::from_font_size(14.0),
@@ -616,7 +683,41 @@ fn cover(
                 Fades(QUIET),
                 shown,
             ));
+            late(&mut status);
         });
+}
+
+/// How bright a dot of the ring is, from 0 to 1, after so many turns: the dot the turn has
+/// just reached is full, and each fades as the turn goes on from it.
+fn dot_alpha(dot: usize, turns: f32) -> f32 {
+    let behind = (turns - dot as f32 / DOTS as f32).rem_euclid(1.0);
+    0.12 + 0.88 * (1.0 - behind) * (1.0 - behind)
+}
+
+/// Turns the ring by the real clock, so it moves whenever a frame is drawn.
+fn spin(real: Res<Time<Real>>, mut dots: Query<(&Spinner, &mut BackgroundColor)>) {
+    let turns = real.elapsed_secs() * TURNS_A_SECOND;
+    for (dot, mut colour) in &mut dots {
+        colour.0 = TITLE.with_alpha(dot_alpha(dot.0, turns));
+    }
+}
+
+/// A crossing still waiting after [`SHOW_AFTER_S`] shows what it waits for.
+fn show_late(
+    mut commands: Commands,
+    real: Res<Time<Real>>,
+    mut screens: Query<(Entity, &mut ShowsIn)>,
+    mut late: Query<&mut Visibility, With<Late>>,
+) {
+    for (screen, mut shows_in) in &mut screens {
+        shows_in.0 -= real.delta_secs();
+        if shows_in.0 <= 0.0 {
+            for mut part in &mut late {
+                *part = Visibility::Inherited;
+            }
+            commands.entity(screen).remove::<ShowsIn>();
+        }
+    }
 }
 
 /// Watches what is still coming, moves the bar, and starts the game once nothing has come

@@ -77,26 +77,98 @@ fn frame(world: &mut World, coming: usize, done: usize, seconds: f32) -> (bool, 
     (started, bar)
 }
 
-/// What of the screen goes up for the world entered so many-th: the visibility of its
-/// words.
-fn covered(entered: u32) -> Vec<Visibility> {
+/// The screen `cover` puts up, at the start or over a window gone dark for a crossing.
+fn covered(crossing: bool) -> World {
     let mut world = screen();
-    world.insert_resource(Entered(entered));
+    if crossing {
+        let to = WorldSpec {
+            key: crate::instance::InstanceKey(7),
+            kind: "tundra".into(),
+            seed: 7,
+        };
+        cross_in_the_dark(&mut world.commands(), to);
+    }
+    world.flush();
     world.run_system_cached(cover).unwrap();
     world.flush();
-    let mut words = world.query_filtered::<&Visibility, (With<Text>, With<Fades>)>();
-    words.iter(&world).copied().collect()
+    world
 }
 
-/// The start shows the title and the bar; a crossing (D501) the dark alone.
+/// The visibility of the screen's title, and of its ring, bar and status.
+fn shown(world: &mut World) -> (Visibility, Vec<Visibility>) {
+    let mut title =
+        world.query_filtered::<&Visibility, (With<Text>, Without<Status>, With<Fades>)>();
+    let title = *title.single(world).unwrap();
+    let mut ring = world.query_filtered::<&ChildOf, With<Spinner>>();
+    let ring = ring.iter(world).next().unwrap().parent();
+    let mut bar = world.query_filtered::<&ChildOf, (With<Bar>, With<Fades>)>();
+    let bar = bar.single(world).unwrap().parent();
+    let mut status = world.query_filtered::<Entity, (With<Status>, With<Fades>)>();
+    let status = status.single(world).unwrap();
+    let parts = [ring, bar, status]
+        .map(|part| *world.get::<Visibility>(part).unwrap())
+        .to_vec();
+    (title, parts)
+}
+
+/// A frame of the screen's own of so many seconds.
+fn wait(world: &mut World, seconds: f32) {
+    world
+        .resource_mut::<Time<Real>>()
+        .update_with_duration(Duration::from_secs_f32(seconds));
+    world.run_system_cached(show_late).unwrap();
+    world.flush();
+}
+
+/// The start shows the title, the ring, the bar and what it waits for at once. A crossing
+/// (D501) is the dark alone while it is short, and shows all but the title once it is not.
 #[test]
-fn a_crossing_is_covered_by_the_dark_alone() {
-    let start = covered(1);
-    assert_eq!(start.len(), 2, "the title and the status");
-    assert!(start.iter().all(|shown| *shown == Visibility::Inherited));
-    let crossing = covered(2);
-    assert_eq!(crossing.len(), 2);
-    assert!(crossing.iter().all(|shown| *shown == Visibility::Hidden));
+fn a_crossing_shows_what_it_waits_for_only_once_it_is_long() {
+    let mut start = covered(false);
+    let all = vec![Visibility::Inherited; 3];
+    assert_eq!(shown(&mut start), (Visibility::Inherited, all.clone()));
+    wait(&mut start, 5.0);
+    assert_eq!(shown(&mut start), (Visibility::Inherited, all.clone()));
+
+    let mut crossing = covered(true);
+    let none = vec![Visibility::Hidden; 3];
+    assert_eq!(shown(&mut crossing), (Visibility::Hidden, none.clone()));
+    wait(&mut crossing, SHOW_AFTER_S * 0.5);
+    assert_eq!(shown(&mut crossing), (Visibility::Hidden, none), "short");
+    wait(&mut crossing, SHOW_AFTER_S * 0.6);
+    assert_eq!(shown(&mut crossing), (Visibility::Hidden, all), "long");
+}
+
+/// The ring turns: one dot is brightest, and which one goes round with the clock.
+#[test]
+fn the_ring_turns_with_the_real_clock() {
+    let brightest = |turns: f32| {
+        (0..DOTS)
+            .max_by(|a, b| dot_alpha(*a, turns).total_cmp(&dot_alpha(*b, turns)))
+            .unwrap()
+    };
+    assert_eq!(brightest(0.0), 0);
+    assert_eq!(brightest(0.31), 3);
+    assert_eq!(brightest(1.95), 9);
+    assert!((0..DOTS).all(|dot| (0.12..=1.0).contains(&dot_alpha(dot, 0.31))));
+    // Through the system: a frame later the dots' colours have changed.
+    let mut world = covered(false);
+    let alphas = |world: &mut World| -> Vec<f32> {
+        world.run_system_cached(spin).unwrap();
+        let mut dots = world.query::<(&Spinner, &BackgroundColor)>();
+        let mut dots: Vec<_> = dots
+            .iter(world)
+            .map(|(dot, c)| (dot.0, c.0.alpha()))
+            .collect();
+        dots.sort_by_key(|dot| dot.0);
+        dots.into_iter().map(|dot| dot.1).collect()
+    };
+    let before = alphas(&mut world);
+    assert_eq!(before.len(), DOTS);
+    world
+        .resource_mut::<Time<Real>>()
+        .update_with_duration(Duration::from_secs_f32(0.25));
+    assert_ne!(before, alphas(&mut world));
 }
 
 /// The window goes dark, then the world is crossed, once.

@@ -85,7 +85,7 @@ A portal is an entity in the world with `Door { to: InstanceKey, arrival }`. The
 
 1. **Approach.** In reach of a portal, the server warms the target and tells the client its spec; the client starts loading the target's asset set (D72's proposal: load the world beyond as you approach).
 2. **Cross.** The player steps through; the server moves the character from the old instance to the new one (a save of the character out of one `World` and a load into the other, as Minecraft does) and sends `Cross { to, spec, arrival, epoch }`.
-3. **Cover.** The client fades out, a short fade under 3 s whatever the entrance (D501, D72), and holds the game clock, as the loading screen does (D135).
+3. **Cover.** The client fades out, a short fade under 3 s whatever the entrance (D501, D72), and holds the game clock, as the loading screen does (D135); a cover that lasts past 0.75 s shows a turning ring, the bar and what it waits for, so a wait never looks like a freeze.
 4. **Leave.** `Travel::Leaving`: the instance's record is kept (frozen, below); scoped roots are despawned; world resources and world components removed; then the old asset set is dropped, after the new one's handles are taken, so an asset both use stays loaded.
 5. **Enter.** `WorldSpec` inserted, `Travel::Entering`: modules build their resources and spawn their content; the record, if there is one, is read back; `Progress` (D135) tracks ground meshing, files, shaders and what is drawable.
 6. **Play.** When ready, the body is placed at the arrival, the cover lifts and `Travel::Playing` begins.
