@@ -937,6 +937,17 @@ fn near_fade(frag_coord: vec4<f32>, world: vec3<f32>) {
     }
 }
 
+// Where a fragment is from the eye, in the world's directions, from its place on the screen
+// and its depth: fine to a fraction of a millimetre near the eye, where its world position,
+// 30 km from the world's middle, is held to a millimetre, too coarse to take a relief's
+// slope from across a pixel (`cap_relief`).
+fn from_eye(frag_coord: vec4<f32>) -> vec3<f32> {
+    let share = (frag_coord.xy - view.viewport.xy) / view.viewport.zw;
+    let clip = vec4<f32>(share.x * 2.0 - 1.0, 1.0 - share.y * 2.0, frag_coord.z, 1.0);
+    let seen = view.view_from_clip * clip;
+    return (view.world_from_view * vec4<f32>(seen.xyz / seen.w, 0.0)).xyz;
+}
+
 // As foliage.wesl's: the camera's eye and the figure it follows (D271).
 struct Parting {
     eye: vec4<f32>,
@@ -1264,7 +1275,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         pbr_input.material.perceptual_roughness = made.rough;
         pbr_input.material.emissive = vec4<f32>(hue_turned(made.glow, parting.look.x), 1.0);
         pbr_input.world_normal = faces;
-        pbr_input.N = cap_relief(faces, in.world_position.xyz, made.height);
+        pbr_input.N = cap_relief(faces, from_eye(in.position), made.height);
         pbr_input.diffuse_occlusion = vec3<f32>(made.open);
     }
 }

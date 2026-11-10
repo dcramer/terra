@@ -57,21 +57,27 @@ fn skin_noise(p: vec2<f32>) -> f32 {
 }
 
 // Warts: how far inside the nearest one of a scatter a point is, 0 outside to 1 at its
-// middle, and that wart's own number. One point a cell, the nine cells round searched
-// (Worley's cellular noise, as The Book of Shaders' chapter 12 builds it).
-fn warts(p: vec2<f32>) -> vec2<f32> {
-    let cell = floor(p);
-    var best = vec2<f32>(0.0);
-    for (var y = -1; y <= 1; y++) {
-        for (var x = -1; x <= 1; x++) {
-            let other = cell + vec2<f32>(f32(x), f32(y));
-            let own = skin_hash(other + 17.0);
-            let at = other + 0.5 + 0.7 * (vec2<f32>(skin_hash(other), skin_hash(other + 71.3)) - 0.5);
-            // Each its own size, a third of a cell across at most.
-            let across = 0.1 + 0.24 * own;
-            let inside = 1.0 - length(p - at) / across;
-            if inside > best.x {
-                best = vec2<f32>(inside, own);
+// middle (below 0 round it, out to its foot), and that wart's own number. One point a cell
+// (Worley's cellular noise, as The Book of Shaders' chapter 12 builds it), in space, not on
+// a plane, so a bell's steep side wears them round as its crown does; the eight cells
+// nearest searched, which hold every wart that can reach, none being wider than 0.34 of a
+// cell nor further than 0.35 from its cell's middle.
+fn warts(p: vec3<f32>) -> vec2<f32> {
+    let cell = floor(p - 0.5);
+    var best = vec2<f32>(-1.0, 0.0);
+    for (var z = 0; z <= 1; z++) {
+        for (var y = 0; y <= 1; y++) {
+            for (var x = 0; x <= 1; x++) {
+                let other = cell + vec3<f32>(f32(x), f32(y), f32(z));
+                let flat = other.xy + other.z * vec2<f32>(37.0, 59.0);
+                let own = skin_hash(flat + 17.0);
+                let jitter = vec3<f32>(skin_hash(flat), skin_hash(flat + 71.3), skin_hash(flat + 113.7));
+                let at = other + 0.5 + 0.7 * (jitter - 0.5);
+                let across = 0.1 + 0.24 * own;
+                let inside = 1.0 - length(p - at) / across;
+                if inside > best.x {
+                    best = vec2<f32>(inside, own);
+                }
             }
         }
     }
@@ -134,14 +140,31 @@ fn cap_skin(tint: vec3<f32>, uv: vec2<f32>, stood: vec3<f32>, gills: vec4<f32>, 
     let top = smoothstep(0.975, 0.995, along);
     let out = 1.0 - abs(along - 1.0);
 
-    // Its top: darker and lighter in broad patches, with pale warts, fewer toward its rim.
-    let wart = smoothstep(0.8, 0.86, skin_noise(stood.xz * 2.6));
-    let above = mix(tint * (0.3 + 0.3 * broad), mix(tint, vec3<f32>(1.0), 0.45) * 0.7, wart);
+    // Its top. Darker at its middle; paler toward its rim, where it dries first; faint
+    // rings; streaked along its radius, and lined at its rim over the gills.
+    let ringed = 0.5 + 0.5 * cos(out * 34.0 + 5.0 * skin_round(vec2<f32>(round * 9.0, out * 2.0), 9.0));
+    let streak = mix(skin_round(vec2<f32>(round * 260.0, out * 7.0), 260.0), 0.5, clamp(pixel * 390.0, 0.0, 1.0));
+    let lined = blades(round, GILLS * 2.0, pixel) * smoothstep(0.8, 0.98, out);
+    var shade = mix(0.3, 0.52, smoothstep(0.05, 0.6, out)) * (0.72 + 0.56 * broad) * (0.9 + 0.2 * middling);
+    shade *= 1.0 + 0.1 * (ringed - 0.5) + 0.3 * (streak - 0.5) * (0.4 + 0.6 * out) - 0.22 * lined;
+    let bloom = smoothstep(0.7, 1.0, out) * (0.3 + 0.4 * middling);
+    var above = mix(tint * shade, pale * 0.5, bloom * 0.45);
+    // Its warts: thick at its middle, few at its rim, shed in patches, each a raised pale
+    // scrap with shade at its foot; gone where one is finer than a pixel.
+    let wart = warts(stood * 2.3);
+    let kept = step(wart.y, mix(1.0, 0.3, out) * smoothstep(0.25, 0.55, broad + 0.25 * middling));
+    let raised = smoothstep(0.0, 0.35, wart.x) * kept * (1.0 - smoothstep(0.25, 0.6, metre * 2.3));
+    let foot = smoothstep(-0.5, 0.0, wart.x) * kept * (1.0 - raised);
+    above = mix(above * (1.0 - 0.3 * foot), pale * (0.42 + 0.2 * wart.y + 0.12 * middling), raised);
+    // Wet, as a fresh cap is, where it is not wart.
+    let above_rough = mix(mix(0.22, 0.5, broad), 0.9, raised);
+    let above_height = raised * 0.04 + streak * 0.006 + middling * 0.03;
+
     // Its gills, from the stalk to the rim, each a ridge with shade between.
     let gill = mix(0.5 + 0.5 * cos(round * 140.0 * TURN), 0.5, clamp(pixel * 210.0, 0.0, 1.0));
     skin.colour = mix(gills.rgb * (0.25 + 0.75 * gill), above, top);
-    skin.rough = mix(0.9, 0.5, top);
-    skin.height = 0.0;
+    skin.rough = mix(0.9, above_rough, top);
+    skin.height = above_height * top;
     skin.glow = gills.rgb * gills.a * (0.2 + 0.8 * gill) * (1.0 - top);
     return skin;
 }
