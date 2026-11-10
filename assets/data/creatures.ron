@@ -90,6 +90,8 @@
         stride: (0.3, 0.05),
         feet: Skitter,
         voice: Hiss,
+        // A recorded hiss, a house cat's played lower: a stand-in, there being no spider's.
+        cry: Some("voice.spider.hiss"),
         blood: Ichor,
         lies_s: 8.0,
         zones: [
@@ -210,7 +212,8 @@
         stride: (2.0, 0.0),
         feet: Skitter,
         voice: Chirp,
-        // Its song at rest is a cock chaffinch's, recorded; its alarm is still made in code.
+        // Its song at rest is a cock chaffinch's and its alarm one's by its nest, both recorded.
+        cry: Some("voice.chaffinch.alarm"),
         call: Some("voice.chaffinch.song"),
         blood: Red,
         lies_s: 60.0,

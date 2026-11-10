@@ -614,6 +614,30 @@ pub(super) const CLIPS: &[Clips] = &[
         (0.97, 1.03),
         6.0,
     ),
+    // A chaffinch's alarm by its nest: single rising notes ("huit"), not its "pink".
+    clips(
+        "voice.chaffinch.alarm",
+        &[
+            "chaffinch_alarm_000",
+            "chaffinch_alarm_001",
+            "chaffinch_alarm_002",
+            "chaffinch_alarm_003",
+            "chaffinch_alarm_004",
+        ],
+        Bus::Effects,
+        0.3,
+        (0.97, 1.03),
+        4.0,
+    ),
+    // The spider's hiss is a house cat's, played slower and so lower: no spider's exists.
+    clips(
+        "voice.spider.hiss",
+        &["cat_hiss_000"],
+        Bus::Effects,
+        0.4,
+        (0.7, 0.88),
+        5.0,
+    ),
     // A bird's wings as it takes off.
     clips(
         "wings",
