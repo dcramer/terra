@@ -148,7 +148,11 @@ export async function start(sandboxArgs: string[], { windows, realTime, foregrou
   const logPath = resolve(ROOT, "shots/remote.log");
   for (let attempt = 0; attempt < 30; attempt++) {
     const log = openSync(logPath, "w");
-    const child = spawn(command[0] as string, command[1] as string[], { cwd: ROOT, detached: true, stdio: ["ignore", log, log] });
+    // A game copy another holds the machine's one slot against waits for it, up to four
+    // minutes (under the GPU wrapper's five of no progress), and is refused only then (D319,
+    // `terra_world::single_instance::WAIT_ENV`).
+    const env = { ...process.env, TERRA_INSTANCE_WAIT_S: process.env.TERRA_INSTANCE_WAIT_S ?? "240" };
+    const child = spawn(command[0] as string, command[1] as string[], { cwd: ROOT, detached: true, stdio: ["ignore", log, log], env });
     let ended = false;
     child.on("exit", () => (ended = true));
     child.unref();

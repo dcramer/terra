@@ -185,3 +185,37 @@ fn a_record_reads_back_as_written() {
     assert_eq!(Record::parse(&record.text()), Some(record));
     assert_eq!(Record::parse("pid=1\n"), None);
 }
+
+/// A start told to wait takes the slot once its holder ends, and gives up when the wait is
+/// over with the holder still there; only a positive number of seconds asks for a wait.
+#[test]
+fn a_start_told_to_wait_takes_the_slot_when_its_holder_ends() {
+    assert_eq!(asked_wait(Some("240")), Some(Duration::from_secs(240)));
+    assert_eq!(asked_wait(Some("0")), None);
+    assert_eq!(asked_wait(Some("soon")), None);
+    assert_eq!(asked_wait(None), None);
+
+    let dir = folder("waits");
+    let first = take_in(&dir, false, &copy(1, "linux", "first"), QUICK)
+        .unwrap()
+        .expect("the first copy takes the slot");
+    let me = copy(2, "linux", "second");
+    let take = || take_in(&dir, false, &me, QUICK).ok()?.ok();
+    assert!(take().is_none(), "refused while the first runs");
+    // The wait over with the holder still there: nothing.
+    assert!(waited(Duration::from_millis(300), take).is_none());
+    // The holder ends a moment into the wait: the slot is taken, long before the wait ends.
+    let ender = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(300));
+        first.release();
+    });
+    let began = Instant::now();
+    let held = waited(Duration::from_secs(60), take);
+    ender.join().unwrap();
+    assert!(held.is_some(), "the waiting start takes the slot");
+    assert!(
+        began.elapsed() < Duration::from_secs(10),
+        "{:?}",
+        began.elapsed()
+    );
+}

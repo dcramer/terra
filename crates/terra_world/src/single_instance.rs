@@ -263,6 +263,10 @@ pub fn take(multirun: bool) {
                 return;
             }
             Ok(Err(refusal)) => {
+                if let Some(held) = wait_for(&folder, multirun, &me, &refusal) {
+                    *HELD.lock().unwrap_or_else(PoisonError::into_inner) = Some(held);
+                    return;
+                }
                 eprintln!("{refusal}");
                 std::process::exit(REFUSED);
             }
@@ -274,6 +278,52 @@ pub fn take(multirun: bool) {
          copy: {}; set TERRA_INSTANCE_DIR to a folder this run can write",
         tried.join("; ")
     );
+}
+
+/// How long a refused start waits for the slot, s, when the run says so: a script's game copy
+/// (`tools/sandbox/client.ts` sets it), which with several agents on one machine was refused
+/// start after start, each a build and a wait for a quiet machine thrown away (portal-freeze
+/// j2 and j3: fourteen refusals, no measurement). A person's start is refused at once.
+pub const WAIT_ENV: &str = "TERRA_INSTANCE_WAIT_S";
+/// How often a waiting start looks at the slot again.
+const WAIT_LOOK: Duration = Duration::from_millis(250);
+
+/// The seconds [`WAIT_ENV`] asks for, if it asks.
+fn asked_wait(value: Option<&str>) -> Option<Duration> {
+    let seconds: f64 = value?.trim().parse().ok()?;
+    (seconds > 0.0 && seconds.is_finite()).then(|| Duration::from_secs_f64(seconds))
+}
+
+/// A refused start that was told to wait looks again until the slot is free or the wait is
+/// over: already started, it takes the slot within [`WAIT_LOOK`] of the holder's end.
+fn wait_for(folder: &Path, multirun: bool, me: &Record, refusal: &Refusal) -> Option<Held> {
+    let wait = asked_wait(std::env::var(WAIT_ENV).ok().as_deref())?;
+    let who = refusal
+        .holders
+        .iter()
+        .map(|holder| match holder {
+            Some(holder) => format!("pid {}", holder.pid),
+            None => "a copy whose record cannot be read".into(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    println!(
+        "SANDBOX waiting up to {} s for the game's slot (one copy a machine, D319), held by {who}",
+        wait.as_secs()
+    );
+    waited(wait, || take_in(folder, multirun, me, TIMING).ok()?.ok())
+}
+
+/// Tries `take` every [`WAIT_LOOK`] for up to `wait`.
+fn waited<T>(wait: Duration, mut take: impl FnMut() -> Option<T>) -> Option<T> {
+    let began = std::time::Instant::now();
+    while began.elapsed() < wait {
+        std::thread::sleep(WAIT_LOOK.min(wait));
+        if let Some(taken) = take() {
+            return Some(taken);
+        }
+    }
+    None
 }
 
 /// Where the slots are tried, in order: `TERRA_INSTANCE_DIR`; else the Windows folder, from WSL
