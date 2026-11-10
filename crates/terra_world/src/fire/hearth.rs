@@ -128,14 +128,19 @@ impl Blazes {
     }
 }
 
-/// The fires kept where something kindled stands, each with a number of its own from its
-/// place, so no two flicker alike, the logs each burns on and how its body is drawn. The
+/// The fires kept where something kindled stands, each with a number of its own from the
+/// place it was kindled at, so no two flicker alike, kept while it burns (`numbers`): taken
+/// from its place every frame, a torch carried in hand had a new number each frame its hand
+/// moved, so its light, its sway and its flames were noise, not a flicker (at midnight its
+/// lumens stepped up to 38% in a frame and its key jumped 16 mm a frame, 42 at most, stood
+/// still: torch-light j2). With them the logs each burns on and how its body is drawn. The
 /// nearest `HEARTHS` to the eye come first and are drawn as hearths; each keeps its slot while it stays among them, so
 /// a slot's fire does not change as the eye moves (a dungeon has more torches than slots).
 pub(super) fn keep(
     kindled: Query<(Entity, &Kindled, &GlobalTransform, Option<&Hung>)>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut slots: Local<Vec<Entity>>,
+    mut numbers: Local<bevy::platform::collections::HashMap<Entity, f32>>,
     mut blazes: ResMut<Blazes>,
 ) {
     if kindled.is_empty() && blazes.kept.is_empty() {
@@ -172,15 +177,24 @@ pub(super) fn keep(
         .iter()
         .map(|f| f.3.map_or(Vec3::ZERO, |h| h.0))
         .collect();
+    numbers.retain(|&entity, _| kindled.contains(entity));
     let kept: Vec<Blaze> = fires
         .iter()
-        .map(|(_, fire, at, _)| {
+        .map(|(entity, fire, at, _)| {
             let at = at.translation();
+            // One spawned this frame is not placed yet (its `GlobalTransform` is the next
+            // frame's): its number waits for its place, or every fire's would be the same.
+            let placed = (at.x * 0.731 + at.z * 0.377).rem_euclid(1.0);
+            let seed = if at == Vec3::ZERO {
+                placed
+            } else {
+                *numbers.entry(*entity).or_insert(placed)
+            };
             Blaze {
                 at,
                 tall: fire.tall,
                 heat: fire.heat,
-                seed: (at.x * 0.731 + at.z * 0.377).rem_euclid(1.0),
+                seed,
                 wide: fire.wide,
                 out: Vec3::ZERO,
             }
@@ -314,5 +328,55 @@ mod tests {
         assert_eq!(a.at, near, "the nearer first");
         assert!(blazes.hangs(0, &a, 0.4).distance(near + hung + up(near)) < 1.0e-5);
         assert!(blazes.hangs(1, &b, 0.4).distance(far + up(far)) < 1.0e-5);
+    }
+
+    #[test]
+    fn a_carried_fire_flickers_on_as_it_moves_and_two_fires_never_alike() {
+        let mut app = App::new();
+        app.init_resource::<Blazes>().add_systems(Update, keep);
+        let fire = Kindled {
+            tall: 0.3,
+            wide: 0.1,
+            heat: 0.6,
+            logs: Logs::NONE,
+            body: Body::Marched,
+            light: Color::WHITE,
+            rig: Rig::Held,
+        };
+        app.world_mut()
+            .spawn((MainCamera, GlobalTransform::default()));
+        let from = Vec3::new(3.0, 1.5, -2.0);
+        let carried = app
+            .world_mut()
+            .spawn((fire, GlobalTransform::from_translation(from)))
+            .id();
+        app.world_mut().spawn((
+            fire,
+            GlobalTransform::from_translation(Vec3::new(3.4, 1.5, -6.0)),
+        ));
+        app.update();
+        let seeds = |app: &App| {
+            let kept = &app.world().resource::<Blazes>().kept;
+            (kept[0].seed, kept[1].seed)
+        };
+        let before = seeds(&app);
+        assert_ne!(before.0, before.1, "two fires flicker apart");
+        // A hand's sway in a frame, then a walk across the yard: the same fire, the same
+        // flicker, from frame to frame its light a step of its tones and no more.
+        let flicker = super::super::light::Flicker::of(0.1);
+        let mut was = super::super::light::signal(before.0, 0.0, flicker);
+        for frame in 1..240 {
+            let at = from + Vec3::new(0.013, 0.004, 0.021) * frame as f32;
+            *app.world_mut().get_mut::<GlobalTransform>(carried).unwrap() =
+                GlobalTransform::from_translation(at);
+            app.update();
+            assert_eq!(seeds(&app), before, "frame {frame}");
+            let now = super::super::light::signal(seeds(&app).0, frame as f32 / 60.0, flicker);
+            assert!(
+                (now - was).abs() < 0.16,
+                "frame {frame}: {was} to {now} in a sixtieth of a second"
+            );
+            was = now;
+        }
     }
 }
