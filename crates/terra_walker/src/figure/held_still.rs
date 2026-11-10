@@ -154,7 +154,7 @@ fn frame_s(uneven: bool, frame: u32) -> f64 {
     if !uneven {
         return 1.0 / 60.0;
     }
-    let long = if hash::of(&[7, frame]) % 20 == 0 {
+    let long = if hash::of(&[7, frame]).is_multiple_of(20) {
         2.0
     } else {
         1.0
@@ -165,7 +165,11 @@ fn frame_s(uneven: bool, frame: u32) -> f64 {
 /// Shakes the right upper arm a tenth of a degree either way on alternate frames.
 fn shake(mut frame: Local<u32>, names: Query<&Name>, mut bones: Query<(Entity, &mut Transform)>) {
     *frame += 1;
-    let by = if *frame % 2 == 0 { 0.1_f32 } else { -0.1 };
+    let by = if frame.is_multiple_of(2) {
+        0.1_f32
+    } else {
+        -0.1
+    };
     for (bone, mut t) in &mut bones {
         if names.get(bone).is_ok_and(|n| n.as_str() == "upperarm_r") {
             t.rotation *= Quat::from_rotation_x(by.to_radians());
