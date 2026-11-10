@@ -99,7 +99,7 @@ test("an assembled look is made by the item writer from its recipe, keyed on its
   assert.match(recipeFault({ assembled: "axe", parts: [] })!, /"parts" \(part ids\) and "material"/);
   assert.deepEqual(recipeArgs({ assembled: "axe", parts: ["h", "s"], material: "iron" }, "o.glb").slice(4), ["--bin", "item", "--", "axe", "h", "s", "--material", "iron", "--out", "o.glb"]);
   const reads = rel(makeInputs({ name: "iron_axe", worn: false, file, data }));
-  for (const f of ["art/held/iron_axe.json", "crates/terra_items/src/assembly/meet.rs", "crates/terra_bake/src/item.rs", "assets/data/kinds/axe.json", "assets/data/parts/ash_haft.json", "assets/models/parts/bearded_axe_head.glb"]) assert.ok(reads.includes(f), f);
+  for (const f of ["art/held/iron_axe.json", "crates/terra_items/src/assembly/meet.rs", "crates/terra_bake/src/item.rs", "assets/data/kinds/hatchet.json", "assets/data/parts/short_ash_haft.json", "assets/models/parts/hatchet_head.glb"]) assert.ok(reads.includes(f), f);
   assert.ok(!reads.includes("tools/characters/fit_held.py"), "no Blender in an assembly");
 });
 

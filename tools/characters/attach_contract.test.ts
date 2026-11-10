@@ -188,7 +188,7 @@ test("a look is made from its data as it stands, and its data's source is there"
   assert.deepEqual(stale("held/basket", { out: 0.1 }).filter((r) => r === "stale"), ["stale"]);
   // An assembled look (D565) is stale when its data names another recipe, and not as it stands.
   assert.deepEqual(stale("held/iron_axe", {}), []);
-  assert.deepEqual(stale("held/iron_axe", { parts: ["hatchet_head", "ash_haft", "iron_collar"] }), ["stale"], "another head, not made again");
+  assert.deepEqual(stale("held/iron_axe", { parts: ["hatchet_head", "short_hickory_haft", "iron_collar"] }), ["stale"], "another haft, not made again");
   assert.deepEqual(stale("held/iron_axe", { material: "stone" }), ["stale"]);
   assert.deepEqual(stale("gear/quiver", { size: 0.4 }), ["stale"]);
   assert.deepEqual(stale("gear/quiver", { hangs_at: 0.6 }), ["stale"]);
