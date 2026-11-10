@@ -254,18 +254,6 @@ impl SkySeen<'_> {
             _ => 1.0,
         }
     }
-
-    /// How much of the sky is open round a point, over it and to every side, as a rough shiny
-    /// surface standing there mirrors it (`skylight`): from 0 deep in a stand to 1 in the open.
-    pub fn around_at(&self, point: Vec3) -> f32 {
-        match (&self.occluders, &self.baked) {
-            (Some(o), Some(baked)) => blend_at(o, &baked.seen, point, |seen, i| {
-                let s = seen.sides[i];
-                (s[0] + s[1] + s[2] + s[4] + s[5]) / 5.0
-            }),
-            _ => 1.0,
-        }
-    }
 }
 
 /// Follows how open the sky is over the camera, between the cells round it.

@@ -20,58 +20,7 @@ import bevy_pbr::render::{
 import super::hue::hue_turned;
 import super::cap_skin::{cap_skin, is_cap_skin};
 import super::sight::sight_keep;
-@if(IRRADIANCE_VOLUME) import bevy_pbr::light_probe::irradiance_volume::{irradiance_volume_light, irradiance_volume_light_held};
-@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) import bevy_pbr::render::mesh_view_bindings::{light_probes, environment_map_sampler};
-@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) import bevy_pbr::render::mesh_view_bindings::diffuse_environment_maps;
-@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP && !MULTIPLE_LIGHT_PROBES_IN_ARRAY) import bevy_pbr::render::mesh_view_bindings::diffuse_environment_map;
-@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) import bevy_render::maths::quat_rotate;
-
-// How much of the open sky's light reaches a point from the side `N` faces, 0 to 1: the sky
-// occlusion volume's light there (D270) against the open sky's, as the environment map gives
-// it. Under the crowns it is a fraction; in the open, all of it.
-@if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP)
-fn sky_seen(world: vec3<f32>, N: vec3<f32>, frag_coord: vec4<f32>) -> f32 {
-    let view_z = dot(vec4<f32>(
-        view.view_from_world[0].z,
-        view.view_from_world[1].z,
-        view.view_from_world[2].z,
-        view.view_from_world[3].z
-    ), vec4<f32>(world, 1.0));
-    let orthographic = view.clip_from_view[3].w == 1.0;
-    var ranges = unpack_clusterable_object_index_ranges(
-        view_fragment_cluster_index(frag_coord.xy, view_z, orthographic),
-    );
-    let held = irradiance_volume_light_held(world, N, &ranges);
-    // Outside every volume (a den's, seen from the open land) nothing hides the sky.
-    if held.w <= 0.0 {
-        return 1.0;
-    }
-    let seen = held.rgb;
-    var d = quat_rotate(light_probes.view_rotation, N);
-    d.z = -d.z;
-    var open = vec3<f32>(0.0);
-@if(MULTIPLE_LIGHT_PROBES_IN_ARRAY) {
-    if light_probes.view_cubemap_index >= 0 {
-        open = textureSampleLevel(diffuse_environment_maps[light_probes.view_cubemap_index], environment_map_sampler, d, 0.0).rgb;
-    }
-} @else {
-    open = textureSampleLevel(diffuse_environment_map, environment_map_sampler, d, 0.0).rgb;
-}
-    let luma = vec3<f32>(0.2126, 0.7152, 0.0722);
-    let open_light = dot(open, luma) * light_probes.intensity_for_view;
-    if open_light <= 1.0e-6 {
-        return 1.0;
-    }
-    return clamp(dot(seen, luma) / open_light, 0.0, 1.0);
-}
-
-// Bark and leaves reflect the sky only where they see the sky (D289, D292): the environment
-// map's specular light is the open sky's, which no crown hides, so limbs up among the leaves,
-// seen from below, and glossy leaves deep in the undergrowth shone slate-blue with a sky they
-// cannot see. Specular occlusion from how much of the
-// sky the point sees, as Frostbite's from ambient occlusion (Lagarde and de Rousiers, "Moving
-// Frostbite to Physically Based Rendering", 2014, section 4.10.2), the visibility here the
-// sky occlusion volume's, as Unreal's sky light occlusion dims its sky's reflections as well.
+@if(IRRADIANCE_VOLUME) import bevy_pbr::light_probe::irradiance_volume::irradiance_volume_light;
 
 // What colour a leaf passes light on in, lit through: yellower than it reflects, as
 // chlorophyll passes green and yellow and keeps the red and blue (D247).
