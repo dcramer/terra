@@ -38,8 +38,14 @@ const FIRE: Kindled = Kindled {
 /// this, 2 m ahead 1.11) and threw the holder's own shadow on the ground 1.5 m round them
 /// 0.68 m wide where this throws 0.10, and darker (0.05 of the ground beside it for 0.13).
 const KEY_M: Option<[f32; 3]> = None;
-/// Its fill on its holder (`fire::Carried::fill`): none.
-const FILL: Option<Fill> = None;
+/// Its fill on its holder (`fire::Carried::fill`): behind their back at the shoulders'
+/// height, between them and a camera that follows them, so their back reads against the
+/// ground the torch lights: in the open 0.53 of the ground 2 m ahead where bare it is 0.07
+/// (torch-light j7, tools/sandbox/torchlight.ts).
+const FILL: Option<Fill> = Some(Fill {
+    at: [0.0, 1.4, -1.0],
+    share: 0.15,
+});
 
 /// The light of the torch in `grip`'s hand on its holder's body: on the right for the main
 /// hand, the left for the off hand.
@@ -172,6 +178,10 @@ mod tests {
         assert_eq!((main.key, main.fill), (off.key, off.fill));
         if let Some([side, up, ahead]) = main.key {
             assert!(side >= 0.0 && up > 1.8 && up < 2.5 && ahead >= 0.0);
+        }
+        // A fill hangs behind the holder, within the body's height, and is the lesser light.
+        if let Some(Fill { at, share }) = main.fill {
+            assert!(at[2] < 0.0 && at[1] > 0.5 && at[1] < 1.8 && share > 0.0 && share < 0.3);
         }
     }
 }
