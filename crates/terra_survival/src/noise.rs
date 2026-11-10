@@ -76,6 +76,9 @@ pub enum Cue {
     Croak,
     Bark,
     Wings,
+    /// A kind's own recorded voice, by the name of its set of clips (`data/creatures.ron`'s
+    /// `cry` and `call`): what is heard in place of the sounds above for a kind that has one.
+    Voiced(&'static str),
     /// A big creature heard at a moment of what it does.
     Cry(Cry),
     /// A settlement's bell.

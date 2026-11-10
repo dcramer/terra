@@ -504,6 +504,56 @@ pub(super) const CLIPS: &[Clips] = &[
         (0.95, 1.05),
         1.0,
     ),
+    // Kinds' own recorded voices, named by `cry` and `call` in data/creatures.ron.
+    clips(
+        "voice.crow",
+        &[
+            "crow_caw_000",
+            "crow_caw_002",
+            "crow_caw_003",
+            "crow_caw_004",
+            "crow_caw_005",
+        ],
+        Bus::Effects,
+        0.4,
+        (0.94, 1.06),
+        10.0,
+    ),
+    clips(
+        "voice.sparrow",
+        &[
+            "sparrow_chirp_000",
+            "sparrow_chirp_001",
+            "sparrow_chirp_002",
+            "sparrow_chirp_003",
+            "sparrow_chirp_004",
+        ],
+        Bus::Effects,
+        0.4,
+        (0.95, 1.06),
+        4.0,
+    ),
+    clips(
+        "voice.chaffinch.song",
+        &[
+            "chaffinch_song_000",
+            "chaffinch_song_003",
+            "chaffinch_song_004",
+        ],
+        Bus::Effects,
+        0.4,
+        (0.97, 1.03),
+        6.0,
+    ),
+    // A bird's wings as it takes off.
+    clips(
+        "wings",
+        &["wings_000", "wings_001", "wings_002", "wings_003"],
+        Bus::Effects,
+        0.8,
+        (0.92, 1.1),
+        4.0,
+    ),
 ];
 
 const fn clips(

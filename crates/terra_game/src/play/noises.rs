@@ -16,6 +16,7 @@ use super::noise::{Cry, Cue, Feet, Noise};
 use super::options::OptionsMenu;
 use super::people::Person;
 use super::props::Prop;
+use super::sounds::voiced;
 use super::species::{Bestiary, Voice};
 use super::tool::Builder;
 use super::{Downed, IsLocalPlayer, Motion, Player, Stance, View};
@@ -219,12 +220,16 @@ fn creatures_heard(
             Voice::Growl => Some(Cue::Cry(Cry::Growl)),
             Voice::Silent => None,
         };
+        // Its own recorded voice where its kind names one, else the one made in code.
+        let recorded = |set: &Option<String>| set.as_deref().and_then(voiced).map(Cue::Voiced);
+        let cry = recorded(&about.cry).or(voice);
+        let call = recorded(&about.call).or(cry);
         // A call as it takes fright, and wings beating as it takes off.
         // One that warns is heard in its warning, not here.
         let fled = (alarmed && !was.alarmed && about.warns.is_none()) || (flying && !was.flying);
         if fled
             && creature.alive()
-            && let Some(cue) = voice
+            && let Some(cue) = cry
         {
             noise.write(Noise::at(cue, here));
         }
@@ -239,7 +244,7 @@ fn creatures_heard(
             was.calls_in -= time.delta_secs();
             if was.calls_in <= 0.0 {
                 was.calls_in = dice.range(least, most);
-                if let Some(cue) = voice {
+                if let Some(cue) = call {
                     noise.write(Noise::at(cue, here));
                 }
             }

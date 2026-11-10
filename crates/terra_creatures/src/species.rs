@@ -66,6 +66,13 @@ pub struct SpeciesDef {
     pub stride: (f32, f32),
     pub feet: Feet,
     pub voice: Voice,
+    /// Its own recorded voice as it takes fright or wing, by the name of a set of clips
+    /// (the game's `sounds/clips.rs`); with none it is heard as `voice`, made in code.
+    #[serde(default)]
+    pub cry: Option<String>,
+    /// Its recorded call at rest (`calls_s`), where that is not its cry: a pigeon's coo.
+    #[serde(default)]
+    pub call: Option<String>,
     /// What it is heard to do at moments of its clips, as an engine's animation notifies
     /// play a sound on a frame (Unreal's `AnimNotify_PlaySound`): a blow's grunt, the air
     /// it parts and the ground it meets, its roar in its warning, its fall.

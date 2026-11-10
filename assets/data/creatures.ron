@@ -46,7 +46,10 @@
 //            seconds
 //   stride   how far a step carries, as so far and so much more for each metre a second
 //   feet     what its steps sound like
-//   voice    what it sounds like when it is alarmed
+//   voice    what it sounds like when it is alarmed, made in code
+//   cry      its own recorded voice in place of that, by its set of clips' name
+//            (terra_game play/sounds/clips.rs); call, its recorded call at rest where
+//            that is not its cry
 //   blood    what sprays from it when it is struck
 //   carcass  what butchering it takes and gives, if it can be butchered
 //   lies_s   how long its body lies after it falls
@@ -202,6 +205,8 @@
         stride: (2.0, 0.0),
         feet: Skitter,
         voice: Chirp,
+        // Its song at rest is a cock chaffinch's, recorded; its alarm is still made in code.
+        call: Some("voice.chaffinch.song"),
         blood: Red,
         lies_s: 60.0,
         zones: [
@@ -227,6 +232,7 @@
         stride: (2.0, 0.0),
         feet: Skitter,
         voice: Chirp,
+        cry: Some("voice.sparrow"),
         blood: Red,
         lies_s: 60.0,
         zones: [
@@ -306,9 +312,12 @@
         lives: About(per_ha: 6.0, group: (2, 5)),
         niche: (warmth_c: (5.0, 30.0), haunts: [Woods, Open]),
         seen_m: 140.0,
+        // It caws now and then from where it sits, and as it takes wing.
+        calls_s: Some((20.0, 70.0)),
         stride: (0.1, 0.0),
         feet: Skitter,
         voice: Silent,
+        cry: Some("voice.crow"),
         blood: Red,
         lies_s: 60.0,
         zones: [

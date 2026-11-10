@@ -151,7 +151,8 @@ fn sounds_like(cue: Cue, stations: &Stations, contacts: &Contacts) -> Like {
         Cue::Quack => Made("quack", Sound::Quack, 0.34, 6.0),
         Cue::Croak => Made("croak", Sound::Croak, 0.5, 8.0),
         Cue::Bark => Made("bark", Sound::Bark, 0.4, 8.0),
-        Cue::Wings => Made("wings", Sound::Wings, 0.42, 4.0),
+        Cue::Wings => Clips("wings"),
+        Cue::Voiced(name) => Clips(name),
         Cue::Bell => Clips("bell"),
         Cue::Click => Clips("click"),
         Cue::Open => Clips("open"),
@@ -260,6 +261,15 @@ fn heard_so_far(
         .map(|&(name, count)| (name.to_string(), count.into()))
         .collect();
     Ok(heard.into())
+}
+
+/// The set of recorded clips a kind's data names as its voice, if there is one: with none
+/// the kind is heard as the sound made in code.
+pub(super) fn voiced(name: &str) -> Option<&'static str> {
+    CLIPS
+        .iter()
+        .find(|clips| clips.name == name)
+        .map(|clips| clips.name)
 }
 
 fn reach_of(name: &str) -> f32 {
@@ -404,8 +414,18 @@ mod tests {
             Cue::Cry(Cry::Groan) => 41,
             Cue::Cry(Cry::Whoosh) => 42,
             Cue::Cry(Cry::Slam) => 43,
+            Cue::Voiced(_) => 44,
         };
-        let mut listed = [false; 44];
+        // Every recorded voice a kind names (`cry`, `call`), so a name with no clips fails
+        // `every_cue_is_heard_and_its_clips_exist`.
+        let bestiary = super::super::species::Bestiary::read(&Default::default());
+        for kind in bestiary.all() {
+            let about = bestiary.get(kind);
+            for name in [&about.cry, &about.call].into_iter().flatten() {
+                cues.push(Cue::Voiced(name.clone().leak()));
+            }
+        }
+        let mut listed = [false; 45];
         for &cue in &cues {
             listed[place(cue)] = true;
         }
