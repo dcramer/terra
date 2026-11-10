@@ -27,6 +27,8 @@ mod held;
 mod paint;
 pub use paint::{Coat, Paint};
 
+#[cfg(test)]
+pub(crate) use held::held_ready;
 pub(crate) use held::look_points;
 pub use held::{CARRIED_IN, CarryHold, CarryPosed, Held};
 

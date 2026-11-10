@@ -905,4 +905,7 @@ mod stop;
 mod course;
 
 #[cfg(test)]
+mod held_sweep;
+
+#[cfg(test)]
 mod tests;

@@ -221,7 +221,7 @@ impl Mover {
 
 /// A headless app with the figure's own plugins: its clips, the foot lock, the pose layers and
 /// the lift, loading the man's file.
-fn app() -> App {
+pub(super) fn app() -> App {
     let assets = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
     let mut app = App::new();
     app.add_plugins((
@@ -390,7 +390,7 @@ const WORLD_M: f32 = 2000.0;
 /// The mover's place on its flat course (`at`, up `Y`) and facing as the game has them on the
 /// world: on the sphere of `WORLD_M` above it, turned so its up is that place's; and the turn
 /// from the course's frame to the world's there.
-fn on_world(at: Vec3, facing: Vec3) -> (Transform, Quat) {
+pub(super) fn on_world(at: Vec3, facing: Vec3) -> (Transform, Quat) {
     let up = Vec3::new(at.x, WORLD_M, at.z).normalize();
     let tilt = Quat::from_rotation_arc(Vec3::Y, up);
     let place = Transform::from_translation(up * (WORLD_M + at.y))

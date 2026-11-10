@@ -97,7 +97,7 @@ pub(crate) fn look_points(
 
 /// Once a held look has loaded, how it is carried: its file's `carry_hold` (a carry pose) goes
 /// on the hand socket it is held in, before a strap moves it to its bone (`CarryHold`).
-pub(super) fn held_ready(
+pub(crate) fn held_ready(
     ready: On<WorldInstanceReady>,
     held: Query<(), With<Held>>,
     children: Query<&Children>,
