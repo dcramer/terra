@@ -711,6 +711,9 @@ const RIPPLE_GRAZING: f32 = 0.45;
 const RIPPLE_NEAR_M: vec2<f32> = vec2<f32>(8.0, 40.0);
 // Glints in lying snow: cells this many a metre, and the share of them a crystal turned to
 // flash (winter round 10).
+// Over what distance, metres, the land's laid snow (D335) loses the surface the weather's snow
+// is drawn with: past it a swell is under a pixel at 1080p and the far tiers shade it.
+const LAID_RELIEF_M: vec2<f32> = vec2<f32>(250.0, 600.0);
 const GLINT_PER_M: f32 = 65.0;
 const GLINT_SHARE: f32 = 0.04;
 // Footprints in a path's packed snow (the looks review: "the path drawn as hard blotches";
@@ -1549,7 +1552,7 @@ fn fragment(
             // two apart and changing fast across a drift's edge, is only a share of where it
             // lies, the noise the rest. On a fell's face the patch thins out into fingers
             // round the ground's ribs rather than ending in a cut-out line.
-            in_snow_m = in.uv.y;
+            in_snow_m = max(in.uv.y, 0.0);
             in_couloir = clamp(-in.uv.x, 0.0, 1.0);
             // Only where the vertices lay some snow: with none, the noise alone broke a faint
             // fleck of snow out of a summer's meadow wherever it stood high, and its seven
@@ -2497,8 +2500,17 @@ fn fragment(
 @if(VERTEX_UVS_A)
     {
         map_snow *= climate_inside(world);
+        // Under a cave's roof no snow falls: the climate's map is of the land over it, so the
+        // ground says where it is a cave's, its laid depth below none (terrain.rs `lying`).
+        map_snow *= 1.0 - clamp(-in.uv.y, 0.0, 1.0);
     }
-    let snow = snow_on(map_snow * SNOW_FULL_M, world, level, canopy_over(world));
+    // The weather's snow, and with it the snow the land's rules lay (D335), near enough to see
+    // its surface: a summer's patch is drifted, cupped and grained as fallen snow is, where
+    // drawn by its texture alone it lay as flat white paper (the developers: "snow looks flat
+    // and washed out"). Farther off the land's snow is the far tiers' own.
+    let fallen = snow_on(map_snow * SNOW_FULL_M, world, level, canopy_over(world));
+    let laid_near = snowed * (1.0 - smoothstep(LAID_RELIEF_M.x, LAID_RELIEF_M.y, distance(world, view.world_position)));
+    let snow = max(fallen, laid_near);
     snowed = max(snowed, snow);
     let wet = max(climate.g * 0.6, climate.b) * (1.0 - snow);
     colour *= mix(1.0, 0.6, wet);
@@ -2512,7 +2524,9 @@ fn fragment(
     }
     if snow > 0.0 {
         let sparkle = 0.94 + 0.12 * noise(world * 9.0 + 3.0);
-        colour = mix(colour, SNOW * sparkle, snow);
+        colour = mix(colour, SNOW * sparkle, fallen);
+        // The land's own snow keeps its tint, grained as the fallen snow's is.
+        colour *= mix(1.0, sparkle / 0.97, laid_near * (1.0 - fallen));
     }
     lying = snow;
     pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.8, snow);

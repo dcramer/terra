@@ -257,7 +257,7 @@ fn colour(planet: &Planet, point: Vec3, normal: Vec3, made_of: MaterialId) -> [f
 /// What the land's rules lay on the ground, for the ground shader (D322), in a vertex's two
 /// texture coordinates:
 /// - the first's x what loose stones lie there, 1 scree and 2 gravel, 0 none; its y how deep
-///   the snow lies, in metres;
+///   the snow lies, in metres, or [`ROOFED`] in a cave;
 /// - the second's x the bare rock there, 0 to 1, or below 0 the woods standing on it, as how
 ///   close they stand, negated; its y how far it stands above the nearest lake's water, in
 ///   metres, below 0 under it, [`DRY_M`] far from any.
@@ -290,6 +290,11 @@ fn lying(
         bed,
         &|p, n| round.snow_m(p, n),
     );
+    // A cave's floor, walls and the cut of its mouth are under a roof: the land's snow is of
+    // the hillside over them, and laid there it whitened the mouth shut (the developers: "the
+    // snow texture covers up the cave entrances"). Below none says so to the shader, which
+    // keeps the weather's snow off it too (ground.wesl, the climate's map).
+    let snow = if planet.in_cave(point) { ROOFED } else { snow };
     let (loose, footing) = match made_of {
         material::SCREE => (1.0, Footing::Loose),
         material::GRAVEL => (2.0, Footing::Loose),
@@ -319,6 +324,9 @@ fn lying(
     };
     ([loose, snow], [rock_or_woods, above_water])
 }
+
+/// The laid snow's depth where the ground is under a cave's roof: none lies and none falls.
+const ROOFED: f32 = -1.0;
 
 /// How deep the snow lies at a point on the ground facing `normal`, in metres, as the land lays
 /// it, `snow_m` the climate's on the day asked, and how far down into a wall's couloir the point
