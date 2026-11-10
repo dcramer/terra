@@ -47,6 +47,13 @@ pub(super) const HELD_RANGE_M: f32 = 14.0;
 /// two thirds a wall torch's, and at a staked torch's light the ground 6 m out stood under
 /// the moon's with the window gone.
 const HELD_GAIN: f32 = 1.5;
+/// How far up its flames a carried torch's key hangs: 0.3 m over a staked one's on a hand
+/// torch's 0.3 m flame, over the holder's head. In the flame's foot it hung at the holder's
+/// shoulder, 0.3 m from their body, and their shadow lay 0.81 to 1.15 m wide on the ground
+/// 1.5 m from their feet (nine stills at midnight in the meadow); 0.3 m higher it is 0.24 m
+/// wide, 0.5 m higher 0.13 m (torch-light j3). Games leave the holder out of a held torch's
+/// shadows or hang its light clear of them; this keeps their shadow and shortens it.
+const HELD_LIGHT_UP: f32 = 1.3;
 
 /// A torch's two lights: `hearth` is the hearth rig's key as it would be (its colour, glow and
 /// sway), `hang` where a share of its flames' height hangs, `still` its steady twin's, `held`
@@ -60,13 +67,13 @@ pub(super) fn lights(
     still: impl Fn(Vec3) -> Option<shadows::Still>,
     held: bool,
 ) -> [Lit; 2] {
-    let (gain, range) = if held {
-        (HELD_GAIN, HELD_RANGE_M)
+    let (gain, range, up) = if held {
+        (HELD_GAIN, HELD_RANGE_M, HELD_LIGHT_UP)
     } else {
-        (1.0, TORCH_RANGE_M)
+        (1.0, TORCH_RANGE_M, TORCH_LIGHT_UP)
     };
     let lumens = blaze.tall * blaze.heat * TORCH_LUMENS_A_METRE * shines * gain;
-    let rest = hang(TORCH_LIGHT_UP);
+    let rest = hang(up);
     let key = Lit {
         at: rest + swayed,
         lumens: lumens * (1.0 - TORCH_TIP),

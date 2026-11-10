@@ -77,6 +77,31 @@ fn a_carried_torchs_key_keeps_its_light_and_shadows_as_the_hand_moves() {
     }
 }
 
+/// A carried torch's key hangs over the holder's head, 0.3 m over where a staked one's would
+/// on the same flame, so the holder's own shadow falls short (`torch::HELD_LIGHT_UP`); its tip
+/// stays at the flames' tips.
+#[test]
+fn a_carried_torchs_key_hangs_over_its_holders_head() {
+    let blaze = Blaze {
+        at: Vec3::new(0.0, 2001.5, 0.0),
+        tall: 0.3,
+        heat: 0.6,
+        seed: 0.3,
+        wide: 0.1,
+        out: Vec3::ZERO,
+    };
+    let hang = |share: f32| blaze.at + Vec3::Y * blaze.tall * share;
+    let rig = |held| {
+        let hearth = torch(0.0)[0].clone();
+        torch::lights(&hearth, &blaze, 1.0, Vec3::ZERO, hang, |_| None, held)
+    };
+    let (held, staked) = (rig(true), rig(false));
+    let over = held[0].at.y - staked[0].at.y;
+    assert!((0.25..0.4).contains(&over), "{over} m over a staked key");
+    assert!(held[0].casts && !held[1].casts);
+    assert_eq!(held[1].at, staked[1].at);
+}
+
 /// Two shadow-casting lights far apart are still matched by place: the nearer entity wins
 /// whichever cast last frame.
 #[test]
