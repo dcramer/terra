@@ -1,6 +1,7 @@
 //! A carried look kept clear of the ground and the body by a constraint solved from the look
-//! itself (held-constraint j1; to replace `carry_arm`'s give, whose amounts were constants set
-//! by hand for every look and body, D560). Not wired into `carry_arm::hold_in_body` yet.
+//! itself (held-constraint j1 and j2; to replace `carry_arm`'s give, whose amounts were
+//! constants set by hand for every look and body, D560). `carry_arm::hold_in_body` lays it
+//! beside the give behind `carry_arm::CLEAR_ON`.
 //!
 //! All in the body's frame, +Y up. `clear` finds how far the hand must move for the look's
 //! points to stand a margin over the ground and a margin off the legs' and trunk's capsules;
@@ -16,8 +17,10 @@
 //! swivel stays the authored one: Unreal's Two Bone IK node and Unity's TwoBoneIKConstraint,
 //! docs only). The terms are RelaxedIK's (Rakita, Mutlu, Gleicher 2018): the authored pose as
 //! the goal, clearance and smoothness as terms; here closed form, with no allocation. The
-//! hand, and the look in it, turn with the forearm: the wrist is not turned back, so a deep
-//! lift tips the look (what `holds.ts`'s `carry.rise` reads; not solved here).
+//! hand, and the look in it, turn with the forearm, so the wrist is turned back (`back`) by
+//! the forearm's turn, within a person's wrist (`WRIST_*`), and the look keeps the direction
+//! the carry pose gave it: left to the forearm, a 6.2 cm lift tipped a 60 cm look 19.5 degrees
+//! (`holds.ts`'s `carry.rise`, bar 10).
 
 use bevy::math::{Quat, Vec3};
 
@@ -89,31 +92,146 @@ pub fn turns(arm: &Arm, by: Vec3) -> (Quat, Quat) {
     (swing, swing * elbow * swing.inverse())
 }
 
-/// How far the hand must move for the look's `points` (in the body, as the carry pose holds
-/// them) to stand `CLEAR_GROUND_M` over `ground` and `CLEAR_BODY_M` off every capsule: zero,
-/// exactly, when they do already, after one pass over the points. `side` is the way out of a
-/// capsule for a point on its axis (the arm's own side of the body).
-pub fn clear(arm: &Arm, points: &[Vec3], ground: f32, capsules: &[Capsule], side: Vec3) -> Vec3 {
+/// A person's wrist, degrees of flexion, extension, radial and ulnar deviation from the hand's
+/// rest (AAOS ranges, adult averages): the Rust home of `tools/characters/wrist.ts`'s `WRIST`,
+/// its twin; change both.
+pub const WRIST_FLEX_DEG: f32 = 80.0;
+pub const WRIST_EXT_DEG: f32 = 70.0;
+pub const WRIST_RADIAL_DEG: f32 = 20.0;
+pub const WRIST_ULNAR_DEG: f32 = 35.0;
+
+/// The hand a look is held in: its bone's rotation in the body as the carry pose lays it, its
+/// own axes in the bone's frame (`hand_axes`) and its bend at the body's rest, `[flex, dev]`.
+#[derive(Clone, Copy, Debug)]
+pub struct Hand {
+    pub turn: Quat,
+    pub axes: [Vec3; 3],
+    pub rest: [f32; 2],
+}
+
+/// A hand's axes in its bone's frame from its rest pose, each unit and square to the others:
+/// along it (wrist to middle knuckle), out of the palm (`palm_out`: the hand socket's -X) and
+/// across it toward the thumb. `wrist.ts`'s `handAxes`.
+pub fn hand_axes(hand: Quat, wrist: Vec3, knuckle: Vec3, thumb: Vec3, palm_out: Vec3) -> [Vec3; 3] {
+    let back = hand.inverse();
+    let along = (back * (knuckle - wrist)).normalize_or_zero();
+    let palm = (back * palm_out).reject_from(along).normalize_or_zero();
+    let across = (back * (thumb - wrist))
+        .reject_from(along)
+        .reject_from(palm)
+        .normalize_or_zero();
+    [along, palm, across]
+}
+
+/// The bend of a hand turned `hand` in the body off a forearm running along `fore` (elbow to
+/// wrist), degrees: `[flex, dev]`, flex + toward the palm, dev + toward the thumb. `wrist.ts`'s
+/// `bendOf`.
+pub fn bend(fore: Vec3, hand: Quat, axes: [Vec3; 3]) -> [f32; 2] {
+    let f = fore.normalize_or_zero();
+    let [fh, fn_, fa] = axes.map(|axis| f.dot(hand * axis));
+    [
+        libm::atan2f(-fn_, fh).to_degrees(),
+        libm::atan2f(-fa, libm::hypotf(fh, fn_)).to_degrees(),
+    ]
+}
+
+/// The turn in the body that takes the hand back from where the arm laid by `laid` turned it,
+/// so the look in it points as the carry pose had it: the whole of the forearm's turn undone
+/// where the wrist's limits allow it, else the most of it (by halving, `PASSES` times) that
+/// keeps the wrist inside them; none for no hand, and none where the pose is past them already.
+pub fn back(arm: &Arm, (swing, elbow): (Quat, Quat), hand: Option<&Hand>) -> Quat {
+    let Some(hand) = hand else {
+        return Quat::IDENTITY;
+    };
+    let fore = swing * elbow;
+    if fore == Quat::IDENTITY {
+        return Quat::IDENTITY;
+    }
+    let along = fore * (arm.hand - arm.elbow);
+    let within = |back: Quat| {
+        let [flex, dev] = bend(along, back * fore * hand.turn, hand.axes);
+        let (flex, dev) = (flex - hand.rest[0], dev - hand.rest[1]);
+        (-WRIST_EXT_DEG..=WRIST_FLEX_DEG).contains(&flex)
+            && (-WRIST_ULNAR_DEG..=WRIST_RADIAL_DEG).contains(&dev)
+    };
+    let whole = fore.inverse();
+    if within(whole) {
+        return whole;
+    }
+    if !within(Quat::IDENTITY) {
+        return Quat::IDENTITY;
+    }
+    let (mut least, mut most) = (0.0_f32, 1.0_f32);
+    for _ in 0..PASSES {
+        let mid = (least + most) * 0.5;
+        if within(Quat::IDENTITY.slerp(whole, mid)) {
+            least = mid;
+        } else {
+            most = mid;
+        }
+    }
+    Quat::IDENTITY.slerp(whole, least)
+}
+
+/// Where a point of the look stands after `reach` with the hand turned `back` at the wrist.
+pub fn held(arm: &Arm, laid: (Quat, Quat), back: Quat, point: Vec3) -> Vec3 {
+    let wrist = moved(arm, laid, arm.hand);
+    wrist + back * (moved(arm, laid, point) - wrist)
+}
+
+/// The nearest point to `p` on a capsule's axis.
+fn on_axis(c: &Capsule, p: Vec3) -> Vec3 {
+    let along = c.b - c.a;
+    if along.length_squared() > 0.0 {
+        c.a + along * ((p - c.a).dot(along) / along.length_squared()).clamp(0.0, 1.0)
+    } else {
+        c.a
+    }
+}
+
+/// How far the hand (`arm.hand`, the wrist) must move for the look's `points` (in the body, as
+/// the carry pose holds them) to stand `CLEAR_GROUND_M` over `ground` and `CLEAR_BODY_M` off
+/// every capsule, the hand turned back at the wrist as `back` allows: zero, exactly, when they
+/// do already, after one pass over the points. A point in a capsule goes out along its normal
+/// when that is toward the side of the capsule the hand is on, else out through that side (a
+/// point past a leg's axis is not pushed on into the body); `side` is the way out when the
+/// hand is on the axis (the arm's own side of the body).
+pub fn clear(
+    arm: &Arm,
+    hand: Option<&Hand>,
+    points: &[Vec3],
+    ground: f32,
+    capsules: &[Capsule],
+    side: Vec3,
+) -> Vec3 {
     let most = (arm.elbow - arm.shoulder).length() + (arm.hand - arm.elbow).length();
     // The move that mends the deepest breaches with the hand moved `by`; none if there is none.
     let mend = |by: Vec3| {
         let laid = reach(arm, by);
+        let back = back(arm, laid, hand);
+        let wrist = moved(arm, laid, arm.hand);
         let (mut under, mut deep, mut out) = (0.0_f32, 0.0_f32, Vec3::ZERO);
         for &point in points {
-            let p = moved(arm, laid, point);
+            let p = held(arm, laid, back, point);
             under = under.max(ground + CLEAR_GROUND_M - p.y);
             for c in capsules {
-                let along = c.b - c.a;
-                let t = if along.length_squared() > 0.0 {
-                    ((p - c.a).dot(along) / along.length_squared()).clamp(0.0, 1.0)
-                } else {
-                    0.0
+                let off = p - on_axis(c, p);
+                let far = c.radius + CLEAR_BODY_M;
+                if off.length() >= far {
+                    continue;
+                }
+                let way = (wrist - on_axis(c, wrist)).try_normalize().unwrap_or(side);
+                let toward = off.dot(way);
+                // Along `way` from `off` to the capsule's margin: a ray out of a circle.
+                let through = -toward
+                    + libm::sqrtf((toward * toward - off.length_squared() + far * far).max(0.0));
+                let (over, to) = match off.try_normalize() {
+                    Some(normal) if toward >= 0.0 => (far - off.length(), normal),
+                    _ => (through, way),
                 };
-                let off = p - (c.a + along * t);
-                let over = c.radius + CLEAR_BODY_M - off.length();
                 if over > deep {
                     deep = over;
-                    out = off.try_normalize().unwrap_or(side) * over;
+                    out = to * over;
                 }
             }
         }
@@ -192,7 +310,7 @@ mod tests {
         let (arm, points) = crouched();
         // The fault planted: left as posed, the look's tip is 17 cm under the ground.
         assert!(lowest(&arm, Vec3::ZERO, &points) < -0.15);
-        let by = clear(&arm, &points, 0.0, &[], Vec3::NEG_X);
+        let by = clear(&arm, None, &points, 0.0, &[], Vec3::NEG_X);
         let low = lowest(&arm, by, &points);
         assert!(low >= CLEAR_GROUND_M - 2.0 * NEAR_M, "lowest {low}");
         // No further than it must: within a centimetre of the margin.
@@ -229,8 +347,104 @@ mod tests {
         };
         // The fault planted: as posed the look's point is inside the shin.
         assert!(off(Vec3::ZERO) < -0.01, "{}", off(Vec3::ZERO));
-        let by = clear(&arm, &points, 0.0, &[shin], Vec3::NEG_X);
+        let by = clear(&arm, None, &points, 0.0, &[shin], Vec3::NEG_X);
         assert!(off(by) >= CLEAR_BODY_M - 2.0 * NEAR_M, "off {}", off(by));
+    }
+
+    /// The crouched arm's hand, straight on its forearm, its palm ahead so a lift's turn back
+    /// is the wrist's flexion or extension.
+    fn straight(arm: &Arm) -> Hand {
+        let along = (arm.hand - arm.elbow).normalize();
+        let palm = along.cross(Vec3::X).normalize();
+        let axes = [along, palm, Vec3::X];
+        Hand {
+            turn: Quat::IDENTITY,
+            axes,
+            rest: bend(along, Quat::IDENTITY, axes),
+        }
+    }
+
+    /// How far the look points from where the carry pose had it, degrees.
+    fn tipped(arm: &Arm, hand: Option<&Hand>, by: Vec3, points: &[Vec3; 5]) -> f32 {
+        let laid = reach(arm, by);
+        let at = |p| held(arm, laid, back(arm, laid, hand), p);
+        (at(points[4]) - at(points[0]))
+            .angle_between(points[4] - points[0])
+            .to_degrees()
+    }
+
+    #[test]
+    fn a_lifted_look_keeps_its_direction_by_the_wrist_turned_back() {
+        let (arm, points) = crouched();
+        let hand = straight(&arm);
+        // The fault planted: with no hand to turn back, the lift tips the look past the bar.
+        let by = clear(&arm, None, &points, 0.0, &[], Vec3::NEG_X);
+        assert!(tipped(&arm, None, by, &points) > 10.0);
+        let by = clear(&arm, Some(&hand), &points, 0.0, &[], Vec3::NEG_X);
+        let laid = reach(&arm, by);
+        let low = points
+            .iter()
+            .map(|&p| held(&arm, laid, back(&arm, laid, Some(&hand)), p).y)
+            .fold(f32::MAX, f32::min);
+        assert!(low >= CLEAR_GROUND_M - 2.0 * NEAR_M, "lowest {low}");
+        let tip = tipped(&arm, Some(&hand), by, &points);
+        assert!(tip < 3.0, "tipped {tip}");
+    }
+
+    #[test]
+    fn a_wrist_is_turned_back_no_further_than_its_limits() {
+        let (arm, points) = crouched();
+        let free = straight(&arm);
+        let by = clear(&arm, Some(&free), &points, 0.0, &[], Vec3::NEG_X);
+        let bent = |hand: &Hand, by: Vec3| {
+            let laid = reach(&arm, by);
+            let fore = laid.0 * laid.1;
+            let turn = back(&arm, laid, Some(hand)) * fore * hand.turn;
+            bend(fore * (arm.hand - arm.elbow), turn, hand.axes)[0] - hand.rest[0]
+        };
+        let whole = bent(&free, by);
+        assert!(whole.abs() > 10.0, "the turn back bends the wrist {whole}");
+        // A hand whose rest leaves it 5 degrees that way: 75 of its 80 of flexion spent, or 65
+        // of its 70 of extension.
+        let spent = if whole > 0.0 { -75.0 } else { 65.0 };
+        let tight = Hand {
+            rest: [free.rest[0] + spent, free.rest[1]],
+            ..free
+        };
+        let by = clear(&arm, Some(&tight), &points, 0.0, &[], Vec3::NEG_X);
+        let now = bent(&tight, by) + spent;
+        assert!(now.abs() <= 5.0 + 1e-3, "bent {now} of 5");
+        // Short of the whole turn, the look tips, and is still over the ground.
+        assert!(tipped(&arm, Some(&tight), by, &points) > 3.0);
+        let laid = reach(&arm, by);
+        let low = points
+            .iter()
+            .map(|&p| held(&arm, laid, back(&arm, laid, Some(&tight)), p).y)
+            .fold(f32::MAX, f32::min);
+        assert!(low >= CLEAR_GROUND_M - 2.0 * NEAR_M, "lowest {low}");
+    }
+
+    #[test]
+    fn a_point_past_a_legs_axis_goes_out_on_the_hands_side() {
+        let (arm, _) = crouched();
+        let shin = Capsule {
+            a: Vec3::new(-0.12, 0.4, 0.14),
+            b: Vec3::new(-0.12, 0.05, 0.14),
+            radius: 0.05,
+        };
+        // The hand is outside the shin (-X of it); the look's point is 2 cm past its axis.
+        let points = [arm.hand, Vec3::new(-0.10, 0.25, 0.14)];
+        let off = |by: Vec3| {
+            let p = moved(&arm, reach(&arm, by), points[1]);
+            p - on_axis(&shin, p)
+        };
+        let way = (arm.hand - on_axis(&shin, arm.hand)).normalize();
+        // The fault planted: the nearest way out is on into the body.
+        assert!(off(Vec3::ZERO).length() < shin.radius && off(Vec3::ZERO).dot(way) < 0.0);
+        let by = clear(&arm, None, &points, 0.0, &[shin], Vec3::NEG_X);
+        let out = off(by);
+        assert!(out.length() >= shin.radius + CLEAR_BODY_M - 2.0 * NEAR_M);
+        assert!(out.dot(way) > 0.0 && out.x < 0.0, "out {out}");
     }
 
     #[test]
@@ -242,17 +456,20 @@ mod tests {
             radius: 0.05,
         };
         assert_eq!(
-            clear(&arm, &[arm.hand], 0.0, &[shin], Vec3::NEG_X),
+            clear(&arm, None, &[arm.hand], 0.0, &[shin], Vec3::NEG_X),
             Vec3::ZERO
         );
-        assert_eq!(clear(&arm, &[], 0.0, &[shin], Vec3::NEG_X), Vec3::ZERO);
+        assert_eq!(
+            clear(&arm, None, &[], 0.0, &[shin], Vec3::NEG_X),
+            Vec3::ZERO
+        );
         assert_eq!(turns(&arm, Vec3::ZERO), (Quat::IDENTITY, Quat::IDENTITY));
     }
 
     #[test]
     fn a_frame_moves_the_hand_no_faster_than_the_spring_allows() {
         let (arm, points) = crouched();
-        let by = clear(&arm, &points, 0.0, &[], Vec3::NEG_X);
+        let by = clear(&arm, None, &points, 0.0, &[], Vec3::NEG_X);
         let (rate, dt) = (crate::carry_arm::GIVE_RATE, 1.0 / 60.0);
         let most = by.length() * rate / std::f32::consts::E;
         let mut eased = Eased::default();
