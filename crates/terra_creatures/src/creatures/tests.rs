@@ -900,7 +900,7 @@ fn a_troll_roars_once_then_deals_its_blows_turn_about_each_landing_at_its_time()
     let mut world = world();
     let ground = Vec3::Y * 2000.0;
     // Where a player with a sword stands to fight it, inside where either blow begins.
-    let player = test_player(&mut world, ground + Vec3::X * 2.5);
+    let player = test_player(&mut world, ground + Vec3::X * 1.8);
     let troll = kind(&mut world, "Troll", ground);
     let (smash, sweep, roar_s) = {
         let species = world.get::<Creature>(troll).unwrap().species;

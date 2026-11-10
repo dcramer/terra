@@ -121,13 +121,14 @@
             notices_m: 16.0,
             leash_m: 34.0,
             // The smash as its clip stands (tools/characters/blow.ts): the fists land 1.93 s
-            // in, 2.3 m ahead of where it stood; it hits whoever is within 0.8 m of there (the
-            // fists' spread, a fist and a person's width) and begins on one who, standing
-            // still, would be.
-            attacks_within_m: 2.9,
+            // in, 1.4 m ahead of where it stood (a squat over planted feet, its 1.15 m arms
+            // straight down from the shoulders: it no longer lunges); it hits whoever is
+            // within 0.8 m of there (the fists' spread, a fist and a person's width) and
+            // begins on one who, standing still, would be.
+            attacks_within_m: 2.0,
             bite: 34.0,
             bite_at_s: 1.93,
-            bite_reach_m: 3.1,
+            bite_reach_m: 2.2,
             attack_s: 3.9,
         ),
         lives: Den,
