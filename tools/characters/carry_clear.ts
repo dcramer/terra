@@ -229,22 +229,40 @@ export function part(bone: string): number | undefined {
   return m[1] ? (m[2] === "l" ? 0 : 2) + (m[1] === "thigh" ? 0 : 1) : 4;
 }
 
-/** A capsule's radius from how far its part's vertices stand off its axis: the distance
- * `WITHIN` of them are inside; 0 for none. */
-export function radius(off: number[]): number {
+/** `sorted`'s value `share` of the way up it, as the game indexes it (in f32). */
+const shareOf = (sorted: number[], share: number) => sorted[Math.floor(Math.fround((sorted.length - 1) * Math.fround(share)))];
+
+/** A capsule's radius from where its part's vertices stand off its axis (`offAxis`): the
+ * distance from their middle (their mean) that `WITHIN` of them are inside; 0 for none. From
+ * their middle, not the axis: a limb's joints do not run down its middle (the game's `radius`
+ * says by how much). */
+export function radius(off: V3[]): number {
   if (!off.length) return 0;
-  const sorted = [...off].sort((a, b) => a - b);
-  return sorted[Math.floor(Math.fround((sorted.length - 1) * Math.fround(WITHIN)))];
+  const middle = mul(off.reduce(add, [0, 0, 0]), 1 / off.length);
+  return shareOf(off.map((o) => len(sub(o, middle))).sort((a, b) => a - b), WITHIN);
 }
 
-/** How far `p` stands off the segment `a` to `b`. */
-export const offAxis = (p: V3, a: V3, b: V3): number => len(sub(p, onAxis({ a, b, radius: 0 }, p)));
+/** Where `p` stands off the line through `a` and `b`, square to it; none past either end and
+ * for an axis with no length. */
+export function offAxis(p: V3, a: V3, b: V3): V3 | undefined {
+  const along = sub(b, a);
+  const l2 = dot(along, along);
+  if (!(l2 > 0)) return undefined;
+  const t = dot(sub(p, a), along) / l2;
+  return t >= 0 && t <= 1 ? sub(sub(p, a), mul(along, t)) : undefined;
+}
+
+/** One part's vertices as `--radii` explains them: how many are its bones', how many of those
+ * lie along its axis, their middle off the axis, and their distances from the axis and from
+ * that middle (the half, `WITHIN` and all of them), metres. */
+export type Spread = { part: string; skin: number; along: number; middle: V3; axis: [number, number, number]; own: [number, number, number] };
 
 /** The radii of a body's capsules, metres, from every skinned mesh of it at its bind pose: each
  * vertex given to its heaviest joint, a joint's place the inverse of its inverse bind matrix;
  * 0 for a part with no skin or a joint the skin has not. As the game, it reads no morph. */
-export function radii(body: Glb): number[] {
-  const off: number[][] = AXES.map(() => []);
+export function radii(body: Glb, spread?: Spread[]): number[] {
+  const off: V3[][] = AXES.map(() => []);
+  const counted = AXES.map(() => 0);
   for (const node of body.gltf.nodes as { mesh?: number; skin?: number }[]) {
     if (node.mesh === undefined || node.skin === undefined) continue;
     const skin = body.gltf.skins![node.skin];
@@ -270,10 +288,19 @@ export function radii(body: Glb): number[] {
         const k = weight > 0 ? parts[j] : undefined;
         if (k === undefined) continue;
         const [a, b] = ends[k];
-        if (a && b) off[k].push(offAxis([at[v * 3], at[v * 3 + 1], at[v * 3 + 2]], a, b));
+        const o = a && b ? offAxis([at[v * 3], at[v * 3 + 1], at[v * 3 + 2]], a, b) : undefined;
+        counted[k]++;
+        if (o) off[k].push(o);
       }
     }
   }
+  spread?.push(
+    ...off.map((o, k): Spread => {
+      const middle: V3 = o.length ? mul(o.reduce(add, [0, 0, 0]), 1 / o.length) : [0, 0, 0];
+      const three = (d: number[]): [number, number, number] => (d.sort((x, y) => x - y).length ? [shareOf(d, 0.5), shareOf(d, WITHIN), d[d.length - 1]] : [0, 0, 0]);
+      return { part: AXES[k][0], skin: counted[k], along: o.length, middle, axis: three(o.map((p) => len(p))), own: three(o.map((p) => len(sub(p, middle)))) };
+    }),
+  );
   return off.map(radius);
 }
 
@@ -287,8 +314,13 @@ if (import.meta.main) {
   const { Glb: Load } = await import("./glb.ts");
   if (process.argv.includes("--radii")) {
     const file = process.argv[process.argv.indexOf("--radii") + 1] ?? "assets/models/character/fight.glb";
-    const r = radii(new Load(file));
-    console.log(`${file}: ${["thigh_l", "calf_l", "thigh_r", "calf_r", "trunk"].map((n, k) => `${n} ${(r[k] * 100).toFixed(1)} cm`).join(", ")} (the distance ${WITHIN} of a part's vertices lie within; 0 is no capsule)`);
+    const spread: Spread[] = [];
+    const r = radii(new Load(file), spread);
+    const cm = (x: number) => (x * 100).toFixed(1);
+    console.log(`${file}: ${["thigh_l", "calf_l", "thigh_r", "calf_r", "trunk"].map((n, k) => `${n} ${cm(r[k])} cm`).join(", ")} (the distance from their middle ${WITHIN} of a part's vertices lie within; 0 is no capsule)`);
+    // Why each is what it is: a middle far off the axis is a limb whose joints run down one side.
+    for (const s of spread)
+      console.log(`  ${s.part}: ${s.along} of ${s.skin} vertices along the axis; their middle ${s.middle.map(cm).join(", ")} cm off it; from the middle half ${cm(s.own[0])}, ${WITHIN} ${cm(s.own[1])}, all ${cm(s.own[2])} cm; from the axis ${cm(s.axis[0])}, ${cm(s.axis[1])}, ${cm(s.axis[2])} cm`);
   } else {
     console.error("✗ carry_clear: say --radii [BODY.glb] for the capsules' radii of a body");
     process.exit(2);

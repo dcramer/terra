@@ -36,25 +36,35 @@ pub fn part(bone: &str) -> Option<usize> {
     })
 }
 
-/// A capsule's radius from how far its part's vertices stand off its axis: the distance
-/// `WITHIN` of them are inside; 0 for none.
-pub fn radius(mut off: Vec<f32>) -> f32 {
+/// A capsule's radius from where its part's vertices stand off its axis (`off_axis`): the
+/// distance from their middle (their mean) that `WITHIN` of them are inside; 0 for none.
+///
+/// From their middle, not from the axis: a limb's joints do not run down its middle (the
+/// calf's run down the shin, 3.4 cm in front of the calf's middle on the base body), and the
+/// distance from such an axis reads the far side's, a calf of 10.9 cm where its section at
+/// mid-length is 6.7 by 6.8 cm of half-width (held-constraint j4; 8.2 cm measured so). The
+/// capsule still stands on the joints, so it is that much proud on the near side and short on
+/// the far one.
+pub fn radius(off: &[Vec3]) -> f32 {
     if off.is_empty() {
         return 0.0;
     }
-    off.sort_by(f32::total_cmp);
-    off[((off.len() - 1) as f32 * WITHIN) as usize]
+    let middle = off.iter().sum::<Vec3>() / off.len() as f32;
+    let mut far: Vec<f32> = off.iter().map(|o| o.distance(middle)).collect();
+    far.sort_by(f32::total_cmp);
+    far[((far.len() - 1) as f32 * WITHIN) as usize]
 }
 
-/// How far `p` stands off the segment `a` to `b`.
-pub fn off_axis(p: Vec3, a: Vec3, b: Vec3) -> f32 {
+/// Where `p` stands off the line through `a` and `b`, square to it; none past either end (a
+/// buttock weighted to a thigh, a heel to a calf: skin the capsule's length does not reach,
+/// which would be measured to the end's point) and for an axis with no length.
+pub fn off_axis(p: Vec3, a: Vec3, b: Vec3) -> Option<Vec3> {
     let along = b - a;
-    let t = if along.length_squared() > 0.0 {
-        ((p - a).dot(along) / along.length_squared()).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    p.distance(a + along * t)
+    if along.length_squared() <= 0.0 {
+        return None;
+    }
+    let t = (p - a).dot(along) / along.length_squared();
+    (0.0..=1.0).contains(&t).then(|| p - a - along * t)
 }
 
 /// The radii of a body's capsules whose axes run between the joints `axes` (each a part's two
@@ -68,7 +78,7 @@ pub fn measure(
     meshes: &Assets<Mesh>,
     bindposes: &Assets<SkinnedMeshInverseBindposes>,
 ) -> [f32; PARTS] {
-    let mut off: [Vec<f32>; PARTS] = Default::default();
+    let mut off: [Vec<Vec3>; PARTS] = Default::default();
     for each in children.iter_descendants(root) {
         let Ok((skin, mesh)) = skins.get(each) else {
             continue;
@@ -123,12 +133,13 @@ pub fn measure(
             }
             if let Some(k) = parts.get(j).copied().flatten()
                 && let Some((a, b)) = ends[k]
+                && let Some(o) = off_axis(Vec3::from(*p), a, b)
             {
-                off[k].push(off_axis(Vec3::from(*p), a, b));
+                off[k].push(o);
             }
         }
     }
-    off.map(radius)
+    off.map(|o| radius(&o))
 }
 
 #[cfg(test)]
@@ -138,16 +149,40 @@ mod tests {
 
     #[test]
     fn a_radius_holds_nine_in_ten_of_its_vertices_and_only_its_parts_bones_count() {
-        // Known another way: ten vertices 1 to 10 cm off the axis, nine within 9 cm.
-        let off: Vec<f32> = (1..=10).map(|k| k as f32 * 0.01).collect();
-        assert!((radius(off) - 0.09).abs() < 1e-6);
-        assert_eq!(radius(Vec::new()), 0.0);
+        // Known another way: ten pairs of vertices 1 to 10 cm either side of the axis (their
+        // middle on it), nine pairs within 9 cm.
+        let off: Vec<Vec3> = (1..=10)
+            .flat_map(|k| [Vec3::X, Vec3::NEG_X].map(|side| side * k as f32 * 0.01))
+            .collect();
+        assert!((radius(&off) - 0.09).abs() < 1e-6);
+        assert_eq!(radius(&[]), 0.0);
         assert_eq!(part("thigh_twist_01_r"), Some(2));
         assert_eq!(part("spine_02"), Some(4));
         assert_eq!((part("foot_l"), part("upperarm_l")), (None, None));
-        // Past a bone's end the distance is to the end, not to the line.
-        let d = off_axis(Vec3::new(0.03, 1.04, 0.0), Vec3::ZERO, Vec3::Y);
-        assert!((d - 0.05).abs() < 1e-6);
+        // A vertex stands off the line square to it; past a bone's end it is not the part's.
+        let o = off_axis(Vec3::new(0.03, 0.4, 0.0), Vec3::ZERO, Vec3::Y).unwrap();
+        assert!(o.distance(Vec3::new(0.03, 0.0, 0.0)) < 1e-6);
+        assert_eq!(
+            off_axis(Vec3::new(0.03, 1.04, 0.0), Vec3::ZERO, Vec3::Y),
+            None
+        );
+        assert_eq!(off_axis(Vec3::X, Vec3::Y, Vec3::Y), None);
+    }
+
+    /// The fault planted (held-constraint j4): a calf 5 cm in radius whose joints run 4 cm in
+    /// front of its middle, as a shin's do, is 5 cm, not the 9 its far side stands off them.
+    #[test]
+    fn a_limb_whose_joints_run_off_its_middle_is_as_thick_as_it_is() {
+        let ring: Vec<Vec3> = (0..16)
+            .map(|k| {
+                let a = k as f32 * std::f32::consts::TAU / 16.0;
+                let at = Vec3::new(0.05 * libm::cosf(a), 0.3, -0.04 + 0.05 * libm::sinf(a));
+                off_axis(at, Vec3::ZERO, Vec3::Y).unwrap()
+            })
+            .collect();
+        let from_the_axis = ring.iter().map(|o| o.length()).fold(0.0, f32::max);
+        assert!((from_the_axis - 0.09).abs() < 1e-5, "{from_the_axis}");
+        assert!((radius(&ring) - 0.05).abs() < 1e-5, "{}", radius(&ring));
     }
 
     /// A skin of a thigh and a calf end to end along -Y, four vertices on each, the thigh's

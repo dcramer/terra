@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { type Arm, CLEAR, back, clear, ease, held, part, radius, reach } from "./carry_clear.ts";
-import { type V3 } from "./glb.ts";
+import { type Arm, CLEAR, type Spread, back, clear, ease, held, offAxis, part, radii, radius, reach } from "./carry_clear.ts";
+import { Glb, type V3, dot, posed, sub } from "./glb.ts";
 import { rustConst } from "./rust_const.ts";
 import { WRIST } from "./wrist.ts";
 
@@ -46,11 +46,49 @@ test("a point inside a shin goes out on the hand's side to the capsule's margin"
   assert.ok(p[0] < shin.a[0], `it went out at x ${p[0]}, on the body's side of the shin, not the hand's`);
 });
 
+test("a limb whose joints run off its middle is as thick as it is, the body's calf as its section", () => {
+  // The fault planted: a calf 5 cm in radius whose joints run 4 cm in front of its middle, as
+  // a shin's do, is 5 cm, not the 9 its far side stands off them.
+  const ring = Array.from({ length: 16 }, (_, k): V3 => offAxis([0.05 * Math.cos((k * Math.PI) / 8), 0.3, -0.04 + 0.05 * Math.sin((k * Math.PI) / 8)], [0, 0, 0], [0, 1, 0])!);
+  assert.ok(Math.abs(Math.max(...ring.map((o) => Math.hypot(...o))) - 0.09) < 1e-9);
+  assert.ok(Math.abs(radius(ring) - 0.05) < 1e-9, `${radius(ring)}`);
+  // The body's own left calf, known another way: the half-width of the whole mesh's section
+  // across the middle of the bone (every vertex within 3% of its length of mid-length, on the
+  // left of the body), the mean of its halves across and fore and aft.
+  const body = new Glb("assets/models/character/base.glb");
+  const rest = posed(body, undefined, 0);
+  const [a, b] = [rest[body.named("calf_l")].t, rest[body.named("foot_l")].t];
+  const along = sub(b, a);
+  const [lo, hi] = [[9, 9], [-9, -9]];
+  for (const node of body.gltf.nodes as { mesh?: number; skin?: number }[]) {
+    if (node.mesh === undefined || node.skin === undefined) continue;
+    for (const prim of body.gltf.meshes![node.mesh].primitives as { attributes: Record<string, number> }[]) {
+      const at = body.read(prim.attributes.POSITION);
+      for (let v = 0; v < at.length / 3; v++) {
+        const p: V3 = [at[v * 3], at[v * 3 + 1], at[v * 3 + 2]];
+        if (p[0] < 0.01 || Math.abs(dot(sub(p, a), along) / dot(along, along) - 0.5) > 0.03) continue;
+        [lo[0], lo[1], hi[0], hi[1]] = [Math.min(lo[0], p[0]), Math.min(lo[1], p[2]), Math.max(hi[0], p[0]), Math.max(hi[1], p[2])];
+      }
+    }
+  }
+  const half = (hi[0] - lo[0] + hi[1] - lo[1]) / 4;
+  assert.ok(half > 0.04 && half < 0.1, `the section's half-width reads ${half} m: the test's own measure is off`);
+  const spread: Spread[] = [];
+  const calf = radii(body, spread)[1];
+  assert.ok(Math.abs(calf - half) < 0.02, `the calf's radius ${calf} m, its section's half-width at mid-length ${half} m`);
+  // Measured from the joints' line, as it was, it reads the far side's.
+  assert.ok(spread[1].axis[1] - half > 0.03, `from the axis ${spread[1].axis[1]} m`);
+});
+
 test("the capsules' parts, their radius and the ease are the game's", () => {
   assert.deepEqual(["thigh_l", "calf_twist_01_l", "thigh_twist_01_r", "calf_r", "pelvis", "spine_03", "neck_01", "foot_l"].map(part), [0, 1, 2, 3, 4, 4, undefined, undefined]);
-  // Nine in ten of eleven distances lie within the tenth.
-  assert.equal(radius([11, 3, 2, 1, 4, 5, 6, 7, 8, 9, 10]), 10);
+  // Ten pairs of vertices 1 to 10 either side of the axis, their middle on it: nine within 9.
+  assert.equal(radius([10, 3, 2, 1, 4, 5, 6, 7, 8, 9].flatMap((k): V3[] => [[k, 0, 0], [-k, 0, 0]])), 9);
   assert.equal(radius([]), 0);
+  // A vertex stands off the line square to it; past a bone's end it is not the part's.
+  assert.deepEqual(offAxis([0.03, 0.4, 0], [0, 0, 0], [0, 1, 0]), [0.03, 0, 0]);
+  assert.equal(offAxis([0.03, 1.04, 0], [0, 0, 0], [0, 1, 0]), undefined);
+  assert.equal(offAxis([1, 0, 0], [0, 1, 0], [0, 1, 0]), undefined);
   // A step's first frame at 60 a second: 1 - (1 + rate t) e^(-rate t) of the way.
   const e = ease({ at: [0, 0, 0], speed: [0, 0, 0] }, [0, 1, 0], 36, 1 / 60);
   assert.ok(Math.abs(e.at[1] - (1 - (1 + 0.6) * Math.exp(-0.6))) < 1e-12);
