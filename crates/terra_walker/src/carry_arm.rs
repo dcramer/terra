@@ -439,7 +439,7 @@ pub fn hold_in_body(
                 carry_clear::clear(&arm, hand.as_ref(), &points, 0.0, &capsules, out)
             };
             let by = match side.cleared {
-                Some(eased) => carry_clear::ease(eased, want, GIVE_RATE, dt),
+                Some(eased) => carry_clear::follow(eased, want, GIVE_RATE, dt),
                 None => carry_clear::Eased {
                     at: want,
                     speed: Vec3::ZERO,

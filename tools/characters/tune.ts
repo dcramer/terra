@@ -10,6 +10,7 @@
 //   pose.<Clip>.swing              the stride's swing on the arm, its share
 //   give.<key>                     carry_arm.ts GIVE's keys (elbow, back, out, from, to, rate, ...)
 //   clear.on, clear.ground, clear.body   carry_clear.ts CLEAR: the switch (1 or 0), the margins, metres
+//   clear.rate                     the rate a hand's move is let go at (the game's GIVE_RATE), to try another
 //   seat.fit, seat.palm            grip.ts FIT_M and PALM_M, metres
 //
 // A tuned pose is hold.py's aim and roll laid in TypeScript on the held clip's first pose (the
@@ -68,7 +69,7 @@ const giveNames = (root = ROOT): Record<string, string> =>
 export type Param = { name: string; start: number; kind: "pose" | "give" | "seat" | "clear"; clip?: string };
 /** The clearance's keys (carry_clear.ts `CLEAR`) with the constant each margin is committed to
  * in carry_clear.rs; `on` is the game's switch, tried here and committed by hand. */
-const CLEAR_NAMES: Record<string, string | undefined> = { on: undefined, ground: "CLEAR_GROUND_M", body: "CLEAR_BODY_M" };
+const CLEAR_NAMES: Record<string, string | undefined> = { on: undefined, ground: "CLEAR_GROUND_M", body: "CLEAR_BODY_M", rate: undefined };
 const CLEAR0: Record<string, number> = { ...CLEAR };
 const OTHERS = [...Object.keys(CLEAR_NAMES).map((k) => `clear.${k}`), "seat.fit", "seat.palm"];
 /** An edit to commit: `key` in `file` set to `value`. */
@@ -101,7 +102,7 @@ export function paramOf(name: string, sets: Sets = readSets()): Param {
     return { name, start: a === "fit" ? FIT_M : PALM_M, kind: "seat" };
   }
   if (group === "clear") {
-    if (!(a in CLEAR_NAMES) || b !== undefined) throw say(name, "carry_clear.ts's CLEAR has no such key", OTHERS.slice(0, 3));
+    if (!(a in CLEAR_NAMES) || b !== undefined) throw say(name, "carry_clear.ts's CLEAR has no such key", OTHERS.filter((o) => o.startsWith("clear.")));
     return { name, start: CLEAR0[a], kind: "clear" };
   }
   if (group !== "pose") throw say(name, "a parameter is a pose's, the give's, the clearance's or the seat's", [...Object.keys(giveNames()).map((k) => `give.${k}`), ...OTHERS]);

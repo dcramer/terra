@@ -133,3 +133,22 @@ test("a hand's move starts whole, eases away and is over, as the game's state do
   const loop = clearedThrough(1, true, (t) => (t > 0.9 ? [0, 0.1, 0] : [0, 0, 0]));
   assert.ok(loop(0)[1] > 0.09 && clearedThrough(1, false, (t) => (t > 0.9 ? [0, 0.1, 0] : [0, 0, 0]))(0)[1] === 0);
 });
+
+// A breach growing a centimetre a frame for eight frames (a landing): the move is never short
+// of it, where the spring alone (the fault planted) trails it by over 2 cm; let go, it leaves
+// no faster than the spring.
+test("a growing breach is followed at once and only its release is eased", async () => {
+  const { GIVE, clearedThrough } = await import("./carry_arm.ts");
+  const { ease } = await import("./carry_clear.ts");
+  const want = (t: number): V3 => (t > 0.5 ? [0, 0, 0] : [0, 0.01 * Math.min(8, Math.round(t * 60)), 0]);
+  const by = clearedThrough(1, false, want);
+  let [sprung, trailed] = [{ at: [0, 0, 0] as V3, speed: [0, 0, 0] as V3 }, 0];
+  for (let i = 1; i <= 12; i++) {
+    assert.ok(by(i / 60)[1] >= want(i / 60)[1] - 1e-12, `frame ${i}: ${by(i / 60)[1]}`);
+    sprung = ease(sprung, want(i / 60), GIVE.rate, 1 / 60);
+    trailed = Math.max(trailed, want(i / 60)[1] - sprung.at[1]);
+  }
+  assert.ok(trailed > 0.02, `the spring alone trailed ${trailed} m`);
+  const most = (0.08 * GIVE.rate) / Math.E / 60;
+  for (let i = 31; i <= 60; i++) assert.ok(by((i - 1) / 60)[1] - by(i / 60)[1] <= most * 1.001, `frame ${i}`);
+});

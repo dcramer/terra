@@ -17,7 +17,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Arm, type Eased as Moved, type Hand, back, ease as easeMove, reach } from "./carry_clear.ts";
+import { type Arm, CLEAR, type Eased as Moved, type Hand, back, follow, reach } from "./carry_clear.ts";
 import { type Glb, type Pose, type Q, type V3, len, qinv, qmul, rot, sub, turn } from "./glb.ts";
 import { rustConst } from "./rust_const.ts";
 import { bendOf, handAxes } from "./wrist.ts";
@@ -92,7 +92,7 @@ export function clearedThrough(end: number, loops: boolean, want: (t: number) =>
   let state: Moved | undefined;
   const step = (i: number): V3 => {
     const to = (wants[i] ??= want(i / STEPS));
-    const by = state ? easeMove(state, to, GIVE.rate, 1 / STEPS) : { at: to, speed: [0, 0, 0] as V3 };
+    const by = state ? follow(state, to, CLEAR.rate, 1 / STEPS) : { at: to, speed: [0, 0, 0] as V3 };
     const settled = to.every((x) => x === 0) && len(by.at) < SETTLED_M;
     state = settled ? undefined : by;
     return settled ? [0, 0, 0] : by.at;

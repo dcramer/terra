@@ -22,8 +22,9 @@ const CLEAR_RS = "crates/terra_walker/src/carry_clear.rs";
 /** The switch and the margins, read from the game's source so the tools measure what it runs:
  * whether a hanging look is kept clear at all (carry_arm.rs `CLEAR_ON`, 1 or 0), and the least
  * its points stand over the ground and off a capsule, metres. tune.ts sets them for one run
- * (`clear.on`, `clear.ground`, `clear.body`). */
-export const CLEAR = { on: rustConst("crates/terra_walker/src/carry_arm.rs", "CLEAR_ON"), ground: rustConst(CLEAR_RS, "CLEAR_GROUND_M"), body: rustConst(CLEAR_RS, "CLEAR_BODY_M") };
+ * (`clear.on`, `clear.ground`, `clear.body`), and `clear.rate`, the rate a move is let go at
+ * (the game's `GIVE_RATE`). */
+export const CLEAR = { on: rustConst("crates/terra_walker/src/carry_arm.rs", "CLEAR_ON"), ground: rustConst(CLEAR_RS, "CLEAR_GROUND_M"), body: rustConst(CLEAR_RS, "CLEAR_BODY_M"), rate: rustConst("crates/terra_walker/src/carry_arm.rs", "GIVE_RATE") };
 export const PASSES = rustConst(CLEAR_RS, "PASSES");
 const NEAR_M = rustConst(CLEAR_RS, "NEAR_M");
 /** The share of a part's vertices its capsule's radius holds within it (carry_radii.rs). */
@@ -216,6 +217,16 @@ export function ease(eased: Eased, to: V3, rate: number, dt: number): Eased {
   return { at: add(to, mul(add(away, mul(j, dt)), decay)), speed: mul(sub(eased.speed, mul(j, rate * dt)), decay) };
 }
 
+/** `eased` a frame on, held to the move wanted now (the game's `follow`, which names the
+ * method): never short of `want` along it, eased only where it is past it. */
+export function follow(eased: Eased, want: V3, rate: number, dt: number): Eased {
+  const next = ease(eased, want, rate, dt);
+  const way = unit(want);
+  if (!way) return next;
+  const short = len(want) - dot(next.at, way);
+  return short <= 0 ? next : { at: add(next.at, mul(way, short)), speed: sub(next.speed, mul(way, dot(next.speed, way))) };
+}
+
 // The capsules' radii (terra_walker::carry_radii).
 
 /** The capsules, in this order: the left thigh and calf, the right thigh and calf, the trunk;
@@ -290,8 +301,7 @@ export function radii(body: Glb, spread?: Spread[]): number[] {
         const [a, b] = ends[k];
         const o = a && b ? offAxis([at[v * 3], at[v * 3 + 1], at[v * 3 + 2]], a, b) : undefined;
         counted[k]++;
-        if (o) off[k].push(o);
-      }
+        if (o) off[k].push(o);      }
     }
   }
   spread?.push(

@@ -281,6 +281,30 @@ pub fn ease(eased: Eased, to: Vec3, rate: f32, dt: f32) -> Eased {
     }
 }
 
+/// `eased` a frame on, held to the move wanted now: never short of `want` along it, and eased
+/// (`ease`) only where it is past it, so a breach is mended the frame it is found and only the
+/// way back to the clip's pose takes time. A spring both ways trails a breach that grows over a
+/// few frames (a jump's start, a landing: 7 to 9 cm under the ground, held-constraint j5). As
+/// penetration is treated elsewhere: Unreal's Lyra third-person camera takes a hard block's
+/// distance at once and blends only back out (its PenetrationBlendOutTime), and its
+/// spring arm's lag never delays the collision test's pull in (how they behave; no code of
+/// theirs is used). The speed along `want` is dropped with the shortfall, so the release starts
+/// from rest.
+pub fn follow(eased: Eased, want: Vec3, rate: f32, dt: f32) -> Eased {
+    let next = ease(eased, want, rate, dt);
+    let Some(way) = want.try_normalize() else {
+        return next;
+    };
+    let short = want.length() - next.at.dot(way);
+    if short <= 0.0 {
+        return next;
+    }
+    Eased {
+        at: next.at + way * short,
+        speed: next.speed - way * next.speed.dot(way),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -483,5 +507,39 @@ mod tests {
         assert!((eased.at - by).length() < 1e-3);
         // The fault planted: followed frame by frame, the first frame's step is the whole move.
         assert!(by.length() / dt > most * 4.0);
+    }
+
+    /// A breach growing a centimetre a frame (a landing) is mended every frame, and the move
+    /// let go is eased away no faster than the spring. The fault planted: eased both ways, the
+    /// move trails the breach by centimetres.
+    #[test]
+    fn a_growing_breach_is_followed_at_once_and_only_its_release_is_eased() {
+        let (rate, dt) = (crate::carry_arm::GIVE_RATE, 1.0 / 60.0);
+        let want = |frame: usize| Vec3::new(0.0, 0.01 * frame.min(8) as f32, 0.0);
+        let (mut held, mut sprung) = (Eased::default(), Eased::default());
+        let mut trailed = 0.0_f32;
+        for frame in 1..=12 {
+            held = follow(held, want(frame), rate, dt);
+            sprung = ease(sprung, want(frame), rate, dt);
+            assert!(held.at.y >= want(frame).y - 1e-6, "frame {frame}: {held:?}");
+            trailed = trailed.max(want(frame).y - sprung.at.y);
+        }
+        assert!(trailed > 0.02, "the spring alone trailed only {trailed} m");
+        let most = 0.08 * rate / std::f32::consts::E;
+        for _ in 0..60 {
+            let next = follow(held, Vec3::ZERO, rate, dt);
+            let speed = (next.at - held.at).length() / dt;
+            assert!(speed <= most * 1.001, "{speed} over {most}");
+            held = next;
+        }
+        assert!(held.at.length() < 1e-3);
+        // A move past what is wanted, across it too, is left to the spring: only the shortfall
+        // along the want is made up.
+        let across = Eased {
+            at: Vec3::new(0.03, 0.05, 0.0),
+            speed: Vec3::ZERO,
+        };
+        let next = follow(across, Vec3::new(0.0, 0.05, 0.0), rate, dt);
+        assert!(next.at.y >= 0.05 - 1e-6 && next.at.x > 0.02 && next.at.x < 0.03);
     }
 }
