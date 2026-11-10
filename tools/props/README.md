@@ -32,6 +32,8 @@ Optional: `roles`, for a textured prop only the palette colours ([tools/characte
 
 Its textures are kept at a budget by its size (D304): colour and normal maps at 2048 for a prop whose longest side is 1.5 m or more, 1024 below, roughness and metal at half that, stored as JPEG with its tangents. Source art keeps Tripo's maps as made.
 
+`far`, a second triangle budget, makes a far level for a thing placed by the thousand, such as a realm's ground plants (`into: "nature/far"`, D642): refine writes `<file>_far.glb` beside the model, the same model cut further, with its sheet `out/<prop>-far.png`. The game draws the far level past where the plant's shape is made out, in the near level's material (`terra_sandbox`'s floor, `data/realms.ron`'s `undergrowth`).
+
 ## Making one
 
 Run from the repository root. The `models` skill (`.agents/skills/models`) gives the whole order of work around these steps, from choosing a model's size, budget and roles to putting it in the game's data. Tripo needs its setup ([tools/tripo](../tripo/README.md)); Blender runs through [tools/blender](../blender/README.md).

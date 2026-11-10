@@ -85,6 +85,10 @@ export type Prop = {
   size?: number;
   // Triangles the finished model may have.
   budget: number;
+  // Triangles its far level may have, for a thing placed by the thousand and drawn past
+  // where its shape is made out (a realm's ground plants, D642): refine writes it beside
+  // the model as `<file>_far.glb`, the same model cut further, with its own sheet.
+  far?: number;
   // A palette prop's colours, which its faces may take (tools/characters/look.py). A textured
   // prop keeps its own and needs none, but for a part that glows: its faces nearest Fire,
   // among the roles given, glow in the game, such as a forge's coals.
@@ -277,6 +281,10 @@ function refine(name: string, prop: Prop) {
   }
   run(BLENDER, [join(HERE, "refine.py"), ...args]);
   const folder = join(ROOT, "assets", "models", prop.into ?? "props");
+  if (prop.far) {
+    const far = refineArgs({ ...prop, budget: prop.far }, here(glb), here(join(folder, `${prop.file}_far.glb`)), here(join(OUT, `${name}-far.png`)));
+    run(BLENDER, [join(HERE, "refine.py"), ...far, ...args.filter((arg) => arg.startsWith("--grade=") && !far.includes(arg))]);
+  }
   const refined = join(folder, `${prop.file}.glb`);
   if (prop.char) run(BLENDER, [join(HERE, "char.py"), here(refined), here(refined)]);
   if (prop.coals) writeFileSync(refined, addBed(readFileSync(refined), 1));

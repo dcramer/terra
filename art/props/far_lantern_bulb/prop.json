@@ -1,0 +1,21 @@
+{
+  "subject": "alien ground plant, knee high: a low rosette of thick fleshy dark indigo leaves with pale veins, and rising from its middle five short stout stalks each ending in a round translucent pale teal bulb the size of a fist that glows softly from inside, the bulbs at different heights, their skin veined like a seed pod's",
+  "file": "FarLanternBulb",
+  "into": "nature/far",
+  "dims": [
+    0.7,
+    0.6,
+    0.7
+  ],
+  "budget": 1600,
+  "roles": [
+    "Light",
+    "MetalDark"
+  ],
+  "light": [
+    0.15,
+    0.4,
+    0.35
+  ],
+  "far": 400
+}
