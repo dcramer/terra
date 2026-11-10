@@ -4,7 +4,8 @@
   "type": "collar",
   "about": "a binding of dark leather thong wound in tight turns under the head (art/parts/axe/trims.png)",
   "kinds": [
-    "axe"
+    "axe",
+    "hatchet"
   ],
   "model": "models/parts/leather_binding.glb",
   "density_kg_m3": {

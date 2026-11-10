@@ -3,6 +3,7 @@
   "part": "hatchet_head",
   "type": "axe_head",
   "about": "a small wrought-iron hatchet head, a long straight cheek to a short bit (art/parts/axe/heads.png)",
+  "kinds": ["hatchet"],
   "model": "models/parts/hatchet_head.glb",
   "points": [
     {

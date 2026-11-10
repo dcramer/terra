@@ -158,7 +158,7 @@ test("a haft that fits many kinds must name the ones it is made for", () => {
 test("the kinds a part fits are the assembler's, never worked out here", () => {
   const c = good();
   // The real assembler, asked as part.ts asks it: a haft is taken by these kinds' slots (assets/data/kinds).
-  assert.deepEqual(c.kindsOf("haft"), { taking: ["axe", "hammer", "pickaxe", "spear", "torch"], made_for: ["axe", "hammer", "pickaxe", "spear", "torch"] });
+  assert.deepEqual(c.kindsOf("haft"), { taking: ["axe", "hammer", "hatchet", "pickaxe", "spear", "torch"], made_for: ["axe", "hammer", "hatchet", "pickaxe", "spear", "torch"] });
   assert.deepEqual(c.kindsOf("haft", ["axe"]).made_for, ["axe"]);
   // An assembler that said a haft fits the axe alone would leave nothing to name: the verdict follows its answer.
   const h = haft();

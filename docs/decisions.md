@@ -168,6 +168,7 @@ Equipment, packs, tools, stations and icons.
 | [D460](decisions/D460.md) | Where the off hand's item comes from | Design | Developers | Decided | How a shield, a torch or a second blade gets into the… |
 | [D566](decisions/D566.md) | Assembled items' parts join on one line, made in the finished frame and never scaled; the kinds are data in assets/data/kinds | Tech | Agent | Decided | Each part of an assembled item (D565) is made in the… |
 | [D602](decisions/D602.md) | The starting kit's clothes are Quaternius's Ranger outfit | Design | Developers | Decided | The v0 starting kit's clothes are Quaternius's Ranger… |
+| [D653](decisions/D653.md) | The one-handed tool axe is a hatchet, its own kind; the long axe's envelope is kept as the axe kind | Tech | Agent | Decided | The bar's one-handed axe is a hatchet… |
 
 ## Lore, magic, combat and growth
 

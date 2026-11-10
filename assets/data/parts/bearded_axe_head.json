@@ -3,6 +3,7 @@
   "part": "bearded_axe_head",
   "type": "axe_head",
   "about": "a wrought-iron bearded head, its beard hooked down below the eye (art/parts/axe/heads.png)",
+  "kinds": ["axe"],
   "model": "models/parts/bearded_axe_head.glb",
   "points": [
     {

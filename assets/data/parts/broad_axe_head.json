@@ -3,6 +3,7 @@
   "part": "broad_axe_head",
   "type": "axe_head",
   "about": "a wrought-iron broad head, a tall flared bit on a short square poll (art/parts/axe/heads.png)",
+  "kinds": ["axe"],
   "model": "models/parts/broad_axe_head.glb",
   "points": [
     {

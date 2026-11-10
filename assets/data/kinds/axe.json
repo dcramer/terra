@@ -1,7 +1,7 @@
 {
   "$schema": "./kind.schema.json",
   "kind": "axe",
-  "about": "A one-handed axe: a head on a wooden haft. Today a tool that fells trees (the stone and iron axes); later also a weapon.",
+  "about": "A long one-handed axe, 0.61 to 0.75 m: a head on a wooden haft, the size both axes had from the free pack. Today the iron axe's look; kept for a later felling or battle axe. The one-handed tool axe is the hatchet kind (D653).",
   "attach_kind": "hafted",
   "hold_class": { "class": "axe", "source": "tools/characters/attach_kinds.json (hafted's classes) and holding.md section 1" },
   "hands": {

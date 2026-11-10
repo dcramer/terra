@@ -95,6 +95,7 @@ export const head = (over: Record<string, any> = {}) => ({
   part: "test_box_head",
   type: "axe_head",
   about: "a made-up box head with a round eye",
+  kinds: ["axe"],
   model: "models/parts/test_box_head.glb",
   volume_m3: n(HEAD_M3),
   centre_m: [0, 0.03, 0],

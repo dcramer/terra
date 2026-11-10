@@ -4,7 +4,8 @@
   "type": "collar",
   "about": "a forged iron collar under the head, a raised bead round its middle (art/parts/axe/trims.png)",
   "kinds": [
-    "axe"
+    "axe",
+    "hatchet"
   ],
   "model": "models/parts/iron_collar.glb",
   "density_kg_m3": {
