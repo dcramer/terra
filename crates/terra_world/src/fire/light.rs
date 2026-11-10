@@ -658,7 +658,14 @@ pub(super) struct Was {
     pub at: Vec3,
     pub on: bool,
     pub near: bool,
+    /// Whether it was given shadows (`ShadowFade::wanted`).
+    pub cast: bool,
 }
+
+/// How much farther off, metres, a light entity counts for a light that casts shadows where
+/// the entity's last did not, or the other way: a torch's key and tip hang 0.21 m apart, and
+/// matched by place alone they traded entities as a running hand moved them (`held_tests`).
+const KIND_M: f32 = 1.0;
 
 /// A light to show: what it is, how far its distance has eased it, whether it casts shadows,
 /// and whether it shines in the fog (a kept fire's near light, shadowed or not).
@@ -698,8 +705,8 @@ pub fn light_reach(quality: Quality) -> f32 {
 
 /// The lights to show on each light entity: the most a fire's light matters where the eye is
 /// (its lumens over its distance, eased out from 30 to 40 m, `reach` times that in a film,
-/// `light_reach`), each kept on the entity that showed the nearest of last frame's, so a
-/// light's shadows stay on it as fires come and go; of the lights that may cast them
+/// `light_reach`), each kept on the entity that showed the nearest of last frame's (one of its
+/// own kind first, `KIND_M`), so a light's shadows stay on it as fires come and go; of the lights that may cast them
 /// (`Lit::casts`) the nearest `shadows` within 20 m cast shadows, kept to 23 m once on, and as
 /// many of the rest, a kept fire's, shine in the fog.
 pub(super) fn choose_within(
@@ -742,15 +749,19 @@ pub(super) fn choose_within(
     let mut out: Vec<Option<Shown>> = vec![None; was.len()];
     for (_, shown) in wanted {
         let free = |i: &usize| out[*i].is_none();
+        // An entity of the other kind (shadowed or not) counts `KIND_M` farther.
+        let off = |i: usize| {
+            let kind = if was[i].cast == shown.lit.casts {
+                0.0
+            } else {
+                KIND_M
+            };
+            was[i].at.distance(shown.lit.at) + kind
+        };
         let near = (0..was.len())
             .filter(free)
             .filter(|i| was[*i].on && was[*i].at.distance(shown.lit.at) < 4.0)
-            .min_by(|a, b| {
-                was[*a]
-                    .at
-                    .distance(shown.lit.at)
-                    .total_cmp(&was[*b].at.distance(shown.lit.at))
-            });
+            .min_by(|a, b| off(*a).total_cmp(&off(*b)));
         let slot = near
             .or_else(|| (0..was.len()).filter(free).find(|i| !was[*i].on))
             .or_else(|| (0..was.len()).find(free));
@@ -828,8 +839,10 @@ pub(super) fn light(
                     at: Vec3::ZERO,
                     on: false,
                     near: false,
+                    cast: false,
                 },
                 |(light, transform, visibility, volumetric)| Was {
+                    cast: wanted,
                     at: transform.translation,
                     on: *visibility != Visibility::Hidden,
                     near: wanted || (volumetric && !light.shadow_maps_enabled),
@@ -943,6 +956,8 @@ pub(super) fn light(
 
 #[cfg(test)]
 mod face_tests;
+#[cfg(test)]
+mod held_tests;
 #[cfg(test)]
 mod pool_tests;
 #[cfg(test)]

@@ -236,7 +236,8 @@ fn none(n: usize) -> Vec<Was> {
         Was {
             at: Vec3::ZERO,
             on: false,
-            near: false
+            near: false,
+            cast: false,
         };
         n
     ]
@@ -282,6 +283,7 @@ fn a_lights_shadows_stay_on_it_until_it_is_well_past_their_reach() {
         at: Vec3::new(x, 0.0, 0.0),
         on: true,
         near,
+        cast: near,
     };
     let shown = choose(
         vec![at(21.0, 1.0e7)],
@@ -965,6 +967,7 @@ fn walking_a_torchlit_corridor_no_light_blinks_in_or_out() {
                 at: s.as_ref().map_or(Vec3::ZERO, |s| s.lit.at),
                 on: s.is_some(),
                 near: s.as_ref().is_some_and(|s| s.shadows),
+                cast: s.as_ref().is_some_and(|s| s.shadows),
             })
             .collect();
         last = Some(by_torch);

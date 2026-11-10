@@ -329,6 +329,7 @@ mod tests {
             at: Vec3::ZERO,
             on: false,
             near: false,
+            cast: false,
         };
         let was = vec![off; super::super::LIGHTS];
         let mut first: Vec<Option<(f32, Vec<Vec3>)>> = vec![None; 3];

@@ -80,6 +80,7 @@ fn a_films_fire_lights_the_walls_from_three_times_plays_distance() {
             at: Vec3::ZERO,
             on: false,
             near: false,
+            cast: false,
         };
         4
     ];
