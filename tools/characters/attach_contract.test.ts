@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { join } from "node:path";
 import { type V3 } from "./glb.ts";
-import { type Look, ROOT, against, audit, dataOf, judge, judgeSockets, kindOf, knownFaults, readBody, readLook, sourceSha } from "./attach_contract.ts";
+import { type Look, ROOT, against, audit, dataOf, headReach, judge, judgeSockets, kindOf, knownFaults, readBody, readLook, sourceSha, workingReach } from "./attach_contract.ts";
 
 const body = readBody();
 const read = new Map<string, Look>();
@@ -73,6 +73,11 @@ test("a hammer's face and a pickaxe's longer pick lead toward -Z", () => {
     assert.deepEqual(rules(tool), [], name);
     assert.deepEqual(rules(moved(tool, aboutY(180))), ["facing"], `${name}, its face toward +Z`);
   }
+  // The assembled hammer's peen reaches further than its face: its working side is its head's
+  // `face` point, not its longer side, so the bounds alone would pass it either way round.
+  const reach = headReach(look("held/hammer"), [0, 0]);
+  assert.ok(reach.plusZ > reach.minusZ, "the hammer's peen (+Z) is its longer end");
+  assert.ok(Math.abs(workingReach(look("held/hammer"), "-Z")! - reach.minusZ) < 0.002, "its face point is its -Z end");
 });
 
 test("a hung basket passes once it says so, and fails standing up or unmarked", () => {

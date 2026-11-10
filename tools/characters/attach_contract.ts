@@ -87,6 +87,10 @@ export const ACROSS = { ratio: 1.1, slack_m: 0.005 };
 /** How much further one side of a working end must reach to count as one-sided (an axe's bit,
  * a hammer's face), which then faces -Z. */
 export const ONE_SIDED_M = 0.02;
+/** How far an assembled look's working end may reach from where its part's working point says,
+ * toward the side it faces: an edge's two points are its span's ends, not its front-most (the
+ * hatchet's bit bows 0.7 cm past them). */
+export const WORKING_M = 0.01;
 /** The share of a held look's length, from its far end, that is its working end. */
 export const HEAD_SHARE = 0.25;
 /** How far a rigid look's middle may sit from its socket: it is saved in the socket's space. */
@@ -316,7 +320,7 @@ export function headReach(look: Look, handle: [number, number]) {
   };
 }
 
-function inHand(look: Look, faces: "+Z" | "-Z", f: (rule: string, detail: string) => void) {
+function inHand(look: Look, faces: "+Z" | "-Z", working: number | undefined, f: (rule: string, detail: string) => void) {
   const { lo, hi } = box(look.points);
   const handle = handleAt(look);
   if (!handle) return f("grip", "nothing crosses y = 0: the grip is not at the origin");
@@ -327,8 +331,33 @@ function inHand(look: Look, faces: "+Z" | "-Z", f: (rule: string, detail: string
   const head = headReach(look, handle);
   if (head.x > ACROSS.ratio * head.z + ACROSS.slack_m)
     f("facing", `its working end is ${(head.x * 100).toFixed(1)} cm across X and ${(head.z * 100).toFixed(1)} cm across Z (reaching ${(head.plusX * 100).toFixed(1)} cm toward +X, ${(head.minusX * 100).toFixed(1)} toward -X): it lies across X, not in the Y-Z plane`);
-  else if ((faces === "-Z" ? head.plusZ - head.minusZ : head.minusZ - head.plusZ) > ONE_SIDED_M)
+  else if (working !== undefined) {
+    // An assembled look's working side is its part's point, not its longer side: a hammer's peen
+    // or claw may reach further than its face.
+    const got = faces === "-Z" ? head.minusZ : head.plusZ;
+    if (Math.abs(got - working) > WORKING_M)
+      f("facing", `its working end reaches ${(got * 100).toFixed(1)} cm toward ${faces}, but its part's working point (its edge, face or tip) is ${(working * 100).toFixed(1)} cm that way, over ${WORKING_M * 100} cm apart: it is turned about its handle, or its part's points are not its model's (node tools/items/part.ts <part>)`);
+  } else if ((faces === "-Z" ? head.plusZ - head.minusZ : head.minusZ - head.plusZ) > ONE_SIDED_M)
     f("facing", `its working end reaches ${(head.plusZ * 100).toFixed(1)} cm toward +Z and ${(head.minusZ * 100).toFixed(1)} cm toward -Z: it leans ${faces === "-Z" ? "+Z, not -Z" : "-Z, not +Z"}`);
+}
+
+/** How far toward `faces` an assembled look's working point lies from its handle's line (D565,
+ * D566: a part's `edge.*`, `face` or `tip` whose direction is along Z, as its part's data gives
+ * it; the assembler places parts on the line unturned), the furthest of them; undefined for a
+ * look that is not assembled or whose working point is on the line (a spear's tip). Negative
+ * when the point faces the other way. */
+export function workingReach(look: Look, faces: "+Z" | "-Z", root = ROOT): number | undefined {
+  const parts = (look.extras.recipe as { parts?: string[] } | undefined)?.parts;
+  if (!parts) return undefined;
+  const sign = faces === "-Z" ? -1 : 1;
+  const reaches: number[] = [];
+  for (const part of parts) {
+    const file = join(root, "assets", "data", "parts", `${part}.json`);
+    if (!existsSync(file)) continue;
+    for (const p of JSON.parse(readFileSync(file, "utf8")).points ?? [])
+      if (["edge", "face", "tip"].includes(p.type) && Math.abs(p.dir[2]) > 0.5) reaches.push(Math.sign(p.dir[2]) === sign ? sign * p.at[2] : -Math.abs(p.at[2]));
+  }
+  return reaches.length ? Math.max(...reaches) : undefined;
 }
 
 const within = (v: number, [lo, hi]: [number, number]) => v >= lo - 1e-6 && v <= hi + 1e-6;
@@ -539,7 +568,7 @@ export function judge(look: Look, body: Body, data = dataOf(look.name), hold = h
     if (look.extras.carry_tilt !== undefined || data?.carry_tilt !== undefined) f("marker", "it gives a carry_tilt, which nothing reads (D546): drop it from its data and fit it again (node tools/characters/fit.ts <item>)");
     if (mount !== "hung" && look.extras.hold === "hung") f("marker", `it says {"hold": "hung"}, which its data does not`);
   }
-  if (mount === "in hand") inHand(look, rules.faces ?? "-Z", f);
+  if (mount === "in hand") inHand(look, rules.faces ?? "-Z", workingReach(look, rules.faces ?? "-Z", root), f);
   if (mount === "hung") hung(look, f);
   if (mount === "strapped") strapped(look, body, data, f);
   if (mount === "rigid") rigid(look, body, f);

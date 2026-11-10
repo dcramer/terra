@@ -5,7 +5,7 @@ boots painted models/gear/boots.glb 15d05f50622445d0 -
 bow painted models/held/bow.glb 0fd90d425329e00d -
 cooked_meat painted - - -
 fibre painted - - -
-hammer painted models/held/hammer.glb d1c2a851f7acdec0 -
+hammer painted models/held/hammer.glb 9205ffd69385e920 -
 heater_shield painted models/held/heater_shield.glb 60154d85ce21367a -
 hide painted - - -
 iron painted - - -
