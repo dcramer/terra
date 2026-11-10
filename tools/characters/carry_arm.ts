@@ -8,10 +8,11 @@
 // chest takes it.
 //
 // An upright pose's arm (the torch's) is held so and no more. A hanging one (a tool's, a
-// sword's, a knife's) is held so too and gives as the legs fold (`fold`): the elbow bends and
-// the arm comes out from the side, so a landing's crouch, which brings the hand down to the
-// knees, lifts the look clear of the ground and the legs instead of driving a pickaxe 34.6 cm
-// under it. Twin of terra_walker::carry_arm, whose numbers it reads; change both.
+// sword's, a knife's) is held so too and gives as the legs fold (`fold`): the elbow bends, the
+// upper arm goes back at the shoulder and the arm comes out from the side, so a landing's
+// crouch, which brings the hand down to the knees, lifts the look clear of the ground and the
+// legs instead of driving a pickaxe 34.6 cm under it, and tips it up by only the elbow's bend
+// less the shoulder's turn back (held.carry.axe_down). Twin of terra_walker::carry_arm, whose numbers it reads; change both.
 // Node 22.18 or later; no dependencies.
 
 import { readFileSync } from "node:fs";
@@ -19,7 +20,8 @@ import { join } from "node:path";
 import { type Glb, type Pose, type Q, len, qinv, qmul, sub, turn } from "./glb.ts";
 
 /** The give's numbers, read from the game's source (terra_walker::carry_arm) so the two
- * cannot differ: the elbow's and the arm's turn (degrees) with the legs folded all the way,
+ * cannot differ: the elbow's turn, the upper arm's back and the arm's out (degrees) with the
+ * legs folded all the way,
  * and the fold a give starts at and is whole at. */
 export const GIVE = (() => {
   const source = readFileSync(join(import.meta.dirname, "../../crates/terra_walker/src/carry_arm.rs"), "utf8");
@@ -28,7 +30,7 @@ export const GIVE = (() => {
     if (!m) throw new Error(`carry_arm.ts: no ${name} in crates/terra_walker/src/carry_arm.rs: the give's numbers are read from it; keep the constant or change both`);
     return Number(m[1]);
   };
-  return { elbow: of("GIVE_ELBOW_DEG"), out: of("GIVE_OUT_DEG"), from: of("FOLD_FROM"), to: of("FOLD_TO"), rate: of("GIVE_RATE") };
+  return { elbow: of("GIVE_ELBOW_DEG"), back: of("GIVE_BACK_DEG"), out: of("GIVE_OUT_DEG"), from: of("FOLD_FROM"), to: of("FOLD_TO"), rate: of("GIVE_RATE") };
 })();
 
 /** The fastest a give's elbow turns, degrees a second, however the fold steps: a critically
@@ -101,8 +103,9 @@ export function carryArm(body: Glb, rest: Pose[], upright: readonly string[], ha
     const g = eased ?? fold(pose, legs);
     for (const root of hanging) {
       const s = root.slice(-1);
-      // The model faces +Z, +X its left: a right arm goes out from the side turning about -Z.
-      turns.set(`upperarm_${s}`, turn([0, 0, (s === "r" ? -1 : 1) * GIVE.out * g]));
+      // The model faces +Z, +X its left: a right arm goes out from the side turning about -Z,
+      // after its upper arm goes back about +X.
+      turns.set(`upperarm_${s}`, qmul(turn([0, 0, (s === "r" ? -1 : 1) * GIVE.out * g]), turn([GIVE.back * g, 0, 0])));
       turns.set(`lowerarm_${s}`, turn([-GIVE.elbow * g, 0, 0]));
     }
     return turns;

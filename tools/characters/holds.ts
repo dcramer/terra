@@ -9,13 +9,15 @@
 //   grip   the handle's radius against the thickest a power grip closes on (NIOSH 2004-164, "A
 //          Guide to Selecting Non-Powered Hand Tools": 2 in, 5.1 cm across); the grip's distance
 //          from the butt against its kind's range; the grip off the handle's line
-//          (attach_contract.ts GRIP_M); read: how far the handle stands out past the little
+//          (attach_contract.ts GRIP_M); the closed fingers off the handle (grip.ts fistOff, 1 cm,
+//          moves.ts fist_cm); read: how far the handle stands out past the little
 //          finger and, a blade's, past the thumb's side before it widens
 //   carry  through every clip the game carries it in (terra_walker's CARRIED_IN), 15 poses a
 //          second from 0: the wrist's flexion, extension, radial and ulnar deviation against a
 //          person's (wrist.ts WRIST, AAOS); the look's lowest point against the ground under the
 //          feet; how deep it goes into the trunk and into the calves and feet (moves.ts's own
-//          numbers and its 1 cm bar); read: the handle below and above level and out from the
+//          numbers and its 1 cm bar); how far above level its working end rises (moves.ts
+//          carried_rise_deg, 10 degrees, held.carry.axe_down's bar); read: the handle below and above level and out from the
 //          body, the elbow's bend
 //   use    the same bars through the walker's use clips, or its class's set (clearances only: a
 //          set's wrists are moves.ts's own rows)
@@ -37,7 +39,7 @@ import { GRIP_M, HEAD_SHARE, KINDS, type Look, ROOT, dataOf, fittedAs, handleAt,
 import { HELD_CM, PARTNER, movesReads, runMoves, setOf } from "./fit.ts";
 import { Cache, closure, key } from "./fit_cache.ts";
 import { Glb, type V3, posed, qinv, rot, sub } from "./glb.ts";
-import { FINGER_M, cut, handleIn } from "./grip.ts";
+import { FINGER_M, FIST_CM, cut, handleIn } from "./grip.ts";
 import { carriedClips, carryHold } from "./held.ts";
 import { BASE } from "./skin.ts";
 import { WRIST } from "./wrist.ts";
@@ -47,6 +49,9 @@ const OUT = join(CHARS, "out");
 const HELD = join(ROOT, "assets", "models", "held");
 /** The thickest handle a power grip closes on, its radius in cm (NIOSH 2004-164: 2 in across). */
 export const HANDLE_R_CM = 2.55;
+/** How far above level a look carried in the fist may tip its working end, degrees: the bar of
+ * held.carry.axe_down (tools/combat/criteria.json, D564; a jump's arms lift it a little). */
+export const RISE_DEG = 10;
 /** How far under the ground a look may reach, cm. */
 export const GROUND_CM = 0;
 
@@ -126,12 +131,30 @@ const KEYS: [string, string, number | null, string, boolean][] = [
   ["hold_elbow_deg", "elbow", null, "deg", true],
 ];
 
+// moves.ts's row "fist" (the worst of every clip it played, with where): the fingers off the
+// handle (grip.ts fistOff, the same in every pose: the fist is closed once a body), and how far
+// above level the carried look's working end rises (carried_rise_deg, the carried clips alone).
+const FIST: [string, string, number, string][] = [
+  ["carried_rise_deg", "carry.rise", RISE_DEG, "deg"],
+  ["fist_cm", "grip.fist_off", FIST_CM, "cm"],
+];
+
 /** A body's rows judged for one look: each of its numbers a measure, `carry.` in a clip the
  * game carries it in, `use.` in any other clip or move. */
 export function judged(look: string, body: string, rows: Row[], carried: string[]): Measure[] {
   const out: Measure[] = [];
   for (const row of rows) {
     const clip = row.move ?? row.clip;
+    if (!row.move && row.clip === "fist") {
+      for (const [k, measure, bar, unit] of FIST) {
+        const value = row.measured[`${k}.${look}`];
+        if (value === undefined) continue;
+        const where = row.where?.[`${k}.${look}`] ?? "";
+        const at = /(\w+) at ([\d.]+) s/.exec(where);
+        out.push({ look, measure, body, clip: at?.[1] ?? "-", time: at ? Number(at[2]) : null, value, bar, unit, ok: value <= bar, where });
+      }
+      continue;
+    }
     const carry = !row.move && carried.includes(row.clip);
     for (const [k, measure, bar, unit, carriedOnly] of KEYS) {
       const value = row.measured[`${k}.${look}`];
@@ -152,6 +175,8 @@ export function fixFor(measure: string): string {
   const refit = "then node tools/characters/fit.ts ITEM";
   if (group === "size") return `make it life size in art/held/ITEM.json (its length), ${refit}; never widen attach_kinds.json's range for one look`;
   if (what === "radius") return `thin the handle in its model (the source art/held/ITEM.json names), ${refit}`;
+  if (what === "fist_off") return `its handle is thinner or thicker than the closed fist lies on (grip.radius; the knuckle bone named is that far off its surface): seat it nearer the fingers (terra_walker::grip::seat and grip.ts seatOf, both) or change the handle's section in its model, ${refit}; never raise grip.ts's FIST_CM`;
+  if (what === "rise") return "its working end tips above level in that clip: tip its carry pose down (hold.py's aim), or have the arm's give lift the hand without turning the forearm up (terra_walker::carry_arm and carry_arm.ts, both); never raise RISE_DEG";
   if (group === "grip") return `move its grip in art/held/ITEM.json (grip_from_end), ${refit}`;
   if (what.startsWith("wrist")) return group === "carry" ? "re-aim the arm of its carry pose (named beside the look; hold.py's aim) so the forearm, not the wrist, points the look; never widen wrist.ts's limits" : "the clip bends the wrist whatever is held: remake its keys (clip.ts); never widen wrist.ts's limits";
   if (what === "ground") return "raise or level its carry pose in that clip, or let the arm give as the body crouches";
@@ -163,7 +188,7 @@ const barOf = (m: Measure) => (Array.isArray(m.bar) ? `${m.bar[0]} to ${m.bar[1]
 const worst = (ms: Measure[]) => ms.reduce((a, b) => (b.value > a.value ? b : a));
 
 /** What a passing look's line reads: its size and grip, then the worst of each carry measure. */
-const READ = ["size.length", "size.extent", "size.head_fists", "grip.radius", "grip.past_little", "grip.past_thumb", "carry.below", "carry.above", "carry.wrist_ulnar", "carry.wrist_ext", "carry.trunk", "carry.legs", "carry.ground", "use.trunk", "use.legs"];
+const READ = ["size.length", "size.extent", "size.head_fists", "grip.radius", "grip.past_little", "grip.past_thumb", "grip.fist_off", "carry.rise", "carry.below", "carry.above", "carry.wrist_ulnar", "carry.wrist_ext", "carry.trunk", "carry.legs", "carry.ground", "use.trunk", "use.legs"];
 
 /** The report's line for one look, `pose` its carry pose: what it reads if every bar holds, else
  * only the measures over their bars, each one's worst case (value, bar, body, clip, time, and

@@ -18,7 +18,10 @@
 //! 6.9 cm under it; held in the body's frame and no more, the hand came down with the hip to
 //! the knees (the pickaxe 32 cm under the ground, a thigh 6.8 cm into its haft). So as the
 //! legs fold the elbow bends, bringing the forearm and the look up, and the arm comes out
-//! from the side, clear of the knee, as a person lands with a tool in hand. Its twin is
+//! from the side, clear of the knee, as a person lands with a tool in hand. The elbow also
+//! goes back at the shoulder, which takes most of the forearm's turn out again: bent alone,
+//! the elbow tipped a crouching body's axe 28 degrees above level, pointing ahead (the
+//! developer's still of 2026-10-28, held.carry.axe_down; `holds.ts`'s `carry.rise`). Its twin is
 //! `tools/characters/carry_arm.ts`, which the move check lays over the carried clips
 //! (`moves.ts --carry`) and which reads the give's numbers from this file; change both.
 
@@ -28,11 +31,17 @@ use crate::bend::{Kept, find, in_body};
 use crate::character::{Body, CarryHold, CarryPosed, HAND_L, HAND_R};
 
 /// How a hanging carried arm gives with the legs folded all the way: the elbow bent this much
-/// more (the forearm brought forward and up about the body's side axis) and the arm this much
-/// out from the side at the shoulder (about the body's forward axis). The least that clears
-/// the ground and the legs in every carried clip on every body
-/// (`node tools/characters/holds.ts`, its `carry.ground` and `carry.legs`).
+/// more (the forearm brought forward and up about the body's side axis), the upper arm this
+/// much back at the shoulder (about the same axis the other way, the elbow going behind the
+/// hip) and the arm this much out from the side (about the body's forward axis). The forearm,
+/// and the look in its fist, tip up by the elbow's bend less the shoulder's turn back, 15
+/// degrees: with no turn back a crouch tipped a tool 28.3 degrees above level, with 20 back
+/// 9.4, with 25 back 4.7 (`node tools/characters/holds.ts`, its `carry.rise`, bar 10), every
+/// look still clear of the ground, the trunk and the legs in every carried clip on every body
+/// (its `carry.ground`, `carry.trunk`, `carry.legs`); 30 back leaves a pickaxe 1.6 cm over
+/// the ground where 25 leaves 2.6.
 pub const GIVE_ELBOW_DEG: f32 = 40.0;
+pub const GIVE_BACK_DEG: f32 = 25.0;
 pub const GIVE_OUT_DEG: f32 = 25.0;
 /// The legs' fold a give starts at (a stride's bend gives nothing) and is whole at (a
 /// landing's crouch): how much shorter hip to ankle is than thigh and shin laid end to end.
@@ -93,12 +102,12 @@ pub fn fold(legs: [[Vec3; 3]; 2]) -> f32 {
 }
 
 /// The turns in the body that give a hanging arm at `fold`, the right arm or the left: at the
-/// upper arm (out from the side) and at the forearm (the elbow). The model faces +Z, +X its
-/// left, so a right arm goes out turning about -Z.
+/// upper arm (back, then out from the side) and at the forearm (the elbow). The model faces
+/// +Z, +X its left, so a right arm goes out turning about -Z, and either goes back about +X.
 pub fn give(fold: f32, right: bool) -> (Quat, Quat) {
     let out = (GIVE_OUT_DEG * fold).to_radians() * if right { -1.0 } else { 1.0 };
     (
-        Quat::from_rotation_z(out),
+        Quat::from_rotation_z(out) * Quat::from_rotation_x((GIVE_BACK_DEG * fold).to_radians()),
         Quat::from_rotation_x(-(GIVE_ELBOW_DEG * fold).to_radians()),
     )
 }
@@ -440,9 +449,11 @@ mod tests {
     }
 
     /// The pickaxe under the ground in a landing: with the legs folded a hanging arm's elbow
-    /// bends and the arm comes out, so the hand is where the give's two turns put it from the
-    /// shoulder (worked here from the arm's lengths), higher, further out and further forward
-    /// than standing; an upright pose's arm gives nothing.
+    /// bends, the upper arm goes back and the arm comes out, so the hand is where the give's
+    /// turns put it from the shoulder (worked here from the arm's lengths), higher and further
+    /// out than standing; an upright pose's arm gives nothing. The axe level in a crouch
+    /// (held.carry.axe_down): the forearm, and so the look in the fist, tips up by no more than
+    /// 20 degrees, which the elbow's bend alone (40) passed.
     #[test]
     fn a_hanging_arm_gives_as_the_legs_fold_and_an_upright_one_does_not() {
         let case = |folded, upright| Case {
@@ -460,7 +471,8 @@ mod tests {
         let standing = hand(case(false, false));
         assert!(standing.distance(Vec3::new(-0.15, -0.55, 0.0)) < 1e-4);
         let given = hand(case(true, false));
-        let out = Quat::from_rotation_z(-GIVE_OUT_DEG.to_radians());
+        let out = Quat::from_rotation_z(-GIVE_OUT_DEG.to_radians())
+            * Quat::from_rotation_x(GIVE_BACK_DEG.to_radians());
         let elbow = Quat::from_rotation_x(-GIVE_ELBOW_DEG.to_radians());
         let wanted = Vec3::new(-0.15, 0.0, 0.0)
             + out * Vec3::new(0.0, -0.3, 0.0)
@@ -470,8 +482,21 @@ mod tests {
             "the hand at {given} from the shoulder, not {wanted}"
         );
         assert!(
-            given.y > standing.y + 0.05 && given.x < standing.x - 0.1 && given.z > 0.1,
-            "the hand at {given} is not up, out and forward of {standing}"
+            given.y > standing.y + 0.03 && given.x < standing.x - 0.1,
+            "the hand at {given} is not up and out of {standing}"
+        );
+        // The forearm's turn about the body's side axis, standing to given: what a look held
+        // across the fist is tipped up by.
+        let forearm = |case: Case| {
+            let (mut world, made) = held(case);
+            place_in_body(&mut world, made.root, made.lower).0
+        };
+        let turned = forearm(case(true, false)) * forearm(case(false, false)).inverse();
+        let tipped = -turned.to_euler(EulerRot::ZXY).1.to_degrees();
+        assert!(
+            tipped > 5.0 && tipped <= 20.0,
+            "the forearm tips {tipped} degrees up as the legs fold: over 20 lifts a carried \
+             axe's head above level (GIVE_ELBOW_DEG less GIVE_BACK_DEG)"
         );
         let upright = hand(case(true, true));
         assert!(
@@ -549,8 +574,9 @@ mod tests {
         let most = (GIVE_ELBOW_DEG + GIVE_OUT_DEG) * GIVE_RATE / std::f32::consts::E / 60.0;
         assert!(first > 1.0 && first < most, "{first} degrees in the frame");
         let settled = frame(&mut world, 1.0);
+        // Bent 40 at the elbow less 25 back at the shoulder, and 25 out: about 29 in all.
         assert!(
-            settled > 35.0,
+            settled > 25.0,
             "a second on the forearm is {settled} degrees"
         );
     }

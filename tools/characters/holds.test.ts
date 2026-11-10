@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { type Look, ROOT, readLook } from "./attach_contract.ts";
 import { Glb, type Pose, type Q, type V3, posed, qmul, rot } from "./glb.ts";
 import { holdPose, wristRest } from "./hold_pose.ts";
-import { type Measure, type Row, fistOf, fixFor, judged, lineFor, shapeOf } from "./holds.ts";
+import { type Measure, RISE_DEG, type Row, fistOf, fixFor, judged, lineFor, shapeOf } from "./holds.ts";
 
 // The planted faults (D632): each bar of the hold report is shown to catch what it is for, on
 // the committed stone axe changed one way at a time; the axe as committed passes them all.
@@ -102,4 +105,39 @@ test("the ground under a pose is the model's zero, lower only by a foot under it
   assert.equal(groundUnder(at(0.1, 0.1), feet), 0);
   assert.equal(groundUnder(at(0.2, 0.2), feet), 0, "both feet in the air raised the ground");
   assert.ok(Math.abs(groundUnder(at(0.07, 0.3), feet) + 0.03) < 1e-9);
+});
+
+// The axe level in a crouch and the fingers off a thin haft (held-carry j5, the developer's
+// still of 2026-10-28): moves.ts's row "fist" as it writes it today, the committed stone axe
+// through the crouch on one body, passes both and says where; the same row with the numbers
+// main had on 2026-11-09 planted (the give's elbow bent 40 degrees with no turn back at the
+// shoulder tipped every tool 28.3 degrees above level in Crouch_Idle_Loop; the iron axe's
+// 1.75 cm haft left the ring finger's knuckle bone 1.06 cm off it) fails each by name.
+test("a carried look tipped above level and fingers off the handle fail from moves.ts's fist row", () => {
+  const dir = mkdtempSync(join(tmpdir(), "holds-fist-"));
+  const json = join(dir, "rows.json");
+  const args = ["--set", "none", "--also", "Crouch_Idle_Loop", "--template", "male", "--hold", "socket.hand.R=assets/models/held/stone_axe.glb", "--carry", "--arms", "--json", json];
+  const run = spawnSync(process.execPath, [join(ROOT, "tools", "characters", "moves.ts"), ...args], { cwd: ROOT, encoding: "utf8" });
+  const rows = JSON.parse(readFileSync(json, "utf8")) as Row[];
+  rmSync(dir, { recursive: true, force: true });
+  const row = rows.find((r) => r.clip === "fist");
+  assert.ok(row, run.stderr);
+  const of = (rows: Row[]) => judged("stone_axe", "male", rows, ["Crouch_Idle_Loop"]).filter((m) => m.measure === "carry.rise" || m.measure === "grip.fist_off");
+  const real = of([row]);
+  assert.deepEqual(real.map((m) => [m.measure, m.ok, m.clip, m.unit]), [["carry.rise", true, "Crouch_Idle_Loop", "deg"], ["grip.fist_off", true, "Crouch_Idle_Loop", "cm"]]);
+  assert.ok(real.every((m) => m.time !== null && /, male$/.test(m.where)), JSON.stringify(real));
+  // The crouch does tip it (so the measure sees the give), by less than the bar.
+  const standing = -20;
+  assert.ok(real[0].value > standing + 5 && real[0].value <= RISE_DEG, `${real[0].value} degrees`);
+  const planted: Row = { clip: "fist", measured: { ...row.measured, "carried_rise_deg.stone_axe": 28.3, "fist_cm.stone_axe": 1.06 }, where: row.where };
+  const ms = of([planted]);
+  assert.deepEqual(failing(ms), ["carry.rise", "grip.fist_off"]);
+  const { ok, line, failed } = lineFor("stone_axe", ms, "Carry_Tool");
+  assert.equal(ok, false);
+  assert.match(line, /^✗ stone_axe \(Carry_Tool\): carry\.rise 28\.3 deg \(bar 10, male, Crouch_Idle_Loop [\d.]+ s, 1 rows on 1 bodies\); grip\.fist_off 1\.1 cm \(bar 1, male, Crouch_Idle_Loop [\d.]+ s, 1 rows on 1 bodies\)$/);
+  assert.match(fixFor(failed[0]), /carry_arm/);
+  assert.match(fixFor(failed[1]), /grip::seat/);
+  // A set's move named "fist" is not the fist row, and a look with no number there has none.
+  assert.deepEqual(of([{ ...planted, move: "fist" }]), []);
+  assert.deepEqual(judged("other", "male", [planted], []).length, 0);
 });

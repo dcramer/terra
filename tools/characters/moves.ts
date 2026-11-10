@@ -868,6 +868,7 @@ for (const name of opt.also!.split(",").filter(Boolean)) {
 // the scorecard (held.fist.*, bar FIST_CM), not bars here.
 if (fists.length) {
   const measured: Record<string, number> = {};
+  const where: Record<string, string> = {};
   const parts: string[] = [];
   const played = [...new Set([...checked.map((m) => m.clip), ...opt.also!.split(",").filter(Boolean)])].map(clipOf);
   for (const f of fists) {
@@ -877,11 +878,12 @@ if (fists.length) {
       for (const shape of shapes)
         for (let t = 0; t <= clip.end + 1e-6; t += 1 / fps) {
           const off = fistOff(body, poseOf(shape, clip, t), f.side, at(f.h.hand), f.handle, f.grip);
-          const when = `${clip.name} ${t.toFixed(2)} s, ${shape.name}`;
+          const when = `${clip.name} at ${t.toFixed(2)} s, ${shape.name}`;
           if (Math.abs(off.cm) > Math.abs(worst.cm)) worst = { cm: off.cm, where: `${off.where}, ${when}` };
           if (off.wrap < wrap.deg) wrap = { deg: off.wrap, where: `${off.short}, ${when}` };
         }
     measured[`fist_cm.${f.h.name}`] = Math.abs(worst.cm);
+    where[`fist_cm.${f.h.name}`] = worst.where;
     measured[`fist_wrap_deg.${f.h.name}`] = wrap.deg;
     parts.push(`${f.h.name} ${cm(worst.cm)} (${worst.where})${Math.abs(worst.cm) > FIST_CM ? ", over the bar" : ""}, round it ${wrap.deg.toFixed(0)} deg at least (${wrap.where})${wrap.deg < WRAP_DEG ? ", short of the bar" : ""}`);
   }
@@ -894,15 +896,16 @@ if (fists.length) {
         for (let t = 0; t <= clip.end + 1e-6; t += 1 / fps) {
           const way = rot(frame(h, poseOf(shape, clip, t)).r, [0, 1, 0]);
           const deg = (Math.asin(Math.max(-1, Math.min(1, way[1] / len(way)))) * 180) / Math.PI;
-          if (deg > high.deg) high = { deg, where: `${clip.name} ${t.toFixed(2)} s, ${shape.name}` };
+          if (deg > high.deg) high = { deg, where: `${clip.name} at ${t.toFixed(2)} s, ${shape.name}` };
         }
     if (high.deg === -Infinity) continue;
     measured[`carried_rise_deg.${h.name}`] = high.deg;
+    where[`carried_rise_deg.${h.name}`] = high.where;
     parts.push(`${h.name} carried tipped ${high.deg <= 0 ? "down" : "up"}, ${Math.abs(high.deg).toFixed(0)} deg ${high.deg <= 0 ? "below" : "above"} level at the highest (${high.where})`);
   }
   measured.fist_cm = Math.max(...Object.entries(measured).filter(([k]) => k.startsWith("fist_cm.")).map(([, v]) => v));
   measured.fist_wrap_deg = Math.min(...Object.entries(measured).filter(([k]) => k.startsWith("fist_wrap_deg.")).map(([, v]) => v));
-  row("fist, the fingers on what the hands hold", parts, [], { clip: "fist", measured });
+  row("fist, the fingers on what the hands hold", parts, [], { clip: "fist", measured, where });
 }
 // Each shield pose with a target against it (D554, shield_place.ts): the board's place in the
 // chest's frame, the worst of its clip on every template. Numbers for the scorecard, not bars here.
