@@ -17,7 +17,7 @@ use terra_world::footprint::Footprint;
 const HEAD_M: f32 = 0.37;
 /// A hand torch's flames: a hand's width and a forearm tall, two thirds a wall torch's
 /// (the dungeon's `TORCH_FIRE`, 0.45 m), drawn and lit as it is: the marched torch field
-/// (D466), pitch's light, a torch's rig.
+/// (D466), pitch's light, a torch's rig as one carried reaches (`Rig::Held`).
 const FIRE: Kindled = Kindled {
     tall: 0.3,
     wide: 0.1,
@@ -25,7 +25,7 @@ const FIRE: Kindled = Kindled {
     logs: Logs::NONE,
     body: Body::Marched,
     light: TORCH_LIGHT,
-    rig: Rig::Torch,
+    rig: Rig::Held,
 };
 
 /// A torch's flame, with its light.

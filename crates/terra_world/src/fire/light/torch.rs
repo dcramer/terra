@@ -34,9 +34,23 @@ const TORCH_DUSK: f32 = 6.0;
 /// The share of its light at its flames' tips, unshadowed, and how far that reaches.
 const TORCH_TIP: f32 = 0.15;
 const TORCH_TIP_RANGE_M: f32 = 3.5;
+/// How far a torch carried in hand reaches (`Rig::Held`), metres: twice a staked one's. A
+/// light's range is where its inverse-square light is windowed to nothing, and at 7 m the
+/// window had taken most of it by 4 m: at midnight in the meadow the ground 4 m ahead of the
+/// holder took a twentieth of the light at their feet and the ground 6 m ahead 1.3 times the
+/// moonlit night's, so the pool ended three paces out (tools/sandbox/torchlight.ts, torch-light
+/// j1; the developers: "the light from the torch isnt amazing"). Skyrim's held torch reaches
+/// 512 units, 7.3 m, with no such window inside it, and its best-used lighting mods take it to
+/// 12-13 m; Valheim's is cited at 10 m by its mods.
+pub(super) const HELD_RANGE_M: f32 = 14.0;
+/// How many times a staked torch's light a carried one gives, flame for flame: its flames are
+/// two thirds a wall torch's, and at a staked torch's light the ground 6 m out stood under
+/// the moon's with the window gone.
+const HELD_GAIN: f32 = 1.5;
 
 /// A torch's two lights: `hearth` is the hearth rig's key as it would be (its colour, glow and
-/// sway), `hang` where a share of its flames' height hangs, `still` its steady twin's.
+/// sway), `hang` where a share of its flames' height hangs, `still` its steady twin's, `held`
+/// whether it is carried in hand (`Rig::Held`).
 pub(super) fn lights(
     hearth: &Lit,
     blaze: &Blaze,
@@ -44,13 +58,19 @@ pub(super) fn lights(
     swayed: Vec3,
     hang: impl Fn(f32) -> Vec3,
     still: impl Fn(Vec3) -> Option<shadows::Still>,
+    held: bool,
 ) -> [Lit; 2] {
-    let lumens = blaze.tall * blaze.heat * TORCH_LUMENS_A_METRE * shines;
+    let (gain, range) = if held {
+        (HELD_GAIN, HELD_RANGE_M)
+    } else {
+        (1.0, TORCH_RANGE_M)
+    };
+    let lumens = blaze.tall * blaze.heat * TORCH_LUMENS_A_METRE * shines * gain;
     let rest = hang(TORCH_LIGHT_UP);
     let key = Lit {
         at: rest + swayed,
         lumens: lumens * (1.0 - TORCH_TIP),
-        range: TORCH_RANGE_M,
+        range,
         radius: TORCH_RADIUS_M,
         night_stops: TORCH_NIGHT_STOPS,
         dusk_gain: TORCH_DUSK,

@@ -476,6 +476,20 @@ fn a_staked_torchs_night_pool_falls_off_from_its_foot_more_than_a_hearths_rig_wo
 }
 
 #[test]
+fn a_carried_torch_lights_the_ground_six_metres_out_where_a_staked_ones_pool_has_ended() {
+    // By full night a carried torch's light (`Rig::Held`) still reaches the ground 6 m from
+    // its foot, where a staked one's 7 m window has taken nearly all of it, and is no more than
+    // twice as bright at the foot: its pool is longer, not blown (torch-light j1).
+    let held = staked_pool(TORCH_LIGHT, Rig::Held, 1.0, 36.0);
+    let staked = staked_pool(TORCH_LIGHT, Rig::Torch, 1.0, 36.0);
+    let (far, foot) = (held(6.0) / staked(6.0), held(0.5) / staked(0.5));
+    println!("a carried torch against a staked one: {far:.1}x at 6 m, {foot:.2}x at the foot");
+    assert!(far > 4.0, "only {far:.1}x a staked torch's light 6 m out");
+    assert!(foot < 2.0, "{foot:.2}x a staked torch's light at the foot");
+    assert!(held(10.0) > 0.0, "no light 10 m out");
+}
+
+#[test]
 fn a_staked_torchs_dusk_pool_is_as_bright_at_its_foot_as_a_hearths_rig_would_light_it() {
     // At the yard's dusk (the sun five degrees under, `night` 0.13, the sky's light on the
     // shade 830, `HEARTH_DUSK_SKY`) the ground by the staked torch's foot takes at least the

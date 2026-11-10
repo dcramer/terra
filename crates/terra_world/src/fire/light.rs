@@ -94,6 +94,9 @@ pub enum Rig {
     /// A torch's: a short shadowed key just over its head, lighting a pool round its foot, and
     /// a dim light at its tips (`torch`).
     Torch,
+    /// A torch carried in hand: a torch's two lights, brighter and reaching further, since
+    /// its holder walks by it where a staked one marks a door (`torch::HELD_RANGE_M`).
+    Held,
 }
 /// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches.
 /// A campfire's 1.3 m at 0.9 heat gives 117,000 lm, about 9,000 cd: a real campfire's order
@@ -530,9 +533,10 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     casts: true,
                     still: still(rest),
                 };
-                if rig == Rig::Torch {
+                if matches!(rig, Rig::Torch | Rig::Held) {
                     let hang = |share| blazes.hangs(fire, blaze, share);
-                    return torch::lights(&main, blaze, shines, swayed, hang, still);
+                    let held = rig == Rig::Held;
+                    return torch::lights(&main, blaze, shines, swayed, hang, still, held);
                 }
                 let top_rest = blazes.hangs(fire, blaze, HEARTH_TOP_UP);
                 let top = Lit {
