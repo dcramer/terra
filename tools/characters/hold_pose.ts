@@ -67,10 +67,44 @@ export function holdPose(pose: Pose[], at: (n: string) => number, s: "l" | "r", 
   };
 }
 
+/** How an arm hangs beside the trunk at one pose (the stance, holds.ts `stand.*`), each one
+ * where more is worse. Degrees: the upper arm out from the trunk's own line (hips' middle to
+ * shoulders' middle) in the trunk's frontal plane, a shoulder's abduction; the same forward of
+ * it (negative, behind); the elbow's bend. Centimetres: the gap between the arm's skin and the
+ * trunk's and thighs' at the forearm's middle and the palm, the lesser (`inside`, skin.ts: its
+ * depth negated, less the arm's own half-thickness). */
+export const STANCE_KEYS = ["out_deg", "fwd_deg", "bend_deg", "gap_cm"] as const;
+export type StanceKey = (typeof STANCE_KEYS)[number];
+
+const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const mid = (a: V3, b: V3): V3 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+
+/** The stance of the arm on side `s` at `pose`; `inside` a point's depth in the body, metres. */
+export function stancePose(pose: Pose[], at: (n: string) => number, s: "l" | "r", inside: (q: V3) => number): Record<StanceKey, number> {
+  const P = (n: string) => pose[at(n)].t;
+  const [shoulder, elbow, wrist] = [P(`upperarm_${s}`), P(`lowerarm_${s}`), P(`hand_${s}`)];
+  const other = P(`upperarm_${s === "l" ? "r" : "l"}`);
+  const up = unit(sub(mid(shoulder, other), mid(P("thigh_l"), P("thigh_r"))));
+  // Out of this arm's side, square to the trunk's line; forward square to both.
+  const across = sub(shoulder, other);
+  const k = dot(across, up);
+  const out = unit([across[0] - up[0] * k, across[1] - up[1] * k, across[2] - up[2] * k]);
+  const fwd = s === "l" ? cross(out, up) : cross(up, out);
+  const upper = unit(sub(elbow, shoulder));
+  const fore = unit(sub(wrist, elbow));
+  const gap = Math.min(-inside(mid(elbow, wrist)) - 0.035, -inside(mid(wrist, P(`middle_01_${s}`))) - 0.025);
+  return {
+    out_deg: deg(Math.atan2(dot(upper, out), -dot(upper, up))),
+    fwd_deg: deg(Math.atan2(dot(upper, fwd), -dot(upper, up))),
+    bend_deg: deg(Math.acos(clamp(dot(upper, fore)))),
+    gap_cm: gap * 100,
+  };
+}
+
 /** The worst of each measure over poses, and where: `see` a pose's measures with what to call it. */
-export class HoldWorst {
-  readonly worst = new Map<HoldKey, { v: number; where: string }>();
-  see(m: Record<HoldKey, number>, where: string) {
-    for (const k of HOLD_KEYS) if (m[k] > (this.worst.get(k)?.v ?? -Infinity)) this.worst.set(k, { v: m[k], where });
+export class HoldWorst<K extends string = HoldKey> {
+  readonly worst = new Map<K, { v: number; where: string }>();
+  see(m: Record<K, number>, where: string) {
+    for (const k of Object.keys(m) as K[]) if (m[k] > (this.worst.get(k)?.v ?? -Infinity)) this.worst.set(k, { v: m[k], where });
   }
 }

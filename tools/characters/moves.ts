@@ -70,7 +70,7 @@ import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qm
 import { type Holding, ends, keptOff, reach } from "./arms.ts";
 import { CLEAR, capsules, clear, radii } from "./carry_clear.ts";
 import { carryArm, clearedThrough, easedThrough, fold, limbOf } from "./carry_arm.ts";
-import { type WristRest, HoldWorst, holdPose, wristRest } from "./hold_pose.ts";
+import { type StanceKey, type WristRest, HoldWorst, holdPose, stancePose, wristRest } from "./hold_pose.ts";
 import { sharesIn, swung as armSwung } from "./additive.ts";
 import { fitter } from "./shield_arm.ts";
 import { tuneWith } from "./tune.ts";
@@ -895,6 +895,19 @@ function holdBy(clip: Clip) {
       }
     }
     for (const [key, w] of worst.worst) [measured[`hold_${key}.${h.name}`], where[`hold_${key}.${h.name}`]] = [w.v, w.where];
+    // How both arms hang beside the trunk with it in hand (hold_pose.ts `stancePose`): `arm`
+    // the one that holds it, `free` the other, read only with nothing in or on it.
+    for (const [which, side] of [["arm", s], ["free", s === "l" ? "r" : "l"]] as const) {
+      if (which === "free" && held.some((o) => (o.strap?.fist ?? o.strap?.bone ?? o.hand).slice(-1).toLowerCase() === side)) continue;
+      const stance = new HoldWorst<StanceKey>();
+      for (const shape of shapes)
+        for (let t = 0; t <= clip.end + 1e-6; t += 1 / fps) {
+          const pose = poseOf(shape, clip, t);
+          const inside = skinned(shape, pose);
+          stance.see(stancePose(pose, at, side, (q) => inside(q).depth), `${clip.name} at ${t.toFixed(2)} s, ${shape.name}`);
+        }
+      for (const [key, w] of stance.worst) [measured[`stand_${which}_${key}.${h.name}`], where[`stand_${which}_${key}.${h.name}`]] = [w.v, w.where];
+    }
   }
   return { measured, where };
 }

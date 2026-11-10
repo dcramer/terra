@@ -38,10 +38,14 @@ use crate::carry_radii::{self, PARTS};
 use crate::character::{Body, CarryHold, CarryPosed, HAND_L, HAND_R};
 
 /// Whether a hanging carried look is also kept clear of the ground and the body by the
-/// constraint solved from the look itself (`carry_clear`), laid beside the give: off until
-/// its twin in `tools/characters` can measure it (held-constraint j2), so with it off the pose
-/// is the give's, bit for bit. What a body is made with (`CarryArms::clear`).
-pub const CLEAR_ON: bool = false;
+/// constraint solved from the look itself (`carry_clear`), laid beside the give; with it off
+/// the pose is the give's, bit for bit. What a body is made with (`CarryArms::clear`). On
+/// (held-stance j1): it is what lets a carry pose hang the arm close to the side. With it off,
+/// one moment of one clip (Jump_Start at 0.20 s, the thigh rising into the fist with the legs
+/// still straight, which no give by the legs' fold reaches) kept every tool's arm 28 degrees
+/// out from the trunk in every clip, the standing idle too (`holds.ts` `stand.arm_out`); with
+/// it on, the arm hangs 14 out and every carried look clears every bar on six bodies.
+pub const CLEAR_ON: bool = true;
 /// A hand's eased move under this, metres, with nothing to clear, is none: the look is clear
 /// and nothing more is laid.
 const SETTLED_M: f32 = 1.0e-4;

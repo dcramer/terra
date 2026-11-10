@@ -22,6 +22,10 @@
 //          how far below level its working end falls at worst (carried_fall_deg; negative, it
 //          stays that far above); the handle below and above level and out from the body, the
 //          elbow's bend
+//   stand  in the standing idle (Idle_Loop), how both arms hang (hold_pose.ts stancePose): the
+//          upper arm's degrees out from the trunk (ARM_OUT_DEG) and the gap between forearm or
+//          palm and the trunk (ARM_GAP_CM), of the arm carrying a handle that hangs and of a
+//          free arm; read: the elbow's bend, and the arm of an upright pose or a hung look
 //   use    the same bars through the walker's use clips, or its class's set (clearances only: a
 //          set's wrists are moves.ts's own rows)
 //
@@ -36,14 +40,14 @@
 
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { GRIP_M, HEAD_SHARE, KINDS, type Look, ROOT, dataOf, fittedAs, handleAt, headReach, kindOf, readLook } from "./attach_contract.ts";
 import { HELD_CM, PARTNER, movesReads, runMoves, setOf } from "./fit.ts";
 import { Cache, closure, key } from "./fit_cache.ts";
 import { Glb, type V3, posed, qinv, rot, sub } from "./glb.ts";
 import { FINGER_M, FIST_CM, cut, handleIn } from "./grip.ts";
-import { carriedClips, carryHold } from "./held.ts";
+import { carriedClips, carryHold, carryUpright } from "./held.ts";
 import { BASE } from "./skin.ts";
 import { WRIST } from "./wrist.ts";
 
@@ -55,6 +59,20 @@ export const HANDLE_R_CM = 2.55;
 /** How far above level a look carried in the fist may tip its working end, degrees: the bar of
  * held.carry.axe_down (tools/combat/criteria.json, D564; a jump's arms lift it a little). */
 export const RISE_DEG = 10;
+/** The clip a body stands idle in, where the stance is judged (`stand.*`). */
+export const STANDING = "Idle_Loop";
+/** How far an arm hanging at the side may stand out from the trunk while standing idle: the
+ * upper arm's degrees out (hold_pose.ts `stancePose`). A person's hangs 4.5 degrees out (median;
+ * IQR 0.9 to 7.8) with the elbow bent 15.5 (13.2 to 18.1): "Three-dimensional alignment of the
+ * upper extremity in the standing neutral position in healthy subjects", J Orthop Surg Res 2022,
+ * doi 10.1186/s13018-022-03113-5 (upright CT; read from its abstract, not the full text). The
+ * library's Idle_Loop holds ours 12 out, and a tool in the fist needs a little more to pass the
+ * thigh; 20 is where it starts to read as held away (the developers' still of 2026-11-09, the
+ * carried arm 26 to 28.5 out: "our stance with the hammer is still stupid"). */
+export const ARM_OUT_DEG = 20;
+/** And the gap between the forearm's or palm's skin and the trunk's, cm: a hand's breadth (the
+ * same still: "a gap of a hand or more", 12.8 to 18.7 measured). */
+export const ARM_GAP_CM = 10;
 /** How far under the ground a look may reach, cm. */
 export const GROUND_CM = 0;
 
@@ -145,12 +163,35 @@ const FIST: [string, string, number | null, string][] = [
   ["fist_cm", "grip.fist_off", FIST_CM, "cm"],
 ];
 
+// moves.ts's stance keys (hold_pose.ts `stancePose`) in the standing idle, `arm` the arm that
+// carries the look and `free` the other: the upper arm out from the trunk and the gap between
+// the forearm or palm and the trunk. An upright pose's own arm (a torch held up) is read, not
+// barred: it is meant to be away from the side.
+const STAND: [string, string, number | null, string, boolean][] = [
+  ["stand_arm_out_deg", "arm_out", ARM_OUT_DEG, "deg", true],
+  ["stand_arm_gap_cm", "arm_gap", ARM_GAP_CM, "cm", true],
+  ["stand_arm_bend_deg", "arm_bend", null, "deg", true],
+  ["stand_free_out_deg", "free_out", ARM_OUT_DEG, "deg", false],
+  ["stand_free_gap_cm", "free_gap", ARM_GAP_CM, "cm", false],
+  ["stand_free_bend_deg", "free_bend", null, "deg", false],
+];
+
 /** A body's rows judged for one look: each of its numbers a measure, `carry.` in a clip the
- * game carries it in, `use.` in any other clip or move. */
-export function judged(look: string, body: string, rows: Row[], carried: string[]): Measure[] {
+ * game carries it in, `use.` in any other clip or move, `stand.` in the standing idle; `hangs`
+ * whether its carry pose hangs at the side (not one marked upright). */
+export function judged(look: string, body: string, rows: Row[], carried: string[], hangs = true): Measure[] {
   const out: Measure[] = [];
   for (const row of rows) {
     const clip = row.move ?? row.clip;
+    if (!row.move && row.clip === STANDING && carried.includes(STANDING))
+      for (const [k, measure, bar, unit, own] of STAND) {
+        const value = row.measured[`${k}.${look}`];
+        if (value === undefined) continue;
+        const where = row.where?.[`${k}.${look}`] ?? "";
+        const t = / at ([\d.]+) s/.exec(where);
+        const held = own && !hangs ? null : bar;
+        out.push({ look, measure: `stand.${measure}`, body, clip, time: t ? Number(t[1]) : null, value, bar: held, unit, ok: held === null ? null : value <= held, where });
+      }
     if (!row.move && row.clip === "fist") {
       for (const [k, measure, bar, unit] of FIST) {
         const value = row.measured[`${k}.${look}`];
@@ -179,6 +220,7 @@ export function judged(look: string, body: string, rows: Row[], carried: string[
 export function fixFor(measure: string): string {
   const [group, what] = measure.split(".");
   const refit = "then node tools/characters/fit.ts ITEM";
+  if (group === "stand") return "that arm stands out from the side as the body idles: bring its carry pose in (the pose named beside the look, art/animation/sets/fight.json: the upper arm and forearm aims nearer straight down, then build_bodies.sh --step fight), or, a free arm, see what turns it out (terra_walker::arms keep_off_hips); never raise ARM_OUT_DEG or ARM_GAP_CM";
   if (group === "size") return `make it life size in art/held/ITEM.json (its length), ${refit}; never widen attach_kinds.json's range for one look`;
   if (what === "radius") return `thin the handle in its model (the source art/held/ITEM.json names), ${refit}`;
   if (what === "fist_off") return `its handle is thinner or thicker than the closed fist lies on (grip.radius; the knuckle bone named is that far off its surface): seat it nearer the fingers (terra_walker::grip::seat and grip.ts seatOf, both) or change the handle's section in its model, ${refit}; never raise grip.ts's FIST_CM`;
@@ -194,7 +236,7 @@ const barOf = (m: Measure) => (Array.isArray(m.bar) ? `${m.bar[0]} to ${m.bar[1]
 const worst = (ms: Measure[]) => ms.reduce((a, b) => (b.value > a.value ? b : a));
 
 /** What a passing look's line reads: its size and grip, then the worst of each carry measure. */
-const READ = ["size.length", "size.extent", "size.head_fists", "grip.radius", "grip.past_little", "grip.past_thumb", "grip.fist_off", "carry.rise", "carry.fall", "carry.below", "carry.above", "carry.wrist_ulnar", "carry.wrist_ext", "carry.trunk", "carry.legs", "carry.ground", "use.trunk", "use.legs"];
+const READ = ["size.length", "size.extent", "size.head_fists", "grip.radius", "grip.past_little", "grip.past_thumb", "grip.fist_off", "carry.rise", "carry.fall", "carry.below", "carry.above", "carry.wrist_ulnar", "carry.wrist_ext", "carry.trunk", "carry.legs", "carry.ground", "stand.arm_out", "stand.arm_gap", "stand.free_out", "stand.free_gap", "use.trunk", "use.legs"];
 
 /** The report's line for one look, `pose` its carry pose: what it reads if every bar holds, else
  * only the measures over their bars, each one's worst case (value, bar, body, clip, time, and
@@ -260,7 +302,10 @@ export async function measured(file: string, on: string[], ctx: Ctx, limit: <T>(
   const data = dataOf(look.name);
   const shape = shapeOf(look, kindOf(look, data), fittedAs(look, data), fistOf(new Glb(join(ROOT, "assets", "models", "character", "base.glb"))));
   const carried = carriedClips();
-  const runs = await Promise.all(on.map((body) => limit(() => rowsOf(file, body, ctx)).then((rows) => judged(name, body, rows, carried))));
+  // The arm's own stance is barred of a handle in the fist carried hanging; a basket's own
+  // width holds its arm out, and that is read.
+  const hangs = !carryUpright(resolve(ROOT, file)) && fittedAs(look, data) === "in hand";
+  const runs = await Promise.all(on.map((body) => limit(() => rowsOf(file, body, ctx)).then((rows) => judged(name, body, rows, carried, hangs))));
   const order = (m: Measure) => `${m.measure} ${m.body} ${m.clip}`;
   return [...shape, ...runs.flat().sort((a, b) => (order(a) < order(b) ? -1 : order(a) > order(b) ? 1 : 0))];
 }

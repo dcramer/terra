@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { type Look, ROOT, readLook } from "./attach_contract.ts";
 import { Glb, type Pose, type Q, type V3, posed, qmul, rot } from "./glb.ts";
-import { holdPose, wristRest } from "./hold_pose.ts";
-import { type Measure, RISE_DEG, type Row, fistOf, fixFor, judged, lineFor, shapeOf } from "./holds.ts";
+import { holdPose, stancePose, wristRest } from "./hold_pose.ts";
+import { ARM_OUT_DEG, type Measure, RISE_DEG, STANDING, type Row, fistOf, fixFor, judged, lineFor, shapeOf } from "./holds.ts";
 
 // The planted faults (D632): each bar of the hold report is shown to catch what it is for, on
 // the committed stone axe changed one way at a time; the axe as committed passes them all.
@@ -173,4 +173,58 @@ test("a carried look tipped above level and fingers off the handle fail from mov
   // A set's move named "fist" is not the fist row, and a look with no number there has none.
   assert.deepEqual(of([{ ...planted, move: "fist" }]), []);
   assert.deepEqual(judged("other", "male", [planted], []).length, 0);
+});
+
+// The stance (held-stance j1; the developers' still of 2026-11-09, the player idle with the
+// hammer: "our stance with the hammer is still stupid", "sorry with all equipment"): the arm that
+// carried a tool stood 26 to 28.5 degrees out from the trunk, 13 to 19 cm of air between forearm
+// and body, and no number said so. The planted fault is that pose itself: main's Carry_Tool arm
+// aims of that day, laid by --tune on the committed body, fail stand.arm_out and stand.arm_gap;
+// the committed pose passes, and its free arm (the idle's own) passes either way.
+test("the arm of a carried tool held out from the side fails the stance; the committed pose stands with it close", () => {
+  const dir = mkdtempSync(join(tmpdir(), "holds-stand-"));
+  const stand = (tune?: Record<string, number>) => {
+    const json = join(dir, "moves.json");
+    const args = ["--set", "none", "--also", STANDING, "--template", "male,female", "--hold", "socket.hand.R=assets/models/held/hammer.glb", "--carry", "--arms", "--json", json, ...(tune ? ["--tune", JSON.stringify(tune)] : [])];
+    const run = spawnSync(process.execPath, [join(ROOT, "tools", "characters", "moves.ts"), ...args], { cwd: ROOT, encoding: "utf8" });
+    const rows = (JSON.parse(readFileSync(json, "utf8")) as Row[]).filter((r) => r.clip === STANDING);
+    assert.equal(rows.length, 1, run.stderr);
+    return judged("hammer", "male,female", rows, [STANDING]).filter((m) => m.measure.startsWith("stand."));
+  };
+  const now = stand();
+  assert.deepEqual(now.map((m) => m.measure).sort(), ["stand.arm_bend", "stand.arm_gap", "stand.arm_out", "stand.free_bend", "stand.free_gap", "stand.free_out"]);
+  assert.deepEqual(failing(now), []);
+  const was = stand({ "pose.Carry_Tool.aim.upperarm_r.up": -64.28, "pose.Carry_Tool.aim.upperarm_r.round": -100.64, "pose.Carry_Tool.aim.lowerarm_r.up": -60.83, "pose.Carry_Tool.aim.lowerarm_r.round": -36.92 });
+  rmSync(dir, { recursive: true, force: true });
+  assert.deepEqual(failing(was).sort(), ["stand.arm_gap", "stand.arm_out"]);
+  const out = was.find((m) => m.measure === "stand.arm_out")!;
+  assert.ok(out.value > 25 && out.value < 31 && out.bar === ARM_OUT_DEG && out.time !== null, JSON.stringify(out));
+  const { ok, line, failed } = lineFor("hammer", was, "Carry_Tool");
+  assert.equal(ok, false);
+  assert.match(line, /stand\.arm_gap [\d.]+ cm \(bar 10, male,female, Idle_Loop/);
+  assert.match(fixFor(failed[0]), /never raise ARM_OUT_DEG/);
+  // An upright pose's own arm (a torch held up) is read, not barred; a free arm always is.
+  const far: Row = { clip: STANDING, measured: { "stand_arm_out_deg.torch": 42, "stand_free_out_deg.torch": 42 } };
+  assert.deepEqual(failing(judged("torch", "male", [far], [STANDING], false)), ["stand.free_out"]);
+  assert.deepEqual(failing(judged("torch", "male", [far], [STANDING], true)), ["stand.arm_out", "stand.free_out"]);
+});
+
+// The stance's angles are known another way: an arm built 30 degrees out of a leaning trunk
+// with its forearm bent 20 forward reads 30 out and 20 bent against that trunk.
+test("an arm's stance is read against the trunk's own line, whichever way the body leans", () => {
+  const names = ["thigh_l", "thigh_r", "upperarm_l", "upperarm_r", "lowerarm_l", "lowerarm_r", "hand_l", "hand_r", "middle_01_l", "middle_01_r"];
+  const at = (n: string) => names.indexOf(n);
+  const lean: Q = [Math.sin(0.2), 0, 0, Math.cos(0.2)];
+  const d = (x: number) => (x * Math.PI) / 180;
+  const along: V3 = [-Math.sin(d(30)), -Math.cos(d(30)), 0];
+  const P: Record<string, V3> = { thigh_l: [0.1, 0, 0], thigh_r: [-0.1, 0, 0], upperarm_l: [0.2, 0.5, 0], upperarm_r: [-0.2, 0.5, 0], lowerarm_l: [0.2, 0.2, 0], hand_l: [0.2, -0.05, 0], middle_01_l: [0.2, -0.13, 0] };
+  P.lowerarm_r = [-0.2 + along[0] * 0.3, 0.5 + along[1] * 0.3, 0];
+  P.hand_r = [P.lowerarm_r[0] + along[0] * 0.25 * Math.cos(d(20)), P.lowerarm_r[1] + along[1] * 0.25 * Math.cos(d(20)), 0.25 * Math.sin(d(20))];
+  P.middle_01_r = P.hand_r;
+  const pose: Pose[] = names.map((n) => ({ t: rot(lean, P[n]), r: [0, 0, 0, 1], s: [1, 1, 1] }));
+  const r = stancePose(pose, at, "r", () => -0.2);
+  const l = stancePose(pose, at, "l", () => -0.2);
+  const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-6, `${a} is not ${b}`);
+  near(r.out_deg, 30), near(r.fwd_deg, 0), near(r.bend_deg, 20), near(r.gap_cm, 16.5);
+  near(l.out_deg, 0), near(l.fwd_deg, 0), near(l.bend_deg, 0);
 });
