@@ -114,6 +114,28 @@ pub fn reach(points: &[Vec3]) -> Vec<Vec3> {
     slices.into_iter().flatten().flatten().collect()
 }
 
+/// A held look's two ends along its handle, in its own frame: its points lowest and highest
+/// along +Y. With its `Reach` (at most 34 points a look, taken once) they are what
+/// `carry_arm` keeps clear of the ground and the body: the point of a look nearest the ground
+/// is an end or the widest of a slice (a head, a blade's edge), and a slice is an eighth of
+/// the look, shorter than a leg's capsule is wide on all but a spear, so no leg passes between
+/// two slices' points unseen.
+#[derive(Component, Default, Debug)]
+pub struct Ends(pub [Vec3; 2]);
+
+/// The ends of a look whose points are `points`; none for no points.
+pub fn ends(points: &[Vec3]) -> Option<[Vec3; 2]> {
+    let low = points
+        .iter()
+        .copied()
+        .reduce(|a, b| if b.y < a.y { b } else { a })?;
+    let high = points
+        .iter()
+        .copied()
+        .reduce(|a, b| if b.y > a.y { b } else { a })?;
+    Some([low, high])
+}
+
 pub fn plugin(app: &mut App) {
     app.add_observer(find_arms)
         .add_observer(held_reach)
@@ -171,6 +193,9 @@ fn held_reach(
     }
     let points = look_points(root, &children, &parents, &transforms, &meshes3d, &meshes);
     commands.entity(root).insert(Reach(reach(&points)));
+    if let Some(ends) = ends(&points) {
+        commands.entity(root).insert(Ends(ends));
+    }
 }
 
 /// How far, radians, to turn out an arm hanging from a shoulder at `shoulder` (in the body,

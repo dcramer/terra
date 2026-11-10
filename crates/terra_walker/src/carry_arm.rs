@@ -25,10 +25,26 @@
 //! `tools/characters/carry_arm.ts`, which the move check lays over the carried clips
 //! (`moves.ts --carry`) and which reads the give's numbers from this file; change both.
 
-use bevy::{prelude::*, world_serialization::WorldInstanceReady};
+use bevy::{
+    mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes},
+    prelude::*,
+    world_serialization::WorldInstanceReady,
+};
 
+use crate::arms::{Ends, Reach};
 use crate::bend::{Kept, find, in_body};
+use crate::carry_clear::{self, Arm, Capsule, Hand};
+use crate::carry_radii::{self, PARTS};
 use crate::character::{Body, CarryHold, CarryPosed, HAND_L, HAND_R};
+
+/// Whether a hanging carried look is also kept clear of the ground and the body by the
+/// constraint solved from the look itself (`carry_clear`), laid beside the give: off until
+/// its twin in `tools/characters` can measure it (held-constraint j2), so with it off the pose
+/// is the give's, bit for bit. What a body is made with (`CarryArms::clear`).
+pub const CLEAR_ON: bool = false;
+/// A hand's eased move under this, metres, with nothing to clear, is none: the look is clear
+/// and nothing more is laid.
+const SETTLED_M: f32 = 1.0e-4;
 
 /// How a hanging carried arm gives with the legs folded all the way: the elbow bent this much
 /// more (the forearm brought forward and up about the body's side axis), the upper arm this
@@ -119,6 +135,34 @@ pub fn give(fold: f32, right: bool) -> (Quat, Quat) {
 pub struct CarryArms {
     sides: [Side; 2],
     legs: [[Entity; 3]; 2],
+    /// Whether a hanging look is kept clear by `carry_clear` too (`CLEAR_ON`).
+    clear: bool,
+    /// The trunk's capsule's ends (the pelvis and the neck), if the body has them.
+    trunk: Option<[Entity; 2]>,
+    /// The capsules' radii, in `carry_radii`'s order, measured once from the body's skin.
+    radii: [f32; PARTS],
+}
+
+/// A body's capsules as it is posed now: each leg's thigh and calf and the trunk, in the body;
+/// a part with no radius is none.
+fn capsules(
+    ([l, r], trunk, radii): ([[Entity; 3]; 2], Option<[Entity; 2]>, [f32; PARTS]),
+    root: Entity,
+    parents: &Query<&ChildOf>,
+    transforms: &Query<&mut Transform>,
+) -> Vec<Capsule> {
+    let at = |bone| Vec3::from(in_body(bone, root, parents, transforms).translation);
+    let ends = [[l[0], l[1]], [l[1], l[2]], [r[0], r[1]], [r[1], r[2]]];
+    ends.into_iter()
+        .chain(trunk)
+        .zip(radii)
+        .filter(|(_, radius)| *radius > 0.0)
+        .map(|([a, b], radius)| Capsule {
+            a: at(a),
+            b: at(b),
+            radius,
+        })
+        .collect()
 }
 
 struct Side {
@@ -133,6 +177,12 @@ struct Side {
     /// A hanging pose's give, eased in time; none while the arm is not carried so, and the
     /// first frame it is, the give is settled on that frame's fold.
     given: Option<Eased>,
+    /// The hand's bone, which `carry_clear` turns back at the wrist, with its axes in its own
+    /// frame and its bend at rest (`carry_clear::Hand`); none on a model without its bones.
+    hand: Option<(Entity, Kept, [Vec3; 3], [f32; 2])>,
+    /// The hand's move that clears the look, eased in time; none while there is nothing to
+    /// clear, and the first frame there is, the move is settled on that frame's.
+    cleared: Option<carry_clear::Eased>,
 }
 
 pub fn plugin(app: &mut App) {
@@ -155,12 +205,42 @@ fn find_arms(
     names: Query<&Name>,
     parents: Query<&ChildOf>,
     transforms: Query<&mut Transform>,
+    skins: Query<(&SkinnedMesh, &Mesh3d)>,
+    meshes: Option<Res<Assets<Mesh>>>,
+    bindposes: Option<Res<Assets<SkinnedMeshInverseBindposes>>>,
     mut commands: Commands,
 ) {
     let root = ready.entity;
     if !bodies.contains(root) {
         return;
     }
+    // A hand's bone with its axes and its bend at rest, as `wrist.ts` takes them: the wrist,
+    // the middle knuckle, the thumb's first joint and the socket's -X out of the palm.
+    let hand = |s: &str, socket: Entity, lower: Entity| {
+        let bones = [
+            format!("hand_{s}"),
+            format!("middle_01_{s}"),
+            format!("thumb_01_{s}"),
+        ];
+        let [hand, knuckle, thumb] = find(
+            root,
+            bones.each_ref().map(String::as_str),
+            &children,
+            &names,
+        )?;
+        let place = |bone| in_body(bone, root, &parents, &transforms);
+        let at = |bone| Vec3::from(place(bone).translation);
+        let turn = |bone| place(bone).to_scale_rotation_translation().1;
+        let axes = carry_clear::hand_axes(
+            turn(hand),
+            at(hand),
+            at(knuckle),
+            at(thumb),
+            turn(socket) * Vec3::NEG_X,
+        );
+        let rest = carry_clear::bend(at(hand) - at(lower), turn(hand), axes);
+        Some((hand, Kept::default(), axes, rest))
+    };
     let Some(arms) = find(
         root,
         [
@@ -186,7 +266,7 @@ fn find_arms(
     ) else {
         return;
     };
-    let side = |[socket, clavicle, upper, lower]: [Entity; 4]| {
+    let side = |s: &str, [socket, clavicle, upper, lower]: [Entity; 4]| {
         let chest = parents.get(clavicle).ok()?.parent();
         let rest = in_body(chest, root, &parents, &transforms)
             .to_scale_rotation_translation()
@@ -200,17 +280,39 @@ fn find_arms(
             upper: (upper, Kept::default()),
             lower: (lower, Kept::default()),
             given: None,
+            hand: hand(s, socket, lower),
+            cleared: None,
         })
     };
     let (Some(left), Some(right)) = (
-        side([arms[0], arms[1], arms[2], arms[3]]),
-        side([arms[4], arms[5], arms[6], arms[7]]),
+        side("l", [arms[0], arms[1], arms[2], arms[3]]),
+        side("r", [arms[4], arms[5], arms[6], arms[7]]),
     ) else {
         return;
     };
+    let legs = [[legs[0], legs[1], legs[2]], [legs[3], legs[4], legs[5]]];
+    let trunk = find(root, ["pelvis", "neck_01"], &children, &names);
+    let [l, r] = legs;
+    let none = [Entity::PLACEHOLDER; 2];
+    let axes = [
+        [l[0], l[1]],
+        [l[1], l[2]],
+        [r[0], r[1]],
+        [r[1], r[2]],
+        trunk.unwrap_or(none),
+    ];
+    let radii = match (meshes, bindposes) {
+        (Some(meshes), Some(bindposes)) => {
+            carry_radii::measure(root, axes, &children, &names, &skins, &meshes, &bindposes)
+        }
+        _ => [0.0; PARTS],
+    };
     commands.entity(root).insert(CarryArms {
         sides: [left, right],
-        legs: [[legs[0], legs[1], legs[2]], [legs[3], legs[4], legs[5]]],
+        legs,
+        clear: CLEAR_ON,
+        trunk,
+        radii,
     });
 }
 
@@ -241,16 +343,19 @@ pub fn hold_in_body(
     time: Res<Time>,
     mut bodies: Query<(Entity, &mut CarryArms)>,
     posed: Query<(&CarryPosed, &CarryHold)>,
+    looks: Query<(&Reach, Option<&Ends>)>,
     parents: Query<&ChildOf>,
     mut transforms: Query<&mut Transform>,
 ) {
     let dt = time.delta_secs();
     for (root, mut arms) in &mut bodies {
         let legs = arms.legs;
+        let body = (arms.clear, (arms.legs, arms.trunk, arms.radii));
         for (k, side) in arms.sides.iter_mut().enumerate() {
             let carried = posed.get(side.socket).ok().filter(|(c, _)| c.0);
             let Some((_, hold)) = carried else {
                 side.given = None;
+                side.cleared = None;
                 continue;
             };
             let chest = in_body(side.chest, root, &parents, &transforms)
@@ -266,6 +371,7 @@ pub fn hold_in_body(
             }
             if hold.upright {
                 side.given = None;
+                side.cleared = None;
                 continue;
             }
             let at = |bone| Vec3::from(in_body(bone, root, &parents, &transforms).translation);
@@ -281,7 +387,107 @@ pub fn hold_in_body(
             let (out, elbow) = give(given.at, k == 1);
             turned(&mut side.upper, out, root, &parents, &mut transforms);
             turned(&mut side.lower, elbow, root, &parents, &mut transforms);
+            if !body.0 {
+                continue;
+            }
+            // A hand turned back the frame before and posed by no clip since is read from its
+            // clip's pose, as the look in it is.
+            if side.cleared.is_some() {
+                turned_hand(
+                    &mut side.hand,
+                    Quat::IDENTITY,
+                    root,
+                    &parents,
+                    &mut transforms,
+                );
+            }
+            // The look as the give leaves it, kept clear by the hand's least move
+            // (`carry_clear`): its sampled points in the body, the arm, the hand and the body's
+            // capsules as they stand now.
+            let place = in_body(hold.look, root, &parents, &transforms);
+            let points: Vec<Vec3> = looks.get(hold.look).map_or_else(
+                |_| Vec::new(),
+                |(reach, ends)| {
+                    let ends = ends.map_or([].as_slice(), |e| e.0.as_slice());
+                    reach
+                        .0
+                        .iter()
+                        .chain(ends)
+                        .map(|&p| place.transform_point3(p))
+                        .collect()
+                },
+            );
+            let wrist = side.hand.map_or(side.socket, |hand| hand.0);
+            let at = |bone| Vec3::from(in_body(bone, root, &parents, &transforms).translation);
+            let arm = Arm {
+                shoulder: at(side.upper.0),
+                elbow: at(side.lower.0),
+                hand: at(wrist),
+            };
+            let hand = side.hand.map(|(bone, _, axes, rest)| Hand {
+                turn: in_body(bone, root, &parents, &transforms)
+                    .to_scale_rotation_translation()
+                    .1,
+                axes,
+                rest,
+            });
+            let want = if points.is_empty() {
+                Vec3::ZERO
+            } else {
+                let capsules = capsules(body.1, root, &parents, &transforms);
+                let out = if k == 1 { Vec3::NEG_X } else { Vec3::X };
+                carry_clear::clear(&arm, hand.as_ref(), &points, 0.0, &capsules, out)
+            };
+            let by = match side.cleared {
+                Some(eased) => carry_clear::ease(eased, want, GIVE_RATE, dt),
+                None => carry_clear::Eased {
+                    at: want,
+                    speed: Vec3::ZERO,
+                },
+            };
+            // Clear, and nothing left of an earlier move: the pose is the give's.
+            let settled = want == Vec3::ZERO && by.at.length() < SETTLED_M;
+            let was = side.cleared.is_some();
+            side.cleared = (!settled).then_some(by);
+            if settled && !was {
+                continue;
+            }
+            let laid = if settled {
+                (Quat::IDENTITY, Quat::IDENTITY)
+            } else {
+                carry_clear::reach(&arm, by.at)
+            };
+            // Over the give's turns, each bone's whole turn from its clip: the shoulder's
+            // swing on the upper arm's, and on the forearm the swing and the elbow's bend
+            // about the forearm as the give left it, under a parent the swing has turned.
+            let (swing, bend) = laid;
+            turned(
+                &mut side.upper,
+                swing * out,
+                root,
+                &parents,
+                &mut transforms,
+            );
+            let lower = swing * bend * elbow * swing.inverse();
+            turned(&mut side.lower, lower, root, &parents, &mut transforms);
+            let back = carry_clear::back(&arm, laid, hand.as_ref());
+            turned_hand(&mut side.hand, back, root, &parents, &mut transforms);
         }
+    }
+}
+
+/// A side's hand, if it has the bone, turned by `turn` in the body from where its clip put it.
+fn turned_hand(
+    hand: &mut Option<(Entity, Kept, [Vec3; 3], [f32; 2])>,
+    turn: Quat,
+    root: Entity,
+    parents: &Query<&ChildOf>,
+    transforms: &mut Query<&mut Transform>,
+) {
+    if let Some((bone, kept, ..)) = hand {
+        let mut written = (*bone, *kept);
+        turned(&mut written, turn, root, parents, transforms);
+        *kept = written.1;
     }
 }
 
@@ -303,8 +509,11 @@ mod tests {
     struct Made {
         root: Entity,
         clavicle: Entity,
+        upper: Entity,
         lower: Entity,
+        hand: Entity,
         socket: Entity,
+        look: Entity,
     }
 
     /// A body with a chest, on it a right arm hanging straight down (shoulder blade, upper
@@ -332,7 +541,8 @@ mod tests {
         );
         let upper = under(world, clavicle, Transform::from_xyz(-0.15, 0.0, 0.0));
         let lower = under(world, upper, Transform::from_xyz(0.0, -0.3, 0.0));
-        let socket = under(world, lower, Transform::from_xyz(0.0, -0.25, 0.0));
+        let hand = under(world, lower, Transform::from_xyz(0.0, -0.25, 0.0));
+        let socket = under(world, hand, Transform::IDENTITY);
         world.entity_mut(socket).insert(CarryPosed(case.carried));
         let look = world.spawn(ChildOf(socket)).id();
         world.entity_mut(socket).insert(CarryHold {
@@ -362,18 +572,26 @@ mod tests {
             upper: (upper, Kept::default()),
             lower: (lower, Kept::default()),
             given: None,
+            hand: None,
+            cleared: None,
         };
         world.init_resource::<Time>();
         let other = world.spawn_empty().id();
         world.entity_mut(root).insert(CarryArms {
             sides: [side(other, other, other), side(socket, upper, lower)],
             legs,
+            clear: false,
+            trunk: None,
+            radii: [0.0; PARTS],
         });
         Made {
             root,
             clavicle,
+            upper,
             lower,
+            hand,
             socket,
+            look,
         }
     }
 
@@ -596,4 +814,6 @@ mod tests {
         assert!((of - 0.5).abs() < 0.02, "fold {of} at 0.19 short");
         assert!((fold([small, small]) - of).abs() < 1e-5);
     }
+
+    mod clear;
 }
