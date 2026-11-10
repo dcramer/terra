@@ -314,12 +314,21 @@ fn show(time: Res<Time<Fixed>>, mut bodies: Query<(&mut Transform, &mut Smoothed
     }
 }
 
-/// So far from one place and turn to another.
+/// So far from one place and turn to another. A body that did not move in the tick is shown
+/// exactly where it stands, and one that did, by the step added to where it was
+/// (`from + (to - from) * along`, glam's `lerp_monotonic`) and never by the two places
+/// weighted (`from * (1 - along) + to * along`, its `lerp`): a place on a planet is tens of
+/// kilometres from the origin, kept to 2 mm at 20 km, and the two weighted places round apart,
+/// so a standing body was shown a step or two of that off where it stood, differently each
+/// frame.
 fn between(from: &Transform, to: &Transform, along: f32) -> Transform {
+    if from == to {
+        return *to;
+    }
     Transform {
-        translation: from.translation.lerp(to.translation, along),
+        translation: from.translation.lerp_monotonic(to.translation, along),
         rotation: from.rotation.slerp(to.rotation, along),
-        scale: from.scale.lerp(to.scale, along),
+        scale: from.scale.lerp_monotonic(to.scale, along),
     }
 }
 
@@ -375,6 +384,35 @@ mod tests {
         // A hitch of over half a second is not a game behind, and its end says nothing.
         assert!((0..5).all(|_| frame(&mut run).is_none()));
         assert_eq!(run.frame(false, 0.01, 0.0, 1), None);
+    }
+
+    /// A body standing still on a planet, 20 km from its centre, where a place is kept to
+    /// 2 mm: shown anywhere between two ticks it is exactly where it stands, never a step of
+    /// the place's precision off it (held-jitter j1: the player's figure and the camera on it
+    /// hopped 2 to 4 mm up and down four frames in five while standing). And one that moves
+    /// a step of that precision in a tick is shown at one end or the other, in order.
+    #[test]
+    fn a_body_standing_far_from_the_origin_is_shown_where_it_stands_at_any_frame() {
+        let stands = Transform::from_xyz(-7_321.4, 19_876.543, 3_210.987)
+            .with_rotation(Quat::from_rotation_y(0.7));
+        let up = stands.translation.y;
+        let next = Transform::from_xyz(-7_321.4, up.next_up(), 3_210.987);
+        let mut last = up;
+        for k in 0..=1000 {
+            let along = k as f32 / 1000.0;
+            let shown = between(&stands, &stands, along);
+            assert_eq!(
+                shown.translation, stands.translation,
+                "a standing body shown {along} of the way between ticks moved"
+            );
+            assert!(shown.rotation.angle_between(stands.rotation) < 1e-3);
+            let stepped = between(&stands, &next, along).translation.y;
+            assert!(
+                stepped >= last && stepped <= up.next_up(),
+                "at {along}: {stepped} after {last}"
+            );
+            last = stepped;
+        }
     }
 
     #[test]
