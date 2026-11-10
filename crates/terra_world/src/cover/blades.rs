@@ -81,8 +81,14 @@ pub fn thinning(density: f32) -> Vec4 {
     )
 }
 
+/// [`thinning`] for the far ring: the share it keeps, and where the third ring's blades it does
+/// not have are gone.
+pub fn thinning_far(density: f32) -> Vec2 {
+    Vec2::new(RINGS[3].0.share * density, RINGS[2].1 - 2.0)
+}
+
 /// The rings of detail, nearest first, and where each ends, in metres from the camera.
-pub const RINGS: [(Ring, f32); 3] = [
+pub const RINGS: [(Ring, f32); 4] = [
     (
         Ring {
             segments: 3,
@@ -103,6 +109,19 @@ pub const RINGS: [(Ring, f32); 3] = [
         Ring {
             segments: 1,
             share: 0.35,
+            widen: 1.0,
+        },
+        72.0,
+    ),
+    // The far ring (the developers: "render distance on grass is not much so the world looks
+    // mostly empty"): an eighth of the blades, the widest of them (a blade's width grows as its
+    // rank falls), out to the reach, as Ghost of Tsushima's far tiles keep a share of their
+    // blades over twice the ground. A blade there is under a pixel wide at 1080p: it is the
+    // meadow's nap and its ragged skyline, not blades to count.
+    (
+        Ring {
+            segments: 1,
+            share: 0.12,
             widen: 1.0,
         },
         f32::MAX,

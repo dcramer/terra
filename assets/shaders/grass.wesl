@@ -31,7 +31,8 @@ import bevy_pbr::render::{
 struct Grass {
     // The way the wind blows, and how hard.
     wind: vec4<f32>,
-    // From how far the blades start to shrink, and where they are gone.
+    // From how far the blades start to shrink, and where they are gone; then the share of
+    // blades the far ring keeps and where the third's others are gone (`blades::thinning_far`).
     fade: vec4<f32>,
     // The share of blades the second ring keeps and where the rest are gone; the same for
     // the third.
@@ -224,6 +225,9 @@ fn shrunk(local: vec3<f32>, to_root: vec2<f32>, rise: f32, rank: f32, world_from
         gone = mix(t.y, t.y - 4.0, (rank - t.x) / (1.0 - t.x));
     } else if rank > t.z {
         gone = mix(t.w, t.y, (rank - t.z) / (t.x - t.z));
+    } else if rank > grass.fade.z && grass.fade.z > 0.0 {
+        // Those the third ring has but not the far ring, by the third's end.
+        gone = mix(grass.fade.w, t.w, (rank - grass.fade.z) / (t.z - grass.fade.z));
     }
     keep *= 1.0 - smoothstep(gone - 2.0, gone, far);
     // Under snow only what stands above it shows (D327); a blade buried whole goes a little

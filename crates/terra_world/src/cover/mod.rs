@@ -44,9 +44,9 @@ use terra_gen::Seed;
 /// Grass is built in squares this wide, in metres east and south of the start.
 pub const SQUARE_M: f32 = 8.0;
 /// Grass grows within this of the camera.
-pub const REACH_M: f32 = 64.0;
+pub const REACH_M: f32 = 120.0;
 /// Blades shrink into the ground over this stretch, so the grass has no edge.
-const FADE_M: [f32; 2] = [42.0, REACH_M - 2.0];
+const FADE_M: [f32; 2] = [90.0, REACH_M - 2.0];
 /// A square changes ring only once the camera is this far past where the rings meet, so
 /// it does not flick between them.
 const HYSTERESIS_M: f32 = 2.0;
@@ -331,7 +331,12 @@ fn ring_for(distance: f32, now: Option<usize>) -> usize {
 /// them: scaled as the rings are, so every ring's blades are still there to see.
 fn fading(detail: f32, density: f32) -> (Vec4, Vec4) {
     (
-        Vec4::new(FADE_M[0], FADE_M[1], 0.0, 0.0) * detail,
+        Vec4::new(
+            FADE_M[0] * detail,
+            FADE_M[1] * detail,
+            blades::thinning_far(density).x,
+            blades::thinning_far(density).y * detail,
+        ),
         blades::thinning(density) * Vec4::new(1.0, detail, 1.0, detail),
     )
 }
@@ -836,9 +841,16 @@ mod tests {
         // must not be shrunk away there already, nor the second's thinned out before it ends.
         for detail in [1.0, 1.35, 2.0] {
             let (fade, thinning) = fading(detail, 1.0);
+            // The far ring's, the last, where the third ends: nor the third's thinned out
+            // before it.
+            let last_ring_starts = RINGS[2].1 * detail;
+            assert!(fade.x >= last_ring_starts * 0.95, "{detail}: {fade}");
+            assert!(fade.y > last_ring_starts + 10.0, "{detail}: {fade}");
+            assert!(
+                fade.w >= last_ring_starts - 2.0 * detail - 1e-3,
+                "{detail}: {fade}"
+            );
             let far_ring_starts = RINGS[1].1 * detail;
-            assert!(fade.x >= far_ring_starts * 0.95, "{detail}: {fade}");
-            assert!(fade.y > far_ring_starts + 10.0, "{detail}: {fade}");
             assert!(
                 thinning.w >= far_ring_starts - 2.0 * detail,
                 "{detail}: {thinning}"
