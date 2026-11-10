@@ -15,6 +15,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ORDER } from "./merge.ts";
+import { sourceFaults } from "./sources.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -459,6 +460,7 @@ function check(): string[] {
   const docs = tracked.filter((f) => f.endsWith(".md"));
   for (const file of docs) faults.push(...brokenLinks(file, read(file)!, read));
   for (const file of docs) faults.push(...overBudget(file, Buffer.byteLength(read(file)!)));
+  for (const file of docs) faults.push(...sourceFaults(file, read(file)!, read));
 
   const sources = tracked
     .filter((f) => f.startsWith("crates/") && f.endsWith(".rs"))
