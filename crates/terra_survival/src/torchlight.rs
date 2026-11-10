@@ -33,7 +33,10 @@ const FIRE: Kindled = Kindled {
 /// Where a carried torch's shadowed light hangs on its holder's body (`fire::Carried::key`:
 /// to the torch's side, up, ahead, metres from their feet). None: over its flames, on the
 /// hand. A place on the body is tried against that in one game run by
-/// tools/sandbox/torchlight.ts (`fire.carried`).
+/// tools/sandbox/torchlight.ts (`fire.carried`). Tried and not taken (torch-light j7):
+/// 0.33, 2.25, 0.47, over the head, kept the ground's light (a metre round the feet 1.04 of
+/// this, 2 m ahead 1.11) and threw the holder's own shadow on the ground 1.5 m round them
+/// 0.68 m wide where this throws 0.10, and darker (0.05 of the ground beside it for 0.13).
 const KEY_M: Option<[f32; 3]> = None;
 /// Its fill on its holder (`fire::Carried::fill`): none.
 const FILL: Option<Fill> = None;
