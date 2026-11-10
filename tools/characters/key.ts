@@ -31,6 +31,12 @@
 // the elbow bent, the palm rolled from facing the thigh (+ toward the front). `fingers` is the
 // degrees each finger curls over its three joints, the little finger most (the resting cascade);
 // `thumb` the degrees its last joint bends.
+// `fists` keys two empty hands by place, for an unarmed blow on any body of our skeleton (a
+// creature's own: the troll's smash): hand_r and hand_l are each {at, elbow}, the wrist's place and
+// the elbow's way, starting where the guard holds them; the hand rides its forearm as the guard
+// has it, and grip {closed} takes its fingers from the guard's (0) to `fingers` curled (1). No
+// blade, no shield, no hand socket needed.
+// `step_lift` is how high a stepping foot rises at mid-step, metres (0.05 unless said; a 4 m body lifts more).
 // `loop` makes the curve run on through the seam; the last key must equal the first.
 // `start` {pelvis, chest, head, stance, turn_out, knees} sets the start pose afresh (below, where it is made).
 
@@ -242,6 +248,7 @@ export function keyClip(spec: any, g: Glb, dir = "."): Keyed {
   const grip = (side: "r" | "l") => {
     if (spec.hang) return { at: [0, 0, 0], blade: [0, 1, 0], edge: [0, 0, 1] };
     const wrist = G[id(`hand_${side}`)].t;
+    if (spec.fists) return { at: [-wrist[0], wrist[1], wrist[2]], blade: [0, 1, 0], edge: [0, 0, 1] };
     const socket = G[id(`socket.hand.${side.toUpperCase()}`)];
     return { at: [-wrist[0], wrist[1], wrist[2]], blade: rot(socket.r, [0, 1, 0]).map((v, i) => (i ? v : -v)), edge: rot(socket.r, [0, 0, -1]).map((v, i) => (i ? v : -v)) };
   };
@@ -250,11 +257,12 @@ export function keyClip(spec: any, g: Glb, dir = "."): Keyed {
     chest: { yaw: 0, pitch: 0, roll: 0 },
     head: { yaw: 0, pitch: 0 },
     hand_r: { ...grip("r"), elbow: [0, 0, 0] },
-    hand_l: { at: [0, 0, 0], elbow: [0, 0, 0] },
+    hand_l: { at: spec.fists ? grip("l").at : [0, 0, 0], elbow: [0, 0, 0] },
     clav_r: { up: 0, forward: 0 },
     clav_l: { up: 0, forward: 0 },
     arm_r: { forward: 0, out: 0, elbow: 0 },
     arm_l: { forward: 0, out: 0, elbow: 0 },
+    grip: { closed: 0 },
     foot_r: { at: [0, 0, 0], yaw: 0, heel: 0 },
     foot_l: { at: [0, 0, 0], yaw: 0, heel: 0 },
   };
@@ -296,7 +304,7 @@ export function keyClip(spec: any, g: Glb, dir = "."): Keyed {
     const u = Math.min(1, Math.max(0, (t - ts[i]) / (ts[i + 1] - ts[i])));
     const s = u * u * (3 - 2 * u);
     const p: V3 = [a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s];
-    if (Math.hypot(b[0] - a[0], b[2] - a[2]) > 1e-4) p[1] += 0.05 * Math.sin(Math.PI * u);
+    if (Math.hypot(b[0] - a[0], b[2] - a[2]) > 1e-4) p[1] += (spec.step_lift ?? 0.05) * Math.sin(Math.PI * u);
     return p;
   }
 
@@ -310,12 +318,14 @@ export function keyClip(spec: any, g: Glb, dir = "."): Keyed {
     return { a: ia, b: ib, c: ic, la: len(sub(B.t, A.t)), lb: len(sub(C.t, B.t)), pole, oa: qmul(qinv(frame(sub(B.t, A.t), n)), A.r), ob: qmul(qinv(frame(sub(C.t, B.t), n)), B.r) };
   }
   const stretched: Record<string, number> = {};
+  const stretchedAt: Record<string, number> = {};
+  let solving = 0;
   function reach(l: Pose[], k: Chain, target: V3, pole: V3, name: string) {
     let w = fk(l);
     const S = w[k.a].t;
     const full = (k.la + k.lb) * 0.995;
     let d = len(sub(target, S));
-    stretched[name] = Math.max(stretched[name] ?? 0, d / (k.la + k.lb));
+    if (d / (k.la + k.lb) > (stretched[name] ?? 0)) [stretched[name], stretchedAt[name]] = [d / (k.la + k.lb), solving];
     d = Math.min(d, full);
     const along = norm(sub(target, S));
     const T = add(S, scale(along, d));
@@ -367,7 +377,12 @@ export function keyClip(spec: any, g: Glb, dir = "."): Keyed {
       for (const n of ["upperarm_twist_01", "lowerarm_twist_01"]) l[b(n)] = { ...l[b(n)], r: g.rest(b(n)).r };
       l[b("lowerarm_twist_01")].r = qmul(l[b("lowerarm_twist_01")].r, about(g.rest(b("hand")).t, roll * 0.5));
     }
-    // The fingers from flat, each curled toward the palm over its three joints.
+    curl(l, side);
+  }
+  /// The fingers from flat, each curled toward the palm over its three joints (`fingers`), and
+  /// the thumb's last joint bent (`thumb`).
+  function curl(l: Pose[], side: "r" | "l") {
+    const b = (n: string) => id(`${n}_${side}`);
     if (spec.fingers === undefined) return;
     for (const [finger] of FINGERS) {
       for (let j = 0; j < 3; j++) {
@@ -440,6 +455,25 @@ export function keyClip(spec: any, g: Glb, dir = "."): Keyed {
         w = fk(l);
         bend(l, id(`lowerarm_${side}`), about(across, -num(`arm_${side}`, "elbow", t)), w);
       }
+    } else if (spec.fists) {
+      // Two empty fists, each wrist where its key puts it, the hand carried on the forearm as
+      // the guard holds it and its fingers closed.
+      for (const side of ["r", "l"] as const) {
+        const v = vec(`hand_${side}`, "elbow", t);
+        reach(l, arm[side], model(vec(`hand_${side}`, "at", t)), len(v) > 1e-3 ? model(v) : rot(turned, arm[side].pole), `arm_${side}`);
+        // The fingers go from the guard's to closed by `grip.closed`, so the guard key is the guard.
+        const k = num("grip", "closed", t);
+        if (k <= 0 || spec.fingers === undefined) continue;
+        const closed = l.map((p) => ({ ...p }));
+        curl(closed, side);
+        for (const bone of [...FINGERS.flatMap(([f]) => [1, 2, 3].map((j) => `${f}_0${j}_${side}`)), `thumb_03_${side}`]) {
+          const [a, b] = [l[id(bone)].r, closed[id(bone)].r];
+          const sign = dot([a[0], a[1], a[2]], [b[0], b[1], b[2]]) + a[3] * b[3] < 0 ? -1 : 1;
+          const m = a.map((x, i) => x + (b[i] * sign - x) * Math.min(1, k));
+          const n = Math.hypot(...m);
+          l[id(bone)] = { ...l[id(bone)], r: m.map((x) => x / n) as Q };
+        }
+      }
     } else {
       // The sword hand goes to its place and points the blade; the shield rides the chest.
       const hint = (part: string, k: Chain): V3 => {
@@ -509,10 +543,10 @@ export function keyClip(spec: any, g: Glb, dir = "."): Keyed {
   }
 
   const frames = Math.round(spec.end * FPS) + 1;
-  const samples = Array.from({ length: frames }, (_, i) => pose(i / FPS));
+  const samples = Array.from({ length: frames }, (_, i) => pose((solving = i / FPS)));
   const tracked = [...guard.keys()].map((n) => g.named(n)).filter((i) => i >= 0);
   const placed = new Set(tracked.filter((i) => guard.get(nodes[i].name!)?.t));
-  const over = Object.entries(stretched).filter(([, v]) => v > 1).map(([k, v]) => `${k} ${(v * 100).toFixed(0)}%`);
+  const over = Object.entries(stretched).filter(([, v]) => v > 1).map(([k, v]) => `${k} ${(v * 100).toFixed(0)}% at ${stretchedAt[k].toFixed(2)} s`);
   return { name: spec.name, samples, tracked, placed, keys: keys.length, over };
 }
 
