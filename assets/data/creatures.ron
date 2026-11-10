@@ -320,7 +320,7 @@
         niche: (warmth_c: (5.0, 30.0), haunts: [Woods, Open]),
         seen_m: 140.0,
         // It caws now and then from where it sits, and as it takes wing.
-        calls_s: Some((20.0, 70.0)),
+        calls_s: Some((90.0, 300.0)),
         stride: (0.1, 0.0),
         feet: Skitter,
         voice: Silent,
