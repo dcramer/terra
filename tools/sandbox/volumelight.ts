@@ -71,11 +71,20 @@ const WHOLE: Box = [0, 0, 1, 1];
 /// passage, `den.rs`'s MOUTH_M, cleared 5.5 m either side); the bare ground is BARE behind
 /// the mouth, inside what is cleared.
 const [IN, OUT, BEHIND, UP, AWAY, BARE, MOUTH_M] = [3, 2.5, 4, 3, 9, 4.2, 22];
+/// A square of ground is seen from RISE metres over it for each metre off, the eye no more
+/// than HIGH over its own ground (under the crowns), and every patch is at least TALL of the
+/// picture's height.
+const [RISE, HIGH, TALL] = [0.5, 9, 0.03];
 /// How far each judged thing may stand from itself without the volume, over the ground
 /// outside the box, and its still with the volume put back from its first (a view less
-/// steady than that has measured nothing).
-const SAME = 0.05;
-const STEADY = 0.05;
+/// steady than that has measured nothing). Five runs on 2026-11-10 (light-fragment j13) read
+/// the trunk 0.999 to 1.000, the grass 1.000 to 1.002 and the floor 0.995 to 1.000, back
+/// over on 1.000 to 1.002, 0.995 to 1.001 and 1.003 to 1.014; with the fault planted
+/// (den_light's `whose` giving open air the den's light) 0.844, 1.018 and 1.013. So the
+/// trunk and the grass are judged (D632); the floor's fault is under three of its own
+/// spreads from its good runs, and it is read only.
+const SAME: Record<string, number> = { trunk: 0.02, grass: 0.01 };
+const STEADY = 0.02;
 /// The chamber toward the mouth with the volume: its luma and blue share at most these, and
 /// without the volume at least LIT times as bright.
 const DARK = 0.02;
@@ -188,7 +197,7 @@ export function judged(things: Record<string, Reading>, chamber: Reading): strin
   const failed: string[] = [];
   for (const [name, thing] of Object.entries(things)) {
     if (Math.abs(thing.steady - 1) > STEADY) failed.push(`the ${name} with the volume put back is ${thing.steady.toFixed(3)} of its first still (within ${STEADY} of 1): the view was not steady and measured nothing, run it again`);
-    if (Math.abs(thing.ratio - 1) > SAME) failed.push(`the ${name} in the den's box is ${thing.ratio.toFixed(3)} of itself without the volume (within ${SAME} of 1)`);
+    if (Math.abs(thing.ratio - 1) > SAME[name]) failed.push(`the ${name} in the den's box is ${thing.ratio.toFixed(3)} of itself without the volume (within ${SAME[name]} of 1)`);
   }
   if (chamber.on > DARK) failed.push(`the chamber's luma is ${chamber.on.toFixed(4)} (at most ${DARK})`);
   if (chamber.blue > BLUE) failed.push(`the chamber's blue share is ${chamber.blue.toFixed(3)} (at most ${BLUE})`);
@@ -272,7 +281,7 @@ async function shoot(volume: string, sandboxArgs: string[], views: (state: State
 /// spots round the thing, 16 ways and from `near` to `far` metres off, that lie OUT outside
 /// the box and AWAY from the mouth, by how far every trunk is from that ground, from the eye
 /// and from the line between the eye and the thing.
-function found(name: string, thing: Spot, [near, far]: number[], land: { box: LightBox; up: (east: number, south: number) => number | undefined; trunks: Trunk[]; mouthward: (at: Place) => number }): View {
+function found(name: string, thing: Spot, [near, far]: number[], land: { box: LightBox; up: (east: number, south: number) => number | undefined; trunks: Trunk[]; mouthward: (at: Place) => number; fov: number | null }): View {
   const flat = (a: Place, b: Place) => Math.hypot(a[0] - b[0], a[2] - b[2]);
   const others = land.trunks.filter((trunk) => Math.hypot(trunk.at[0] - thing.at[0], trunk.at[1] - thing.at[2]) > 0.5);
   // How far the trunks are from a line between two places, less each one's own radius.
@@ -287,27 +296,40 @@ function found(name: string, thing: Spot, [near, far]: number[], land: { box: Li
       }),
     );
   let best: { score: number; view: View } | undefined;
+  const refused = { inside: 0, high: 0, small: 0 };
   for (let turn = 0; turn < 16; turn++)
     for (let off = near; off <= far; off++) {
       const way: Place = [Math.cos((turn * Math.PI) / 8), 0, Math.sin((turn * Math.PI) / 8)];
       const [ground, eye] = [add(thing.at, way, off), add(thing.at, way, off + BEHIND)];
       const [groundUp, eyeUp] = [land.up(ground[0], ground[2]), land.up(eye[0], eye[2])];
       if (groundUp === undefined || eyeUp === undefined) continue;
-      [ground[1], eye[1]] = [groundUp, eyeUp + UP];
-      if (inside(land.box, ground) > -OUT || inside(land.box, add(ground, [0, 1, 0])) > -OUT || land.mouthward(ground) < AWAY) continue;
+      // A square of ground is looked down on (RISE), however the land between falls: from
+      // UP over the eye's own ground alone, a hillside's was seen edge on, 4 pixels high.
+      [ground[1], eye[1]] = [groundUp, Math.max(eyeUp, groundUp) + UP];
+      if (!thing.tall) eye[1] = Math.max(eye[1], thing.at[1] + RISE * (off + BEHIND));
+      if (eye[1] - eyeUp > HIGH && ++refused.high) continue;
+      if ((inside(land.box, ground) > -OUT || inside(land.box, add(ground, [0, 1, 0])) > -OUT || land.mouthward(ground) < AWAY) && ++refused.inside) continue;
       const score = Math.min(clear(ground, ground), clear(eye, eye), clear(eye, thing.at));
       if (best && best.score >= score) continue;
-      const middle = add(add([0, 0, 0], thing.at, 0.5), ground, 0.5);
+      // The eye looks midway between the two by angle: at the middle of the line between
+      // them, the ground 4 m off lay on the picture's lower edge or under it.
+      const middle = add(eye, unit(add(unit(sub(thing.at, eye)), unit(sub(ground, eye)))), 5);
+      // Both patches as the game's camera will picture them (`sandbox.look` keeps the eye
+      // level), each at least TALL of the picture's height.
+      const toward = unit(sub(middle, eye));
+      const planned: Camera = { at: eye, toward, up: cross(unit(cross(toward, [0, 1, 0])), toward), fov: land.fov };
+      const tall = [thing, { name: "ground outside", at: ground, wide: 1 }].map((spot) => patchOf(planned, 16 / 9, spot)).map((box) => (box ? box[3] - box[1] : 0));
+      if (Math.min(...tall) < TALL && ++refused.small) continue;
       const note = `${inside(land.box, thing.at).toFixed(1)} m inside the box, its ground ${(-inside(land.box, ground)).toFixed(1)} m outside, ${score.toFixed(1)} m clear of trunks`;
       best = { score, view: { name, clear: score, vantage: [...eye, ...middle], spots: [thing, { name: "ground outside", at: ground, wide: 1 }], note } };
     }
-  if (!best) throw new Error(`no ground outside the den's box to judge the ${name} over within ${far} m of it`);
+  if (!best) throw new Error(`no ground outside the den's box to judge the ${name} over within ${far} m of it (of the spots tried, ${refused.inside} in the box or by the mouth, ${refused.high} with the eye over ${HIGH} m up, ${refused.small} with a patch under ${TALL} of the picture's height or out of it)`);
   return best.view;
 }
 
 /// The den's views: a trunk, grass and the bare ground by the mouth, each inside the box with
 /// ground outside it; and from the chamber's floor toward the mouth.
-async function denViews({ den }: State): Promise<View[]> {
+async function denViews({ den, camera }: State): Promise<View[]> {
   if (!den?.light_box) throw new Error("this world has no den, or its game does not say its light's box (den.state): build it from this checkout");
   const { mouth, floor, ahead, light_box: box } = den;
   const flatly = (from: Place, to: Place) => unit([to[0] - from[0], 0, to[2] - from[2]]);
@@ -330,15 +352,17 @@ async function denViews({ den }: State): Promise<View[]> {
     const nearest = add(mouth, inward, along);
     return Math.hypot(at[0] - nearest[0], at[2] - nearest[2]);
   };
-  const land = { box, up, trunks, mouthward };
+  const land = { box, up, trunks, mouthward, fov: camera?.fov ?? null };
+  let why = "none stands there";
   const best = (views: View[], what: string) => {
-    if (!views.length) throw new Error(`no ${what} at least ${IN} m inside the den's box with ground outside it near`);
+    if (!views.length) throw new Error(`no ${what} at least ${IN} m inside the den's box with ground outside it near: ${why}`);
     return views.reduce((a, b) => (b.clear! > a.clear! ? b : a));
   };
   const tried = (make: () => View) => {
     try {
       return [make()];
-    } catch {
+    } catch (error) {
+      why = `the last tried, ${(error as Error).message}`;
       return [];
     }
   };
@@ -395,13 +419,9 @@ if (import.meta.main) {
     said.push(`the ${thing} ${read[thing].ratio.toFixed(3)} (back over on ${read[thing].steady.toFixed(3)}; its own ${own.ratio.toFixed(3)}, the ground's ${ground.ratio.toFixed(3)}; ${patches[thing].note})`);
   }
   const chamber = reading(out, "chamber", WHOLE);
-  // Only the trunk is judged (D632). The grass's and the floor's patches are slivers 4 pixels
-  // high (the eye stands UP over its own ground, and on this hillside sees theirs edge on):
-  // they read 1.155 and 1.052 in the one run made (2026-11-10, light-fragment j11), which says
-  // nothing of the light yet. The trunk read 0.998, back over on 1.004, in that run; the fault
-  // (den_light's open air lit as the den's) has not been planted against this view.
-  const failed = judged({ trunk: read.trunk }, chamber);
+  // The trunk and the grass are judged, the floor read only (SAME's note, D632).
+  const failed = judged(Object.fromEntries(Object.keys(SAME).map((name) => [name, read[name]])), chamber);
   const fix = failed.length ? `: ${failed.join("; ")}. The den's volume holds the wrong light in those cells: see den_light.rs's \`Whose\` (open air and the rock under it hold the open sky's, D485) and \`thrown_on\`, and do not widen the bars` : "";
-  console.log(`volumelight: ${failed.length ? "✗" : "✓"} the den's volume on against off, each thing in its box over ground outside it in the same stills, the trunk within ${SAME} of 1 and the rest read only: ${said.join(", ")}; the chamber toward the mouth luma ${chamber.on.toFixed(4)} (at most ${DARK}), blue share ${chamber.blue.toFixed(3)} (at most ${BLUE}), ${(1 / chamber.ratio).toFixed(2)} times as bright without it (at least ${LIT})${fix}; stills in ${out}`);
+  console.log(`volumelight: ${failed.length ? "✗" : "✓"} the den's volume on against off, each thing in its box over ground outside it in the same stills, the trunk within ${SAME.trunk} of 1, the grass within ${SAME.grass} and the floor read only: ${said.join(", ")}; the chamber toward the mouth luma ${chamber.on.toFixed(4)} (at most ${DARK}), blue share ${chamber.blue.toFixed(3)} (at most ${BLUE}), ${(1 / chamber.ratio).toFixed(2)} times as bright without it (at least ${LIT})${fix}; stills in ${out}`);
   process.exit(failed.length ? 1 : 0);
 }
