@@ -3,7 +3,34 @@
 
 use super::*;
 
-impl Lay<'_, '_, '_> {
+/// Where a floor is laid, as its deciding reads it (`kit::decide`): the ground, the places
+/// kept clear and the sun through the crowns, nothing of the app's assets or entities, so a
+/// floor is decided off the main thread (portal-freeze j1).
+#[derive(Clone, Copy)]
+pub(in crate::experiments::lush) struct Ground<'a> {
+    pub planet: &'a Planet,
+    pub kept_clear: Option<&'a terra_world::flora::KeptClear>,
+    pub start: Vec3,
+    pub east: Vec3,
+    pub south: Vec3,
+    pub sun: Option<(&'a SkyOccluders, Vec3)>,
+}
+
+impl<'a> Lay<'a, '_, '_> {
+    /// Where it lays, for the deciding.
+    pub(in crate::experiments::lush) fn ground(&self) -> Ground<'a> {
+        Ground {
+            planet: self.planet,
+            kept_clear: self.kept_clear,
+            start: self.start,
+            east: self.east,
+            south: self.south,
+            sun: self.sun,
+        }
+    }
+}
+
+impl Ground<'_> {
     /// What a place is for a kind that grows in the sun's patches, the verge's bracken: in
     /// the sun where it reaches the fronds' height past the crowns' thick, by the one test of
     /// what a crown hides (`SkyOccluders::hides`).
@@ -111,6 +138,13 @@ impl Lay<'_, '_, '_> {
     /// Where a direction in the world points on the map.
     pub(super) fn on_map(&self, direction: Vec3) -> Vec2 {
         Vec2::new(direction.dot(self.east), direction.dot(self.south)).normalize_or(Vec2::X)
+    }
+}
+
+impl Lay<'_, '_, '_> {
+    /// A place on the ground (`Ground::on`).
+    pub(super) fn on(&self, at: Vec2, dice: &mut Rng, sink: f32, scale: f32) -> Transform {
+        self.ground().on(at, dice, sink, scale)
     }
 
     pub(super) fn cut_as(&self, name: &str, size: f32) -> Option<Cuttable> {

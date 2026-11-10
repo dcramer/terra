@@ -42,7 +42,7 @@ use std::f32::consts::TAU;
 use std::sync::Arc;
 use terra_gen::smoothstep;
 use terra_gen::{Noise, Rng, Seed};
-use terra_world::cover::{CoverRules, CoverSource, Growing};
+use terra_world::cover::{CoverSource, Growing};
 use terra_world::detail::DetailScale;
 use terra_world::flora_kinds::Flora;
 use terra_world::grown::Cards;
@@ -57,6 +57,7 @@ mod felled;
 mod floor;
 mod footing;
 mod kinds;
+mod lay_floor;
 mod overgrowth;
 mod pivots;
 mod seasons;
@@ -236,12 +237,25 @@ pub fn plugin(app: &mut App) {
         .init_resource::<kinds::Grown>()
         // The forest is the world's (D469): planted again in each world entered.
         .world_resource::<Forest>()
+        .world_resource::<lay_floor::Pending>()
+        .add_systems(
+            Update,
+            lay_floor::waited.in_set(terra_world::loading::Track),
+        )
         .add_systems(
             Update,
             (
-                // The forest is the world's: planted once its land is made (D623).
+                // The forest is the world's: planted once its land is made (D623), its
+                // floor put down once decided (`lay_floor`), in the same frame where no
+                // loading screen is up.
                 (
-                    plant.run_if(not(resource_exists::<Forest>)),
+                    (
+                        plant
+                            .run_if(not(resource_exists::<Forest>))
+                            .run_if(not(resource_exists::<lay_floor::Pending>)),
+                        lay_floor::put_down.run_if(resource_exists::<lay_floor::Pending>),
+                    )
+                        .chain(),
                     far_land.run_if(resource_added::<Forest>),
                     follow_detail,
                 )
@@ -1194,9 +1208,12 @@ fn plant(
         Option<Res<terra_world::instance::WorldSpec>>,
     ),
     // Where the sun stands as the floor is laid, for what grows in its patches.
-    sky: (
-        Option<Res<terra_world::daylight::SkyPath>>,
-        Option<Res<terra_world::daylight::Clock>>,
+    (sky, screen): (
+        (
+            Option<Res<terra_world::daylight::SkyPath>>,
+            Option<Res<terra_world::daylight::Clock>>,
+        ),
+        Option<Res<State<terra_world::loading::Screen>>>,
     ),
 ) {
     let (Some(planet), Some(flora), Some(sun)) = (planet, flora, sun) else {
@@ -1598,49 +1615,75 @@ fn plant(
         (Some(path), Some(clock)) => Some(path.sun(clock.hour)),
         _ => None,
     };
-    let mut map = floor::Floor::new(path, canopy, seed.derive("patches"));
-    floor::lay(
-        &mut floor::Lay {
-            commands: &mut commands,
-            planet: &planet,
-            kept_clear: kept_clear.as_deref(),
+    let map = floor::Floor::new(path, canopy, seed.derive("patches"));
+    // Its kit made here, with the app; where its things go is decided on a thread of its
+    // own behind the loading screen, then put down (`lay_floor`).
+    let mut lay = floor::Lay {
+        commands: &mut commands,
+        planet: &planet,
+        kept_clear: kept_clear.as_deref(),
+        start,
+        east,
+        south,
+        assets: &assets,
+        meshes: &mut meshes,
+        plain: &mut plain,
+        mossy: &mut mossy,
+        mossy_scans: &mut mossy_scans,
+        flora: &flora,
+        cards: &cards,
+        variants: &mut variants,
+        bark: bark.clone(),
+        pine_bark: pine_bark.clone(),
+        spruce_bark: spruce_bark.clone(),
+        atlas: floor_cards.clone(),
+        thicket: thicket_cards.clone(),
+        seed,
+        foliage: &mut materials,
+        shrinking: HashMap::default(),
+        shade: shade::NearShadows::new(start, east, south),
+        // The deciding's to ask (`lay_floor::Deciding`).
+        sun: None,
+    };
+    let kit = Arc::new(floor::make_kit(&mut lay));
+    let (shrinking, shade) = (lay.shrinking, lay.shade);
+    let pending = lay_floor::begin(
+        lay_floor::Deciding {
+            planet: planet.clone(),
+            kept_clear: kept_clear.as_deref().cloned(),
+            occluders,
+            sun_way,
+            map,
+            kit: kit.clone(),
+            seed,
             start,
             east,
             south,
-            assets: &assets,
-            meshes: &mut meshes,
-            plain: &mut plain,
-            mossy: &mut mossy,
-            mossy_scans: &mut mossy_scans,
-            flora: &flora,
-            cards: &cards,
-            variants: &mut variants,
-            bark: bark.clone(),
+        },
+        lay_floor::Laying {
+            kit,
+            cards,
+            bark,
             pine_bark,
             spruce_bark,
             atlas: floor_cards,
             thicket: thicket_cards,
             seed,
-            foliage: &mut materials,
-            shrinking: HashMap::default(),
-            shade: shade::NearShadows::new(start, east, south),
-            sun: sun_way.map(|way| (&occluders, way)),
+            shrinking,
+            shade,
+            start,
+            east,
+            south,
+            forest: Forest {
+                dropping: looks.dropping_leaves.clone(),
+                dropping_needles: looks.dropping_needles.clone(),
+                stand_in: looks.stand_in_leaves.clone(),
+                lumps: looks.shadow_lumps.clone(),
+            },
         },
-        &mut map,
-        &floor::Area::YARD,
+        lay_floor::behind_the_screen(screen.as_deref()),
     );
-    commands.insert_resource(occluders);
-    let map = Arc::new(map);
-    commands.insert_resource(CoverRules {
-        source: Arc::new(LushCover(map)),
-        seed: seed.derive("grass"),
-    });
-    commands.insert_resource(Forest {
-        dropping: looks.dropping_leaves.clone(),
-        dropping_needles: looks.dropping_needles.clone(),
-        stand_in: looks.stand_in_leaves.clone(),
-        lumps: looks.shadow_lumps.clone(),
-    });
+    commands.insert_resource(pending);
 }
 
 /// Paths through the forest: a ring round the clearing, and two ways out from it to the

@@ -6,7 +6,7 @@ use bevy::prelude::*;
 
 /// The places asked to be cleared ([`ClearAround`]), each its middle and how far round it:
 /// kept for the world, so what grows there after is cleared as it comes.
-#[derive(Resource, Default, Debug)]
+#[derive(Resource, Default, Debug, Clone)]
 pub struct KeptClear(Vec<(Vec3, f32)>);
 
 impl KeptClear {

@@ -118,6 +118,35 @@ pub(in crate::experiments::lush) struct Put {
     /// Each kind of undergrowth's count, and the nearest to the start.
     pub(super) undergrowth: Vec<(Under, u32, Vec2)>,
     plants: u32,
+    /// What was decided and is not spawned yet, in the order decided (`Put::spawn`).
+    laid: Vec<Laid>,
+}
+
+/// One thing a laying decided on, for `Put::spawn` to spawn: the deciding reads the ground
+/// and the floor's map alone and rolls every die, so it runs off the main thread, and the
+/// spawning, which needs the app, only puts what was decided (portal-freeze j1).
+enum Laid {
+    Rock {
+        boulder: bool,
+        scan: Scan,
+        place: Transform,
+        sink: f32,
+    },
+    /// A fallen log, or a stump, of its kind, in pine bark among the conifers.
+    Wood {
+        stump: bool,
+        kind: usize,
+        pine: bool,
+        place: Transform,
+    },
+    /// A plant of a placement's variant `pick`, the `n`th plant of the laying.
+    Plant {
+        placement: usize,
+        pick: usize,
+        at: Vec2,
+        place: Transform,
+        n: u32,
+    },
 }
 
 impl Put {
@@ -134,8 +163,7 @@ impl Put {
     }
 }
 
-/// Lays an area with a kit, by `dice`: rocks and boulders, fallen logs, stumps, then the
-/// undergrowth, in that order, as the forest walk always has.
+/// Lays an area with a kit, by `dice`: decided (`decide`), then spawned (`Put::spawn`).
 pub(in crate::experiments::lush) fn lay_with<W: Ways>(
     lay: &mut Lay,
     kit: &Kit,
@@ -144,20 +172,117 @@ pub(in crate::experiments::lush) fn lay_with<W: Ways>(
     dice: &mut Rng,
     put: &mut Put,
 ) {
+    decide(&lay.ground(), kit, map, area, dice, put);
+    put.spawn(lay, kit);
+}
+
+/// Decides what an area is laid with, by `dice`: rocks and boulders, fallen logs, stumps,
+/// then the undergrowth, in that order, as the forest walk always has; filed on the map as
+/// they are decided, and kept in `put` for `Put::spawn`. Reads nothing of the app, so the
+/// load's floor is decided on a thread of its own (`lush::lay_floor`).
+pub(in crate::experiments::lush) fn decide<W: Ways>(
+    ground: &Ground,
+    kit: &Kit,
+    map: &mut Floor<W>,
+    area: &Area,
+    dice: &mut Rng,
+    put: &mut Put,
+) {
     // Each timed apart (the recorder names a `terra` span), each inside the one before.
     let _part = info_span!("floor", name = "rocks").entered();
-    rocks(lay, kit, map, area, dice, put);
+    rocks(ground, kit, map, area, dice, put);
     let _part = info_span!("floor", name = "logs").entered();
-    logs(lay, kit, map, area, dice, put);
+    logs(ground, kit, map, area, dice, put);
     let _part = info_span!("floor", name = "stumps").entered();
-    stumps(lay, kit, map, area, dice, put);
+    stumps(ground, kit, map, area, dice, put);
     let _part = info_span!("floor", name = "undergrowth").entered();
-    undergrowth(lay, kit, map, area, dice, put);
+    undergrowth(ground, kit, map, area, dice, put);
+}
+
+impl Put {
+    /// Spawns what was decided, in the order decided, with the app's assets and commands.
+    pub(in crate::experiments::lush) fn spawn(&mut self, lay: &mut Lay, kit: &Kit) {
+        let _part = info_span!("floor", name = "spawning").entered();
+        for laid in std::mem::take(&mut self.laid) {
+            match laid {
+                Laid::Rock {
+                    boulder,
+                    scan: (mesh, material),
+                    place,
+                    sink,
+                } => {
+                    let thing = lay.commands.spawn((
+                        Name::new(if boulder { "Boulder" } else { "Rock" }),
+                        Mesh3d(mesh),
+                        MeshMaterial3d(material),
+                        place,
+                        within(if boulder { 160.0 } else { 80.0 }),
+                        Footing,
+                        Sink(sink),
+                    ));
+                    self.things.push(thing.id());
+                }
+                Laid::Wood {
+                    stump,
+                    kind,
+                    pine,
+                    place,
+                } => {
+                    let (name, bark_mesh, end_mesh, seen) = if stump {
+                        let (bark, end, _) = kit.stumps[kind].clone();
+                        ("Stump", bark, end, 90.0)
+                    } else {
+                        let (bark, end, _, _) = kit.logs[kind].clone();
+                        ("Log", bark, end, 110.0)
+                    };
+                    // Of the trees round it.
+                    let bark = if pine {
+                        lay.pine_bark.clone()
+                    } else {
+                        lay.bark.clone()
+                    };
+                    let mut wood = lay.commands.spawn((
+                        Name::new(name),
+                        Mesh3d(bark_mesh),
+                        MeshMaterial3d(bark),
+                        place,
+                        within(seen),
+                        Footing,
+                    ));
+                    if let Some(end) = end_mesh {
+                        wood.with_child((
+                            Mesh3d(end),
+                            MeshMaterial3d(kit.end_grain.clone()),
+                            within(seen),
+                        ));
+                    }
+                    self.things.push(wood.id());
+                }
+                Laid::Plant {
+                    placement,
+                    pick,
+                    at,
+                    place,
+                    n,
+                } => {
+                    let drawn = &kit.undergrowth[placement].0[pick];
+                    if let Some((plant, cuttable)) =
+                        lay.plant(&PLACEMENTS[placement], drawn, at, place)
+                    {
+                        self.things.push(plant);
+                        if cuttable {
+                            self.cuttable.push((n, plant));
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// One rock or boulder at a place, if the place holds one.
 fn rock<W: Ways>(
-    lay: &mut Lay,
+    ground: &Ground,
     map: &mut Floor<W>,
     (kit, area): (&Kit, &Area),
     dice: &mut Rng,
@@ -183,21 +308,17 @@ fn rock<W: Ways>(
     } else {
         dice.range(0.2, 0.4)
     };
-    let place = lay.on(at, dice, 0.0, scale);
-    let (mesh, material) = kinds[dice.below(kinds.len() as u32) as usize].clone();
-    if lay.off(area, &place) {
+    let place = ground.on(at, dice, 0.0, scale);
+    let scan = kinds[dice.below(kinds.len() as u32) as usize].clone();
+    if ground.off(area, &place) {
         return;
     }
-    let thing = lay.commands.spawn((
-        Name::new(if boulder { "Boulder" } else { "Rock" }),
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
+    put.laid.push(Laid::Rock {
+        boulder,
+        scan,
         place,
-        within(if boulder { 160.0 } else { 80.0 }),
-        Footing,
-        Sink(sink),
-    ));
-    put.things.push(thing.id());
+        sink,
+    });
     put.lies(map, at, size * scale * 0.6);
     put.note(boulder as usize, at);
 }
@@ -205,7 +326,7 @@ fn rock<W: Ways>(
 /// Rocks and boulders, the rocks scattered round the boulders and alone; sunk a fifth to two
 /// fifths of their height once their meshes are loaded (`Sink`).
 fn rocks<W: Ways>(
-    lay: &mut Lay,
+    ground: &Ground,
     kit: &Kit,
     map: &mut Floor<W>,
     area: &Area,
@@ -216,13 +337,13 @@ fn rocks<W: Ways>(
         let at = area.place(dice);
         let skip = area.skips(at);
         if !skip {
-            rock(lay, map, (kit, area), dice, put, at, true);
+            rock(ground, map, (kit, area), dice, put, at, true);
         }
         // Stones broken from it round its foot.
         for _ in 0..dice.below(5) {
             let near = round(dice, at, 2.2);
             if !skip {
-                rock(lay, map, (kit, area), dice, put, near, false);
+                rock(ground, map, (kit, area), dice, put, near, false);
             }
         }
     }
@@ -232,14 +353,14 @@ fn rocks<W: Ways>(
         if area.skips(at) || dice.unit() > 0.4 + 0.6 * (1.0 - map.here(at).light) {
             continue;
         }
-        rock(lay, map, (kit, area), dice, put, at, false);
+        rock(ground, map, (kit, area), dice, put, at, false);
     }
 }
 
 /// Fallen logs, under the trees most, each from the forest's own trees: tapering, broken at
 /// the crown's end, its stubs of branches, settled into the ground.
 fn logs<W: Ways>(
-    lay: &mut Lay,
+    ground: &Ground,
     kit: &Kit,
     map: &mut Floor<W>,
     area: &Area,
@@ -255,11 +376,11 @@ fn logs<W: Ways>(
         if dice.unit() > 0.25 + 0.75 * (1.0 - here.light) || !area.holds(&here) {
             continue;
         }
-        let (bark_mesh, end_mesh, length, radius) =
-            kit.logs[dice.below(LOG_KINDS as u32) as usize].clone();
+        let kind = dice.below(LOG_KINDS as u32) as usize;
+        let (length, radius) = (kit.logs[kind].2, kit.logs[kind].3);
         let scale = dice.range(0.85, 1.15);
-        let place = lay.on(at, dice, 0.12 * scale, scale);
-        let along = lay.on_map(place.rotation * Vec3::X);
+        let place = ground.on(at, dice, 0.12 * scale, scale);
+        let along = ground.on_map(place.rotation * Vec3::X);
         let half = length * scale * 0.5;
         // Clear of the paths, the trunks and what else lies there, all along it.
         let steps = (half / 0.8).ceil() as i32;
@@ -268,7 +389,7 @@ fn logs<W: Ways>(
             let h = map.here(p);
             h.path > 1.0 && h.bark > 0.6 && h.lying > 0.3
         });
-        if !clear || lay.off(area, &place) {
+        if !clear || ground.off(area, &place) {
             continue;
         }
         for k in -steps..=steps {
@@ -278,35 +399,19 @@ fn logs<W: Ways>(
                 radius * scale,
             );
         }
-        // Of the trees round it.
-        let bark = if here.needles > 0.5 {
-            lay.pine_bark.clone()
-        } else {
-            lay.bark.clone()
-        };
-        let mut log = lay.commands.spawn((
-            Name::new("Log"),
-            Mesh3d(bark_mesh),
-            MeshMaterial3d(bark),
+        put.laid.push(Laid::Wood {
+            stump: false,
+            kind,
+            pine: here.needles > 0.5,
             place,
-            within(110.0),
-            Footing,
-        ));
-        if let Some(end) = end_mesh {
-            log.with_child((
-                Mesh3d(end),
-                MeshMaterial3d(kit.end_grain.clone()),
-                within(110.0),
-            ));
-        }
-        put.things.push(log.id());
+        });
         put.note(2, at);
     }
 }
 
 /// Stumps of trees cut or broken long ago, each its foot in duff and roots as a tree's.
 fn stumps<W: Ways>(
-    lay: &mut Lay,
+    ground: &Ground,
     kit: &Kit,
     map: &mut Floor<W>,
     area: &Area,
@@ -327,34 +432,19 @@ fn stumps<W: Ways>(
         {
             continue;
         }
-        let (bark_mesh, end_mesh, radius) =
-            kit.stumps[dice.below(STUMP_KINDS as u32) as usize].clone();
+        let kind = dice.below(STUMP_KINDS as u32) as usize;
+        let radius = kit.stumps[kind].2;
         let scale = dice.range(0.8, 1.25);
-        let place = lay.on(at, dice, 0.0, scale);
-        if lay.off(area, &place) {
+        let place = ground.on(at, dice, 0.0, scale);
+        if ground.off(area, &place) {
             continue;
         }
-        let bark = if here.needles > 0.5 {
-            lay.pine_bark.clone()
-        } else {
-            lay.bark.clone()
-        };
-        let mut stump = lay.commands.spawn((
-            Name::new("Stump"),
-            Mesh3d(bark_mesh),
-            MeshMaterial3d(bark),
+        put.laid.push(Laid::Wood {
+            stump: true,
+            kind,
+            pine: here.needles > 0.5,
             place,
-            within(90.0),
-            Footing,
-        ));
-        if let Some(end) = end_mesh {
-            stump.with_child((
-                Mesh3d(end),
-                MeshMaterial3d(kit.end_grain.clone()),
-                within(90.0),
-            ));
-        }
-        put.things.push(stump.id());
+        });
         map.canopy.add(Stand::stump(at, radius * scale * 1.3));
         put.stumps.push((at, radius * scale * 1.3));
         put.note(3, at);
@@ -364,19 +454,22 @@ fn stumps<W: Ways>(
 /// The undergrowth, kind by kind, in drifts. A plant cut before (`Put::cut`) has its dice
 /// rolled as ever, so everything else stays where it was, and is not spawned.
 fn undergrowth<W: Ways>(
-    lay: &mut Lay,
+    ground: &Ground,
     kit: &Kit,
     map: &mut Floor<W>,
     area: &Area,
     dice: &mut Rng,
     put: &mut Put,
 ) {
-    for (placement, (variants, drift)) in PLACEMENTS.iter().zip(&kit.undergrowth) {
+    for (which, (placement, (variants, drift))) in
+        PLACEMENTS.iter().zip(&kit.undergrowth).enumerate()
+    {
         let clear = placement.kind.clear_of();
         let mut count = 0;
         let mut closest = Vec2::splat(f32::MAX);
         // Its realm's share of plants (D642): so many fewer tries.
-        let tries = (area.tries(placement.tries, true, dice) as f32 * lay.planet.plants()) as u32;
+        let tries =
+            (area.tries(placement.tries, true, dice) as f32 * ground.planet.plants()) as u32;
         for _ in 0..tries {
             let Some(at) = placement.kind.tried_at(&map.ways, area, dice) else {
                 continue;
@@ -397,7 +490,7 @@ fn undergrowth<W: Ways>(
             if roll > drifts {
                 continue;
             }
-            if !lay.starts(placement.kind, at, map.here(at), roll, drifts) {
+            if !ground.starts(placement.kind, at, map.here(at), roll, drifts) {
                 continue;
             }
             let many = placement.clump.0 + dice.below(placement.clump.1 - placement.clump.0 + 1);
@@ -407,18 +500,18 @@ fn undergrowth<W: Ways>(
                 } else {
                     round(dice, at, placement.spread_m)
                 };
-                let member = lay.member(placement.kind, p, map.here(p), clear);
+                let member = ground.member(placement.kind, p, map.here(p), clear);
                 let Some(here) = member.filter(|here| area.holds(here)) else {
                     continue;
                 };
                 // Smaller toward the clump's edge.
                 let edge = 1.0 - 0.3 * (p.distance(at) / (placement.spread_m * 2.0)).min(1.0);
                 let scale = dice.range(placement.scale.0, placement.scale.1) * edge;
-                let place = lay.on(p, dice, 0.03 * scale, scale);
+                let place = ground.on(p, dice, 0.03 * scale, scale);
                 let pick = dice.below(variants.len() as u32) as usize;
                 // Rolled as before, so every other plant stays where it was, then left out if
                 // it would stand in the path's line.
-                if !placement.kind.keeps_path_line(here.path) || lay.off(area, &place) {
+                if !placement.kind.keeps_path_line(here.path) || ground.off(area, &place) {
                     continue;
                 }
                 let n = put.plants;
@@ -426,12 +519,13 @@ fn undergrowth<W: Ways>(
                 if put.cut.contains(&n) {
                     continue;
                 }
-                if let Some((plant, cuttable)) = lay.plant(placement, &variants[pick], p, place) {
-                    put.things.push(plant);
-                    if cuttable {
-                        put.cuttable.push((n, plant));
-                    }
-                }
+                put.laid.push(Laid::Plant {
+                    placement: which,
+                    pick,
+                    at: p,
+                    place,
+                    n,
+                });
                 if placement.kind.stands_in_a_well() {
                     map.feet.add(p, FOOT_M * scale);
                     put.feet.push((p, FOOT_M * scale));

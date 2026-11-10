@@ -40,6 +40,7 @@ use bevy::{
 };
 use builds::*;
 pub(super) use kit::{Kit, Put, lay_with};
+pub(super) use laying::Ground;
 use placements::{PLACEMENTS, Placement};
 use std::f32::consts::{PI, TAU};
 use terra_gen::{Noise, Rng, Seed};
@@ -534,13 +535,36 @@ impl Drawn {
 /// fallen logs, and the undergrowth in drifts; and gives back the kit it was laid with, for
 /// laying more of it later (`floor_stream`).
 pub(super) fn lay<W: Ways>(lay: &mut Lay, map: &mut Floor<W>, area: &Area) -> Kit {
-    let mut dice = lay.seed.derive("floor").rng();
-    let kit = {
-        let _part = info_span!("floor", name = "its kit").entered();
-        Kit::make(lay)
-    };
+    let kit = make_kit(lay);
+    let put = decide_load(&lay.ground(), &kit, map, area, lay.seed);
+    put_down(lay, &kit, put);
+    kit
+}
+
+/// The kit the load's floor is laid with: its meshes and materials, made with the app.
+pub(super) fn make_kit(lay: &mut Lay) -> Kit {
+    let _part = info_span!("floor", name = "its kit").entered();
+    Kit::make(lay)
+}
+
+/// Decides the load's floor, by the forest's seed: every die rolled, the map filed, nothing
+/// of the app read, so it runs on a thread of its own (`lush::lay_floor`).
+pub(super) fn decide_load<W: Ways>(
+    ground: &Ground,
+    kit: &Kit,
+    map: &mut Floor<W>,
+    area: &Area,
+    seed: Seed,
+) -> Put {
+    let mut dice = seed.derive("floor").rng();
     let mut put = Put::default();
-    lay_with(lay, &kit, map, area, &mut dice, &mut put);
+    kit::decide(ground, kit, map, area, &mut dice, &mut put);
+    put
+}
+
+/// Spawns the load's floor as decided, says what it has, and hands its shadows over.
+pub(super) fn put_down(lay: &mut Lay, kit: &Kit, mut put: Put) {
+    put.spawn(lay, kit);
     let (laid, nearest) = (put.wood, put.nearest);
     info!(
         "lush: the floor has {} rocks, {} boulders, {} fallen logs and {} stumps; the nearest \
@@ -570,7 +594,6 @@ pub(super) fn lay<W: Ways>(lay: &mut Lay, map: &mut Floor<W>, area: &Area) -> Ki
         .collect();
     info!("lush: undergrowth: {}.", counts.join(", "));
     lay.hand_over_shadows();
-    kit
 }
 
 /// A stump at `stump_at` and a fallen log at `log_at`, of the floor's own wood, as if the
