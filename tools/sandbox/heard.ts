@@ -1,8 +1,8 @@
 // node tools/sandbox/heard.ts [--seed 3] [--seconds 180]: a walk among wildlife, judged by what
 // was heard (D69): begins a world, walks for so long, steps up to each kind of animal it comes
-// near, and asks `sounds.heard`. It fails when one voice was heard more often than the bar a
-// minute (heard/judge.ts says where the bar is from) or when a kind stepped up to was not heard
-// as its data says. A line when it passes (D388). Run through `cargo xtask gpu still -- …`.
+// near, and asks `sounds.heard` and `sounds.unheard`. It fails when one voice was heard more
+// often than the bar a minute, or a cry asked for more often (heard/judge.ts says where the bar
+// is from, D657), or when a kind stepped up to was not heard as its data says. A line when it passes (D388). Run through `cargo xtask gpu still -- …`.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { call, holdKey, ROOT, start, state, status, stop, waitSeconds, waitUntil, warp } from "./client.ts";
@@ -41,12 +41,14 @@ try {
     met.push({ kind: one.what!, after: Object.keys(is).filter((name) => is[name] > (was[name] ?? 0)) });
   }
   const after = await heard();
+  // The animal voices in earshot not played, over their budget (D657).
+  const unheard = (await call("sounds.unheard")) as Heard;
   const minutes = ((await status()).seconds - began) / 60;
-  found = faults(kinds, before, after, minutes, met);
+  found = faults(kinds, before, after, minutes, met, unheard);
   if (met.length === 0) found.push(`no animal came within play.state's reach in ${seconds} s on seed ${seed}: nothing was judged; walk longer (--seconds) or another seed`);
   const most = busiest(kinds, before, after, minutes);
   passed = `✓ heard: ${minutes.toFixed(1)} min on seed ${seed}, met ${met.map((m) => m.kind).join(", ")}; the busiest voice ${most.voice} ${most.rate.toFixed(1)} a minute (bar ${BAR_PER_MIN}); each kind met was heard as its data says`;
-  if (process.env.TERRA_VERBOSE) console.log(JSON.stringify({ met, before, after }));
+  if (process.env.TERRA_VERBOSE) console.log(JSON.stringify({ met, before, after, unheard }));
 } catch (problem) {
   found = [`the run did not finish: ${problem instanceof Error ? problem.message : problem} (a refusal is in shots/remote.log: the game runs one copy a machine, wait for the other and run again)`];
 } finally {

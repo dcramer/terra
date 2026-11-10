@@ -11,14 +11,23 @@ export type Heard = Record<string, number>;
 export type Met = { kind: string; after: string[] };
 
 /**
- * No one voice more than this many times a minute: one every three seconds. A guess (D654),
- * and so this check is a reading, not a gate (D632): the walk the developers refused heard the
- * crow's caw 326 times in three minutes, 109 a minute, which it fails, but no walk has yet
- * been heard and found good, whose number would be the bar. On main 2026-11-10 (seed 3) the
- * crow's caw is still 109 a minute with calls_s at 90 to 300 s, so its calls were not the cause.
+ * No one voice more than this many times a minute: the most its budget lets begin (D657,
+ * terra_game play/sounds/budget.rs: MOST in any SPAN_S seconds from afar and as many again
+ * from near at hand), so 2 x 2 x 60 / 6. A cry, a fright's voice, is held to the same number
+ * in what was asked for, heard or not: frights are few, and a cry asked for more often than
+ * its budget could let be heard is cried by animals not frightened. The walk the developers
+ * refused (2026-11-10, seed 3) asked for the crow's caw 115 times a minute and the chaffinch's
+ * alarm 65, 85 and 98 in every 100 of them at a takeoff from perch to perch.
  */
-export const KNOWN_BAD_PER_MIN = 109;
-export const BAR_PER_MIN = 20;
+export const KNOWN_BAD_PER_MIN = 65;
+export const BUDGET = { most: 2, span_s: 6 };
+export const BAR_PER_MIN = (2 * BUDGET.most * 60) / BUDGET.span_s;
+
+/** The budget as the game has it, to hold `BUDGET` to (judge.test.ts). */
+export function readBudget(rust: string): { most: number; span_s: number } {
+  const value = (name: string) => Number(new RegExp(`pub const ${name}: \\w+ = ([\\d.]+);`).exec(rust)?.[1]);
+  return { most: value("MOST"), span_s: value("SPAN_S") };
+}
 
 /** The names the sounds made in code are heard by (terra_game play/sounds.rs sounds_like). */
 const MADE: Record<string, string | undefined> = {
@@ -49,15 +58,16 @@ export function readKinds(ron: string): Kind[] {
 }
 
 /** The faults of a walk: a voice heard too often, or a kind met that named no sound. */
-export function faults(kinds: Kind[], before: Heard, after: Heard, minutes: number, met: Met[], bar = BAR_PER_MIN): string[] {
+export function faults(kinds: Kind[], before: Heard, after: Heard, minutes: number, met: Met[], unheard: Heard = {}, bar = BAR_PER_MIN): string[] {
   const found: string[] = [];
   const voices = new Set(kinds.flatMap((kind) => [kind.cry, kind.call]).filter((name) => name !== undefined));
+  const cries = new Set(kinds.map((kind) => kind.cry));
   for (const voice of voices) {
     const rate = ((after[voice] ?? 0) - (before[voice] ?? 0)) / minutes;
-    if (rate > bar) {
-      const whose = kinds.filter((kind) => kind.cry === voice || kind.call === voice).map((kind) => `${kind.name}${kind.calls ? ` (calls_s ${kind.calls.join(" to ")})` : ""}`);
-      found.push(`${voice} was heard ${rate.toFixed(1)} times a minute, over the bar of ${bar}: it is ${whose.join(", ")}'s in assets/data/creatures.ron; raise calls_s or thin the kind, do not raise the bar`);
-    }
+    const asked = rate + (unheard[voice] ?? 0) / minutes;
+    const whose = kinds.filter((kind) => kind.cry === voice || kind.call === voice).map((kind) => `${kind.name}${kind.calls ? ` (calls_s ${kind.calls.join(" to ")})` : ""}`);
+    if (rate > bar) found.push(`${voice} was heard ${rate.toFixed(1)} times a minute, over the ${bar} its budget lets begin (D657): it is ${whose.join(", ")}'s in assets/data/creatures.ron; the budget of terra_game play/sounds/budget.rs is not holding it (is it an animal_voice in play/sounds.rs?), do not raise the bar`);
+    else if (cries.has(voice) && asked > bar) found.push(`${voice}, a cry, was asked for ${asked.toFixed(1)} times a minute (heard ${rate.toFixed(1)}), over the bar of ${bar}: ${whose.join(", ")} cries when not frightened; a cry is given only as fright takes it (terra_game play/noises.rs creatures_heard, Creature::frightened), never at a takeoff from perch to perch; do not raise the bar or the budget`);
   }
   for (const one of met) {
     const kind = kinds.find((kind) => kind.name === one.kind);

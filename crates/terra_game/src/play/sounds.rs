@@ -28,7 +28,9 @@ use serde::Deserialize;
 use terra_motion::moves::Taken;
 use terra_motion::struck::{Struck, Surface};
 
+mod budget;
 mod clips;
+use budget::Budget;
 use clips::CLIPS;
 
 pub fn plugin(app: &mut App) {
@@ -38,6 +40,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (mix, hear).chain())
         .add_systems(Last, report);
     crate::remote::method(app, "sounds.heard", heard_so_far);
+    crate::remote::method(app, "sounds.unheard", unheard_so_far);
 }
 
 /// How a cue is heard: recorded clips by name, or a sound made in code with its level
@@ -160,17 +163,49 @@ fn sounds_like(cue: Cue, stations: &Stations, contacts: &Contacts) -> Like {
     }
 }
 
-/// What has been heard, by name, for scripted runs to report.
+/// What has been heard, by name, for scripted runs to report; and the animal voices in
+/// earshot that went unheard, over their budget (`budget`).
 #[derive(Resource, Default)]
-pub struct Heard(Vec<(&'static str, u32)>);
+pub struct Heard {
+    heard: Counts,
+    unheard: Counts,
+}
+
+#[derive(Default)]
+struct Counts(Vec<(&'static str, u32)>);
 
 impl Heard {
+    fn count(&mut self, name: &'static str) {
+        self.heard.count(name);
+    }
+}
+
+impl Counts {
     fn count(&mut self, name: &'static str) {
         match self.0.iter_mut().find(|(heard, _)| *heard == name) {
             Some((_, count)) => *count += 1,
             None => self.0.push((name, 1)),
         }
     }
+
+    fn json(&self) -> serde_json::Value {
+        let counts: serde_json::Map<_, _> = self
+            .0
+            .iter()
+            .map(|&(name, count)| (name.to_string(), count.into()))
+            .collect();
+        counts.into()
+    }
+}
+
+/// An animal's voice, a cry or a call, which its budget holds (`budget`); not its steps,
+/// its wings or a moment of its clips, each heard as it happens.
+fn animal_voice(cue: Cue) -> bool {
+    use Cue::{Bark, Chatter, Chirp, Croak, Hiss, Quack, Snort, Voiced};
+    matches!(
+        cue,
+        Voiced(_) | Snort | Hiss | Chatter | Chirp | Quack | Croak | Bark
+    )
 }
 
 fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
@@ -205,19 +240,31 @@ fn hear(
     synths: Option<ResMut<Assets<Synth>>>,
     mut heard: ResMut<Heard>,
     mut seed: Local<u64>,
+    mut budget: Local<Budget>,
+    time: Res<Time>,
 ) {
     let ear = ear.single().ok().map(GlobalTransform::translation);
     let (mut bank, mut synths) = (bank, synths);
-    for noise in noises.read() {
+    // The nearest first, so of a voice over its budget the far ones go unheard.
+    let off = |noise: &Noise| match (noise.at, ear) {
+        (Some(at), Some(ear)) => at.distance(ear),
+        _ => 0.0,
+    };
+    let mut noises: Vec<&Noise> = noises.read().collect();
+    noises.sort_by(|a, b| off(a).total_cmp(&off(b)));
+    for noise in noises {
         let (name, reach_m) = match sounds_like(noise.cue, &stations, &contacts) {
             Like::Clips(name) => (name, reach_of(name)),
             Like::Made(name, _, _, reach_m) => (name, reach_m),
             Like::Nothing => continue,
         };
         // Far enough off to be all but silent: not worth playing.
-        if let (Some(at), Some(ear)) = (noise.at, ear)
-            && at.distance(ear) > reach_m * 12.0
+        if off(noise) > reach_m * 12.0 {
+            continue;
+        }
+        if animal_voice(noise.cue) && !budget.lets(name, time.elapsed_secs(), off(noise) <= reach_m)
         {
+            heard.unheard.count(name);
             continue;
         }
         heard.count(name);
@@ -255,12 +302,16 @@ fn heard_so_far(
     In(_): In<Option<serde_json::Value>>,
     heard: Res<Heard>,
 ) -> bevy::remote::BrpResult {
-    let heard: serde_json::Map<_, _> = heard
-        .0
-        .iter()
-        .map(|&(name, count)| (name.to_string(), count.into()))
-        .collect();
-    Ok(heard.into())
+    Ok(heard.heard.json())
+}
+
+/// `sounds.unheard`: the animal voices in earshot not played, over their budget, by name:
+/// with `sounds.heard`, how often each was asked for.
+fn unheard_so_far(
+    In(_): In<Option<serde_json::Value>>,
+    heard: Res<Heard>,
+) -> bevy::remote::BrpResult {
+    Ok(heard.unheard.json())
 }
 
 /// The set of recorded clips a kind's data names as its voice, if there is one: with none
@@ -285,6 +336,7 @@ fn report(options: Res<Options>, mut exits: MessageReader<AppExit>, heard: Res<H
         return;
     }
     let mut heard: Vec<_> = heard
+        .heard
         .0
         .iter()
         .map(|(name, count)| format!("{name} {count}"))

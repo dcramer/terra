@@ -499,6 +499,7 @@ The look, models, bodies and gear, textures and audio.
 | [D624](decisions/D624.md) | Leaves on the line from the third-person lens to the figure open over the figure alone | Tech | Agent | Decided | Every leaf card the foliage shaders draw… |
 | [D626](decisions/D626.md) | The clouds are lit by octaves of multiple scattering and shaped as domed towers, measured against photographs | Tech | Agent | Decided | Under D516 (the sky photographic) and D515… |
 | [D630](decisions/D630.md) | Iso characters keep main Terra's triangle budgets, or the iso camera's own | Design | — | Open | Main Terra's budgets (art-style.md) give a character… |
+| [D657](decisions/D657.md) | An animal's voice has a budget: of one voice at most two begin in any six seconds from afar and two more near at hand, the nearest first | Tech | Agent | Decided | Not every animal in earshot is voiced. |
 
 ## Engine and code
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { BAR_PER_MIN, KNOWN_BAD_PER_MIN, faults, readKinds } from "./judge.ts";
+import { BAR_PER_MIN, BUDGET, KNOWN_BAD_PER_MIN, faults, readBudget, readKinds } from "./judge.ts";
 
 const RON = `[
     (
@@ -51,6 +51,24 @@ test("a voice over the bar is a fault that names its kind, and one under is none
   assert.equal(loud.length, 1);
   assert.match(loud[0], /voice\.crow was heard 108\.7 times a minute.*Crow \(calls_s 90 to 300\)/);
   assert.deepEqual(faults(kinds, {}, { "voice.crow": 3 * BAR_PER_MIN, "step.grass": 900 }, 3, []), []);
+});
+
+test("a cry asked for more often than its budget lets be heard is a fault, and a call at rest is not", () => {
+  const kinds = readKinds(RON);
+  // The takeoff cry put back under the budget: 60 caws heard in three minutes, 290 not.
+  const cried = faults(kinds, {}, { "voice.crow": 60 }, 3, [], { "voice.crow": 290 });
+  assert.equal(cried.length, 1);
+  assert.match(cried[0], /voice\.crow, a cry, was asked for 116\.7 times a minute \(heard 20\.0\).*cries when not frightened/);
+  // A known-good walk (main, 2026-11-10: the crow asked for 10 a minute).
+  assert.deepEqual(faults(kinds, {}, { "voice.crow": 30 }, 3, [], {}), []);
+  // A wood's finches sing more than is played: what the budget is for.
+  assert.deepEqual(faults(kinds, {}, { "voice.finch.song": 60 }, 3, [], { "voice.finch.song": 240 }), []);
+});
+
+test("the bar is the game's own budget", () => {
+  const rust = readFileSync(resolve(import.meta.dirname, "../../../crates/terra_game/src/play/sounds/budget.rs"), "utf8");
+  assert.deepEqual(readBudget(rust), BUDGET);
+  assert.equal(BAR_PER_MIN, 40);
 });
 
 test("a kind met must be heard as its data says, unless its data says it is silent", () => {
