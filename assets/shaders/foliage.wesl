@@ -396,8 +396,10 @@ fn foliage_vertex(vertex_in: Vertex, pivot: vec4<f32>, twig: vec4<f32>, pivoted:
 @if(VERTEX_UVS_A)
     out.uv = vertex.uv;
     // Each tree's bark shifted by where it stands, so no two trunks of a kind show the same
-    // bark at the same place (D218).
-    if wind.bark > 0.5 {
+    // bark at the same place (D218). Not a cap tree's skin, whose coordinates below zero say
+    // what a point is (`cap_skin.wesl`'s `is_cap_skin`): shifted, a cap's top was drawn as
+    // gills, shining, by as much of the way in from its rim as its tree's shift.
+    if wind.bark > 0.5 && vertex.uv.y > -0.5 {
         let foot = world_from_local[3].xyz;
         out.uv += fract(vec2<f32>(sin(dot(foot, vec3<f32>(12.9898, 78.233, 37.719))), sin(dot(foot, vec3<f32>(39.346, 11.135, 83.155)))) * 43758.547);
     }

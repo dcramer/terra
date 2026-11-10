@@ -4,7 +4,7 @@
 //! stand-in for its shadow. Ported from the lush forest spike's oak (research/lush-forest-
 //! spike.md), with the conifer's and birch's habits added.
 
-use super::build::{Build, Limb, Placing, card, folded_card, lathe, lump, tube};
+use super::build::{Build, Limb, Placing, card, folded_card, lump, tube};
 use super::pivots::{self, Clump, Line, Pivots};
 use super::{Card, Habit, TreeDef};
 use bevy::prelude::*;
@@ -20,8 +20,8 @@ pub struct Tree {
     pub trunk_m: f32,
     pub height: f32,
     pub habit: Habit,
-    /// The colour of a cap tree's caps over its surface; white for a tree.
-    pub cap_tint: Vec3,
+    /// How a cap tree's caps and stalks are shaped (`caps`); nothing for a tree.
+    pub fungus: super::caps::Fungus,
 }
 
 /// A spray of leaves: where, how big, on which branch, and, for a conifer's, which way its
@@ -42,7 +42,7 @@ pub fn grow(dice: &mut Rng, def: &TreeDef, height: f32) -> Tree {
         trunk_m: height * def.trunk,
         height,
         habit: def.habit,
-        cap_tint: Vec3::ONE,
+        fungus: Default::default(),
     };
     match def.habit {
         Habit::Spreading => {
@@ -403,11 +403,8 @@ pub fn wood(tree: &Tree, detail: usize, bark_m: f32, pivots: &Pivots) -> Build {
             [2, 1, 0][detail],
             [[10, 5, 3, 3], [7, 4, 3, 3], [5, 3, 3, 3]][detail],
         ),
-        // A cap is round: many sides near, and its young ones gone far off.
-        Habit::Cap => (
-            [3, 1, 1][detail],
-            [[12, 28, 14, 14], [9, 18, 9, 9], [6, 10, 6, 6]][detail],
-        ),
+        // A cap tree is skin, not bark, in shapes of its own.
+        Habit::Cap => return super::caps::wood(tree, detail, pivots),
     };
     let mut build = Build::levelled(pivots);
     for (i, limb) in tree.limbs.iter().enumerate() {
@@ -416,12 +413,7 @@ pub fn wood(tree: &Tree, detail: usize, bark_m: f32, pivots: &Pivots) -> Build {
         }
         build.pivot = pivots.limbs.get(i).copied();
         let sides = sides[limb.depth.min(3) as usize];
-        // A cap tree's caps (its odd depths) are skin, its stalks bark.
-        if tree.habit == Habit::Cap && limb.depth % 2 == 1 {
-            lathe(&mut build, limb, sides, tree.height, tree.cap_tint);
-        } else {
-            tube(&mut build, limb, sides, tree.height, bark_m, Vec3::ONE);
-        }
+        tube(&mut build, limb, sides, tree.height, bark_m, Vec3::ONE);
     }
     build
 }
@@ -830,7 +822,7 @@ mod tests {
             trunk_m: 0.05,
             height: 5.0,
             habit: Habit::Upright,
-            cap_tint: Vec3::ONE,
+            fungus: Default::default(),
         }
     }
 

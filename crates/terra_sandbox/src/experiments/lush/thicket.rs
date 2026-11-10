@@ -39,7 +39,7 @@ fn empty(habit: Habit) -> Tree {
         trunk_m: 0.0,
         height: 0.0,
         habit,
-        cap_tint: Vec3::ONE,
+        fungus: Default::default(),
     }
 }
 

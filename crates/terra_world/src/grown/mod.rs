@@ -106,6 +106,9 @@ pub struct CapDef {
     pub gills: (f32, f32, f32),
     #[serde(default)]
     pub glow: f32,
+    /// Its stalk's and ring's colour.
+    #[serde(default = "white")]
+    pub stalk: (f32, f32, f32),
 }
 
 impl Default for CapDef {
@@ -118,6 +121,7 @@ impl Default for CapDef {
             tint: white(),
             gills: white(),
             glow: 0.0,
+            stalk: white(),
         }
     }
 }

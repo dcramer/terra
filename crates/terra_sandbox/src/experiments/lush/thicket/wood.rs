@@ -238,7 +238,7 @@ mod tests {
             trunk_m: 0.025,
             height: 3.0,
             habit: Habit::Upright,
-            cap_tint: Vec3::ONE,
+            fungus: Default::default(),
         }
     }
 
