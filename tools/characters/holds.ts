@@ -283,7 +283,15 @@ export function pool(n: number) {
 }
 
 if (import.meta.main) {
-  const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: { json: { type: "string" }, body: { type: "string" }, fresh: { type: "boolean", default: false } } });
+  const { values: opt, positionals } = parseArgs({ allowPositionals: true, options: { json: { type: "string" }, body: { type: "string" }, fresh: { type: "boolean", default: false }, tune: { type: "string" } } });
+  // `--tune JSON`: tune.ts's parameters tried for this run, as solve.ts tries them.
+  let tune: Record<string, number> | undefined;
+  try {
+    tune = opt.tune ? JSON.parse(opt.tune) : undefined;
+  } catch (e) {
+    console.error(`✗ holds: --tune is not JSON (${(e as Error).message}) (D556): give tune.ts's parameters as an object, e.g. --tune '{"clear.on":1}'`);
+    process.exit(2);
+  }
   const all = readdirSync(HELD).filter((f) => f.endsWith(".glb")).map((f) => f.slice(0, -4)).sort();
   const unknown = positionals.filter((p) => !all.includes(p));
   if (unknown.length) {
@@ -294,7 +302,7 @@ if (import.meta.main) {
   mkdirSync(OUT, { recursive: true });
   const log = join(OUT, "holds.log");
   writeFileSync(log, "");
-  const ctx: Ctx = { cache: opt.fresh ? undefined : new Cache(join(OUT, "holds-cache")), log, out: OUT };
+  const ctx: Ctx = { cache: opt.fresh ? undefined : new Cache(join(OUT, "holds-cache")), log, out: OUT, tune };
   const limit = pool(availableParallelism());
   const on = opt.body ? opt.body.split(",") : bodies();
   try {

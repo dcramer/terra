@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { carryArm } from "./carry_arm.ts";
-import { Glb, type V3, posed, rot } from "./glb.ts";
+import { Glb, type V3, posed, qmul, rot } from "./glb.ts";
 
 const offUp = (v: V3) => (Math.acos(v[1] / Math.hypot(...v)) * 180) / Math.PI;
 
@@ -73,4 +73,63 @@ test("a hanging carried arm gives as a landing folds the legs, and not standing"
   assert.ok(given.t[1] > stiff.t[1] + 0.05 && given.t[0] < stiff.t[0] - 0.05, `the hand at ${given.t}, held stiff ${stiff.t}`);
   assert.ok(offUp(rot(laid[hand].r, [0, 1, 0])) > 150, "the landing no longer tips the laid handle down");
   assert.ok(offUp(rot(given.r, [0, 1, 0])) < 90, `the given handle points ${offUp(rot(given.r, [0, 1, 0]))} degrees off up`);
+});
+
+// The clearance laid over the give (held-constraint j4): the turns carryArm writes put the
+// wrist and a point of the look where carry_clear.ts's own model of the arm (`held`) says the
+// move puts them, so what `clear` solved is what the pose shows. Known another way: the model
+// is three vectors and two turns; the pose is the whole skeleton posed through `posed`.
+test("a hand's move is laid over the give where the solver's model puts it", async () => {
+  const { limbOf } = await import("./carry_arm.ts");
+  const { back, held, reach } = await import("./carry_clear.ts");
+  const { place, sub } = await import("./glb.ts");
+  const g = new Glb("assets/models/character/fight.glb");
+  const rest = posed(g, undefined, 0);
+  const land = g.layered(g.clip("Jump_Land")!, g.clip("Carry_Tool")!, ["clavicle_r"]);
+  const laid = posed(g, land, 0.2);
+  const hold = carryArm(g, rest, [], ["clavicle_r"]);
+  const lay = (turns: Map<string, [number, number, number, number]>) => posed(g, land, 0.2, turns);
+  const given = lay(hold(laid));
+  const [socket, wrist] = [g.named("socket.hand.R"), g.named("hand_r")];
+  // A point 50 cm down the handle, in the body as the give holds it.
+  const local: V3 = [0, -0.5, 0];
+  const point = place(given[socket], local);
+  for (const by of [[-0.03, 0.08, 0.05], [0.02, 0.2, -0.04], [0, 0, 0]] as V3[]) {
+    const pose = lay(hold(laid, undefined, { by: () => by, lay }));
+    const { arm, hand } = limbOf(g, rest, "r", given);
+    const model = reach(arm, by);
+    const turn = back(arm, model, hand);
+    const [at, want] = [pose[wrist].t, held(arm, model, turn, arm.hand)];
+    const moved = sub(at, given[wrist].t);
+    for (let i = 0; i < 3; i++) {
+      assert.ok(Math.abs(moved[i] - by[i]) < 1e-6, `the wrist moved ${moved}, asked ${by}`);
+      assert.ok(Math.abs(at[i] - want[i]) < 1e-6, `the wrist at ${at}, the model's ${want}`);
+    }
+    const [seen, modelled] = [place(pose[socket], local), held(arm, model, turn, point)];
+    // To 0.01 mm: the clips' turns are f32, half a metre down a handle.
+    for (let i = 0; i < 3; i++) assert.ok(Math.abs(seen[i] - modelled[i]) < 1e-5, `moved ${by}: the look's point at ${seen}, the model's ${modelled}`);
+    // The planted fault: the forearm's turn laid without its parent's swing undone puts it elsewhere.
+    if (by[1] === 0.2) {
+      const wrong = hold(laid, undefined, { by: () => by, lay });
+      wrong.set("lowerarm_r", qmul(wrong.get("lowerarm_r")!, model[0]));
+      assert.ok(Math.hypot(...sub(lay(wrong)[wrist].t, want)) > 0.01, "a forearm turned wrongly still lands on the model");
+    }
+  }
+});
+
+test("a hand's move starts whole, eases away and is over, as the game's state does", async () => {
+  const { GIVE, clearedThrough } = await import("./carry_arm.ts");
+  // Wanted 10 cm up from 0.1 s to 0.2 s of a second's clip, and not before or after.
+  const want = (t: number): V3 => (t > 0.099 && t < 0.201 ? [0, 0.1, 0] : [0, 0, 0]);
+  const by = clearedThrough(1, false, want);
+  assert.deepEqual(by(0.05), [0, 0, 0]);
+  assert.deepEqual(by(0.1), [0, 0.1, 0]);
+  // After it: a critically damped spring let go from rest, (1 + rate t) e^(-rate t) of it.
+  const left = by(0.2 + 3 / 60)[1];
+  const t = 3 / 60;
+  assert.ok(Math.abs(left - 0.1 * (1 + GIVE.rate * t) * Math.exp(-GIVE.rate * t)) < 1e-9, `${left}`);
+  assert.deepEqual(by(1), [0, 0, 0]);
+  // A loop is entered as it leaves itself: wanted at its end, the move is there at its start.
+  const loop = clearedThrough(1, true, (t) => (t > 0.9 ? [0, 0.1, 0] : [0, 0, 0]));
+  assert.ok(loop(0)[1] > 0.09 && clearedThrough(1, false, (t) => (t > 0.9 ? [0, 0.1, 0] : [0, 0, 0]))(0)[1] === 0);
 });

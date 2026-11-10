@@ -17,7 +17,10 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Glb, type Pose, type Q, len, qinv, qmul, sub, turn } from "./glb.ts";
+import { type Arm, type Eased as Moved, type Hand, back, ease as easeMove, reach } from "./carry_clear.ts";
+import { type Glb, type Pose, type Q, type V3, len, qinv, qmul, rot, sub, turn } from "./glb.ts";
+import { rustConst } from "./rust_const.ts";
+import { bendOf, handAxes } from "./wrist.ts";
 
 /** The give's numbers, read from the game's source (terra_walker::carry_arm) so the two
  * cannot differ: the elbow's turn, the upper arm's back and the arm's out (degrees) with the
@@ -75,6 +78,51 @@ export function easedThrough(end: number, loops: boolean, fold: (t: number) => n
   };
 }
 
+/** A hand's move shorter than this, with none wanted, is over (carry_arm.rs `SETTLED_M`). */
+const SETTLED_M = rustConst("crates/terra_walker/src/carry_arm.rs", "SETTLED_M");
+
+/** The hand's eased move through a clip `end` seconds long that wants `want` of it at a time
+ * (carry_clear.ts `clear` on the pose the give leaves): as the game eases it frame by frame,
+ * entered as `easedThrough` enters a clip. A move starts whole on the frame it is first wanted
+ * (the game's state is none until then) and is over, the pose the give's again, once none is
+ * wanted and what is left of it is under `SETTLED_M`. */
+export function clearedThrough(end: number, loops: boolean, want: (t: number) => V3): (t: number) => V3 {
+  const count = Math.round(end * STEPS);
+  const wants: V3[] = [];
+  let state: Moved | undefined;
+  const step = (i: number): V3 => {
+    const to = (wants[i] ??= want(i / STEPS));
+    const by = state ? easeMove(state, to, GIVE.rate, 1 / STEPS) : { at: to, speed: [0, 0, 0] as V3 };
+    const settled = to.every((x) => x === 0) && len(by.at) < SETTLED_M;
+    state = settled ? undefined : by;
+    return settled ? [0, 0, 0] : by.at;
+  };
+  let first = step(0);
+  if (loops) for (let i = 1; i <= count; i++) first = step(i);
+  const at = [first];
+  for (let i = 1; i <= count; i++) at[i] = step(i);
+  return (t) => {
+    const x = Math.max(0, Math.min(count, t * STEPS));
+    const i = Math.min(count - 1, Math.floor(x));
+    return count ? (at[i].map((a, k) => a + (at[i + 1][k] - a) * (x - i)) as V3) : at[0];
+  };
+}
+
+/** A carried arm as carry_clear.ts solves it, at `pose` (the give laid): the `s` side's (`l` or
+ * `r`) shoulder, elbow and wrist, and its hand: the bone's turn in the body, its own axes and
+ * its bend at the body's rest (`rest`), as terra_walker::carry_arm reads them. */
+export function limbOf(body: Glb, rest: Pose[], s: string, pose: Pose[]): { arm: Arm; hand: Hand } {
+  const [upper, lower, hand] = [`upperarm_${s}`, `lowerarm_${s}`, `hand_${s}`].map((n) => body.named(n));
+  const at = rest[hand];
+  const axes = handAxes(at.r, at.t, rest[body.named(`middle_01_${s}`)].t, rest[body.named(`thumb_01_${s}`)].t, rot(rest[body.named(`socket.hand.${s.toUpperCase()}`)].r, [-1, 0, 0]));
+  return { arm: { shoulder: pose[upper].t, elbow: pose[lower].t, hand: pose[hand].t }, hand: { turn: pose[hand].r, axes, rest: bendOf(rest[lower].t, at.t, at.r, axes) } };
+}
+
+/** What keeps a hanging arm's look clear (carry_clear.ts), for `carryArm`'s turns: the hand's
+ * move wanted of a carried arm's root now, eased (`clearedThrough`), and the pose the body
+ * stands in with a set of turns laid, where the arm is read. */
+export type Clearing = { by: (root: string) => V3; lay: (turns: Map<string, Q>) => Pose[] };
+
 /** How far the legs are folded at `pose`, 0 standing to 1: of the straighter leg (each its
  * hip, knee and ankle), how much shorter hip to ankle is than thigh and shin laid end to end,
  * from `GIVE.from` to `GIVE.to`, eased. It has no scale, so it is one on every body. */
@@ -89,13 +137,16 @@ export function fold(pose: Pose[], legs: readonly (readonly [number, number, num
 /** The turns, in the body, that hold each carried arm at `pose`: at each of `upright` and
  * `hanging` (a carried arm's clavicle, by its carry pose's kind) the chest's turn from its rest
  * (`rest`, the body's rest pose) undone, as hold.py's and posed's bends turn a bone with what
- * is below it; and a hanging arm's give by the legs' fold, at its upper arm and forearm. */
-export function carryArm(body: Glb, rest: Pose[], upright: readonly string[], hanging: readonly string[] = []): (pose: Pose[], eased?: number) => Map<string, Q> {
+ * is below it; and a hanging arm's give by the legs' fold, at its upper arm and forearm. With
+ * `clear`, a hanging arm whose hand is to move is then laid again over the give, in the game's
+ * order: the shoulder's swing on the upper arm's turn, the swing and the elbow's bend on the
+ * forearm's under a parent the swing has turned, and the hand turned back at the wrist. */
+export function carryArm(body: Glb, rest: Pose[], upright: readonly string[], hanging: readonly string[] = []): (pose: Pose[], eased?: number, clear?: Clearing) => Map<string, Q> {
   const parentOf = new Map<number, number>();
   body.gltf.nodes.forEach((n, i) => n.children?.forEach((c) => parentOf.set(c, i)));
   const chests = [...upright, ...hanging].map((root) => [root, parentOf.get(body.named(root))!] as const);
   const legs = hanging.length ? ["l", "r"].map((s) => [body.named(`thigh_${s}`), body.named(`calf_${s}`), body.named(`foot_${s}`)] as const) : [];
-  return (pose, eased) => {
+  return (pose, eased, clear) => {
     const turns = new Map<string, Q>(chests.map(([root, chest]) => [root, qmul(rest[chest].r, qinv(pose[chest].r))]));
     if (!hanging.length) return turns;
     // The give eased through the clip where the caller plays one (`easedThrough`), else the
@@ -107,6 +158,18 @@ export function carryArm(body: Glb, rest: Pose[], upright: readonly string[], ha
       // after its upper arm goes back about +X.
       turns.set(`upperarm_${s}`, qmul(turn([0, 0, (s === "r" ? -1 : 1) * GIVE.out * g]), turn([GIVE.back * g, 0, 0])));
       turns.set(`lowerarm_${s}`, turn([-GIVE.elbow * g, 0, 0]));
+    }
+    if (!clear) return turns;
+    for (const root of hanging) {
+      const by = clear.by(root);
+      if (by.every((x) => x === 0)) continue;
+      const s = root.slice(-1);
+      const { arm, hand } = limbOf(body, rest, s, clear.lay(turns));
+      const laid = reach(arm, by);
+      const [swing, bend] = laid;
+      turns.set(`upperarm_${s}`, qmul(swing, turns.get(`upperarm_${s}`)!));
+      turns.set(`lowerarm_${s}`, qmul(qmul(qmul(swing, bend), turns.get(`lowerarm_${s}`)!), qinv(swing)));
+      turns.set(`hand_${s}`, back(arm, laid, hand));
     }
     return turns;
   };

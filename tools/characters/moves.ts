@@ -67,8 +67,9 @@ import { type Shape, BODY, armPoints, shaped, skinOf } from "./skin.ts";
 import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shield_path.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
-import { type Holding, keptOff, reach } from "./arms.ts";
-import { carryArm, easedThrough, fold } from "./carry_arm.ts";
+import { type Holding, ends, keptOff, reach } from "./arms.ts";
+import { CLEAR, capsules, clear, radii } from "./carry_clear.ts";
+import { carryArm, clearedThrough, easedThrough, fold, limbOf } from "./carry_arm.ts";
 import { type WristRest, HoldWorst, holdPose, wristRest } from "./hold_pose.ts";
 import { sharesIn, swung as armSwung } from "./additive.ts";
 import { fitter } from "./shield_arm.ts";
@@ -290,11 +291,53 @@ function givenAt(shape: Shape, clip: Clip): (t: number) => number {
   if (!givens.has(key)) givens.set(key, easedThrough(clip.end, clip.name.endsWith("_Loop"), (t) => fold(shaped(body, shape, clip, t, bends), legBones)));
   return givens.get(key)!;
 }
-function carriedArms(shape: Shape, clip: Clip, t: number): Map<string, Q> {
-  if (!(uprightRoots.length + hangingRoots.length) || !carriedNow(clip) || clip.name.includes("+")) return bends;
-  const turns = carryTurns(shaped(body, shape, clip, t, bends), hangingRoots.length ? givenAt(shape, clip)(t) : undefined);
+// `--bend`'s turns over a carried arm's.
+const bent = (turns: Map<string, Q>): Map<string, Q> => {
   for (const [bone, q] of bends) turns.set(bone, turns.has(bone) ? qmul(turns.get(bone)!, q) : q);
   return turns;
+};
+// The give's turns alone, and the pose they leave: what the clearance is solved on.
+const givenTurns = (shape: Shape, clip: Clip, t: number) => carryTurns(shaped(body, shape, clip, t, bends), hangingRoots.length ? givenAt(shape, clip)(t) : undefined);
+// A hanging arm's look kept clear of the ground and the body (carry_clear.ts, `CLEAR.on`), as
+// the game keeps it after the give: the look of each hanging root with the points the game
+// samples of it (its reach and its two ends, taken in its own frame, here in the socket's);
+// the body's capsules' radii, of the body as loaded (the game reads no morph); and the hand's
+// move through each clip on each body, eased frame by frame (carry_arm.ts `clearedThrough`).
+const clearLooks = new Map<string, { look: Held; points: V3[] }>(
+  held
+    .flatMap((look, i): [string, { look: Held; points: V3[] }][] => {
+      if (!poseOfLook[i] || carryUpright(opt.hold![i].split("=")[1])) return [];
+      const index = new Map(look.own.map((p, k) => [p, k]));
+      const points = [...reach(look.own), ...ends(look.own)].map((p) => look.points[index.get(p)!]);
+      return [[`clavicle_${(look.strap?.fist ?? look.strap?.bone ?? look.hand).slice(-1).toLowerCase()}`, { look, points }]];
+    })
+    // The first look of a root is its own, as `carriedRoots` orders them.
+    .reverse(),
+);
+let bodyRadii: number[] | undefined;
+const cleareds = new Map<string, (t: number) => V3>();
+function clearedAt(shape: Shape, clip: Clip, root: string): (t: number) => V3 {
+  const key = `${shape.name} ${clip.name} ${root}`;
+  if (!cleareds.has(key)) {
+    const { look, points } = clearLooks.get(root)!;
+    const s = root.slice(-1);
+    cleareds.set(
+      key,
+      clearedThrough(clip.end, clip.name.endsWith("_Loop"), (t) => {
+        const pose = shaped(body, shape, clip, t, bent(givenTurns(shape, clip, t)));
+        const { arm, hand } = limbOf(body, rest, s, pose);
+        const socket = frame(look, pose);
+        return clear(arm, hand, points.map((p) => place(socket, p)), 0, capsules(body, pose, (bodyRadii ??= radii(body))), [s === "l" ? 1 : -1, 0, 0]);
+      }),
+    );
+  }
+  return cleareds.get(key)!;
+}
+function carriedArms(shape: Shape, clip: Clip, t: number): Map<string, Q> {
+  if (!(uprightRoots.length + hangingRoots.length) || !carriedNow(clip) || clip.name.includes("+")) return bends;
+  if (!CLEAR.on || !hangingRoots.length) return bent(givenTurns(shape, clip, t));
+  const clearing = { by: (root: string) => clearedAt(shape, clip, root)(t), lay: (turns: Map<string, Q>) => shaped(body, shape, clip, t, bent(new Map(turns))) };
+  return bent(carryTurns(shaped(body, shape, clip, t, bends), givenAt(shape, clip)(t), clearing));
 }
 const carriedNow = (clip: Clip) => carriedIn.includes(clip.name.split("+")[0]);
 // `--arms`: what each hand holds counts in its arm's spacing, as the game counts it: a look on

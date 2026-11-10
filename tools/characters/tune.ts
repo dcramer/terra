@@ -9,6 +9,7 @@
 //   pose.<Clip>.roll.<bone>        degrees about the bone's own line
 //   pose.<Clip>.swing              the stride's swing on the arm, its share
 //   give.<key>                     carry_arm.ts GIVE's keys (elbow, back, out, from, to, rate, ...)
+//   clear.on, clear.ground, clear.body   carry_clear.ts CLEAR: the switch (1 or 0), the margins, metres
 //   seat.fit, seat.palm            grip.ts FIT_M and PALM_M, metres
 //
 // A tuned pose is hold.py's aim and roll laid in TypeScript on the held clip's first pose (the
@@ -22,6 +23,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { GIVE } from "./carry_arm.ts";
+import { CLEAR } from "./carry_clear.ts";
 import { type Clip, type Glb, type Pose, type Q, type V3, dot, len, posed, qinv, qmul, rot, sub } from "./glb.ts";
 import { FIT_M, PALM_M, SEAT } from "./grip.ts";
 
@@ -63,7 +65,12 @@ const giveNames = (root = ROOT): Record<string, string> =>
   Object.fromEntries([...readFileSync(join(root, "tools/characters/carry_arm.ts"), "utf8").matchAll(/(\w+): of\("(\w+)"\)/g)].map((m) => [m[1], m[2]]));
 
 /** One parameter: its committed value and the edits that would commit another. */
-export type Param = { name: string; start: number; kind: "pose" | "give" | "seat"; clip?: string };
+export type Param = { name: string; start: number; kind: "pose" | "give" | "seat" | "clear"; clip?: string };
+/** The clearance's keys (carry_clear.ts `CLEAR`) with the constant each margin is committed to
+ * in carry_clear.rs; `on` is the game's switch, tried here and committed by hand. */
+const CLEAR_NAMES: Record<string, string | undefined> = { on: undefined, ground: "CLEAR_GROUND_M", body: "CLEAR_BODY_M" };
+const CLEAR0: Record<string, number> = { ...CLEAR };
+const OTHERS = [...Object.keys(CLEAR_NAMES).map((k) => `clear.${k}`), "seat.fit", "seat.palm"];
 /** An edit to commit: `key` in `file` set to `value`. */
 export type EditOf = { file: string; key: string; value: number | V3 };
 
@@ -93,7 +100,11 @@ export function paramOf(name: string, sets: Sets = readSets()): Param {
     if ((a !== "fit" && a !== "palm") || b !== undefined) throw say(name, "the seat has two numbers", ["seat.fit", "seat.palm"]);
     return { name, start: a === "fit" ? FIT_M : PALM_M, kind: "seat" };
   }
-  if (group !== "pose") throw say(name, "a parameter is a pose's, the give's or the seat's", [...Object.keys(giveNames()).map((k) => `give.${k}`), "seat.fit", "seat.palm"]);
+  if (group === "clear") {
+    if (!(a in CLEAR_NAMES) || b !== undefined) throw say(name, "carry_clear.ts's CLEAR has no such key", OTHERS.slice(0, 3));
+    return { name, start: CLEAR0[a], kind: "clear" };
+  }
+  if (group !== "pose") throw say(name, "a parameter is a pose's, the give's, the clearance's or the seat's", [...Object.keys(giveNames()).map((k) => `give.${k}`), ...OTHERS]);
   if (b === "swing" && c === undefined) {
     if (sets[a]?.swing === undefined) throw say(name, `${FIGHT}'s ${a} has no swing`, Object.keys(sets).filter((k) => sets[k].swing !== undefined).map((k) => `pose.${k}.swing`));
     return { name, start: sets[a].swing!, kind: "pose", clip: a };
@@ -146,6 +157,8 @@ export function editsOf(tune: Tune, sets: Sets = readSets()): EditOf[] {
     const p = paramOf(name, sets);
     const key = name.split(".")[1];
     if (p.kind === "give") out.push({ file: CARRY_ARM_RS, key: names[key] ?? key, value: tune[name] });
+    // The switch is a bool the game's own tests turn on: no edit commits it.
+    if (p.kind === "clear" && CLEAR_NAMES[key]) out.push({ file: "crates/terra_walker/src/carry_clear.rs", key: CLEAR_NAMES[key]!, value: tune[name] });
     if (p.kind === "seat") for (const file of ["crates/terra_walker/src/grip.rs", "tools/characters/grip.ts"]) out.push({ file, key: key === "fit" ? "FIT_M" : "PALM_M", value: tune[name] });
   }
   return out;
@@ -192,6 +205,7 @@ export function tuneWith(tune: Tune, body: Glb, clips: Glb): { clip: (name: stri
     const p = paramOf(name, committed);
     const key = name.split(".")[1];
     if (p.kind === "give") (GIVE as Record<string, number>)[key] = tune[name];
+    if (p.kind === "clear") (CLEAR as Record<string, number>)[key] = tune[name];
     if (p.kind === "seat") SEAT[key as "fit" | "palm"] = tune[name];
   }
   const { sets, clips: tuned } = setsWith(tune, committed);

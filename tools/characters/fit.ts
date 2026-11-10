@@ -356,7 +356,7 @@ export async function runMoves(args: string[], json: string, log: string): Promi
 export function movesReads(scripts: string[], root = ROOT): string[] {
   const named = new Set<string>();
   for (const s of scripts) for (const [, f] of readFileSync(s, "utf8").matchAll(/"((?:assets|art)\/[\w./-]+\.(?:json|ron|glb|npz))"/g)) named.add(join(root, f));
-  const more = ["crates/terra_walker/src/character/held.rs", "crates/terra_walker/src/carry_arm.rs", "assets/data/items.ron", "assets/data/moves/families.ron", "tools/characters/attach_kinds.json"];
+  const more = ["crates/terra_walker/src/character/held.rs", "crates/terra_walker/src/carry_arm.rs", "crates/terra_walker/src/carry_clear.rs", "crates/terra_walker/src/carry_radii.rs", "crates/terra_walker/src/arms.rs", "assets/data/items.ron", "assets/data/moves/families.ron", "tools/characters/attach_kinds.json"];
   return [...named, ...more.map((f) => join(root, f))].sort();
 }
 
