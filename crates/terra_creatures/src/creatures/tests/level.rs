@@ -4,11 +4,12 @@
 use super::*;
 
 /// What a troll at home does, and what it lands, in so many seconds with a player standing
-/// so far above it and three metres off across the ground.
+/// so far above it and a metre and a half off across the ground: within its sweep's 2.9 m
+/// when 2 m up a bank (the two together 2.5 m), as nothing here walks it nearer.
 fn with_a_player_above(rise_m: f32, seconds: f32) -> (State, Vec<f32>) {
     let mut world = world();
     let ground = Vec3::Y * 2000.0;
-    test_player(&mut world, ground + Vec3::X * 3.0 + Vec3::Y * rise_m);
+    test_player(&mut world, ground + Vec3::X * 1.5 + Vec3::Y * rise_m);
     let troll = kind(&mut world, "Troll", ground);
     let mut landed = Vec::new();
     for _ in 0..(seconds / 0.02) as usize {
@@ -29,7 +30,7 @@ fn a_fighter_neither_notices_nor_strikes_a_player_over_its_roof() {
         let (_, landed) = with_a_player_above(rise_m, 12.0);
         assert!(!landed.is_empty(), "{rise_m} m above, nothing landed");
     }
-    // Over its roof, or down a cliff from it: three metres off across the ground, and it
+    // Over its roof, or down a cliff from it: as near across the ground, and it
     // does not so much as rouse.
     for rise_m in [18.0, -18.0] {
         let (state, landed) = with_a_player_above(rise_m, 12.0);

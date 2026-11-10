@@ -138,8 +138,12 @@
         // Its smash is its temper's own blow: both fists raised over a second and a half, the
         // tell, then brought down in a lunge. Its sweep reaches wider and lands sooner. It roars once on
         // noticing anyone.
+        // The sweep as its clip stands (tools/characters/blow.ts --sweep): the right wrist
+        // passes straight ahead 1.37 s in, 1.31 m up and 2.42 m out from where it stands (a
+        // step and a deep lean are in the clip); it reaches a fist (0.35 m) and half a
+        // person's width (0.3 m) past that, and begins on one who, standing still, is hit.
         blows: [
-            (clip: "Troll_Sweep", within_m: 4.6, damage: 24.0, lands_at_s: 1.4, reach_m: 5.2, lasts_s: 3.0),
+            (clip: "Troll_Sweep", within_m: 2.9, damage: 24.0, lands_at_s: 1.37, reach_m: 3.1, lasts_s: 3.2),
         ],
         warns: Some(("Troll_Roar", 3.5)),
         // It growls to itself in its den, heard before it is seen. Its clips' moments: the
@@ -154,8 +158,8 @@
             (clip: "Troll_Smash", at_s: 0.3, cry: Grunt),
             (clip: "Troll_Smash", at_s: 1.57, cry: Whoosh),
             (clip: "Troll_Smash", at_s: 1.93, cry: Slam),
-            (clip: "Troll_Sweep", at_s: 0.2, cry: Grunt),
-            (clip: "Troll_Sweep", at_s: 1.1, cry: Whoosh),
+            (clip: "Troll_Sweep", at_s: 0.3, cry: Grunt),
+            (clip: "Troll_Sweep", at_s: 1.08, cry: Whoosh),
             (clip: "Death01", at_s: 0.0, cry: Groan),
         ],
         pained: Some(Groan),
