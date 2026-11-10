@@ -9,7 +9,7 @@ import { test } from "node:test";
 import { Glb, type Q, qinv, qmul } from "./glb.ts";
 import type { Measure } from "./holds.ts";
 import { pool } from "./holds.ts";
-import { type Dim, type Spec, apply, dimsOf, holdsMeasure, readSpec, report, scored, search, solve } from "./solve.ts";
+import { type Dim, type Spec, apply, dimsOf, holdsMeasure, readSpec, report, scored, search, solve, turner } from "./solve.ts";
 import { FIGHT, type Tune, aimOf, anglesOf, heldPose, readSets, setsWith } from "./tune.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -66,7 +66,54 @@ test("the search is the seed's: the same trace twice, another seed another, the 
   assert.ok((await search(dims, evaluate, { seed: 7, samples: 16, starts: 3, budget: 30 })).trace.length <= 30);
 });
 
-test("the objective is over the bars first, then the thinnest margin, then the nearest; a bound is said", async () => {
+test("of two answers that clear every bar by the target, the one nearer the authored pose is returned, and a far one is warned of", async () => {
+  const sets = readSets();
+  const roll = sets.Carry_Tool.hold![0].roll!.hand_r;
+  const R = "pose.Carry_Tool.roll.hand_r";
+  // Two planted answers: the hand rolled 5 degrees one way clears the bar by 1.5, a step either
+  // side of it is over; rolled 25 the other way clears by 20, and a step either side by 10.
+  const value = (r: number) => Math.min(2 * Math.abs(r - (roll + 5)) - 1.5, 10 * Math.abs(r - (roll - 25)) - 20);
+  const measure = async (t: Tune) => [m("stone_axe", "carry.planted", value(t[R]), 0)];
+  const spec: Spec = { looks: { stone_axe: ["Jog_Fwd_Loop"] }, measures: ["carry.*"], samples: 91, starts: 6, parameters: [{ name: R, lo: roll - 45, hi: roll + 45, step: 1 }] };
+  const solved = await solve(spec, measure);
+  // Both were measured and both score no excess and no shortfall; the far one's margin is wider.
+  const far = solved.trace.find((f) => f.at[0] === roll - 25)!;
+  assert.deepEqual([far.score[0], far.score[1]], [0, 0]);
+  assert.ok(Math.abs(far.score[2] - 25) < 0.01, `the far answer turns ${far.score[2]}`);
+  assert.equal(scored(far.detail, spec).margin, 20);
+  assert.deepEqual(solved.best.at, [roll + 5]);
+  assert.deepEqual(solved.best.score.slice(0, 2), [0, 0]);
+  // The turn is the hand's, in degrees, from the laid pose; the start turns nothing.
+  assert.equal(solved.start.score[2], 0);
+  assert.deepEqual(solved.turn.joints.filter((j) => j.deg > 0).map((j) => [j.joint, Math.round(j.deg * 100) / 100]), [["Carry_Tool hand_r", 5]]);
+  const lines = report("near", solved);
+  assert.ok(lines.some((l) => l.includes("turned: Carry_Tool hand_r 5.0 deg")), lines.join("\n"));
+  assert.ok(lines.some((l) => l.includes("thinnest margin 1.5 (short 0), turn 5")), lines.join("\n"));
+  assert.ok(!lines.some((l) => l.includes("look at a still")), lines.join("\n"));
+  // The same bytes twice.
+  assert.equal(lines.join("\n"), report("near", await solve(spec, measure)).join("\n"));
+  // A lower `turn_warn` warns of the 5 degrees.
+  assert.ok(report("near", await solve({ ...spec, turn_warn: 3 }, measure)).some((l) => l.includes("! Carry_Tool hand_r turns 5.0 deg from the authored pose, over 3 (turn_warn): look at a still before applying")));
+  // A target of 2 the near answer falls short of: the nearest that meets it is 24 degrees off
+  // (margin 10, not the 20 a degree further), and the report warns of it.
+  const wide = await solve({ ...spec, margin: 2 }, measure);
+  assert.deepEqual(wide.best.at, [roll - 24]);
+  const warned = report("far", wide);
+  assert.ok(warned.some((l) => l.includes("! Carry_Tool hand_r turns 24.0 deg from the authored pose, over 15 (turn_warn): look at a still before applying")), warned.join("\n"));
+  assert.ok(warned.length <= 24);
+});
+
+test("a parameter that is no pose's turns as its change over its bounds; the objective is the excess, then the shortfall, then the turn", async () => {
+  const dims: Dim[] = [{ name: "give.back", start: 25, lo: 0, hi: 60, step: 1 }, { name: "give.out", start: 25, lo: 10, hi: 30, step: 1 }];
+  assert.deepEqual(turner(dims)([40, 20]), { total: 0.5, joints: [], shares: [{ name: "give.back", share: 0.25 }, { name: "give.out", share: 0.25 }] });
+  // Every give.back from 28 clears the bar by the target of 1; the margin goes on widening to 60.
+  const spec: Spec = { looks: { basket: ["Jog_Fwd_Loop"] }, measures: ["carry.*"], parameters: [{ name: "give.back", lo: 0, hi: 60, step: 1 }] };
+  const solved = await solve(spec, async (t: Tune) => [m("basket", "carry.ground", 27 - t["give.back"], 0)]);
+  assert.deepEqual(solved.best.at, [28]);
+  assert.deepEqual(solved.best.score.slice(0, 3), [0, 0, 0.05]);
+});
+
+test("the excess over the bars comes first and counts the held looks; a bound is said", async () => {
   const spec: Spec = { looks: { basket: ["Jog_Fwd_Loop"] }, hold: { knife: ["Jog_Fwd_Loop"] }, measures: ["carry.*"], parameters: [] };
   const got = scored([m("basket", "carry.ground", 4, 0), m("basket", "carry.ground", 6, 0, "Sprint_Loop"), m("basket", "carry.legs", -3, 1), m("basket", "use.trunk", 50, 1), m("basket", "carry.out", 70, null), m("knife", "carry.trunk", 2.5, 1), m("torch", "carry.trunk", 9, 1)], spec);
   // The worst of a measure counts once (6 over 0), a held look's excess counts (1.5), a look or

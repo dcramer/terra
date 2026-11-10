@@ -10,6 +10,7 @@
 //     "hold":  { "stone_axe": ["Sprint_Loop"] },                  held: every barred measure of theirs
 //     "measures": ["carry.*"],                                    of `looks`; * is any run of letters
 //     "parameters": [{ "name": "give.back", "lo": 0, "hi": 60, "step": 1 }],
+//     "margin": 1, "turn_warn": 15,                       the objective's two numbers; these by default
 //     "samples": 16, "starts": 2, "budget": 300 }         the search's size; defaults below
 //
 // A point is every parameter at a value, measured by holds.ts's own rows and bars with moves.ts
@@ -20,8 +21,22 @@
 // The objective, least first, in order (lexicographic):
 //   1. over: the sum, over every barred measure of every look, of its worst value's amount over
 //      its bar (centimetres and degrees summed as they are); the bars are holds.ts's.
-//   2. the thinnest margin under a bar among the improved looks' measures, the wider the better.
-//   3. the distance from the start, each parameter's move as a share of its range.
+//   2. short: max(0, margin target - the thinnest margin under a bar among the improved looks'
+//      measures); the target is the spec's `margin`, 1 (a centimetre or a degree) by default. It
+//      is 0 once the target is met, so a wider margin earns nothing.
+//   3. turn: how far the answer is from the authored one. The sum, over the joints of the carried
+//      pose (each bone a pose the spec tunes aims or rolls), of the angle in degrees between the
+//      joint's rotation in its parent's frame in the authored pose and in the answer's, both laid
+//      by tune.ts's heldPose on the base body, so an aim and a roll are in one unit; plus, for
+//      every other parameter (the give, the seat, a swing), |its change| / (hi - lo).
+//   4. only between equals: the distance from the start, each parameter's move as a share of its
+//      range.
+// So the answer is the pose nearest the authored one that clears every bar by the target: the
+// authored pose is the known-good one, and the least change from it is Gleicher's formulation
+// (Gleicher 1998, "Retargetting Motion to New Characters", SIGGRAPH 98: constraints the result
+// must meet, and an objective that is the least change from the source). The report prints each
+// joint's turn, and warns when one turns more than the spec's `turn_warn` (15 degrees by
+// default): nobody has seen that pose, so look at a still before applying.
 //
 // The search is seeded and deterministic, on the grid start + k * step, so the answer is the edit:
 //   - a Latin hypercube sample of the bounds (McKay, Beckman and Conover 1979, "A Comparison of
@@ -38,9 +53,10 @@ import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "nod
 import { availableParallelism } from "node:os";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
+import { Glb, type Q, qinv, qmul } from "./glb.ts";
 import { carriedClips, carryHold, carryUpright } from "./held.ts";
 import { type Ctx, type Measure, bodies, judged, pool, rowsOf } from "./holds.ts";
-import { type EditOf, FIGHT, type Sets, type Tune, editsOf, paramOf, readSets } from "./tune.ts";
+import { type EditOf, FIGHT, type Sets, type Tune, editsOf, heldPose, paramOf, readSets, setsWith } from "./tune.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const OUT = join(ROOT, "tools", "characters", "out");
@@ -49,6 +65,10 @@ const HELD = join(ROOT, "assets", "models", "held");
 export type Dim = { name: string; start: number; lo: number; hi: number; step: number };
 export type Spec = {
   about?: string;
+  /** The margin under a bar worth having, in the measure's unit; 1 by default. */
+  margin?: number;
+  /** A joint turned more than this from the authored pose is warned of, degrees; 15 by default. */
+  turn_warn?: number;
   seed?: number;
   samples?: number;
   starts?: number;
@@ -143,7 +163,7 @@ const matcher = (patterns: string[]) => {
   return (name: string) => res.some((r) => r.test(name));
 };
 
-/** A point's measures as its objective: the amount over holds.ts's bars and the thinnest margin,
+/** A point's measures for its objective: the amount over holds.ts's bars and the thinnest margin,
  * with the worst value of every look's measure (the first of equals, in a fixed order). */
 export function scored(ms: Measure[], spec: Spec): { over: number; margin: number; worst: Map<string, Measure> } {
   const wanted = matcher(spec.measures);
@@ -165,7 +185,43 @@ export function scored(ms: Measure[], spec: Spec): { over: number; margin: numbe
   return { over, margin, worst };
 }
 
-export type Solved = { spec: Spec; dims: Dim[]; start: Found<Measure[]>; best: Found<Measure[]>; trace: Found<Measure[]>[]; edits: EditOf[] };
+/** How far a point is from the authored one: each joint's turn in degrees, each other parameter's
+ * change as a share of its bounds, and their sum (the header's term 3). */
+export type Turn = { total: number; joints: { joint: string; deg: number }[]; shares: { name: string; share: number }[] };
+
+const marginOf = (spec: Spec) => spec.margin ?? 1;
+const warnOf = (spec: Spec) => spec.turn_warn ?? 15;
+const POSED = /^pose\.(\w+)\.(aim|roll)\./;
+/** The angle between two rotations, degrees; exact at none (an acos of the dot is not). */
+const between = (a: Q, b: Q) => {
+  const d = qmul(qinv(a), b);
+  return (2 * Math.atan2(Math.hypot(d[0], d[1], d[2]), Math.abs(d[3])) * 180) / Math.PI;
+};
+
+/** The turn of a point from the start, the authored one. The carried poses are laid on the base
+ * body by tune.ts's heldPose, the start's the same way, so the start turns nothing. */
+export function turner(dims: Dim[], sets: Sets = readSets()): (at: number[]) => Turn {
+  const clips = [...new Set(dims.flatMap((d) => POSED.exec(d.name)?.[1] ?? []))].sort();
+  const tuneOf = (at: number[]) => Object.fromEntries(dims.flatMap((d, i) => (POSED.test(d.name) ? [[d.name, at[i]]] : [])));
+  const laid = (() => {
+    if (!clips.length) return () => new Map<string, Q>();
+    const body = new Glb(join(ROOT, "assets", "models", "character", "base.glb"));
+    const from = new Glb(join(ROOT, "assets", "models", "character", "fight.glb"));
+    return (at: number[]) => {
+      const tuned = setsWith(tuneOf(at), sets).sets;
+      return new Map(clips.flatMap((clip) => [...heldPose(body, from, clip, tuned[clip])].map(([bone, q]) => [`${clip} ${bone}`, q] as [string, Q])));
+    };
+  })();
+  const authored = laid(dims.map((d) => d.start));
+  return (at) => {
+    const now = laid(at);
+    const joints = [...authored].map(([joint, q]) => ({ joint, deg: r6(between(q, now.get(joint)!)) }));
+    const shares = dims.flatMap((d, i) => (POSED.test(d.name) ? [] : [{ name: d.name, share: r6(Math.abs(at[i] - d.start) / (d.hi - d.lo || 1)) }]));
+    return { total: r6(joints.reduce((s, j) => s + j.deg, 0) + shares.reduce((s, p) => s + p.share, 0)), joints, shares };
+  };
+}
+
+export type Solved = { spec: Spec; dims: Dim[]; start: Found<Measure[]>; best: Found<Measure[]>; trace: Found<Measure[]>[]; edits: EditOf[]; turn: Turn };
 
 /** The spec's parameters as the search's dimensions; a bad one is an error that says what to do. */
 export function dimsOf(spec: Spec, sets: Sets = readSets()): Dim[] {
@@ -186,6 +242,7 @@ export async function solve(spec: Spec, measure: (tune: Tune) => Promise<Measure
   const sets = opts.sets ?? readSets();
   const dims = dimsOf(spec, sets);
   const n = dims.length;
+  const turn = turner(dims, sets);
   const evaluate = (points: number[][]) =>
     Promise.all(
       points.map(async (at) => {
@@ -195,12 +252,12 @@ export async function solve(spec: Spec, measure: (tune: Tune) => Promise<Measure
           const names = [...new Set(detail.filter((m) => typeof m.bar === "number").map((m) => `${m.look} ${m.measure}`))].sort();
           throw new Error(`the spec's measures (${spec.measures.join(", ")}) match no barred measure of ${Object.keys(spec.looks).join(", ")} in the clips it names (D556): name patterns that match one of: ${names.join(", ") || "none measured"}`);
         }
-        return { score: [over, -margin], detail: [...worst.values()] };
+        return { score: [over, Math.max(0, marginOf(spec) - margin), turn(at).total], detail: [...worst.values()] };
       }),
     );
   const found = await search(dims, evaluate, { seed: spec.seed ?? 1, samples: spec.samples ?? 8 * n, starts: spec.starts ?? 3, budget: budgetOf(spec), progress: opts.progress });
   const moved = Object.fromEntries(dims.flatMap((d, i) => (found.best.k[i] ? [[d.name, found.best.at[i]]] : [])));
-  return { spec, dims, ...found, edits: editsOf(moved, sets) };
+  return { spec, dims, ...found, edits: editsOf(moved, sets), turn: turn(found.best.at) };
 }
 
 const num = (x: number) => String(Number(x.toFixed(3)) + 0);
@@ -211,8 +268,15 @@ export function report(name: string, s: Solved): string[] {
   const { dims, start, best, spec } = s;
   const held = Object.keys(spec.hold ?? {}).length;
   const out = [`solve ${name}: ${dims.length} parameters, ${Object.keys(spec.looks).join(", ")} improved, ${held} looks held passing; ${s.trace.length} evaluations${s.trace.length >= budgetOf(spec) ? " (the budget, which ended the search: raise `budget` in the spec to go on)" : ""}, seed ${spec.seed ?? 1}`];
-  const obj = (f: Found<Measure[]>) => `over bars ${num(f.score[0])} (cm and deg summed), thinnest margin ${num(-f.score[1])}, distance ${num(f.score[2])}`;
+  const target = marginOf(spec);
+  out.push(`  objective, least first: over (each measure's amount over its bar, cm and deg summed); short (max(0, ${num(target)} - the thinnest margin), a wider margin earning nothing); turn (each joint's degrees from the authored pose, summed, plus each other parameter's change / (hi - lo))`);
+  const obj = (f: Found<Measure[]>) => `over ${num(f.score[0])}, thinnest margin ${num(scored(f.detail, spec).margin)} (short ${num(f.score[1])}), turn ${num(f.score[2])}`;
   out.push(`  start:  ${obj(start)}`, `  answer: ${obj(best)}`);
+  const joints = s.turn.joints.filter((j) => j.deg > 0);
+  const shares = s.turn.shares.filter((p) => p.share > 0);
+  if (joints.length || shares.length) out.push(`  turned: ${[...joints.map((j) => `${j.joint} ${one(j.deg)} deg`), ...shares.map((p) => `${p.name} ${num(p.share)} of its range`)].join(", ")}`);
+  const far = joints.filter((j) => j.deg > warnOf(spec));
+  if (far.length) out.push(`  ! ${far.map((j) => `${j.joint} turns ${one(j.deg)} deg`).join(", ")} from the authored pose, over ${num(warnOf(spec))} (turn_warn): look at a still before applying`);
   dims.forEach((d, i) => {
     const edge = best.at[i] <= d.lo + d.step / 2 ? "lower" : best.at[i] >= d.hi - d.step / 2 ? "upper" : "";
     out.push(`  ${d.name}: ${num(d.start)} -> ${num(best.at[i])}${edge && best.k[i] ? ` (left at its ${edge} bound ${edge === "lower" ? d.lo : d.hi}: widen it in the spec to search past)` : ""}`);
@@ -338,7 +402,7 @@ if (import.meta.main) {
     const measure = holdsMeasure(spec, { log, out: scratch }, pool(availableParallelism()));
     const solved = await solve(spec, measure, { progress: (line) => console.error(`solve ${name}: ${line}, ${secs()} s`) });
     console.log(report(name, solved).join("\n"));
-    if (opt.json) writeFileSync(opt.json, `${JSON.stringify({ spec, parameters: solved.dims, start: solved.start, answer: solved.best, edits: solved.edits, trace: solved.trace.map((f) => ({ at: f.at, score: f.score })) }, null, 1)}\n`);
+    if (opt.json) writeFileSync(opt.json, `${JSON.stringify({ spec, parameters: solved.dims, start: solved.start, answer: solved.best, turn: solved.turn, edits: solved.edits, trace: solved.trace.map((f) => ({ at: f.at, score: f.score })) }, null, 1)}\n`);
     if (opt.apply) apply(solved.edits);
     console.error(`solve ${name}: ${solved.trace.length} evaluations in ${secs()} s${opt.apply ? `; ${solved.edits.length} edits written, nothing baked` : ""}`);
     rmSync(scratch, { recursive: true, force: true });
