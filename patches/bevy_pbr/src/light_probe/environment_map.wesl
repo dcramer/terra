@@ -105,6 +105,69 @@ fn compute_cubemap_sample_dir(
 // as Unreal's sky light occlusion dims its sky's reflections with its diffuse light. Per
 // fragment, so it does not change with where the camera stands. A reflection probe's own
 // map (a room's) is not scaled: it holds what the room sees.
+/// The view's environment map's diffuse light toward a direction in the map's own frame,
+/// before its brightness (Terra's patch, D485).
+@if(IRRADIANCE_VOLUME && MULTIPLE_LIGHT_PROBES_IN_ARRAY)
+fn view_diffuse_toward(in_map: vec3<f32>) -> vec3<f32> {
+    // Cubemaps are left-handed, so we negate the Z coordinate.
+    return textureSampleLevel(
+        bindings::diffuse_environment_maps[light_probes.view_cubemap_index],
+        bindings::environment_map_sampler,
+        vec3<f32>(in_map.xy, -in_map.z),
+        0.0).rgb;
+}
+
+// Terra's patch (D485): what an irradiance volume's light is scaled by at a normal, so a
+// cell holding the open sky lights a surface exactly as the view's environment map does.
+// A volume's cell is an ambient cube (Mitchell, McTaggart and Green, "Shading in Valve's
+// Source Engine", SIGGRAPH 2006: six sides, blended by the squares of the normal's parts);
+// the map's diffuse light is the sky's spherical harmonics. The two hold the same light and
+// agree only for a normal along an axis: off it the cube read 2 to 6% brighter or dimmer by
+// direction, a step in every surface's shade where a volume began. Shipped engines keep the
+// sky's light in one form and let the volume say only how much of it arrives: Unreal's
+// volumetric lightmap and distance field ambient occlusion give a bent normal and an
+// occlusion the sky light's own harmonics are read with ("Volumetric Lightmaps", "Distance
+// Field Ambient Occlusion", Unreal Engine documentation), and Far Cry 4 multiplies the
+// sky's harmonics by a baked sky occlusion (Stefanov, "Global Illumination in Far Cry 4",
+// GDC 2015). Here the volume is not baked again: its light is divided by what an open cell
+// holds toward the normal and multiplied by the map's light there, which is the share of
+// the sky that arrives, in the cube's terms, times the sky's own light.
+//
+// What an open cell holds: the app fills a side with the map's light toward the six axes of
+// the map's own frame, blended by the squares of the side's parts in that frame (Terra's
+// `sky_occlusion::world_sides`), and the shader blends three sides by the normal's. Both
+// are done again here from the map's six face middles. Each colour apart, so an open cell's
+// hue is the map's too; held within a half and two, and left alone where the map is dark.
+@if(IRRADIANCE_VOLUME && MULTIPLE_LIGHT_PROBES_IN_ARRAY)
+fn sky_light_over_its_cube(N: vec3<f32>) -> vec3<f32> {
+    if (light_probes.view_cubemap_index < 0) {
+        return vec3<f32>(1.0);
+    }
+    let rotation = light_probes.view_rotation;
+    let toward = view_diffuse_toward(quat_rotate(rotation, N));
+    let x_pos = view_diffuse_toward(vec3<f32>(1.0, 0.0, 0.0));
+    let x_neg = view_diffuse_toward(vec3<f32>(-1.0, 0.0, 0.0));
+    let y_pos = view_diffuse_toward(vec3<f32>(0.0, 1.0, 0.0));
+    let y_neg = view_diffuse_toward(vec3<f32>(0.0, -1.0, 0.0));
+    let z_pos = view_diffuse_toward(vec3<f32>(0.0, 0.0, 1.0));
+    let z_neg = view_diffuse_toward(vec3<f32>(0.0, 0.0, -1.0));
+    let facing = sign(N);
+    let NN = N * N;
+    var cube = vec3<f32>(0.0);
+    for (var i = 0u; i < 3u; i += 1u) {
+        var side = vec3<f32>(0.0);
+        side[i] = facing[i];
+        let in_map = quat_rotate(rotation, side);
+        let pos = max(in_map, vec3<f32>(0.0));
+        let neg = max(-in_map, vec3<f32>(0.0));
+        cube += NN[i] * (x_pos * pos.x * pos.x + x_neg * neg.x * neg.x
+            + y_pos * pos.y * pos.y + y_neg * neg.y * neg.y
+            + z_pos * pos.z * pos.z + z_neg * neg.z * neg.z);
+    }
+    let scale = clamp(toward / max(cube, vec3<f32>(1.0e-6)), vec3<f32>(0.5), vec3<f32>(2.0));
+    return select(scale, vec3<f32>(1.0), cube <= vec3<f32>(1.0e-6));
+}
+
 @if(IRRADIANCE_VOLUME && MULTIPLE_LIGHT_PROBES_IN_ARRAY)
 fn sky_reflection_seen(
     world_position: vec3<f32>,

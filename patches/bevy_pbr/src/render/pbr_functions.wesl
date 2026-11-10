@@ -720,7 +720,13 @@ fn apply_pbr_lighting(
             &clusterable_object_index_ranges,
         );
         if (irradiance_volume_light.w > 0.0) {
-            indirect_light += irradiance_volume_light.rgb * diffuse_color * diffuse_occlusion;
+            // Terra's patch (D485): the volume's ambient cube says how much of the sky
+            // arrives; the sky's own light toward the normal is the environment map's.
+            var volume_light = irradiance_volume_light.rgb;
+            @if(ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) {
+                volume_light *= environment_map::sky_light_over_its_cube(in.N);
+            }
+            indirect_light += volume_light * diffuse_color * diffuse_occlusion;
             found_diffuse_indirect = true;
         }
     }

@@ -49,10 +49,10 @@ const GRASS: Box = [0.85, 0.88, 1, 1];
 const WHOLE: Box = [0, 0, 1, 1];
 /// How far the trunk may stand from itself without the volume, and its still with the volume
 /// put back from its first (a run less steady than that has measured nothing). The trunk
-/// reads 1.05 on main (two runs, 2026-11-09): what stands in the den's box under trees is a
-/// little brighter than outside it, a fault not yet fixed and not this bar's to hide if it
-/// grows; with the open air's cells lit as the den's (the fault planted, D632) it reads 0.857.
-const SAME = 0.1;
+/// reads 0.984 and 0.992 (two steady runs, 2026-11-10; 1.05 before a volume's light took the
+/// environment map's shape by direction, `sky_light_over_its_cube`, D485); with the open
+/// air's cells lit as the den's (the fault planted, D632) it reads 0.796 (0.857 before that).
+const SAME = 0.05;
 const STEADY = 0.05;
 /// The chamber toward the mouth with the volume: its luma and blue share at most these, and
 /// without the volume at least LIT times as bright. Read 0.008, 0.19 and 7.8 at b4ea4ba5.
