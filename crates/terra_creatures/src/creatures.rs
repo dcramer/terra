@@ -21,7 +21,7 @@ mod steer;
 mod wake;
 
 pub use crate::species::Species;
-use crate::species::{Bestiary, Lives, Moves, Refuge};
+use crate::species::{Bestiary, Lives, Moves, Refuge, SpeciesDef};
 pub use appear::{Shown, leave};
 use bevy::{
     prelude::*,
@@ -190,6 +190,23 @@ impl Creature {
 
     pub fn alive(&self) -> bool {
         !matches!(self.state, State::Dead(_))
+    }
+
+    /// The clip it is part way through, and how many seconds, while it deals a blow, warns
+    /// or falls: the clips whose moments are heard (`SpeciesDef::heard`).
+    pub fn playing<'a>(&self, about: &'a SpeciesDef) -> Option<(&'a str, f32)> {
+        match self.state {
+            State::Dead(since) => Some((&about.clips.death, since)),
+            State::Attack(through) => {
+                let clip = match self.blow {
+                    WARNING => &about.warns.as_ref()?.0,
+                    0 => &about.clips.attack,
+                    other => &about.blows.get(other as usize - 1)?.clip,
+                };
+                Some((clip, through))
+            }
+            _ => None,
+        }
     }
 
     /// Where it was placed, which stays the same for as long as it lives and is the same

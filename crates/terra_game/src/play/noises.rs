@@ -12,7 +12,7 @@ use super::death::WentDown;
 use super::flora::Growth;
 use super::harvest::{Cutting, Felled};
 use super::inventory::InventoryScreen;
-use super::noise::{Cue, Feet, Noise};
+use super::noise::{Cry, Cue, Feet, Noise};
 use super::options::OptionsMenu;
 use super::people::Person;
 use super::props::Prop;
@@ -152,6 +152,9 @@ struct Was {
     health: f32,
     alarmed: bool,
     flying: bool,
+    /// How far through a blow's, a warning's or its fall's clip it was, seconds; below
+    /// nothing while in none.
+    through: f32,
     /// Until it next calls of its own accord, seconds, for a kind that does.
     calls_in: f32,
 }
@@ -178,11 +181,13 @@ fn creatures_heard(
                 health: creature.health,
                 alarmed,
                 flying,
+                through: -1.0,
                 calls_in: dice.range(0.0, 20.0),
             });
             continue;
         };
         let here = at.translation() + at.translation().normalize_or(Vec3::Y) * 0.5;
+        let about = bestiary.get(creature.species);
         if creature.health < was.health - 0.01 {
             let cue = if creature.alive() {
                 Cue::Hit
@@ -190,8 +195,20 @@ fn creatures_heard(
                 Cue::Kill
             };
             noise.write(Noise::at(cue, here));
+            if let (true, Some(cry)) = (creature.alive(), about.pained) {
+                noise.write(Noise::at(Cue::Cry(cry), here));
+            }
         }
-        let voice = match bestiary.get(creature.species).voice {
+        // The moments of its blow's, warning's or fall's clip passed since the last frame.
+        let playing = creature.playing(about);
+        let through = playing.map_or(-1.0, |(_, through)| through);
+        if let Some((clip, through)) = playing {
+            for cry in about.heard_between(clip, was.through, through) {
+                noise.write(Noise::at(Cue::Cry(cry), here));
+            }
+        }
+        was.through = through;
+        let voice = match about.voice {
             Voice::Snort => Some(Cue::Snort),
             Voice::Hiss => Some(Cue::Hiss),
             Voice::Chatter => Some(Cue::Chatter),
@@ -199,10 +216,12 @@ fn creatures_heard(
             Voice::Quack => Some(Cue::Quack),
             Voice::Croak => Some(Cue::Croak),
             Voice::Bark => Some(Cue::Bark),
+            Voice::Growl => Some(Cue::Cry(Cry::Growl)),
             Voice::Silent => None,
         };
         // A call as it takes fright, and wings beating as it takes off.
-        let fled = (alarmed && !was.alarmed) || (flying && !was.flying);
+        // One that warns is heard in its warning, not here.
+        let fled = (alarmed && !was.alarmed && about.warns.is_none()) || (flying && !was.flying);
         if fled
             && creature.alive()
             && let Some(cue) = voice
@@ -213,7 +232,7 @@ fn creatures_heard(
             noise.write(Noise::at(Cue::Wings, here));
         }
         // Now and then a call of its own at rest: a duck on the water, a heron, a grouse.
-        if let Some((least, most)) = bestiary.get(creature.species).calls_s
+        if let Some((least, most)) = about.calls_s
             && creature.alive()
             && !alarmed
         {

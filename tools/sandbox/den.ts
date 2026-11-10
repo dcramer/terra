@@ -105,8 +105,12 @@ try {
   const borne = await marks();
   if (!borne.includes("troll")) throw new Error(`the troll fell ${fell} and the player bears ${JSON.stringify(borne)}, not its mark: a kind's \`marks\` in data/creatures.ron is imprinted on the players by it when it falls (play::marks::earned, D590)`);
   if (eyeNearest < 0) throw new Error(`on the way into the den the camera was ${(-eyeNearest).toFixed(2)} m inside the rock: in a passage the camera must keep to the open (terra_walker camera: its boom is shortened by the ground behind the player)`);
+  // What the troll sounded of: its fall's groan at the least (data/creatures.ron's `heard`).
+  const heard = (await call("sounds.heard")) as Record<string, number>;
+  const cries = Object.entries(heard).filter(([name]) => /^(cry\.|step\.heavy|slam|swing\.great)/.test(name)).map(([name, count]) => `${name} ${count}`);
+  if (!heard["cry.groan"]) throw new Error(`the troll fell and no groan was heard (heard of it: ${cries.join(", ") || "nothing"}): a kind's clips are heard at the moments data/creatures.ron's \`heard\` names (terra_game play::noises creatures_heard); do not send the noise from the script`);
   const down = den.mouth[1] - den.floor[1];
-  console.log(`✓ den: seed ${SEED}'s den (way ${den.layout.way}, room ${den.layout.room}, ${den.layout.alcoves} alcoves) opens ${Math.hypot(den.mouth[0], den.mouth[2]).toFixed(0)} m from the start; walking in from its mouth the player came to its chamber's floor, ${down.toFixed(1)} m below the mouth, in ${((Date.now() - began) / 1000).toFixed(0)} s (a reading); the troll kept the den, fell ${fell} to the script's blow, and the player bears its mark; the camera kept ${eyeNearest.toFixed(2)} m and more from the rock`);
+  console.log(`✓ den: seed ${SEED}'s den (way ${den.layout.way}, room ${den.layout.room}, ${den.layout.alcoves} alcoves) opens ${Math.hypot(den.mouth[0], den.mouth[2]).toFixed(0)} m from the start; walking in from its mouth the player came to its chamber's floor, ${down.toFixed(1)} m below the mouth, in ${((Date.now() - began) / 1000).toFixed(0)} s (a reading); the troll kept the den, fell ${fell} to the script's blow, and the player bears its mark; the camera kept ${eyeNearest.toFixed(2)} m and more from the rock; of the troll was heard ${cries.join(", ")}`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 } finally {

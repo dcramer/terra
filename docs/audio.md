@@ -19,7 +19,7 @@ Technical, and decided (D113).
 - **A blow in a fight says what met what**: the blade's surface and the one it struck (from the move set's kit, D447, or the body), how it was taken and whether the move was heavy. A table in data (`assets/data/contacts.ron`) names the sound: its first row that fits. A new weapon or shield is a kit; a new pairing a row.
 - **Built on Bevy's own audio**, with no new dependency. It has no effects such as reverb or muffling, so indoors is quieter rather than muffled. If we need those, `bevy_seedling` is the candidate, and only the audio module would change.
 - **Every sound has a place in the mix**, checked by tests that measure the clips and the generated sounds at the default volumes, while they sound: the world's background (wind, birds, water) about 40 dB below full scale; fires and the hum close up about 36; the player's steps about 32, creatures' quieter; blows and tools 22 to 30; menus about 33; music about 34. A sound that drifts out of its band fails the check. `TERRA_LOUDNESS=1 cargo test loudness -- --nocapture` prints them all.
-- **Scripted runs are silent but still decide what they would play**, and print it at the end (`SANDBOX heard: step.grass 4`), so a script can check that walking made steps. WSL is silent unless `--sound` is given, since it usually has no sound device.
+- **Scripted runs are silent but still decide what they would play**, and print it at the end (`SANDBOX heard: step.grass 4`), so a script can check that walking made steps. A run driven over the remote asks `sounds.heard` at any moment (`tools/sandbox/den.ts` asks it of the troll). WSL is silent unless `--sound` is given, since it usually has no sound device.
 
 ## What it sounds like now
 
@@ -31,11 +31,11 @@ A proposal, built so it can be heard and changed (D114).
 | **Things** | A campfire burns, and a forge or smelter while it works. The place where magic pools hums low. The village bell rings every two or three minutes. |
 | **Doing** | Steps on grass, wood or in water; an axe, pick or knife at work, stroke by stroke; a tree coming down; a hammer while building; a station at work, and a click when something is made. |
 | **Fighting** | A blow is heard by what it meets and how heavy it is (D447): a blade knocking on a wooden shield's face, a parry ringing on its iron boss, the face cracking as a heavy blow breaks the guard, a slap and slice on flesh, deeper for a heavy blow. A swing whistles, a heavy one a broader whoosh. |
-| **Creatures** | A deer snorts when startled; a spider hisses when it turns to attack; blows land; hoofs and skittering legs. |
+| **Creatures** | A deer snorts when startled; a spider hisses when it turns to attack; blows land; hoofs and skittering legs. A kind's clips are heard at their moments (`heard` in `data/creatures.ron`, as an engine's animation notifies play a sound on a frame): the troll roars as its arms spread, grunts as a blow begins, its arm parts the air and its smash meets the ground as it lands; it growls to itself in its den, groans at a wound, and its feet are heard across a clearing. |
 | **Music** | A phrase now and then, then a minute or two of silence. Warmer near the village. Low and uneasy near where magic pools or when something hunts you, with hardly a pause. Made in code, so no two phrases are the same. |
 | **Menus** | Panels open and close; buttons click. |
 
-The recorded clips are CC0 packs by Kenney, and for the fight Still North Media's and Independent.nu's from OpenGameArt ([THIRD_PARTY.md](../THIRD_PARTY.md)). They are a start, not the game's sound.
+The recorded clips are CC0 packs by Kenney, for the fight Still North Media's and Independent.nu's, and for the troll's voice Darsycho's, from OpenGameArt ([THIRD_PARTY.md](../THIRD_PARTY.md)). They are a start, not the game's sound.
 
 ## Questions for the developers
 

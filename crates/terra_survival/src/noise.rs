@@ -76,6 +76,8 @@ pub enum Cue {
     Croak,
     Bark,
     Wings,
+    /// A big creature heard at a moment of what it does.
+    Cry(Cry),
     /// A settlement's bell.
     Bell,
     /// The interface: a click, a panel opened or closed.
@@ -92,6 +94,22 @@ pub enum Feet {
     Water,
     Hoof,
     Skitter,
+    /// A foot the ground is felt under: a body of some tonnes.
+    Heavy,
+}
+
+/// What a big creature is heard to do at a moment of one of its clips, when it is hurt, or
+/// at rest (`data/creatures.ron`'s `heard`, `pained` and `voice`): its roar, the growl it
+/// makes to itself, the grunt of a blow begun, its groan at a wound, a great limb through
+/// the air, and a fist, a foot or its whole weight meeting the ground.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Deserialize)]
+pub enum Cry {
+    Roar,
+    Growl,
+    Grunt,
+    Groan,
+    Whoosh,
+    Slam,
 }
 
 pub fn plugin(app: &mut App) {

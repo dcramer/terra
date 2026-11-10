@@ -32,6 +32,8 @@
 //            afloat, its feet so far under the surface
 //   wades_m  how deep a water it walks into
 //   seen_m   how far off it is drawn
+//   heard    moments of its clips that are heard: the clip, seconds into it, and the cry
+//            (Roar, Growl, Grunt, Groan, Whoosh, Slam); pained, its cry at a wound
 //   calls_s  how often it calls of its own accord at rest, (least, most) seconds; none for
 //            a kind that only calls in alarm
 //   pools    whether it forms where magic pools (D103)
@@ -130,9 +132,23 @@
             (clip: "Troll_Sweep", within_m: 4.6, damage: 24.0, lands_at_s: 1.4, reach_m: 5.2, lasts_s: 3.0),
         ],
         warns: Some(("Troll_Roar", 3.5)),
+        // It growls to itself in its den, heard before it is seen. Its clips' moments: the
+        // roar as its arms spread; each blow's grunt as it begins, the air it parts and,
+        // for the smash, the ground it meets as it lands (the blows' own lands_at_s).
+        calls_s: Some((9.0, 24.0)),
         stride: (1.1, 0.2),
-        feet: Hoof,
-        voice: Snort,
+        feet: Heavy,
+        voice: Growl,
+        heard: [
+            (clip: "Troll_Roar", at_s: 0.6, cry: Roar),
+            (clip: "Troll_Smash", at_s: 0.3, cry: Grunt),
+            (clip: "Troll_Smash", at_s: 1.9, cry: Whoosh),
+            (clip: "Troll_Smash", at_s: 2.2, cry: Slam),
+            (clip: "Troll_Sweep", at_s: 0.2, cry: Grunt),
+            (clip: "Troll_Sweep", at_s: 1.1, cry: Whoosh),
+            (clip: "Death01", at_s: 0.0, cry: Groan),
+        ],
+        pained: Some(Groan),
         blood: Red,
         lies_s: 30.0,
         zones: [

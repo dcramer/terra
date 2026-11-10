@@ -10,7 +10,7 @@ use bevy::prelude::Resource;
 use serde::Deserialize;
 use terra_items::ItemKind;
 use terra_survival::inventory::{Cut, Items};
-use terra_survival::noise::Feet;
+use terra_survival::noise::{Cry, Feet};
 use terra_survival::registries::Registry;
 use terra_walker::bodies::Body;
 use terra_world::data;
@@ -66,6 +66,14 @@ pub struct SpeciesDef {
     pub stride: (f32, f32),
     pub feet: Feet,
     pub voice: Voice,
+    /// What it is heard to do at moments of its clips, as an engine's animation notifies
+    /// play a sound on a frame (Unreal's `AnimNotify_PlaySound`): a blow's grunt, the air
+    /// it parts and the ground it meets, its roar in its warning, its fall.
+    #[serde(default)]
+    pub heard: Vec<HeardDef>,
+    /// What it cries when a blow wounds it.
+    #[serde(default)]
+    pub pained: Option<Cry>,
     pub blood: Blood,
     #[serde(default)]
     pub carcass: Option<CarcassDef>,
@@ -106,6 +114,24 @@ fn seen_by_default() -> f32 {
 }
 
 impl SpeciesDef {
+    /// The moments of a clip passed between two times through it, seconds, in the data's
+    /// order: after `since`, up to `through`. A time gone backwards is the clip begun again.
+    pub fn heard_between(
+        &self,
+        clip: &str,
+        since: f32,
+        through: f32,
+    ) -> impl Iterator<Item = Cry> + '_ {
+        let since = if since <= through { since } else { -1.0 };
+        let clip = clip.to_owned();
+        self.heard
+            .iter()
+            .filter(move |moment| {
+                moment.clip == clip && since < moment.at_s && moment.at_s <= through
+            })
+            .map(|moment| moment.cry)
+    }
+
     pub fn seen_m(&self) -> f32 {
         self.seen_m
     }
@@ -231,6 +257,15 @@ pub struct BlowDef {
     pub lasts_s: f32,
 }
 
+/// A moment of one of a kind's clips that is heard: so many seconds into the clip, as what.
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct HeardDef {
+    pub clip: String,
+    pub at_s: f32,
+    pub cry: Cry,
+}
+
 /// The most blows a kind has besides its temper's.
 pub const MOST_BLOWS: usize = 3;
 
@@ -313,6 +348,8 @@ pub enum Voice {
     /// A heron's or a grouse's harsh call.
     Croak,
     Bark,
+    /// A big creature's growl, to itself at rest (`calls_s`).
+    Growl,
     /// Nothing: it flees in silence, as a hare does.
     Silent,
 }
@@ -425,6 +462,91 @@ impl Registry for Bestiary {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every heard moment is in a clip its kind plays to the end (a blow, its warning, its
+    /// fall) and inside that clip's length; and a blow that slams does so as it lands.
+    #[test]
+    fn every_heard_moment_is_in_a_clip_its_kind_plays_and_a_slam_is_the_blow_landing() {
+        let bestiary = Bestiary::read(&Default::default());
+        let mut heard = 0;
+        for kind in bestiary.all() {
+            let about = bestiary.get(kind);
+            // Each clip played through, how long it lasts and when its blow lands.
+            let mut played = vec![(about.clips.death.as_str(), about.lies_s, None)];
+            if let Temper::Hostile {
+                bite_at_s,
+                attack_s,
+                ..
+            } = about.temper
+            {
+                played.push((about.clips.attack.as_str(), attack_s, Some(bite_at_s)));
+            }
+            played.extend(
+                about
+                    .blows
+                    .iter()
+                    .map(|blow| (blow.clip.as_str(), blow.lasts_s, Some(blow.lands_at_s))),
+            );
+            played.extend(
+                about
+                    .warns
+                    .iter()
+                    .map(|(clip, lasts_s)| (clip.as_str(), *lasts_s, None)),
+            );
+            for moment in &about.heard {
+                heard += 1;
+                let name = &about.name;
+                let Some(&(_, lasts_s, lands_at_s)) =
+                    played.iter().find(|(clip, ..)| *clip == moment.clip)
+                else {
+                    panic!(
+                        "{name}: {} is heard, and is no blow, warning or fall of its",
+                        moment.clip
+                    );
+                };
+                assert!(
+                    (0.0..=lasts_s).contains(&moment.at_s),
+                    "{name}: {} is heard at {} s of its {lasts_s}",
+                    moment.clip,
+                    moment.at_s
+                );
+                if let (Cry::Slam, Some(lands_at_s)) = (moment.cry, lands_at_s) {
+                    assert!(
+                        (moment.at_s - lands_at_s).abs() < 0.05,
+                        "{name}: {} slams at {} s and lands at {lands_at_s}",
+                        moment.clip,
+                        moment.at_s
+                    );
+                }
+            }
+        }
+        assert!(heard > 0, "no kind has a heard moment");
+    }
+
+    /// Played through in frames, a clip's moments are each heard once, in their order, and
+    /// again when the clip is begun again.
+    #[test]
+    fn a_clip_s_moments_are_heard_once_each_as_it_plays() {
+        let bestiary = Bestiary::read(&Default::default());
+        let troll = bestiary.get(bestiary.named("Troll").unwrap());
+        let play = |frame_s: f32| {
+            let (mut cries, mut since) = (Vec::new(), -1.0);
+            for frame in 1..=(4.0 / frame_s) as u32 {
+                let through = frame as f32 * frame_s;
+                cries.extend(troll.heard_between("Troll_Smash", since, through));
+                since = through;
+            }
+            cries
+        };
+        let wanted = [Cry::Grunt, Cry::Whoosh, Cry::Slam];
+        assert_eq!(play(1.0 / 60.0), wanted);
+        // A slow machine's long frames miss none.
+        assert_eq!(play(0.5), wanted);
+        // Begun again from part way through the last: its first moment once more.
+        let again: Vec<_> = troll.heard_between("Troll_Smash", 3.9, 0.4).collect();
+        assert_eq!(again, [Cry::Grunt]);
+        assert_eq!(troll.heard_between("Troll_Sweep", 3.9, 0.1).count(), 0);
+    }
 
     /// Reading checks that what each kind gives is a kind of item there is.
     #[test]

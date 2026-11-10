@@ -14,10 +14,10 @@
 use super::controls::Settings;
 use super::crafting::Stations;
 use super::inventory::Cut;
-use super::noise::{Cue, Feet, Noise};
+use super::noise::{Cry, Cue, Feet, Noise};
 use crate::audio::{
     self, Bus, Mix, Voice,
-    bank::{Bank, Clips},
+    bank::Bank,
     synth::{Sound, Synth},
 };
 use crate::loading::Loading;
@@ -28,12 +28,16 @@ use serde::Deserialize;
 use terra_motion::moves::Taken;
 use terra_motion::struck::{Struck, Surface};
 
+mod clips;
+use clips::CLIPS;
+
 pub fn plugin(app: &mut App) {
     app.init_resource::<Heard>()
         .insert_resource(Contacts::read())
         .add_systems(Startup, load.run_if(audio::speaking))
         .add_systems(Update, (mix, hear).chain())
         .add_systems(Last, report);
+    crate::remote::method(app, "sounds.heard", heard_so_far);
 }
 
 /// How a cue is heard: recorded clips by name, or a sound made in code with its level
@@ -107,6 +111,13 @@ fn sounds_like(cue: Cue, stations: &Stations, contacts: &Contacts) -> Like {
         Cue::Step(Feet::Water) => Made("step.water", Sound::Splash, 0.35, 3.0),
         Cue::Step(Feet::Hoof) => Clips("step.hoof"),
         Cue::Step(Feet::Skitter) => Clips("step.skitter"),
+        Cue::Step(Feet::Heavy) => Clips("step.heavy"),
+        Cue::Cry(Cry::Roar) => Clips("cry.roar"),
+        Cue::Cry(Cry::Growl) => Clips("cry.growl"),
+        Cue::Cry(Cry::Grunt) => Clips("cry.grunt"),
+        Cue::Cry(Cry::Groan) => Clips("cry.groan"),
+        Cue::Cry(Cry::Whoosh) => Clips("swing.great"),
+        Cue::Cry(Cry::Slam) => Clips("slam"),
         Cue::Swing { heavy: false } => Clips("swing.light"),
         Cue::Swing { heavy: true } => Clips("swing.heavy"),
         Cue::Hit => Clips("hit"),
@@ -145,423 +156,6 @@ fn sounds_like(cue: Cue, stations: &Stations, contacts: &Contacts) -> Like {
         Cue::Click => Clips("click"),
         Cue::Open => Clips("open"),
         Cue::Close => Clips("close"),
-    }
-}
-
-/// The recorded sounds. Each takes one of its files at random, at a pitch in range.
-const CLIPS: &[Clips] = &[
-    clips(
-        "step.grass",
-        &[
-            "footstep_grass_000",
-            "footstep_grass_001",
-            "footstep_grass_002",
-            "footstep_grass_003",
-            "footstep_grass_004",
-        ],
-        Bus::Effects,
-        0.24,
-        (0.9, 1.08),
-        2.0,
-    ),
-    clips(
-        "step.wood",
-        &[
-            "footstep_wood_000",
-            "footstep_wood_001",
-            "footstep_wood_002",
-            "footstep_wood_003",
-            "footstep_wood_004",
-        ],
-        Bus::Effects,
-        0.14,
-        (0.9, 1.08),
-        2.0,
-    ),
-    clips(
-        "step.hoof",
-        &[
-            "footstep_grass_000",
-            "footstep_grass_002",
-            "footstep_grass_004",
-        ],
-        Bus::Effects,
-        0.12,
-        (1.25, 1.45),
-        2.0,
-    ),
-    clips(
-        "step.skitter",
-        &[
-            "impactGeneric_light_000",
-            "impactGeneric_light_001",
-            "impactGeneric_light_002",
-            "impactGeneric_light_003",
-            "impactGeneric_light_004",
-        ],
-        Bus::Effects,
-        0.12,
-        (1.7, 2.3),
-        1.5,
-    ),
-    clips(
-        "hit",
-        &[
-            "impactPunch_medium_000",
-            "impactPunch_medium_001",
-            "impactPunch_medium_002",
-            "impactPunch_medium_003",
-            "impactPunch_medium_004",
-        ],
-        Bus::Effects,
-        0.4,
-        (0.9, 1.1),
-        3.0,
-    ),
-    clips(
-        "kill",
-        &[
-            "impactSoft_heavy_000",
-            "impactSoft_heavy_001",
-            "impactSoft_heavy_002",
-            "impactSoft_heavy_003",
-            "impactSoft_heavy_004",
-        ],
-        Bus::Effects,
-        0.46,
-        (0.8, 0.95),
-        3.0,
-    ),
-    clips(
-        "hurt",
-        &[
-            "impactPunch_heavy_000",
-            "impactPunch_heavy_001",
-            "impactPunch_heavy_002",
-            "impactPunch_heavy_003",
-            "impactPunch_heavy_004",
-        ],
-        Bus::Effects,
-        0.54,
-        (0.85, 1.0),
-        3.0,
-    ),
-    clips(
-        "down",
-        &[
-            "impactSoft_heavy_000",
-            "impactSoft_heavy_002",
-            "impactSoft_heavy_004",
-        ],
-        Bus::Effects,
-        0.58,
-        (0.65, 0.75),
-        3.0,
-    ),
-    clips(
-        "strike.wood",
-        &[
-            "chop",
-            "impactWood_medium_000",
-            "impactWood_medium_001",
-            "impactWood_medium_002",
-        ],
-        Bus::Effects,
-        0.45,
-        (0.9, 1.1),
-        3.0,
-    ),
-    clips(
-        "strike.rock",
-        &[
-            "impactMining_000",
-            "impactMining_001",
-            "impactMining_002",
-            "impactMining_003",
-            "impactMining_004",
-        ],
-        Bus::Effects,
-        0.5,
-        (0.9, 1.1),
-        3.0,
-    ),
-    clips(
-        "strike.plant",
-        &["knifeSlice", "knifeSlice2"],
-        Bus::Effects,
-        0.36,
-        (0.9, 1.15),
-        2.5,
-    ),
-    clips(
-        "felled.tree",
-        &[
-            "impactWood_heavy_000",
-            "impactWood_heavy_001",
-            "impactWood_heavy_002",
-            "impactWood_heavy_003",
-            "impactWood_heavy_004",
-        ],
-        Bus::Effects,
-        0.64,
-        (0.6, 0.75),
-        6.0,
-    ),
-    clips(
-        "felled.small",
-        &[
-            "impactSoft_medium_000",
-            "impactSoft_medium_001",
-            "impactSoft_medium_002",
-            "impactSoft_medium_003",
-            "impactSoft_medium_004",
-        ],
-        Bus::Effects,
-        0.31,
-        (0.9, 1.1),
-        3.0,
-    ),
-    clips(
-        "hammer",
-        &[
-            "impactPlank_medium_000",
-            "impactPlank_medium_001",
-            "impactPlank_medium_002",
-            "impactPlank_medium_003",
-            "impactPlank_medium_004",
-        ],
-        Bus::Effects,
-        0.27,
-        (0.9, 1.1),
-        3.0,
-    ),
-    clips(
-        "built",
-        &[
-            "impactWood_heavy_000",
-            "impactWood_heavy_002",
-            "impactWood_heavy_004",
-        ],
-        Bus::Effects,
-        0.45,
-        (1.0, 1.15),
-        4.0,
-    ),
-    clips(
-        "placed",
-        &[
-            "impactWood_light_000",
-            "impactWood_light_001",
-            "impactWood_light_002",
-            "impactWood_light_003",
-            "impactWood_light_004",
-        ],
-        Bus::Effects,
-        0.37,
-        (0.9, 1.1),
-        3.0,
-    ),
-    clips(
-        "taken_apart",
-        &["creak1", "creak2", "creak3"],
-        Bus::Effects,
-        0.58,
-        (0.9, 1.1),
-        3.0,
-    ),
-    clips(
-        "anvil",
-        &[
-            "impactMetal_medium_000",
-            "impactMetal_medium_001",
-            "impactMetal_medium_002",
-            "impactMetal_medium_003",
-            "impactMetal_medium_004",
-        ],
-        Bus::Effects,
-        0.36,
-        (0.95, 1.05),
-        4.0,
-    ),
-    // The fight's (THIRD_PARTY.md): by what is struck and how hard, `data/contacts.ron`.
-    clips(
-        "swing.light",
-        &[
-            "swing_light_000",
-            "swing_light_001",
-            "swing_light_002",
-            "swing_light_003",
-            "swing_light_004",
-            "swing_light_005",
-        ],
-        Bus::Effects,
-        0.35,
-        (0.92, 1.1),
-        3.0,
-    ),
-    clips(
-        "swing.heavy",
-        &[
-            "swing_heavy_000",
-            "swing_heavy_001",
-            "swing_heavy_002",
-            "swing_heavy_003",
-            "swing_heavy_004",
-            "swing_heavy_005",
-        ],
-        Bus::Effects,
-        1.0,
-        (0.85, 1.0),
-        3.5,
-    ),
-    clips(
-        "parry.steel",
-        &[
-            "parry_steel_000",
-            "parry_steel_001",
-            "parry_steel_002",
-            "parry_steel_003",
-            "parry_steel_004",
-            "parry_steel_005",
-        ],
-        Bus::Effects,
-        1.0,
-        (0.94, 1.06),
-        8.0,
-    ),
-    clips(
-        "block.wood",
-        &[
-            "block_wood_000",
-            "block_wood_001",
-            "block_wood_002",
-            "block_wood_003",
-            "block_wood_004",
-            "block_wood_005",
-        ],
-        Bus::Effects,
-        0.6,
-        (0.9, 1.08),
-        5.0,
-    ),
-    clips(
-        "guard_break.wood",
-        &[
-            "guard_break_wood_000",
-            "guard_break_wood_001",
-            "guard_break_wood_002",
-            "guard_break_wood_003",
-        ],
-        Bus::Effects,
-        0.7,
-        (0.9, 1.02),
-        6.0,
-    ),
-    clips(
-        "hit.flesh",
-        &[
-            "hit_flesh_000",
-            "hit_flesh_001",
-            "hit_flesh_002",
-            "hit_flesh_003",
-            "hit_flesh_004",
-            "hit_flesh_005",
-        ],
-        Bus::Effects,
-        0.55,
-        (0.92, 1.08),
-        4.0,
-    ),
-    clips(
-        "hit.flesh.heavy",
-        &[
-            "hit_flesh_heavy_000",
-            "hit_flesh_heavy_001",
-            "hit_flesh_heavy_002",
-            "hit_flesh_heavy_003",
-            "hit_flesh_heavy_004",
-        ],
-        Bus::Effects,
-        0.65,
-        (0.88, 1.0),
-        5.0,
-    ),
-    clips(
-        "bench",
-        &[
-            "impactWood_light_000",
-            "impactWood_light_002",
-            "impactWood_light_004",
-            "impactPlank_medium_001",
-        ],
-        Bus::Effects,
-        0.19,
-        (1.0, 1.2),
-        3.0,
-    ),
-    clips(
-        "made",
-        &["metalClick", "metalLatch"],
-        Bus::Effects,
-        0.31,
-        (0.95, 1.05),
-        3.0,
-    ),
-    clips(
-        "bell",
-        &[
-            "impactBell_heavy_000",
-            "impactBell_heavy_001",
-            "impactBell_heavy_002",
-            "impactBell_heavy_003",
-            "impactBell_heavy_004",
-        ],
-        Bus::Ambience,
-        0.3,
-        (0.55, 0.6),
-        25.0,
-    ),
-    clips(
-        "click",
-        &["bookPlace1", "bookPlace2", "bookPlace3"],
-        Bus::Interface,
-        0.16,
-        (1.4, 1.6),
-        1.0,
-    ),
-    clips(
-        "open",
-        &["handleSmallLeather", "clothBelt"],
-        Bus::Interface,
-        0.8,
-        (0.95, 1.05),
-        1.0,
-    ),
-    clips(
-        "close",
-        &["handleSmallLeather2", "clothBelt2"],
-        Bus::Interface,
-        0.8,
-        (0.95, 1.05),
-        1.0,
-    ),
-];
-
-const fn clips(
-    name: &'static str,
-    files: &'static [&'static str],
-    bus: Bus,
-    level: f32,
-    pitch: (f32, f32),
-    reach_m: f32,
-) -> Clips {
-    Clips {
-        name,
-        files,
-        bus,
-        level,
-        pitch,
-        reach_m,
     }
 }
 
@@ -654,6 +248,20 @@ fn hear(
     }
 }
 
+/// `sounds.heard`: what has been heard so far, each sound's name and how many times, so a
+/// run driven over the remote checks what an action sounded of (D69).
+fn heard_so_far(
+    In(_): In<Option<serde_json::Value>>,
+    heard: Res<Heard>,
+) -> bevy::remote::BrpResult {
+    let heard: serde_json::Map<_, _> = heard
+        .0
+        .iter()
+        .map(|&(name, count)| (name.to_string(), count.into()))
+        .collect();
+    Ok(heard.into())
+}
+
 fn reach_of(name: &str) -> f32 {
     CLIPS
         .iter()
@@ -710,6 +318,13 @@ mod tests {
             Cue::Step(Feet::Water),
             Cue::Step(Feet::Hoof),
             Cue::Step(Feet::Skitter),
+            Cue::Step(Feet::Heavy),
+            Cue::Cry(Cry::Roar),
+            Cue::Cry(Cry::Growl),
+            Cue::Cry(Cry::Grunt),
+            Cue::Cry(Cry::Groan),
+            Cue::Cry(Cry::Whoosh),
+            Cue::Cry(Cry::Slam),
             Cue::Swing { heavy: false },
             Cue::Swing { heavy: true },
             Cue::Hit,
@@ -782,8 +397,15 @@ mod tests {
             Cue::Bark => 34,
             Cue::Wings => 35,
             Cue::Struck(_) => 36,
+            Cue::Step(Feet::Heavy) => 37,
+            Cue::Cry(Cry::Roar) => 38,
+            Cue::Cry(Cry::Growl) => 39,
+            Cue::Cry(Cry::Grunt) => 40,
+            Cue::Cry(Cry::Groan) => 41,
+            Cue::Cry(Cry::Whoosh) => 42,
+            Cue::Cry(Cry::Slam) => 43,
         };
-        let mut listed = [false; 37];
+        let mut listed = [false; 44];
         for &cue in &cues {
             listed[place(cue)] = true;
         }
