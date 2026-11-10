@@ -222,22 +222,27 @@ export function lineFor(look: string, ms: Measure[], pose?: string): { ok: boole
 /** The bodies a look is measured on: every template, then the unmorphed base. */
 export const bodies = (): string[] => [...Object.keys(JSON.parse(readFileSync(join(ROOT, "assets", "models", "character", "templates.json"), "utf8"))), BASE];
 
-type Ctx = { cache?: Cache; log: string; out: string };
+/** `tune` and `clips` are solve.ts's: hold parameters tried for the run (tune.ts) and, in place
+ * of a look's set and every clip, these clips alone with the look alone in its hand. */
+export type Ctx = { cache?: Cache; log: string; out: string; tune?: Record<string, number>; clips?: string[] };
 
 /** moves.ts's rows for a look's file on one body, cut to the look's own numbers: through its
  * class's set with the set's partner, or the walker's use clips, and every carried clip. */
 export async function rowsOf(file: string, body: string, ctx: Ctx): Promise<Row[]> {
   const name = basename(file, ".glb");
-  const { set, hand, clips } = setOf(name);
+  const of = setOf(name);
+  const { set, hand, clips } = ctx.clips ? { set: "none", hand: of.hand, clips: ctx.clips.join(",") } : of;
   const hold = set === "none" ? [`socket.hand.${hand}=${file}`] : (["R", "L"] as const).map((h) => `socket.hand.${h}=${h === hand ? file : PARTNER[h]}`);
-  const args = ["--set", set, "--carry", "--arms", ...hold.flatMap((h) => ["--hold", h]), "--also", clips || carriedClips().join(",")];
+  const tuned = Object.keys(ctx.tune ?? {}).sort();
+  const tune = tuned.length ? ["--tune", JSON.stringify(Object.fromEntries(tuned.map((k) => [k, ctx.tune![k]])))] : [];
+  const args = ["--set", set, "--carry", "--arms", ...hold.flatMap((h) => ["--hold", h]), "--also", clips || carriedClips().join(","), ...tune];
   const scripts = closure(join(CHARS, "moves.ts"), ROOT);
   const reads = [...scripts, ...movesReads(scripts), ...hold.map((h) => join(ROOT, h.split("=")[1])), ...(set === "none" ? [] : [join(ROOT, set)])];
   // The look is in the key: a set's two partners run the same command, and each keeps only its own rows.
   const k = key("holds", ROOT, reads, [args, body, name]);
   const kept = ctx.cache?.get(k, ROOT);
   if (kept) return kept.data as Row[];
-  const json = join(ctx.out, `holds-${name}-${body}.json`);
+  const json = join(ctx.out, `holds-${name}-${body}${tune.length || ctx.clips ? `-${k.slice(0, 16)}` : ""}.json`);
   const rows = await runMoves([join(CHARS, "moves.ts"), ...args, "--template", body, "--json", json], json, ctx.log);
   if (typeof rows === "string") throw new Error(`${name} on ${body}: ${rows}`);
   const own = (o: Record<string, unknown> = {}) => Object.fromEntries(Object.entries(o).filter(([key]) => key.endsWith(`.${name}`)));

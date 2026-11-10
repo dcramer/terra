@@ -117,13 +117,17 @@ export const PALM_M = 0.021;
  * source is named). */
 export const FIT_M = 0.0206;
 
+/** The seat's two numbers as `palmed` reads them: `PALM_M` and `FIT_M` unless a caller trying
+ * another seat for one run sets them (tune.ts, for solve.ts's search); nothing else writes it. */
+export const SEAT = { palm: PALM_M, fit: FIT_M };
+
 /** Where a seated handle's line crosses the grip, in the socket's frame before any tilt: on the
  * palm (`PALM_M` less its radius up +X) and, thinner than the fist is placed for (`FIT_M`),
  * toward the fingers (-Z) by what it lacks, at their roots as a power grip clamps it
  * (terra_walker::grip::seat). `fit` is the handle the fist is placed for, the test's planted
  * fault giving 0 (the seat mid palm whatever the handle). */
-export function palmed(r: number, fit = FIT_M): V3 {
-  return [PALM_M - r, 0, -Math.max(0, fit - r)];
+export function palmed(r: number, fit = SEAT.fit): V3 {
+  return [SEAT.palm - r, 0, -Math.max(0, fit - r)];
 }
 
 /** A power grip's look seated in the fist: the move, in the socket's frame before any tilt, that

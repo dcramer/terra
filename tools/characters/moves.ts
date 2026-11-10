@@ -72,6 +72,7 @@ import { carryArm, easedThrough, fold } from "./carry_arm.ts";
 import { type WristRest, HoldWorst, holdPose, wristRest } from "./hold_pose.ts";
 import { sharesIn, swung as armSwung } from "./additive.ts";
 import { fitter } from "./shield_arm.ts";
+import { tuneWith } from "./tune.ts";
 import { FIST_CM, WRAP_DEG, close, fistOff, handRest, lookGrip, seated } from "./grip.ts";
 import { type WristPose, type WristWorst, EDGE, WRIST, bendOf, edgeLead, handAxes, wristPose, wristWorst } from "./wrist.ts";
 
@@ -118,6 +119,8 @@ const { values: opt } = parseArgs({
     // (held_legs_cm.<look>). Off until the committed looks that fail it are refitted (held-check
     // j1: the basket in Jump_Start, the axes and pickaxes in Jump_Land); then it is the default.
     legs: { type: "boolean", default: false },
+    // Hold parameters tried for this run, {name: value} as JSON (tune.ts; solve.ts searches them).
+    tune: { type: "string" },
   },
   allowNegative: true,
 });
@@ -203,11 +206,12 @@ const clips = new Map<string, Clip>();
 // arm it goes on, set once the looks are hung below.
 let carryPoses: [string, string][] = [];
 const swingShares = sharesIn(clipsFile);
+const tuned = opt.tune ? tuneWith(JSON.parse(opt.tune), body, clipsFile) : undefined;
 const clipOf = (name: string): Clip => {
   if (!clips.has(name)) {
     // `Walk_Loop+Keyed_Guard`: a locomotion clip under a stance's hold, laid by the mask.
     const [under, over] = name.split("+");
-    let c = over ? clipsFile.layered(clipOf(under), clipOf(over)) : clipsFile.clip(name);
+    let c = over ? clipsFile.layered(clipOf(under), clipOf(over)) : (tuned?.clip(name) ?? clipsFile.clip(name));
     if (!c) throw new Error(`no clip ${name} in ${opt.clips}`);
     // A carried clip with no stance hold takes each carry pose on its arm alone, as
     // terra_walker::figure lays a `CarryHold` (Nodes::over_one); the clip keeps its name.
@@ -216,7 +220,7 @@ const clipOf = (name: string): Clip => {
     if (!over && carriedIn.includes(name))
       for (const [pose, root] of carryPoses) {
         c = { ...clipsFile.layered(c, clipOf(pose), [root]), name };
-        c = armSwung(clipsFile, c, root.slice(-1) === "l" ? "L" : "R", swingShares[pose] ?? 0);
+        c = armSwung(clipsFile, c, root.slice(-1) === "l" ? "L" : "R", tuned?.swing(pose) ?? swingShares[pose] ?? 0);
       }
     clips.set(name, c);
   }
