@@ -390,6 +390,16 @@ Off in release builds, since it lets anything on the machine control the game.
 
 Playing the game as an agent, inside its rules rather than as a tester, is a separate want: see [multiplayer.md](multiplayer.md#agents-as-players) (D73).
 
+## Building a system without guessing
+
+The order for a system, new or rebuilt (D654). Each step leaves something another agent can check.
+
+1. **Read the prior art.** At least two shipped implementations: an engine's source (Godot, O3DE, Jolt, Voxel Tools, Bevy's own crates and examples) or docs (Unreal, Unity), a paper, a GDC or SIGGRAPH talk, a studio's write-up. Search and read them now; a source remembered and not opened is graded [M] and nothing rests on it. Write the **Prior art** section of the design doc, or a research note it links: each source linked and graded ([P] primary read now, [S] secondary, [C] community, [M] memory), the architecture they share in their terms (the parts, what owns what, what runs when), the one we port (D196) and each departure with its reason.
+2. **Take the reference with the design.** From the same sources, what a correct result is: the paper's figures, the engine's own test values, a behaviour the reference game shows that can be measured (D311), a law the result obeys. If none can be found, say so on the desk before building: a system with no reference can only be judged by eye.
+3. **Write the check before the tuning.** Its bar is the reference's number. Beside it, two tests: a planted fault fails (D632) and a known-good case passes, the reference itself run through the same measure where it can be.
+4. **Build, then look once.** When the check first passes, look at the result against the reference (a still, a film, a table). Passing and plainly wrong means the check is missing a measure: add it, with its planted fault. Never tune the system to the number, and never add a constant whose only reason is another system's error; fix that system or raise it.
+5. **Say what is not known.** A constant carries its source in a comment (`// Jolt CharacterVirtual's default, 0.02 m`, `// measured: look.ts on the Enshrouded frames`, `// a guess, D654: no source found`). A bug's cause is shown by a measurement that would differ were the cause another, before the fix.
+
 ## Writing tests
 
 A behaviour you rely on gets a test. A test earns its place by failing when the behaviour breaks, and only then. Before keeping one, name a plausible bug in the code it covers and check that the test catches it; for a new test, make that bug for a moment and watch it fail.

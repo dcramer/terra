@@ -36,7 +36,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 
 - **Heavy tests run on main** (D398, D37): GPU renders, the fire sheet, look checks and benches are continuous checks (`cargo xtask continuous`, a row of `tools/continuous/checks.json`), never a hook. Keep a test to a few seconds; a sweep over many cases runs on every core (`terra_gen::par::map`, D406).
 - **Gates are quiet** (D388), new tools and tasks too: a line a stage, only what fixes a failure, the rest in a log it names. On failure read only what follows `✗`, then `target/check/<stage>.log`; `TERRA_VERBOSE=1` shows all.
-- **A check gates only once proven** (D632): a test plants a known fault and shows the check catches it; until then its number is a reading, not a pass.
+- **A check gates only once proven** (D632, D654): a test shows it catches a planted fault and passes a known-good reference, whose number is its bar; until then it is a reading, not a pass.
 - **An error says what to do** (D556): what went wrong with the thing named, the rule it breaks and its decision, the fix wanted or the next command (and what not to do where the tempting fix is wrong); never a bare complaint.
 - **Code health is gated** (D396): split a file over 1,000 lines or a function over 150 (`cargo xtask sizes`); call a shared primitive from its home (`terra_gen::hash`), never copy it.
 
@@ -65,14 +65,14 @@ Tokens are a constraint of the work (D627): every turn rereads the whole context
 - **Don't overbuild**: nothing on a Leaning or Open design decision but a spike, which answers one stated question with the least code, then stops.
 - **No new sessions** (the developers): never suggest or open a separate session (a task chip, `spawn_task`) and never ask about one; the coordinator spawns an agent or subagent for found work, and a subagent names out-of-scope work in its report instead.
 - **The review desk** (D422): a question, or a still or film for the developer's eye, goes on their desk, never into chat; the coordinator keeps it and subagents hand items over in a `FOR REVIEW` line (`.agents/skills/review-desk`).
-- **Tools for repeated work** (D71): when a check you will do again takes several manual steps, a restart or squinting at a picture, make it one step. General over single-case; its output reads at a glance and explains itself ([examples](docs/development.md#developer-tools)).
+- **Tools for repeated work** (D71): when a check you will do again takes several manual steps, a restart or squinting at a picture, make it one step. General over single-case; its output reads at a glance and explains itself.
 - **No options for one-offs** (D249): one scene or check uses existing options, `cargo xtask remote` or an uncommitted script; if none can, ask.
-- **Do it as shipped games do**: find how they and other engines do it first, use the industry's terms, say where we depart.
-- **Paid when it is much better** (D526): look for paid tools, libraries, assets and services too; propose one when it beats the free ones or solves what we'd find very hard, explaining on the desk what it is, what it costs and why we need it; the developers buy.
-- **Third-party current**: before building on or debugging a pack, library or tool, get its latest release from the original source and read its changelog.
-- **Step back on a second attempt** at one failure: list the approaches (ours, an industry tool, a service, a known-good reference), pick one an agent can verify by measurement, and compare against the known-good reference.
-- **Correct before fast**: right first; measure so the numbers are known; optimise later unless unusable.
-- **Demos look finished**: real models, light, ground and props, small but never placeholder. Screenshot first.
+- **Never guess** (D654): before a system, read how shipped games and engines build it (sources read now, linked; memory is a lead), use their terms, say where we depart. A constant, an API or a bug's cause is read, measured or derived, or marked a guess.
+- **Paid when it is much better** (D526): look for paid tools, libraries, assets and services too; propose one on the desk (what, cost, why) when it beats the free ones or solves what we'd find very hard; the developers buy.
+- **Third-party current**: before building on or debugging a pack, library or tool, read its latest release's changelog at the original source.
+- **Step back on a second attempt** at one failure: list the approaches (ours, an industry tool, a service), pick one an agent can verify by measurement against a known-good reference.
+- **Correct before fast**: right first; measure; optimise later unless unusable.
+- **Demos look finished**: real models, light, ground and props, small, never placeholder. Screenshot first.
 - **Research** goes in `research/`; it informs decisions, never makes them.
 - **Rust or TypeScript** (D121): the game and what it shares in Rust; tooling in TypeScript on Node 22.18+, no build step, no dependencies where possible; shell only as glue; Python only inside a program that speaks nothing else (Blender). Delete code nothing uses.
 - **Public repository**: never commit engine binaries, build output, logs or anything personal.
