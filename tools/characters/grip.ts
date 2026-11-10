@@ -6,7 +6,8 @@
 // GraspIt!'s auto-grasp closes each link until contact (Miller and Allen, "GraspIt!", IEEE
 // Robotics & Automation Magazine 2004). The handle is read from the look: the section of its
 // vertices across the grip (y = 0), its middle and its radius, tipped as the look is carried.
-// A power grip's look is seated with its handle on the palm (`seatOf`); the fingers bend about
+// A power grip's look is seated with its handle on the palm, a thin one toward the fingers'
+// roots (`seatOf`); the fingers bend about
 // the hand's own flexion axis however a tipped handle crosses them; the opposed thumb comes round
 // the handle, its metacarpal swung no more than it must. Grip types by mount: in hand a power grip (fingers and thumb round the handle); hung a hook
 // grip (the fingers alone, the thumb left to the clip); strapped none (the shield's arm is
@@ -112,17 +113,29 @@ export function lookGrip(file: string): { grip: Grip; handle: Handle } | undefin
  * back of the hand), measured on the base body's skin at rest (terra_walker::grip::PALM_M). */
 export const PALM_M = 0.021;
 
-/** A power grip's look seated against the palm: the move, in the socket's frame before any tilt,
- * that brings its handle's line to lie on the palm (`PALM_M` less its radius up +X, on the
- * socket's Y). The line then runs through the socket's X axis, about which a carried look is
- * tipped, so the seat holds tipped (terra_walker::grip::seat). */
+/** The radius, metres, of the handle the fist is placed for (terra_walker::grip::FIT_M, where its
+ * source is named). */
+export const FIT_M = 0.0206;
+
+/** Where a seated handle's line crosses the grip, in the socket's frame before any tilt: on the
+ * palm (`PALM_M` less its radius up +X) and, thinner than the fist is placed for (`FIT_M`),
+ * toward the fingers (-Z) by what it lacks, at their roots as a power grip clamps it
+ * (terra_walker::grip::seat). `fit` is the handle the fist is placed for, the test's planted
+ * fault giving 0 (the seat mid palm whatever the handle). */
+export function palmed(r: number, fit = FIT_M): V3 {
+  return [PALM_M - r, 0, -Math.max(0, fit - r)];
+}
+
+/** A power grip's look seated in the fist: the move, in the socket's frame before any tilt, that
+ * brings its handle's line to `palmed`. The seat is turned with a tipped look
+ * (terra_walker::grip::seat). */
 export function seatOf(h: Handle): V3 {
-  return [PALM_M - h.r - h.at[0], -h.at[1], -h.at[2]];
+  return sub(palmed(h.r), h.at);
 }
 
 /** The handle as its look is seated (`seatOf`), in the socket's frame. */
 export function seated(h: Handle): Handle {
-  return { at: [PALM_M - h.r, 0, 0], way: h.way, r: h.r };
+  return { at: palmed(h.r), way: h.way, r: h.r };
 }
 
 /** The handle's line in a frame where the socket sits at `socket`. */
@@ -320,6 +333,28 @@ export function fistOff(body: Glb, pose: Pose[], side: string, socket: number, h
     if (wrap < worst.wrap) worst = { ...worst, wrap, short: bones[0] };
   }
   return worst;
+}
+
+/** A hand closed on a handle at rest (`close` from `handRest`'s `locals` and `socket`): each
+ * counted bone's gap to the handle's surface padded by a finger, cm, by its bone, in the hand's
+ * frame, as `fistOff` measures a posed body's. */
+export function restOff(locals: Map<string, Pose>, socket: Pose, handle: Handle, grip: Grip, side: string): Map<string, number> {
+  const turns = close(locals, socket, handle, grip, side);
+  const line = inFrame(handle, socket);
+  const out = new Map<string, number>();
+  for (const stem of CHAINS) {
+    if (stem === "thumb" && grip === "hook") continue;
+    const bones = chainBones(stem, side);
+    let parent: Pose = { t: [0, 0, 0], r: [0, 0, 0, 1], s: [1, 1, 1] };
+    const at: V3[] = [];
+    for (const b of bones) {
+      const rest = locals.get(b)!;
+      parent = apply(parent, { ...rest, r: turns.get(b) ?? rest.r });
+      at.push(parent.t);
+    }
+    for (let k = stem === "thumb" ? 1 : 0; k < 3; k++) out.set(bones[k], (toLine(at[k], at[k + 1], line.c, line.d) - line.r - FINGER_M * socket.s[0]) * 100);
+  }
+  return out;
 }
 
 /** The least a finger closed round a handle comes round it from its knuckle, degrees: near a

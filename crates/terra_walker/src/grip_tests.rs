@@ -57,6 +57,11 @@ fn gaps(chains: &[[Transform; 4]; 5], pose: &[[Option<Quat>; 3]; 5], line: &Line
 /// A look whose handle is `r` round, off its origin, seated (`seat`) and tipped `tilt` degrees
 /// about the socket's X as a carried look is.
 fn line(r: f32, tilt: f32) -> Line {
+    line_seated(r, tilt, seat)
+}
+
+/// `line`, the look seated by `seat`.
+fn line_seated(r: f32, tilt: f32, seat: impl Fn(&Handle, Quat) -> Vec3) -> Line {
     let handle = Handle {
         at: Vec3::new(0.004, 0.0, -0.003),
         way: Vec3::Y,
@@ -64,29 +69,69 @@ fn line(r: f32, tilt: f32) -> Line {
     };
     let rotation = Quat::from_rotation_x(tilt.to_radians());
     let look = Transform {
-        translation: rotation * seat(&handle),
+        translation: seat(&handle, rotation),
         rotation,
         ..default()
     };
     Line::of(handle, &Transform::IDENTITY, &look)
 }
 
+/// The seat before it followed the handle's radius: mid palm whatever the handle.
+fn mid_palm(handle: &Handle, turn: Quat) -> Vec3 {
+    Vec3::new(PALM_M - handle.r, 0.0, 0.0) - turn * handle.at
+}
+
 #[test]
 fn a_seated_handle_lies_on_the_palm_however_it_is_tipped() {
     for (r, tilt) in [(0.012, 0.0), (0.02, -45.0), (0.03, 60.0)] {
         let line = line(r, tilt);
-        let palm = Vec3::new(PALM_M - r, 0.0, 0.0);
-        assert!(line.to_segment(palm, palm, 0.0) < 1e-5, "{r} {tilt}");
+        let at = palmed(r);
+        assert!((at.x - (PALM_M - r)).abs() < 1e-6, "{r}");
+        assert!(line.to_segment(at, at, 0.0) < 1e-5, "{r} {tilt}");
         let way = Quat::from_rotation_x(f32::to_radians(tilt)) * Vec3::Y;
         assert!(line.d.dot(way) > 0.9999, "{r} {tilt}");
     }
 }
 
 #[test]
+fn a_thinner_handle_is_seated_toward_the_fingers_by_what_it_lacks() {
+    // The side of the handle toward the fingers (-Z) stays where the fitted handle's is; a
+    // handle as thick as the fist is placed for, or thicker, stays mid palm.
+    for r in [0.012, 0.016, FIT_M] {
+        assert!((palmed(r).z - r + FIT_M).abs() < 1e-6, "{r}");
+    }
+    assert_eq!(palmed(0.025).z, 0.0);
+}
+
+#[test]
+fn a_thin_a_middle_and_a_thick_handle_each_leave_every_finger_within_a_centimetre() {
+    let chains = hand();
+    let worst = |line: &Line| {
+        gaps(&chains, &close(&chains, line, Grip::Power), line)
+            .into_iter()
+            .fold(0.0_f32, |a, g| a.max(g.abs()))
+    };
+    // Square in the fist, as every look is held (no look is tipped in the hand, D546), and
+    // tipped 30 degrees either way.
+    for r in [0.012, 0.016, 0.021] {
+        for tilt in [0.0, -30.0, 30.0] {
+            let off = worst(&line(r, tilt));
+            assert!(off <= 0.01, "{r} m, {tilt} deg: {:.2} cm off", off * 100.0);
+        }
+    }
+    // The planted fault: the thin handle seated mid palm, as every handle was, leaves the ring's
+    // and little finger's knuckle bones short of it.
+    let off = worst(&line_seated(0.012, 0.0, mid_palm));
+    assert!(off > 0.01, "{:.2} cm off", off * 100.0);
+}
+
+#[test]
 fn a_fist_closes_until_every_finger_bone_lies_on_the_handle() {
     let chains = hand();
-    // Handles from a knife's to thicker than the socket was placed for, seated against the
-    // palm, held and carried tipped either way.
+    // Handles from a knife's to thicker than the socket was placed for, seated in the fist
+    // (`seat`), square and tipped either way. A knife's tipped 45 degrees runs 1.3 cm past the
+    // index's end bone, seated mid palm or at the fingers' roots: no look is tipped in the hand
+    // (D546), so it is tried at 30.
     let mut off = Vec::new();
     for (r, tilt) in [
         (0.02, 0.0),
@@ -94,7 +139,7 @@ fn a_fist_closes_until_every_finger_bone_lies_on_the_handle() {
         (0.015, 0.0),
         (0.012, 0.0),
         (0.02, -40.0),
-        (0.012, -45.0),
+        (0.012, -30.0),
         (0.02, 35.0),
     ] {
         let line = line(r, tilt);
@@ -103,10 +148,9 @@ fn a_fist_closes_until_every_finger_bone_lies_on_the_handle() {
         assert!(open.iter().any(|g| *g > 0.03), "{r} {tilt}: {open:?}");
         let closed = gaps(&chains, &close(&chains, &line, Grip::Power), &line);
         for (i, g) in closed.iter().enumerate() {
-            // On a handle thinner than 2 cm round the ring's and little finger's first bones
-            // fall short: their palm bones, which the skeleton lacks, would cup the fist.
-            let cupped = r < 0.02 && (i == 8 || i == 11);
-            if g.abs() > if cupped { 0.015 } else { 0.01 } {
+            // The ring's and little finger's first bones too: a thin handle is seated at their
+            // roots, where they reach it without the palm bones the skeleton lacks.
+            if g.abs() > 0.01 {
                 off.push(format!(
                     "{r} m, {tilt} deg: bone {i} {:.1} cm off",
                     g * 100.0

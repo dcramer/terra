@@ -8,8 +8,8 @@
 //! grip (y = 0), its middle and its radius; the pose is solved again only when the look turns in
 //! the hand (carried or used, `character::tilt`).
 //!
-//! A power grip's look is seated with its handle on the palm (`seat`), so a thin handle sits in
-//! the fist rather than where a sword's would. The fingers bend about the hand's own flexion
+//! A power grip's look is seated with its handle on the palm (`seat`), a thin one toward the
+//! fingers' roots, so it sits in the fist rather than where a sword's would. The fingers bend about the hand's own flexion
 //! axis however a tipped handle crosses them; the thumb, opposed, comes round the handle, its
 //! metacarpal swung no more than it must where a handle tipped up the palm runs under it.
 //!
@@ -130,12 +130,28 @@ pub fn handle(section: &[Vec3]) -> Option<Handle> {
     })
 }
 
-/// A power grip's look seated against the palm: where, in its socket's frame before any tilt, the
-/// look's origin goes for its handle's line to lie on the palm (`PALM_M` less its radius up +X,
-/// on the socket's Y). The line then runs through the socket's X axis, about which a carried
-/// look is tipped, so the seat turned with the look holds (`close_hands`).
-pub fn seat(handle: &Handle) -> Vec3 {
-    Vec3::new(PALM_M - handle.r, 0.0, 0.0) - handle.at
+/// The radius, metres, of the handle the fist is placed for: the one whose line lies on the hand
+/// socket's Y with the palm and every finger on it. 41 mm across, the cylinder a hand closes
+/// right round: grip studies put the handle of full finger and palm contact at 35 to 45 mm by
+/// hand size (Kong and Lowe, "Optimal cylindrical handle diameter for grip force tasks",
+/// International Journal of Industrial Ergonomics 35, 2005).
+pub const FIT_M: f32 = 0.0206;
+
+/// Where a seated handle's line crosses the grip, in the hand socket's frame: on the palm
+/// (`PALM_M` less its radius up +X) and, if it is thinner than the fist is placed for (`FIT_M`),
+/// toward the fingers (-Z) by what it lacks, so its side toward them stays where the full
+/// handle's is. In a power grip the fingers clamp the handle against the palm (Napier, "The
+/// prehensile movements of the human hand", Journal of Bone and Joint Surgery 38B, 1956): a thin
+/// one lies at their roots, not mid palm, where the knuckle bones cannot reach it.
+pub fn palmed(r: f32) -> Vec3 {
+    Vec3::new(PALM_M - r, 0.0, -(FIT_M - r).max(0.0))
+}
+
+/// A power grip's look seated in the fist: where, in its socket's frame, the origin of a look
+/// turned `turn` in the hand goes for its handle's line to cross the grip at `palmed`, however
+/// it is tipped there (`close_hands`).
+pub fn seat(handle: &Handle, turn: Quat) -> Vec3 {
+    palmed(handle.r) - turn * handle.at
 }
 
 /// A handle's line: a point, its unit way, the reach of a finger's bone touching it, and the
@@ -504,11 +520,11 @@ pub fn close_hands(
                 .solved
                 .is_some_and(|(was, turn, _)| was == look && turn == at.rotation)
             {
-                // A power grip's look seated against the palm, turned as it is turned.
+                // A power grip's look seated in the fist, however it is turned there.
                 if grip.grip == Grip::Power
                     && let Ok(mut placed) = transforms.get_mut(look)
                 {
-                    at.translation = at.rotation * seat(&grip.handle);
+                    at.translation = seat(&grip.handle, at.rotation);
                     placed.translation = at.translation;
                 }
                 let mut chains = [[Transform::IDENTITY; 4]; 5];

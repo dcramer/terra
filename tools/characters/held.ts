@@ -79,8 +79,8 @@ export function hang(body: Glb, rest: Pose[], hand: string, file: string): Held 
   const strap = (g.gltf.nodes[node] as { extras?: { strap?: Strap } }).extras?.strap;
   const socket = strap?.bone ?? hand;
   const hung = strap ? strapped(strap, rest[body.named(hand)].s[0] / rest[body.named(strap.bone)].s[0]) : undefined;
-  // In hand a power grip's look is seated with its handle on the palm (grip.ts seatOf,
-  // terra_walker::grip::seat); the seat lies on the socket's X, so it holds when carried tipped.
+  // In hand a power grip's look is seated with its handle on the palm, a thin one at the fingers'
+  // roots (grip.ts seatOf, terra_walker::grip::seat); the seat is tipped with a carried look.
   const handle = !strap && gripOf(g) === "power" ? handleOf(g) : undefined;
   const seat: V3 = handle ? seatOf(handle) : [0, 0, 0];
   const put = (p: V3): V3 => (hung ? place(hung, p) : [p[0] + seat[0], p[1] + seat[1], p[2] + seat[2]]);
