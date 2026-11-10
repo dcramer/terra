@@ -83,6 +83,9 @@ test("the objective is over the bars first, then the thinnest margin, then the n
   const lines = report("give", solved);
   assert.ok(lines.some((l) => l.includes("give.out") && l.includes("left at its upper bound 30")), lines.join("\n"));
   assert.ok(!lines.some((l) => l.includes("give.back") && l.includes("bound")), lines.join("\n"));
+  // A search its budget ended says so; one that ended by itself does not.
+  assert.ok(!lines[0].includes("budget"), lines[0]);
+  assert.ok(report("give", await solve({ ...give, budget: 20 }, measure))[0].includes("20 evaluations (the budget, which ended the search"));
   assert.deepEqual(solved.edits.map((e) => e.key).sort(), ["GIVE_BACK_DEG", "GIVE_OUT_DEG"]);
 });
 

@@ -178,6 +178,9 @@ export function dimsOf(spec: Spec, sets: Sets = readSets()): Dim[] {
   });
 }
 
+/** The most points a spec's search evaluates. */
+const budgetOf = (spec: Spec) => spec.budget ?? 60 * spec.parameters.length + 40;
+
 /** Search a spec with `measure` (a point's measures; holds.ts's through `holdsMeasure`). */
 export async function solve(spec: Spec, measure: (tune: Tune) => Promise<Measure[]>, opts: { sets?: Sets; progress?: (line: string) => void } = {}): Promise<Solved> {
   const sets = opts.sets ?? readSets();
@@ -195,7 +198,7 @@ export async function solve(spec: Spec, measure: (tune: Tune) => Promise<Measure
         return { score: [over, -margin], detail: [...worst.values()] };
       }),
     );
-  const found = await search(dims, evaluate, { seed: spec.seed ?? 1, samples: spec.samples ?? 8 * n, starts: spec.starts ?? 3, budget: spec.budget ?? 60 * n + 40, progress: opts.progress });
+  const found = await search(dims, evaluate, { seed: spec.seed ?? 1, samples: spec.samples ?? 8 * n, starts: spec.starts ?? 3, budget: budgetOf(spec), progress: opts.progress });
   const moved = Object.fromEntries(dims.flatMap((d, i) => (found.best.k[i] ? [[d.name, found.best.at[i]]] : [])));
   return { spec, dims, ...found, edits: editsOf(moved, sets) };
 }
@@ -207,7 +210,7 @@ const one = (x: number) => (x + 0).toFixed(1);
 export function report(name: string, s: Solved): string[] {
   const { dims, start, best, spec } = s;
   const held = Object.keys(spec.hold ?? {}).length;
-  const out = [`solve ${name}: ${dims.length} parameters, ${Object.keys(spec.looks).join(", ")} improved, ${held} looks held passing; ${s.trace.length} evaluations, seed ${spec.seed ?? 1}`];
+  const out = [`solve ${name}: ${dims.length} parameters, ${Object.keys(spec.looks).join(", ")} improved, ${held} looks held passing; ${s.trace.length} evaluations${s.trace.length >= budgetOf(spec) ? " (the budget, which ended the search: raise `budget` in the spec to go on)" : ""}, seed ${spec.seed ?? 1}`];
   const obj = (f: Found<Measure[]>) => `over bars ${num(f.score[0])} (cm and deg summed), thinnest margin ${num(-f.score[1])}, distance ${num(f.score[2])}`;
   out.push(`  start:  ${obj(start)}`, `  answer: ${obj(best)}`);
   dims.forEach((d, i) => {
@@ -218,7 +221,8 @@ export function report(name: string, s: Solved): string[] {
   const changed = best.detail
     .map((m) => ({ m, was: before.get(`${m.look} ${m.measure}`) }))
     .filter(({ m, was }) => !was || one(was.value) !== one(m.value))
-    .sort((a, b) => Math.abs(b.m.value - (b.was?.value ?? 0)) - Math.abs(a.m.value - (a.was?.value ?? 0)));
+    // The improved looks' first, then the held ones', each by how far it moved.
+    .sort((a, b) => Number(b.m.look in spec.looks) - Number(a.m.look in spec.looks) || Math.abs(b.m.value - (b.was?.value ?? 0)) - Math.abs(a.m.value - (a.was?.value ?? 0)));
   const edits = s.edits.map((e) => `  edit ${e.file}: ${e.key} = ${Array.isArray(e.value) ? `[${e.value.join(", ")}]` : num(e.value)}`);
   const room = Math.max(1, 24 - out.length - 2 - Math.min(edits.length, 6));
   const cut = <T>(rows: T[], n: number) => (rows.length > n ? rows.slice(0, n - 1) : rows);

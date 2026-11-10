@@ -1,0 +1,34 @@
+{
+  "about": "The basket's carry (Carry_Basket, its left arm) and the give, over the basket's carry measures in its worst clips; every other look whose carry passes holds.ts is held passing in its two or three tightest clips. The spear is left out: its carry.ground fails already and would be traded against the basket's.",
+  "seed": 1,
+  "samples": 32,
+  "starts": 2,
+  "budget": 320,
+  "looks": {
+    "basket": ["Crouch_Idle_Loop", "Jump_Land", "Jump_Loop", "Jump_Start", "Sprint_Loop"]
+  },
+  "hold": {
+    "arming_sword": ["Crouch_Fwd_Loop", "Jump_Start"],
+    "bow": ["Crouch_Idle_Loop", "Jump_Start"],
+    "hammer": ["Crouch_Idle_Loop", "Jump_Start"],
+    "heater_shield": ["Jump_Loop", "Jump_Start"],
+    "iron_axe": ["Crouch_Idle_Loop", "Jump_Start"],
+    "iron_pickaxe": ["Crouch_Fwd_Loop", "Crouch_Idle_Loop", "Jump_Land"],
+    "knife": ["Crouch_Idle_Loop", "Jump_Start"],
+    "round_shield": ["Jump_Loop", "Jump_Start"],
+    "stone_axe": ["Crouch_Idle_Loop", "Jump_Start"],
+    "stone_pickaxe": ["Crouch_Fwd_Loop", "Crouch_Idle_Loop", "Jump_Land"],
+    "torch": ["Crouch_Idle_Loop", "Jump_Land"]
+  },
+  "measures": ["carry.*", "grip.fist_off"],
+  "parameters": [
+    { "name": "pose.Carry_Basket.aim.upperarm_l.up", "lo": -89, "hi": -40, "step": 1 },
+    { "name": "pose.Carry_Basket.aim.upperarm_l.round", "lo": 45, "hi": 135, "step": 1 },
+    { "name": "pose.Carry_Basket.aim.lowerarm_l.up", "lo": -89, "hi": -30, "step": 1 },
+    { "name": "pose.Carry_Basket.aim.lowerarm_l.round", "lo": -20, "hi": 100, "step": 1 },
+    { "name": "pose.Carry_Basket.roll.hand_l", "lo": -70, "hi": 10, "step": 1 },
+    { "name": "give.elbow", "lo": 0, "hi": 90, "step": 1 },
+    { "name": "give.back", "lo": 0, "hi": 60, "step": 1 },
+    { "name": "give.out", "lo": 0, "hi": 60, "step": 1 }
+  ]
+}
