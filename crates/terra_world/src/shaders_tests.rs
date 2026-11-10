@@ -287,6 +287,14 @@ const DRAWS: &[Draw] = &[
         ..DRAW
     },
     Draw {
+        material: "Wings (terra_creatures butterflies/look.rs), on a breed's model (props' textured mesh and material): opaque or masked, NotShadowCaster",
+        vertex: Some("butterfly"),
+        prepass_vertex: Some("butterfly"),
+        alpha: &[Opaque, Mask],
+        meshes: &[MODEL],
+        ..DRAW
+    },
+    Draw {
         material: "DustFade (terra_building loss/dust.rs): blended, NotShadowCaster",
         fragment: Some("dust"),
         alpha: &[Blend],
