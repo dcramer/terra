@@ -17,8 +17,11 @@
 //          person's (wrist.ts WRIST, AAOS); the look's lowest point against the ground under the
 //          feet; how deep it goes into the trunk and into the calves and feet (moves.ts's own
 //          numbers and its 1 cm bar); how far above level its working end rises (moves.ts
-//          carried_rise_deg, 10 degrees, held.carry.axe_down's bar); read: the handle below and above level and out from the
-//          body, the elbow's bend
+//          carried_rise_deg, 10 degrees, held.carry.axe_down's bar), of a pose that hangs: one
+//          marked upright (a torch, a spear, a bow) is meant to rise; read: of an upright pose,
+//          how far below level its working end falls at worst (carried_fall_deg; negative, it
+//          stays that far above); the handle below and above level and out from the body, the
+//          elbow's bend
 //   use    the same bars through the walker's use clips, or its class's set (clearances only: a
 //          set's wrists are moves.ts's own rows)
 //
@@ -133,9 +136,12 @@ const KEYS: [string, string, number | null, string, boolean][] = [
 
 // moves.ts's row "fist" (the worst of every clip it played, with where): the fingers off the
 // handle (grip.ts fistOff, the same in every pose: the fist is closed once a body), and how far
-// above level the carried look's working end rises (carried_rise_deg, the carried clips alone).
-const FIST: [string, string, number, string][] = [
+// above level the carried look's working end rises (carried_rise_deg, the carried clips alone;
+// moves.ts writes it only for a pose not marked upright) or, of an upright pose, how far below
+// level it falls (carried_fall_deg: a reading, no bar proven by a planted fault yet, D632).
+const FIST: [string, string, number | null, string][] = [
   ["carried_rise_deg", "carry.rise", RISE_DEG, "deg"],
+  ["carried_fall_deg", "carry.fall", null, "deg"],
   ["fist_cm", "grip.fist_off", FIST_CM, "cm"],
 ];
 
@@ -151,7 +157,7 @@ export function judged(look: string, body: string, rows: Row[], carried: string[
         if (value === undefined) continue;
         const where = row.where?.[`${k}.${look}`] ?? "";
         const at = /(\w+) at ([\d.]+) s/.exec(where);
-        out.push({ look, measure, body, clip: at?.[1] ?? "-", time: at ? Number(at[2]) : null, value, bar, unit, ok: value <= bar, where });
+        out.push({ look, measure, body, clip: at?.[1] ?? "-", time: at ? Number(at[2]) : null, value, bar, unit, ok: bar === null ? null : value <= bar, where });
       }
       continue;
     }
@@ -188,7 +194,7 @@ const barOf = (m: Measure) => (Array.isArray(m.bar) ? `${m.bar[0]} to ${m.bar[1]
 const worst = (ms: Measure[]) => ms.reduce((a, b) => (b.value > a.value ? b : a));
 
 /** What a passing look's line reads: its size and grip, then the worst of each carry measure. */
-const READ = ["size.length", "size.extent", "size.head_fists", "grip.radius", "grip.past_little", "grip.past_thumb", "grip.fist_off", "carry.rise", "carry.below", "carry.above", "carry.wrist_ulnar", "carry.wrist_ext", "carry.trunk", "carry.legs", "carry.ground", "use.trunk", "use.legs"];
+const READ = ["size.length", "size.extent", "size.head_fists", "grip.radius", "grip.past_little", "grip.past_thumb", "grip.fist_off", "carry.rise", "carry.fall", "carry.below", "carry.above", "carry.wrist_ulnar", "carry.wrist_ext", "carry.trunk", "carry.legs", "carry.ground", "use.trunk", "use.legs"];
 
 /** The report's line for one look, `pose` its carry pose: what it reads if every bar holds, else
  * only the measures over their bars, each one's worst case (value, bar, body, clip, time, and

@@ -113,15 +113,48 @@ test("the ground under a pose is the model's zero, lower only by a foot under it
 // main had on 2026-11-09 planted (the give's elbow bent 40 degrees with no turn back at the
 // shoulder tipped every tool 28.3 degrees above level in Crouch_Idle_Loop; the iron axe's
 // 1.75 cm haft left the ring finger's knuckle bone 1.06 cm off it) fails each by name.
-test("a carried look tipped above level and fingers off the handle fail from moves.ts's fist row", () => {
+/** moves.ts's row "fist" for a committed look carried in `hand` through the crouch on one body. */
+function fistRow(look: string, hand = "R"): Row {
   const dir = mkdtempSync(join(tmpdir(), "holds-fist-"));
   const json = join(dir, "rows.json");
-  const args = ["--set", "none", "--also", "Crouch_Idle_Loop", "--template", "male", "--hold", "socket.hand.R=assets/models/held/stone_axe.glb", "--carry", "--arms", "--json", json];
+  const args = ["--set", "none", "--also", "Crouch_Idle_Loop", "--template", "male", "--hold", `socket.hand.${hand}=assets/models/held/${look}.glb`, "--carry", "--arms", "--json", json];
   const run = spawnSync(process.execPath, [join(ROOT, "tools", "characters", "moves.ts"), ...args], { cwd: ROOT, encoding: "utf8" });
   const rows = JSON.parse(readFileSync(json, "utf8")) as Row[];
   rmSync(dir, { recursive: true, force: true });
   const row = rows.find((r) => r.clip === "fist");
   assert.ok(row, run.stderr);
+  return row;
+}
+
+// A pose that stands up is not a tool tipped up (held-report j2): on main of 2026-11-09 the
+// torch (70.6 degrees), the spear (89.8) and the bow (41) each failed carry.rise, the bar of a
+// tool carried head down, though their carry poses are marked upright. moves.ts writes such a
+// look no rise but how far below level its working end falls, which the report reads with no
+// bar; the same row with the rise main wrote planted fails as it did, and a hanging tool's row
+// carries a rise and no fall.
+test("an upright pose is not judged on rising and reads how far it falls; a hanging one is", () => {
+  const row = fistRow("torch");
+  assert.equal(row.measured["carried_rise_deg.torch"], undefined, "moves.ts wrote an upright look a rise");
+  const of = (r: Row) => judged("torch", "male", [r], ["Crouch_Idle_Loop"]).filter((m) => m.measure.startsWith("carry."));
+  const real = of(row);
+  assert.deepEqual(real.map((m) => [m.measure, m.ok, m.bar, m.clip, m.unit]), [["carry.fall", null, null, "Crouch_Idle_Loop", "deg"]]);
+  // The flame stays well above level through the crouch (its pose stands it up).
+  assert.ok(real[0].value < -30 && real[0].value > -90, `${real[0].value} degrees`);
+  const { ok, line } = lineFor("torch", real, "Carry_Torch");
+  assert.equal(ok, true);
+  assert.match(line, /^✓ torch \(Carry_Torch\): carry\.fall -[\d.]+ deg; 1 bodies$/);
+  const planted: Row = { ...row, measured: { ...row.measured, "carried_rise_deg.torch": 70.6 } };
+  assert.deepEqual(failing(of(planted)), ["carry.rise"]);
+  // The reading is a reading whatever it says (no bar is proven, D632): a flame under level
+  // does not fail, and shows.
+  const fallen: Row = { ...row, measured: { ...row.measured, "carried_fall_deg.torch": 12 } };
+  assert.deepEqual(failing(of(fallen)), []);
+  assert.match(lineFor("torch", of(fallen)).line, /carry\.fall 12 deg/);
+});
+
+test("a carried look tipped above level and fingers off the handle fail from moves.ts's fist row", () => {
+  const row = fistRow("stone_axe");
+  assert.equal(row.measured["carried_fall_deg.stone_axe"], undefined, "moves.ts wrote a hanging look a fall");
   const of = (rows: Row[]) => judged("stone_axe", "male", rows, ["Crouch_Idle_Loop"]).filter((m) => m.measure === "carry.rise" || m.measure === "grip.fist_off");
   const real = of([row]);
   assert.deepEqual(real.map((m) => [m.measure, m.ok, m.clip, m.unit]), [["carry.rise", true, "Crouch_Idle_Loop", "deg"], ["grip.fist_off", true, "Crouch_Idle_Loop", "cm"]]);

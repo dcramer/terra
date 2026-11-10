@@ -888,21 +888,34 @@ if (fists.length) {
     parts.push(`${f.h.name} ${cm(worst.cm)} (${worst.where})${Math.abs(worst.cm) > FIST_CM ? ", over the bar" : ""}, round it ${wrap.deg.toFixed(0)} deg at least (${wrap.where})${wrap.deg < WRAP_DEG ? ", short of the bar" : ""}`);
   }
   // A look carried in hand (D564): how far above level its working end rises at most, degrees
-  // (negative: always tipped down), the handle's +Y, every carried clip and template.
-  for (const h of held.filter((h) => h.socket === h.hand && opt.carry)) {
+  // (negative: always tipped down), the handle's +Y, every carried clip and template. A look
+  // whose carry pose stands up (`carry_upright`: a torch, a spear, a bow) is meant to rise: of
+  // it, how far below level its working end falls at worst (carried_fall_deg; negative: it
+  // stays that far above level).
+  held.forEach((h, i) => {
+    if (h.socket !== h.hand || !opt.carry) return;
+    const upright = carryUpright(opt.hold![i].split("=")[1]);
     let high = { deg: -Infinity, where: "" };
+    let low = { deg: Infinity, where: "" };
     for (const clip of played.filter(carriedNow))
       for (const shape of shapes)
         for (let t = 0; t <= clip.end + 1e-6; t += 1 / fps) {
           const way = rot(frame(h, poseOf(shape, clip, t)).r, [0, 1, 0]);
           const deg = (Math.asin(Math.max(-1, Math.min(1, way[1] / len(way)))) * 180) / Math.PI;
           if (deg > high.deg) high = { deg, where: `${clip.name} at ${t.toFixed(2)} s, ${shape.name}` };
+          if (deg < low.deg) low = { deg, where: `${clip.name} at ${t.toFixed(2)} s, ${shape.name}` };
         }
-    if (high.deg === -Infinity) continue;
+    if (high.deg === -Infinity) return;
+    if (upright) {
+      measured[`carried_fall_deg.${h.name}`] = -low.deg;
+      where[`carried_fall_deg.${h.name}`] = low.where;
+      parts.push(`${h.name} carried upright, ${Math.abs(low.deg).toFixed(0)} deg ${low.deg >= 0 ? "above" : "below"} level at the lowest (${low.where})`);
+      return;
+    }
     measured[`carried_rise_deg.${h.name}`] = high.deg;
     where[`carried_rise_deg.${h.name}`] = high.where;
     parts.push(`${h.name} carried tipped ${high.deg <= 0 ? "down" : "up"}, ${Math.abs(high.deg).toFixed(0)} deg ${high.deg <= 0 ? "below" : "above"} level at the highest (${high.where})`);
-  }
+  });
   measured.fist_cm = Math.max(...Object.entries(measured).filter(([k]) => k.startsWith("fist_cm.")).map(([, v]) => v));
   measured.fist_wrap_deg = Math.min(...Object.entries(measured).filter(([k]) => k.startsWith("fist_wrap_deg.")).map(([, v]) => v));
   row("fist, the fingers on what the hands hold", parts, [], { clip: "fist", measured, where });
