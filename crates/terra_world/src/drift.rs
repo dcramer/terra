@@ -25,7 +25,7 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     pbr::{ExtendedMaterial, MaterialExtension},
     prelude::*,
-    render::render_resource::AsBindGroup,
+    render::render_resource::{AsBindGroup, Face},
     shader::ShaderRef,
 };
 use serde::Deserialize;
@@ -339,25 +339,37 @@ fn state(
 }
 
 /// A field's cards, every corner at the frame's origin: the first texture coordinate the
-/// corner, the second each card's luck and its place in the kind's swarms.
-fn cards(count: usize) -> Mesh {
-    let mut positions = Vec::with_capacity(count * 4);
-    let mut corners = Vec::with_capacity(count * 4);
-    let mut seeds = Vec::with_capacity(count * 4);
-    let mut normals = Vec::with_capacity(count * 4);
-    let mut indices = Vec::with_capacity(count * 6);
+/// corner, the second each card's luck and its place in the kind's swarms. A `folded` card
+/// is two halves hinged down its middle, a butterfly's wings: each half has its own corners
+/// at the hinge, a hair to its own side of the middle, which is how the shader tells the
+/// wings apart (drift.wesl).
+fn cards(count: usize, folded: bool) -> Mesh {
+    const HINGE: f32 = 0.001;
+    let halves: &[[f32; 2]] = if folded {
+        &[[0.0, 0.5 - HINGE], [0.5 + HINGE, 1.0]]
+    } else {
+        &[[0.0, 1.0]]
+    };
+    let corners_in_all = count * halves.len() * 4;
+    let mut positions = Vec::with_capacity(corners_in_all);
+    let mut corners = Vec::with_capacity(corners_in_all);
+    let mut seeds = Vec::with_capacity(corners_in_all);
+    let mut normals = Vec::with_capacity(corners_in_all);
+    let mut indices = Vec::with_capacity(count * halves.len() * 6);
     for card in 0..count {
         // The golden ratio's spread, so neighbours differ.
         let luck = (card as f32 * 0.618_034 + 0.31) % 1.0;
         let order = (card as f32 + 0.5) / count as f32;
-        let first = positions.len() as u32;
-        for corner in [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]] {
-            positions.push([0.0f32, 0.0, 0.0]);
-            normals.push([0.0f32, 1.0, 0.0]);
-            corners.push(corner);
-            seeds.push([luck, order]);
+        for &[left, right] in halves {
+            let first = positions.len() as u32;
+            for corner in [[left, 0.0], [right, 0.0], [right, 1.0], [left, 1.0]] {
+                positions.push([0.0f32, 0.0, 0.0]);
+                normals.push([0.0f32, 1.0, 0.0]);
+                corners.push(corner);
+                seeds.push([luck, order]);
+            }
+            indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
         }
-        indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
     }
     Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -441,6 +453,12 @@ fn sow(
                 perceptual_roughness: 0.9,
                 reflectance: 0.0,
                 diffuse_transmission: 0.6,
+                // A butterfly's wings are seen from over and under; a card faces the eye.
+                cull_mode: if kind.look == Look::Butterfly {
+                    None
+                } else {
+                    Some(Face::Back)
+                },
                 ..default()
             },
             extension: DriftExtension {
@@ -471,7 +489,7 @@ fn sow(
         });
         commands.spawn((
             Name::new(format!("Drift: {}", kind.name)),
-            Mesh3d(meshes.add(cards(count))),
+            Mesh3d(meshes.add(cards(count, kind.look == Look::Butterfly))),
             MeshMaterial3d(material.clone()),
             Transform::IDENTITY,
             // Its cards are wherever the eye is, so it is never culled.
@@ -688,6 +706,33 @@ mod tests {
             above_m: 1.7,
             rain_mm_h: 0.0,
             snow_mm_h: 0.0,
+        }
+    }
+
+    /// A butterfly's card folds down its middle: each of its two wings has four corners
+    /// of its own, all to its own side of the hinge, which is how the shader raises the
+    /// two apart; any other card is one flat quad.
+    #[test]
+    fn a_folded_card_is_two_wings_each_to_its_own_side_of_the_hinge() {
+        let across = |mesh: &Mesh| -> Vec<f32> {
+            let Some(bevy::mesh::VertexAttributeValues::Float32x2(corners)) =
+                mesh.attribute(Mesh::ATTRIBUTE_UV_0)
+            else {
+                panic!("a card's corners are its first texture coordinate");
+            };
+            corners.iter().map(|corner| corner[0]).collect()
+        };
+        assert_eq!(across(&cards(3, false)).len(), 12);
+        let folded = across(&cards(3, true));
+        assert_eq!(folded.len(), 24);
+        for (wing, corners) in folded.chunks(4).enumerate() {
+            let side = if wing % 2 == 0 { -1.0 } else { 1.0 };
+            assert!(
+                corners.iter().all(|x| (x - 0.5) * side > 0.0),
+                "wing {wing}: {corners:?}"
+            );
+            assert!(corners.iter().any(|x| (x - 0.5).abs() < 0.01));
+            assert!(corners.iter().any(|x| (x - 0.5).abs() > 0.49));
         }
     }
 

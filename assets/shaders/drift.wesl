@@ -158,6 +158,12 @@ fn place(luck: f32, order: f32, seconds: f32) -> vec3<f32> {
     return base + carried + sway - vec3<f32>(0.0, drift.motion.y * seconds * (0.8 + 0.4 * luck), 0.0);
 }
 
+// A butterfly's flutter about its slow wander: it jinks a hand's breadth or two every
+// second or so, never flying straight.
+fn flit(luck: f32, seconds: f32) -> vec3<f32> {
+    return wander(luck + 3.7, seconds * 0.9) * vec3<f32>(0.35, 0.22, 0.35);
+}
+
 @vertex
 fn vertex(vertex_in: Vertex) -> VertexOutput {
     var out: VertexOutput;
@@ -171,7 +177,11 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     // The eye in the field's frame, and the card wrapped into the box round it.
     let eye = transpose(frame) * (view.world_position - origin);
     let half = vec3<f32>(drift.field.x, drift.field.y, drift.field.x);
-    let free = place(luck, order, seconds) - eye;
+    var at = place(luck, order, seconds);
+    if is_butterfly() {
+        at += flit(luck, seconds);
+    }
+    let free = at - eye;
     let crossing = round(free / (2.0 * half));
     var rel = free - 2.0 * half * crossing;
     var edge = max(max(abs(rel.x) / half.x, abs(rel.z) / half.x), abs(rel.y) / half.y);
@@ -242,19 +252,6 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         // Its wings' beat, each bird at its own phase, carried to the fragment.
         flip = sin(globals.time * drift.flock.z * 6.283 + luck * 6.283);
     }
-    if is_butterfly() {
-        // Its wings open and close, seen as the card narrowing to its body, in bouts with
-        // a glide between as a butterfly flies; and it is turned the way it happens to head.
-        let beat = globals.time * drift.flock.z * 6.283 * (0.8 + 0.4 * luck) + luck * 6.283;
-        let bout = smoothstep(-0.2, 0.3, sin(globals.time * 1.7 + luck * 40.0));
-        flip = mix(0.85, abs(cos(beat)), bout);
-        corner.x *= max(flip, 0.12);
-        let roll = (smooth_noise(vec2<f32>(luck * 17.0, seconds * 0.3)) - 0.5) * 2.4;
-        turned = vec2<f32>(
-            corner.x * cos(roll) - corner.y * sin(roll),
-            corner.x * sin(roll) + corner.y * cos(roll),
-        );
-    }
     if drift.lit.x > 0.0 && drift.lit.y > 0.0 {
         // Each blinks at its own beat: lit for under half of it, dark between.
         let blink = fract(globals.time * drift.lit.y * (0.7 + 0.6 * luck) + luck * 13.0);
@@ -270,7 +267,39 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
             corner.x * sin(roll) + corner.y * cos(roll),
         );
     }
-    let world = middle + right * turned.x + card_up * turned.y;
+    var offset = right * turned.x + card_up * turned.y;
+    var facing = select(to_eye, up, is_fall());
+    if is_butterfly() {
+        // Not a card turned to the eye but two wings hinged on the body, which lies along
+        // the way it flies: the mesh's middle corners are the hinge, the outer ones the
+        // wing tips, raised and lowered about it (drift.rs `cards`). The technique is the
+        // vertex-animated insect of shipped games (a flap about the body's axis in the
+        // vertex stage, no skeleton), as our fish swim (fish.wesl). It beats in bouts with
+        // a glide between, wings held in a shallow V, and its body sinks as the wings rise.
+        let dt = 0.1;
+        var ahead = frame * (at - place(luck, order, seconds - dt) - flit(luck, seconds - dt));
+        ahead -= up * dot(ahead, up) * 0.6;
+        if dot(ahead, ahead) < 1.0e-8 {
+            ahead = frame[0];
+        }
+        ahead = normalize(ahead);
+        let side = normalize(cross(ahead, up));
+        let over = cross(side, ahead);
+        let beat = globals.time * drift.flock.z * 6.283 * (0.8 + 0.4 * luck) + luck * 6.283;
+        let bout = smoothstep(-0.2, 0.3, sin(globals.time * 1.7 + luck * 40.0));
+        let open = mix(0.45, mix(-0.35, 1.35, 0.5 + 0.5 * sin(beat)), bout);
+        let wing = sign(vertex.uv.x - 0.5);
+        let span = abs(corner.x);
+        offset = ahead * corner.y
+            + side * wing * span * cos(open)
+            + over * (span * sin(open) - 0.12 * size * sin(beat) * bout);
+        facing = over * cos(open) - side * wing * sin(open);
+        if dot(facing, to_eye) < 0.0 {
+            facing = -facing;
+        }
+        flip = 1.0;
+    }
+    let world = middle + offset;
     out.position = position_world_to_clip(world);
     out.world_position = vec4<f32>(world, 1.0);
     out.uv = vertex.uv;
@@ -280,9 +309,12 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     if drift.look.z > 0.5 {
         shown = select(0.0, 1.0, order < drift.field.w);
     }
+    if is_butterfly() {
+        // A living thing is there or not: where fewer are about, fewer fly, none a ghost.
+        shown = clamp((drift.field.w - order * 0.95) / 0.05, 0.0, 1.0);
+    }
     out.uv_b = vec2<f32>(fade * shown, flip);
     // Snow is lit as the snow lying round it is, by the sky over it.
-    let facing = select(to_eye, up, is_fall());
 @if(PREPASS_PIPELINE) {
 @if(NORMAL_PREPASS_OR_DEFERRED_PREPASS)
     out.world_normal = facing;

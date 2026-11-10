@@ -7,6 +7,7 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 ## Rules
 
 - **The art is uniform** (D14, D647): whatever is a bird's size or more is a model in the game's style, made by the creature and model pipelines. Only what is a fly's size is a speck or card drawn by a shader (`terra_world::drift`).
+- **A thing in the world, or a speck** (D655): what a player could care about (butterflies, moths, dragonflies, fireflies, bees if caught) is a small model the CPU places and moves, as the fish; dust, pollen, midges, down, rain and snow are the drift. Not built: all of the first list are the drift still.
 - **By place, season, warmth and hour**, as data (D136): a kind is about where it would be.
 - **As many at any quality preset**: how much life is about is the world's to say, not the machine's. What a preset changes is how far off a kind is drawn.
 - **Seen is measured**: `wildlife.state` counts the creatures in the camera's picture at 6 pixels tall or more. At the meadow start, standing: 5 or 6 creatures, **no bird** of 57 near. A finch at 1.6 times life size is 6 pixels tall only within 15 m, and takes flight at 7 m; a pigeon within 19 m. Dozens of birds seen needs birds that are larger (crow, pheasant, gull: models not made) or nearer in flocks (a flush staged ahead of a walking player, as the meetings stage animals, D384), not more small birds.
@@ -18,7 +19,7 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 
 | Kind | Made as | About | Seen in a view |
 |---|---|---|---|
-| Butterflies, white and brown | Shader card, built | 290 round the eye | About 15 |
+| Butterflies, white and brown | Shader, two hinged wings heading the way each flies (a stopgap: to be things in the world, D655) | 64 round the eye, life size (7 cm): whites in threes close together, browns in fives spread out, for the developers to choose between | None in the one still taken; 290 at 10 cm were about 15, "far too numerous" |
 | Bees, midges, dust | Shader speck, built | Hundreds | Hardly: too small to read past a few metres |
 | Dragonflies by water | Shader card (the far bird's shape), built | 24 | A few darts over the lake |
 | Fireflies on a warm night | Shader speck with a light, built | 300 | About seven, before their number was raised |
@@ -47,5 +48,4 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 ## Open, for the developers
 
 - Whether those assumptions stand.
-- Whether a butterfly, the largest thing drawn by a shader, may stay a card or should be a model too.
 - Which fish, and whether they may be caught: this proposal has them for the eye only.

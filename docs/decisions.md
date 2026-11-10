@@ -110,6 +110,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D643](decisions/D643.md) | Natural caves are systems placed by rule and carved from the ground's distance field | Tech | Agent | Decided | A natural cave (D591) is a system of chambers and… |
 | [D647](decisions/D647.md) | v0's worlds have small wildlife about for ambience: insects, small birds and the like | Design | Developers | Decided | A world of v0 is not empty at a few metres… |
 | [D649](decisions/D649.md) | Players cross between realms one by one, and may be in both realms at once | Design | Developers | Decided | A gate takes whoever steps through it, alone… |
+| [D655](decisions/D655.md) | Small life a player could care about is a thing in the world; only what nobody touches is a shader's speck | Design | Developers | Decided | The line between the two ways small life is made… |
 
 ## The player and survival
 
