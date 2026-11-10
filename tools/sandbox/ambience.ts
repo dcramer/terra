@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // A world's small life, about when and where it would be (D647, D379; v0's world design):
-// with no picture, by what the game says drifts round the eye (`drift.state`) and which
-// small creatures stand near (`sandbox.find`). A new small world is started three times:
-// on a July day butterflies, bees and birds on the wing are about and small animals stand
-// near; that night the day's insects are gone and fireflies are out; on a January day no
-// insect flies. How much of each kind is seen is said. And at a mountain lake fish swim
+// with no picture, by what the game says drifts round the eye (`drift.state`), which
+// butterflies fly (`butterflies.state`, data/butterflies.ron: things in the world, D655)
+// and which small creatures stand near (`sandbox.find`). A new small world is started
+// three times: on a July day butterflies, bees and birds on the wing are about and small
+// animals stand near; that night the day's insects are gone and fireflies are out; on a
+// January day no insect flies. How much of each kind is seen is said. And at a mountain lake fish swim
 // (`fish.state`, data/fish.ron): schools stand in its water, they swim on, and one a
 // swimmer comes on darts.
 //
@@ -19,21 +20,26 @@ const SEED = args.includes("--seed") ? args[args.indexOf("--seed") + 1] : "3";
 /// A kind is about when this much of it is seen, of 1, and gone below a twentieth.
 const ABOUT = 0.3;
 const GONE = 0.05;
-const INSECTS = ["White butterflies", "Brown butterflies", "Bees", "Midges", "Dragonflies", "Fireflies"];
+const INSECTS = ["Bees", "Midges", "Dragonflies", "Fireflies"];
+/// Butterflies are about when two dozen fly within sight of the start (D647's dozens; 76 on
+/// seed 3 when this was written).
+const FLYING = 24;
 const BIRDS = ["Birds overhead"];
 /// The small animals of the first realm (data/creatures.ron), any of which may stand near.
 const SMALL = ["Chaffinch", "Wood pigeon", "House sparrow", "Feral pigeon", "Red squirrel", "Brown hare", "Mallard"];
 
 type Drift = { kinds: { name: string; seen: number }[] };
+type Butterflies = { models: number; groups: number; standing: number; groups_out: number; flying: number; kinds: Record<string, number>; out: Record<string, number> };
 
-/// What drifts, and how many small animals stand near, in a new world on a date at an hour.
-async function about(date: string, hour: number): Promise<{ seen: Map<string, number>; small: string[]; wild: { birds: number; flying: number; in_view: number; birds_in_view: number } }> {
+/// What drifts, which butterflies fly, and how many small animals stand near, in a new world on a date at an hour.
+async function about(date: string, hour: number): Promise<{ seen: Map<string, number>; butterflies: Butterflies; small: string[]; wild: { birds: number; flying: number; in_view: number; birds_in_view: number } }> {
   try {
     await start(["--experiment", "play", "--fresh", "--save", "shots/ambience.ron", "--radius", "2000", "--seed", SEED, "--date", date, "--time", String(hour), "--offscreen", "--mute"], { realTime: true, release: true });
     await waitUntil("the world to be played", async () => (await call("title.state")) as { screen: string }, (now) => now.screen === "Playing", 600);
     // What drifts is weighed a few times a minute and fades in; the animals are put out as the player stands.
     await waitSeconds(12);
     const drift = (await call("drift.state")) as Drift;
+    const butterflies = (await call("butterflies.state")) as Butterflies;
     const small: string[] = [];
     for (const name of SMALL) {
       const found = (await call("sandbox.find", { name })) as unknown[];
@@ -53,7 +59,7 @@ async function about(date: string, hour: number): Promise<{ seen: Map<string, nu
       wild.birds_in_view = most;
       (wild as { seen_share?: number }).seen_share = withBird / looks;
     }
-    return { seen: new Map(drift.kinds.map((kind) => [kind.name, kind.seen])), small, wild };
+    return { seen: new Map(drift.kinds.map((kind) => [kind.name, kind.seen])), butterflies, small, wild };
   } finally {
     await stop().catch(() => undefined);
   }
@@ -90,11 +96,15 @@ async function fish(): Promise<string> {
 }
 
 const said = (seen: Map<string, number>, names: string[]) => names.map((name) => `${name} ${seen.get(name) ?? "none"}`).join(", ");
+/// The butterflies flying, by breed, and what the game says of the rest.
+const flying = (b: Butterflies) => `${b.flying} butterflies in ${b.groups_out} groups (${Object.entries(b.kinds).map(([name, count]) => `${count} ${name}`).join(", ") || "none"})`;
+const why = (b: Butterflies) => `${b.models} breeds' models read, ${b.standing} standing in ${b.groups} groups, out by the air and the hour ${JSON.stringify(b.out)}`;
 let failed = "";
 try {
   const day = await about("7-10", 13);
-  const missing = ["White butterflies", "Brown butterflies", "Bees"].filter((name) => !((day.seen.get(name) ?? 0) >= ABOUT));
+  const missing = ["Bees"].filter((name) => !((day.seen.get(name) ?? 0) >= ABOUT));
   if (missing.length > 0) throw new Error(`on a July day at one o'clock ${missing.join(" and ")} are not about (${said(day.seen, INSECTS)}): each kind of assets/data/drift.ron is seen where its place, season_c, air_c and hours are`);
+  if (!(day.butterflies.flying >= FLYING)) throw new Error(`on a July day at one o'clock ${flying(day.butterflies)} fly within sight of the start, where ${FLYING} or more should (${why(day.butterflies)}): a breed of assets/data/butterflies.ron flies where its place and season_c suit it, in its hours, in air its air_c or warmer, its model read (terra_creatures::butterflies)`);
   if (!BIRDS.some((name) => (day.seen.get(name) ?? 0) >= ABOUT)) throw new Error(`on a July day no bird is on the wing (${said(day.seen, BIRDS)})`);
   if ((day.seen.get("Fireflies") ?? 0) > GONE) throw new Error(`fireflies are out at one in the afternoon (${day.seen.get("Fireflies")})`);
   const life = day.wild;
@@ -103,16 +113,18 @@ try {
 
   const night = await about("7-10", 22);
   if (!((night.seen.get("Fireflies") ?? 0) >= ABOUT)) throw new Error(`on a July night at ten no fireflies are out (${said(night.seen, INSECTS)})`);
-  const late = ["White butterflies", "Brown butterflies", "Bees", ...BIRDS].filter((name) => (night.seen.get(name) ?? 0) > GONE);
+  const late = ["Bees", ...BIRDS].filter((name) => (night.seen.get(name) ?? 0) > GONE);
   if (late.length > 0) throw new Error(`at ten at night ${late.join(" and ")} are still about (${said(night.seen, [...INSECTS, ...BIRDS])}): each kind's hours say when`);
+  if (night.butterflies.flying > 0) throw new Error(`at ten at night ${flying(night.butterflies)} still fly (${why(night.butterflies)}): a breed's hours in assets/data/butterflies.ron say when`);
 
   const winter = await about("1-15", 13);
   const hardy = INSECTS.filter((name) => (winter.seen.get(name) ?? 0) > GONE);
   if (hardy.length > 0) throw new Error(`on a January day ${hardy.join(" and ")} fly (${said(winter.seen, INSECTS)}): an insect needs its air_c of warmth`);
+  if (winter.butterflies.flying > 0) throw new Error(`on a January day ${flying(winter.butterflies)} fly (${why(winter.butterflies)}): a breed needs its air_c of warmth (assets/data/butterflies.ron)`);
 
   const swims = await fish();
 
-  console.log(`✓ ambience: ${swims}; on a July day ${said(day.seen, ["White butterflies", "Brown butterflies", "Bees", ...BIRDS])}, with ${day.small.join(", ")} near, ${day.wild.birds} birds in all and ${day.wild.flying} on the wing (in the picture, 6 pixels tall or more: ${day.wild.in_view} creatures at a look; over twenty seconds at most ${day.wild.birds_in_view} birds at once and a bird in ${Math.round(((day.wild as { seen_share?: number }).seen_share ?? 0) * 100)}% of looks: a reading, the bar being dozens); that night Fireflies ${night.seen.get("Fireflies")} and the day's gone; on a January day no insect flies`);
+  console.log(`✓ ambience: ${swims}; on a July day ${flying(day.butterflies)}, ${said(day.seen, ["Bees", ...BIRDS])}, with ${day.small.join(", ")} near, ${day.wild.birds} birds in all and ${day.wild.flying} on the wing (in the picture, 6 pixels tall or more: ${day.wild.in_view} creatures at a look; over twenty seconds at most ${day.wild.birds_in_view} birds at once and a bird in ${Math.round(((day.wild as { seen_share?: number }).seen_share ?? 0) * 100)}% of looks: a reading, the bar being dozens); that night Fireflies ${night.seen.get("Fireflies")} and the day's gone, no butterfly out; on a January day no insect flies`);
 } catch (problem) {
   failed = String(problem instanceof Error ? problem.message : problem);
 }

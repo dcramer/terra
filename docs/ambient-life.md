@@ -7,7 +7,7 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 ## Rules
 
 - **The art is uniform** (D14, D647): whatever is a bird's size or more is a model in the game's style, made by the creature and model pipelines. Only what is a fly's size is a speck or card drawn by a shader (`terra_world::drift`).
-- **A thing in the world, or a speck** (D655): what a player could care about (butterflies, moths, dragonflies, fireflies, bees if caught) is a small model the CPU places and moves, as the fish; dust, pollen, midges, down, rain and snow are the drift. Not built: all of the first list are the drift still.
+- **A thing in the world, or a speck** (D655): what a player could care about (butterflies, moths, dragonflies, fireflies, bees if caught) is a small model the CPU places and moves, as the fish; dust, pollen, midges, down, rain and snow are the drift. Built for the first realm's butterflies (below); the rest of the first list are the drift still.
 - **By place, season, warmth and hour**, as data (D136): a kind is about where it would be.
 - **As many at any quality preset**: how much life is about is the world's to say, not the machine's. What a preset changes is how far off a kind is drawn.
 - **Seen is measured**: `wildlife.state` counts the creatures in the camera's picture at 6 pixels tall or more. At the meadow start, standing: 5 or 6 creatures, **no bird** of 57 near. A finch at 1.6 times life size is 6 pixels tall only within 15 m, and takes flight at 7 m; a pigeon within 19 m. Dozens of birds seen needs birds that are larger (crow, pheasant, gull: models not made) or nearer in flocks (a flush staged ahead of a walking player, as the meetings stage animals, D384), not more small birds.
@@ -19,7 +19,7 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 
 | Kind | Made as | About | Seen in a view |
 |---|---|---|---|
-| Butterflies, white and brown | Shader, two hinged wings heading the way each flies (a stopgap: to be things in the world, D655) | 64 round the eye, life size (7 cm): whites in threes close together, browns in fives spread out, for the developers to choose between | None in the one still taken; 290 at 10 cm were about 15, "far too numerous" |
+| Butterflies, five breeds | Models, things in the world (D655): groups put from the seed, the wing beat in the shader | Life size (3 to 7 cm), 1 to 6 to a group, some 95 to a hectare of meadow, at most 120 at once; 76 flew within 50 m of seed 3's start on a July afternoon | Two of a group of five plainly at 3 m in the one still; from the player's eye not counted. The drift's 290 at 10 cm were "far too numerous" |
 | Bees, midges, dust | Shader speck, built | Hundreds | Hardly: too small to read past a few metres |
 | Dragonflies by water | Shader card (the far bird's shape), built | 24 | A few darts over the lake |
 | Fireflies on a warm night | Shader speck with a light, built | 300 | About seven, before their number was raised |
@@ -40,15 +40,17 @@ Status: **Proposal, 2026-11-08** (D647, the developers'): for the developers to 
 
 ## Butterflies as things in the world (D655; the developers, 2026-11-09: "you cant use a model generator here or what", "i want like.. diff breeds of butterflies")
 
-- **Breeds**, each a model of its own (`art/props/butterfly_<breed>`, as the fish are props): the first realm's are the small white, the brimstone (lemon yellow), the small tortoiseshell (orange, barred black), the peacock (dark red, four eyespots) and the common blue (small, sky blue). Told apart by colour, pattern and size (D182). Their real spans, 3 to 7 cm, are to be looked up, not taken from here [M]. The far realm keeps its drift moths until its theme is chosen (D642).
+- **Breeds**, each a model of its own (`art/props/butterfly_<breed>`, as the fish are props): the first realm's are the small white, the brimstone (lemon yellow), the small tortoiseshell (orange, barred black), the peacock (dark red, four eyespots) and the common blue (small, sky blue). Told apart by colour, pattern and size (D182), at their real spans, 3.5 to 6.6 cm (Butterfly Conservation's). The far realm keeps its drift moths until its theme is chosen (D642).
 - **The model**: wings spread flat as a set specimen's, the body along Z (head +Z), the span along X, a few hundred triangles, its own textures (D304). The shader raises and lowers each side about the body's axis, in bouts with a glide between; no skeleton, as the fish's bend.
-- **In the world**: a kind is a row of `assets/data/butterflies.ron` (model, span, how many fly together, how far apart, to a hectare, where: open, woods, water; season, air and hours as the drift's rows had), placed by rule in cells round whoever looks, from the seed, so two players find a group in the same place (`terra_creatures`, beside `fish`). They fly in small groups with stretches between that have none: threes close together or fives spread out, the developers' to choose. For the eye in v0: each game's own, nothing crosses the network.
-- **Not chosen**: whether they may be caught (D655), whether they settle on flowers and rise as a player nears.
-- When they fly, the drift's two butterfly rows for the first realm go.
+- **In the world** (built, `terra_creatures::butterflies`, beside `fish`): a kind is a row of `assets/data/butterflies.ron` (model, span, how many fly together, how far apart, to a hectare, where: open, woods, water; season, air and hours as the drift's rows had; beat, bouts, speed, height), placed by rule in 10 m cells round whoever looks, from the seed, so two players find a group in the same place. They fly in small groups with stretches between that have none: threes close together (whites, blues) or fives spread out (tortoiseshells), the developers' to choose. A breed's groups come out and go in one by one over the half hour at each end of its hours; none fly in rain. For the eye in v0: each game's own, nothing crosses the network.
+- **Flight** (`butterflies::flight`, on the CPU): each wanders about its group's middle, jinking, never straight, heading the way it goes, lifted by each bout of beats; the middle drifts. After Skyrim's leashed critters and the cabbage white's measured flight (the module's header names both and where we depart).
+- **Not chosen**: whether they may be caught (D655), whether they settle on flowers and rise as a player nears; whether they are drawn life size (a small bird is drawn 1.6 times).
+- **Not right yet**: a place's woods are read when its cell is first come on, before the trees there may stand, so two players can differ at a wood's edge; they fly through trunks; over ground that bends within a group's reach they can dip into the grass.
+- The drift's two butterfly rows for the first realm are gone; the far realm's moths are the drift still.
 
 ## Taken as working assumptions (the agent's, 2026-11-08; the developers overrule)
 
-- A small bird is drawn 1.6 times life size (finch, sparrow), as a butterfly is drawn at 10 cm: at life size neither is seen past a few metres.
+- A small bird is drawn 1.6 times life size (finch, sparrow): at life size it is not seen past a few metres. A butterfly is drawn life size, and is not.
 - Half of a bird's flights go past a player who is about; larger kinds (the wood pigeon) carry the middle distance.
 - The far birds overhead stay cards until a model stands in for them; no card bird flies near.
 - Fish: a minnow, a brown trout and a northern pike, for the eye only in v0 (made, 162 credits).

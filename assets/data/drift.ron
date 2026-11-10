@@ -106,54 +106,8 @@
             whole: true,
             realms: Some(["world"]),
         ),
-        (
-            // Whites over the meadow and the wood's edge on a warm day (the small white, the
-            // green-veined white): each fluttering a few beats and gliding, never straight.
-            // In threes, close together, with stretches of meadow between that have none
-            // (the developers: "a little group of 3 or something maybe? or maybe 5 but
-            // spread out? im not totally sure": the whites are the one, the browns the
-            // other, until they choose).
-            name: "White butterflies",
-            count: 39,
-            look: Butterfly,
-            size_m: 0.07,
-            colour: (0.93, 0.91, 0.8),
-            glow: 0.3,
-            opacity: 1.0,
-            motion: Swarm(swarms: 13, radius_m: 2.0, buzz: 0.15),
-            box_m: (16.0, 1.6),
-            woods: 0.25,
-            open: 1.0,
-            water: 0.5,
-            season_c: (8.0, 40.0),
-            air_c: 13.0,
-            hours: [(8.0, 18.5)],
-            flap_hz: 9.0,
-            whole: true,
-            realms: Some(["world"]),
-        ),
-        (
-            // Tortoiseshells, commas and fritillaries: the orange-browns of rides, glades and
-            // nettle beds, in the wood as much as out of it. In fives, spread out.
-            name: "Brown butterflies",
-            count: 25,
-            look: Butterfly,
-            size_m: 0.07,
-            colour: (0.8, 0.4, 0.1),
-            glow: 0.3,
-            opacity: 1.0,
-            motion: Swarm(swarms: 5, radius_m: 4.0, buzz: 0.12),
-            box_m: (16.0, 1.6),
-            woods: 0.6,
-            open: 0.9,
-            water: 0.4,
-            season_c: (9.0, 40.0),
-            air_c: 14.0,
-            hours: [(9.0, 18.0)],
-            flap_hz: 8.0,
-            whole: true,
-            realms: Some(["world"]),
-        ),
+        // The first realm's butterflies are things in the world, not drift (D655):
+        // data/butterflies.ron, terra_creatures::butterflies.
         (
             // Bees and hoverflies working the flowers: dark specks low over the grass, each
             // going its own way, in the warm of the day.
