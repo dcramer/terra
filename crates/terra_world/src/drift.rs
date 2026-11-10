@@ -268,17 +268,8 @@ impl DriftKind {
         } else {
             0.0
         };
-        let air = ((round.air_c - self.air_c) / 3.0).clamp(0.0, 1.0);
-        // Faded in and out over half an hour at each end of its hours.
-        let hours = self
-            .hours
-            .iter()
-            .map(|&(from, to)| {
-                ((round.hour - from) / 0.5)
-                    .min((to - round.hour) / 0.5)
-                    .clamp(0.0, 1.0)
-            })
-            .fold(0.0, f32::max);
+        let air = warm_enough(self.air_c, round.air_c);
+        let hours = in_hours(&self.hours, round.hour);
         let place = (self.woods * round.woods)
             .max(self.open * round.open)
             .max(self.water * round.water);
@@ -292,6 +283,22 @@ impl DriftKind {
         });
         season * air * hours * place * falling * self.aloft(round.above_m)
     }
+}
+
+/// How much of a kind that needs the air so warm is about in air this warm, 0 to 1: all of
+/// it three degrees over what it needs. Small life placed in the world asks it too
+/// (`terra_creatures::butterflies`).
+pub fn warm_enough(needs_c: f32, air_c: f32) -> f32 {
+    ((air_c - needs_c) / 3.0).clamp(0.0, 1.0)
+}
+
+/// How much of a kind about in these spans of the clock is about at an hour, 0 to 1: faded
+/// in and out over half an hour at each end of a span.
+pub fn in_hours(hours: &[(f32, f32)], hour: f32) -> f32 {
+    hours
+        .iter()
+        .map(|&(from, to)| ((hour - from) / 0.5).min((to - hour) / 0.5).clamp(0.0, 1.0))
+        .fold(0.0, f32::max)
 }
 
 /// How often the place round the eye is looked at again, and how fast a field follows it.
@@ -638,7 +645,7 @@ fn sense(
 }
 
 /// What the place at a point on the ground is like, as drift asks it.
-fn round_at(
+pub fn round_at(
     planet: &Planet,
     climate: Option<&ClimateFields>,
     clock: &Clock,
@@ -855,7 +862,7 @@ mod tests {
     }
 
     /// A realm's own small life is its alone: every kind that names realms names ones the
-    /// realms' data has, the first realm's butterflies do not fly in the far one, and the
+    /// realms' data has, the first realm's bees do not fly in the far one, and the
     /// far one has small life of its own by day and by night.
     #[test]
     fn a_realms_small_life_is_its_own() {
@@ -871,8 +878,8 @@ mod tests {
             }
         }
         let named = |name: &str| drifts.kinds.iter().find(|kind| kind.name == name).unwrap();
-        assert!(named("White butterflies").lives_in("world"));
-        assert!(!named("White butterflies").lives_in("industrial"));
+        assert!(named("Bees").lives_in("world"));
+        assert!(!named("Bees").lives_in("industrial"));
         assert!(named("Dust motes").lives_in("industrial"));
         let own: Vec<&DriftKind> = (drifts.kinds.iter())
             .filter(|kind| kind.realms.is_some() && kind.lives_in("industrial"))

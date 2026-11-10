@@ -13,6 +13,7 @@
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
 pub mod archery;
+pub mod butterflies;
 pub mod coats;
 pub mod combat;
 pub mod creatures;

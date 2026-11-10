@@ -141,6 +141,7 @@ impl Plugin for GameplayPlugin {
         coats::plugin(app);
         fliers::plugin(app);
         terra_creatures::fish::plugin(app);
+        terra_creatures::butterflies::plugin(app);
         staged::plugin(app);
         melee::plugin(app);
         bodies::plugin(app);

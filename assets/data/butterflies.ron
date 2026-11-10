@@ -1,0 +1,145 @@
+// The butterflies (docs/ambient-life.md "Butterflies as things in the world", D655, D647):
+// for the eye only in v0. Each breed is a model (assets/models/<model>, made through
+// tools/props: wings spread flat, the head to +Z, the span along x) flying in small groups
+// put by rule from the world's seed, near the player (terra_creatures::butterflies). A new
+// breed is a row and a model; a row whose model is not there is skipped.
+//   span_m     how wide one is across its spread wings, least and most, metres
+//   group      how many fly together, least and most
+//   spread_m   how far from the group's middle any of it wanders
+//   roams_m    how far the group's middle drifts from where the group was put
+//   a_ha       groups to a hectare of ground that suits it wholly
+//   woods, open, water   how much of that is found among trees (five trunks within 12 m),
+//              in the open and within 12 m of water; the most of those the place is
+//   season_c   the growing season's mean warmth of the places it is found, °C (D313)
+//   air_c      the air's warmth it needs to fly, °C; all fly three degrees over it
+//   hours      the spans of the clock it flies in; over half an hour at each end the groups
+//              come out and go in one by one. None fly in rain.
+//   beat_hz    its wing beats a second
+//   bout_s     how long it beats, and how long it glides after, seconds
+//   speed      metres a second
+//   over_m     how high over the ground it keeps, least and most (the least over the
+//              meadow's grass, which stands to half a metre: a guess from one still)
+//   seen_m     from how far it is drawn
+//   realms     the realms it flies in, by kind (data/realms.ron; "world" the first)
+//
+// Spans are life size, about each model's, within Butterfly Conservation's range for the
+// breed (read by butterfly-models j1, 2026-11-09: 38-57, 60, 50-56, 63-69, 35 mm). The small white's
+// beat is measured (11.8 Hz, Jantzen and Eisner 2008); the others' beats, every bout and
+// speed are guesses to be looked at. Whether a group is three close together or five
+// spread out is the developers' to choose: the whites and blues are the one, the
+// tortoiseshells the other.
+[
+    (
+        // Over the meadow and the wood's edge, fluttering with hardly a glide.
+        name: "Small white",
+        model: "props/ButterflySmallWhite.glb",
+        span_m: (0.042, 0.054),
+        group: (2, 4),
+        spread_m: 1.5,
+        roams_m: 3.0,
+        a_ha: 10.0,
+        woods: 0.25,
+        open: 1.0,
+        water: 0.5,
+        season_c: (8.0, 40.0),
+        air_c: 13.0,
+        hours: [(8.0, 18.5)],
+        beat_hz: 11.8,
+        bout_s: (0.7, 0.15),
+        speed: 1.6,
+        over_m: (0.6, 1.6),
+        seen_m: 45.0,
+        realms: ["world"],
+    ),
+    (
+        // Lemon yellow, along the wood's edge and the rides, alone or a pair, flying
+        // strongly and far.
+        name: "Brimstone",
+        model: "props/ButterflyBrimstone.glb",
+        span_m: (0.057, 0.063),
+        group: (1, 2),
+        spread_m: 3.0,
+        roams_m: 4.0,
+        a_ha: 4.0,
+        woods: 0.7,
+        open: 0.7,
+        water: 0.4,
+        season_c: (8.0, 40.0),
+        air_c: 12.0,
+        hours: [(8.5, 18.0)],
+        beat_hz: 10.0,
+        bout_s: (0.6, 0.25),
+        speed: 2.0,
+        over_m: (0.7, 2.2),
+        seen_m: 50.0,
+        realms: ["world"],
+    ),
+    (
+        // Orange barred with black, over nettle beds, glades and rides: in fives, spread
+        // out, beating a few times and gliding.
+        name: "Small tortoiseshell",
+        model: "props/ButterflySmallTortoiseshell.glb",
+        span_m: (0.05, 0.056),
+        group: (4, 6),
+        spread_m: 4.0,
+        roams_m: 3.0,
+        a_ha: 5.0,
+        woods: 0.6,
+        open: 0.9,
+        water: 0.4,
+        season_c: (9.0, 40.0),
+        air_c: 14.0,
+        hours: [(9.0, 18.0)],
+        beat_hz: 9.0,
+        bout_s: (0.45, 0.4),
+        speed: 1.8,
+        over_m: (0.6, 1.8),
+        seen_m: 45.0,
+        realms: ["world"],
+    ),
+    (
+        // Dark red with an eye on each wing, in glades and at the wood's edge, gliding
+        // long between its beats.
+        name: "Peacock",
+        model: "props/ButterflyPeacock.glb",
+        span_m: (0.063, 0.069),
+        group: (1, 3),
+        spread_m: 3.0,
+        roams_m: 3.0,
+        a_ha: 4.0,
+        woods: 0.7,
+        open: 0.8,
+        water: 0.4,
+        season_c: (9.0, 40.0),
+        air_c: 14.0,
+        hours: [(9.0, 18.0)],
+        beat_hz: 9.0,
+        bout_s: (0.4, 0.5),
+        speed: 1.8,
+        over_m: (0.6, 2.0),
+        seen_m: 50.0,
+        realms: ["world"],
+    ),
+    (
+        // Small and sky blue, low over the grass of open ground, a few together.
+        name: "Common blue",
+        model: "props/ButterflyCommonBlue.glb",
+        span_m: (0.032, 0.037),
+        group: (3, 5),
+        spread_m: 2.0,
+        roams_m: 2.0,
+        a_ha: 8.0,
+        woods: 0.05,
+        open: 1.0,
+        water: 0.3,
+        season_c: (9.0, 40.0),
+        air_c: 14.0,
+        hours: [(9.0, 18.0)],
+        beat_hz: 12.0,
+        bout_s: (0.6, 0.2),
+        speed: 1.2,
+        over_m: (0.5, 1.0),
+        seen_m: 30.0,
+        realms: ["world"],
+    ),
+]
