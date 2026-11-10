@@ -12,7 +12,9 @@
 // solved on (the mannequin unless it says; a blow keyed against the fight's guard names
 // fight.glb). `guard` is the pose every key starts from: a clip of the body (its first frame), or
 // a pose file beside the keys (`*.json`, { bones: { NAME: { r, t? } } }, each bone's local turn
-// and place in the body's nodes), so a clip keyed from another need not be made after it. A
+// and place in the body's nodes), so a clip keyed from another need not be made after it, or
+// `bind`, every joint of the body's skin as it is bound (a creature's idle, which takes nothing
+// from the take it replaces: its `start`, `rest_arm` and feet's `knee` then pose it whole). A
 // control a key leaves out holds its last value. All places are [right, up, forward] in metres
 // from the model's origin, all directions the same axes; degrees are yaw + to his left, pitch +
 // forward, roll + to his right.
@@ -22,7 +24,9 @@
 //   hand_r {at, blade, edge, elbow}      wrist place, tip's way, leading edge's way, elbow's way
 //   hand_l {at, elbow}                   an offset; else it rides half the chest's turn
 //   clav_r / clav_l {up, forward}        the shoulder lifted and pushed forward
-//   foot_r / foot_l {at, yaw, heel}      the ball moved, turned, the heel raised over the ball
+//   foot_r / foot_l {at, yaw, heel, knee} the ball moved, turned, the heel raised over the ball, the
+//                                        knee's way (a direction of length 1 or more; unkeyed,
+//                                        the guard's own, and between the two a blend by length)
 //   arm_r / arm_l {forward, out, elbow}  with `hang`: empty arms hang as `rest_arm` sets them, swayed
 //                                        by these degrees; hand_r and hand_l are unused
 // `rest_arm` {out, forward, turn_in, elbow, palm} poses both empty arms afresh from the bind pose,
@@ -135,6 +139,11 @@ export type Keyed = {
 /// The guard every key starts from: a clip's first frame, or a pose file's bones.
 type Part = { t?: V3; r?: Q; s?: V3 };
 function guardOf(g: Glb, guard: string, dir: string): Map<string, Part> {
+  if (guard === "bind") {
+    const joints = g.gltf.skins?.[0]?.joints ?? [];
+    if (!joints.length) throw new Error("key: guard `bind` needs a skinned body, and this file has no skin; name a clip of it or a pose file beside the keys (`*.json`)");
+    return new Map(joints.filter((i) => g.gltf.nodes[i].name).map((i) => [g.gltf.nodes[i].name!, { r: g.rest(i).r, t: g.rest(i).t }]));
+  }
   if (guard.endsWith(".json")) {
     const file = JSON.parse(readFileSync(join(dir, guard), "utf8"));
     return new Map(Object.entries(file.bones as Record<string, Part>));
@@ -263,8 +272,8 @@ export function keyClip(spec: any, g: Glb, dir = "."): Keyed {
     arm_r: { forward: 0, out: 0, elbow: 0 },
     arm_l: { forward: 0, out: 0, elbow: 0 },
     grip: { closed: 0 },
-    foot_r: { at: [0, 0, 0], yaw: 0, heel: 0 },
-    foot_l: { at: [0, 0, 0], yaw: 0, heel: 0 },
+    foot_r: { at: [0, 0, 0], yaw: 0, heel: 0, knee: [0, 0, 0] },
+    foot_l: { at: [0, 0, 0], yaw: 0, heel: 0, knee: [0, 0, 0] },
   };
   const keys: { t: number; c: Controls }[] = [];
   let last = start;
@@ -515,7 +524,13 @@ export function keyClip(spec: any, g: Glb, dir = "."): Keyed {
       const sideAxis = rot(yaw, norm(cross(sub(footG.t, ballG.t), [0, 1, 0])));
       const heel = about(sideAxis, -(num(part, "heel", t) + heelUp[side]) * (dot(cross(sideAxis, along), [0, 1, 0]) > 0 ? -1 : 1));
       const ankle = add(ball, rot(heel, along));
-      reach(l, leg[side], ankle, leg[side].pole, `leg_${side}`);
+      // The knee bends the way its key points; unkeyed, the way the guard's does (which, with the
+      // hips ahead of a planted foot, is forward and down: a kneel, so a step or a lunge keys it).
+      // Between an unkeyed key and a keyed one the guard's way gives over to the key's as the
+      // key's length grows to 1, so the knee swings across and never jumps.
+      const knee = vec(part, "knee", t);
+      const keyed = Math.min(1, len(knee));
+      reach(l, leg[side], ankle, keyed > 1e-3 ? add(scale(leg[side].pole, 1 - keyed), model(knee)) : leg[side].pole, `leg_${side}`);
       w = fk(l);
       setWorld(l, id(`foot_${side}`), qmul(qmul(heel, yaw), footG.r), w);
       w = fk(l);

@@ -78,3 +78,62 @@ test("the start stands as `start` says: feet apart and turned out, knees bent, e
     assert.ok(Math.abs(elbow - 18) < 0.5, `elbow ${s} ${elbow.toFixed(1)}`);
   }
 });
+
+// A creature's own body, posed whole from the way it is bound: nothing of any clip in it.
+const TROLL = "assets/models/characters/troll.glb";
+const troll = new Glb(TROLL);
+const trollWorld = (l: Pose[]): Pose[] => {
+  const w: Pose[] = [];
+  const at = (i: number): Pose => (w[i] ??= troll.parentOf[i] === undefined ? l[i] : apply(at(troll.parentOf[i]), l[i]));
+  l.forEach((_, i) => at(i));
+  return w;
+};
+
+test("the `bind` guard starts every joint of the skin as it is bound, turned and placed", () => {
+  const k = keyClip({ name: "Bound", body: TROLL, guard: "bind", fists: true, end: 1, keys: [{ t: 0 }, { t: 1 }] }, troll);
+  const joints = troll.gltf.skins![0].joints;
+  assert.deepEqual([...k.tracked].sort(), [...joints].sort());
+  assert.equal(k.placed.size, joints.length);
+  for (const i of joints) {
+    // The legs are solved to their feet, which stand where the bind pose has them.
+    if (/^(thigh|calf|foot|ball)_/.test(troll.gltf.nodes[i].name!)) continue;
+    const [got, rest] = [k.samples[0][i], troll.rest(i)];
+    assert.ok(len(sub(got.t, rest.t)) < 1e-6 && Math.abs(Math.abs(got.r[0] * rest.r[0] + got.r[1] * rest.r[1] + got.r[2] * rest.r[2] + got.r[3] * rest.r[3]) - 1) < 1e-6, `${troll.gltf.nodes[i].name} is not as bound`);
+  }
+  const [first, bound] = [trollWorld(k.samples[0]), trollWorld(troll.gltf.nodes.map((_, i) => troll.rest(i)))];
+  // (To the centimetre: a leg bound straight is solved a little short of its full length.)
+  for (const s of ["r", "l"]) assert.ok(len(sub(first[troll.named(`ball_${s}`)].t, bound[troll.named(`ball_${s}`)].t)) < 0.02, `ball_${s} stands where it is bound`);
+});
+
+test("a keyed knee bends the way its key points, swings there without a jump, and the foot stays", () => {
+  // The hips dropped and carried ahead of both planted feet: unkeyed, the knees fold forward and
+  // down (a kneel); the right one is keyed out to its side.
+  const spec = {
+    name: "Knee_Out",
+    body: TROLL,
+    guard: "bind",
+    fists: true,
+    end: 1,
+    keys: [{ t: 0 }, { t: 1, pelvis: { move: [0, -0.7, 0.5] }, foot_r: { knee: [1, 0.3, 0] } }],
+  };
+  const frames = keyClip(spec, troll).samples.map(trollWorld);
+  const at = (f: number, n: string) => frames[f][troll.named(n)].t;
+  const last = frames.length - 1;
+  // Each knee's offset from its hip-to-ankle line: the right one out to the right (-X) and up, the
+  // left one, unkeyed, forward.
+  const off = (s: string): V3 => {
+    const [hip, knee, ankle] = [at(last, `thigh_${s}`), at(last, `calf_${s}`), at(last, `foot_${s}`)];
+    const line = sub(ankle, hip);
+    const k = dot(sub(knee, hip), line) / dot(line, line);
+    return sub(knee, [hip[0] + line[0] * k, hip[1] + line[1] * k, hip[2] + line[2] * k]);
+  };
+  const [right, left] = [off("r"), off("l")];
+  assert.ok(len(right) > 0.5, `the leg is bent, its knee ${len(right).toFixed(2)} m off the line`);
+  assert.ok(right[0] < 0 && -right[0] > 0.8 * len(right), `the keyed knee points to its right, ${right.map((v) => v.toFixed(2))}`);
+  assert.ok(left[2] > right[2] + 0.15, `the unkeyed knee keeps the guard's way, further forward, ${left.map((v) => v.toFixed(2))} against ${right.map((v) => v.toFixed(2))}`);
+  const bound = trollWorld(troll.gltf.nodes.map((_, i) => troll.rest(i)));
+  for (const s of ["r", "l"]) assert.ok(len(sub(at(last, `ball_${s}`), bound[troll.named(`ball_${s}`)].t)) < 1e-3, "a foot not told to move stays where it is bound");
+  // No frame's knee jumps: the guard's way gives over to the key's by degrees.
+  const jump = Math.max(...frames.slice(1).map((_, f) => len(sub(at(f + 1, "calf_r"), at(f, "calf_r")))));
+  assert.ok(jump < 0.08, `the knee moves ${jump.toFixed(3)} m in one frame`);
+});

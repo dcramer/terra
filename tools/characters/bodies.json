@@ -4,5 +4,5 @@
   "designed": ["heavy", "thin", "strong"],
   "rigged": [{ "morph": "female", "body": "base-female", "height": 1.7 }],
   "skins": [{ "morph": "female", "front": "art/characters/base-female/front.png" }],
-  "creatures": [{ "name": "troll", "height": 4.0, "triangles": 20000, "set": "troll", "colour": [0.8, 0.74, 0.66], "keyed": { "Troll_Smash": "art/animation/keyed/troll_smash.json" } }]
+  "creatures": [{ "name": "troll", "height": 4.0, "triangles": 20000, "set": "troll", "colour": [0.8, 0.74, 0.66], "keyed": { "Troll_Idle": "art/animation/keyed/troll_idle.json", "Troll_Smash": "art/animation/keyed/troll_smash.json" } }]
 }

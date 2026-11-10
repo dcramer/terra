@@ -216,21 +216,28 @@ test("a creature's keyed clip is solved on its game file and put in after everyt
   for (const p of [keys, "tools/characters/key.ts", "tools/characters/glb_clips.ts"]) assert.ok(with_keys.inputs.includes(p) && !plain.inputs.includes(p), p);
   assert.ok(!plain.run.includes("key.ts"));
   // The keys in bodies.json: each names its clip and is solved on its creature's own game file.
-  for (const c of bodies.creatures ?? [])
+  for (const c of bodies.creatures ?? []) {
+    const game = `assets/models/characters/${c.name}.glb`;
+    // The game's file holds the clips its keys make today: the step's lines, run in its order on
+    // a copy (a blow's guard is the idle keyed before it), change no byte of it (glb_clips.ts
+    // writes the same clips again, in the same order, to the same bytes).
+    const dir = mkdtempSync(join(tmpdir(), "keyed-"));
+    const [take, copy] = [join(dir, "take.glb"), join(dir, "game.glb")];
+    writeFileSync(copy, readFileSync(join(ROOT, game)));
     for (const [clip, path] of Object.entries(c.keyed ?? {})) {
       const k = JSON.parse(readFileSync(join(ROOT, path), "utf8"));
       assert.equal(k.name, clip, `${path} makes ${k.name}, bodies.json says ${clip}`);
-      assert.equal(k.body, `assets/models/characters/${c.name}.glb`, `${path} is keyed on ${k.body}`);
-      // The game's file holds the clip its keys make today: the step's two lines run on a copy
-      // change no byte of it (glb_clips.ts writes the same clip again to the same bytes).
-      const dir = mkdtempSync(join(tmpdir(), "keyed-"));
-      const [take, copy] = [join(dir, "take.glb"), join(dir, "game.glb")];
-      writeFileSync(copy, readFileSync(join(ROOT, k.body)));
-      execFileSync("node", ["tools/characters/key.ts", path, take], { cwd: ROOT, stdio: "pipe" });
+      assert.equal(k.body, game, `${path} is keyed on ${k.body}`);
+      // Solved on the copy, as the step solves each on the file the one before it was put into.
+      const keys = join(dir, "keys.json");
+      writeFileSync(keys, JSON.stringify({ ...k, body: copy }));
+      execFileSync("node", ["tools/characters/key.ts", keys, take], { cwd: ROOT, stdio: "pipe" });
       execFileSync("node", ["tools/characters/glb_clips.ts", copy, take, clip], { cwd: ROOT, stdio: "pipe" });
-      assert.ok(readFileSync(copy).equals(readFileSync(join(ROOT, k.body))), `${k.body}'s ${clip} is not what ${path} makes: run node tools/characters/key.ts ${path} take.glb, then glb_clips.ts ${k.body} take.glb ${clip}`);
-      rmSync(dir, { recursive: true });
     }
+    const made = Object.entries(c.keyed ?? {}).map(([clip, path]) => `node tools/characters/key.ts ${path} take.glb, then glb_clips.ts ${game} take.glb ${clip}`);
+    assert.ok(readFileSync(copy).equals(readFileSync(join(ROOT, game))), `${game}'s keyed clips are not what their keys make: run, in this order, ${made.join("; ")}`);
+    rmSync(dir, { recursive: true });
+  }
 });
 
 test("a fresh worktree restores from the step cache what another built from the same inputs, and builds what differs", async () => {
