@@ -25,7 +25,7 @@ const KEPT_BYTES: usize = 1 << 30;
 const KEPT_MOST: usize = 16_384;
 
 /// What a world loaded from model files, kept loaded for the worlds entered after (D501):
-/// its pictures, and its models' meshes and materials. A world left drops its handles, and
+/// its pictures, and its models' files, scenes, meshes and materials. A world left drops its handles, and
 /// the next, asking for the same rock's mesh by its label, had its whole file read again,
 /// its pictures replaced and their mipmaps made again: a quarter to two thirds of a second
 /// of every crossing's cover. The oldest are let go past [`KEPT_BYTES`] of pictures.
@@ -63,6 +63,8 @@ pub fn plugin(app: &mut App) {
             keep_parts::<StandardMaterial>,
             keep_parts::<bevy::gltf::GltfMaterial>,
             keep_parts::<bevy::gltf::GltfMesh>,
+            keep_parts::<bevy::gltf::Gltf>,
+            keep_parts::<bevy::world_serialization::WorldAsset>,
         )
             .after(bevy::asset::AssetEventSystems),
     );
@@ -72,6 +74,13 @@ pub fn plugin(app: &mut App) {
 /// and the glTF's own records of them, which is what a label such as `Material0` names. With
 /// any part of a file let go, asking for it again reads the whole file again, and every
 /// part still held is replaced.
+///
+/// So what is asked for is kept too: the file itself (a `Handle<Gltf>`, which holds every
+/// part) and its scenes (`…#Scene0`). With the meshes kept and those let go, every model was
+/// read again on the next world's entry and its kept meshes replaced under their ids, which
+/// undid what the game had done to them in place: a worn look's skin cut to its joints
+/// (`terra_walker::character::Trimmed`), so the figure was drawn in strips (held-explode j2,
+/// j3), and a skin's dual quaternion shares.
 fn keep_parts<A: Asset>(
     mut events: MessageReader<AssetEvent<A>>,
     assets: Res<AssetServer>,
@@ -83,7 +92,7 @@ fn keep_parts<A: Asset>(
         };
         let of_a_model = assets
             .get_path(*id)
-            .is_some_and(|path| path.label().is_some() && path.path().starts_with("models"));
+            .is_some_and(|path| path.path().starts_with("models"));
         if let (true, Some(part)) = (of_a_model, assets.get_id_handle(*id)) {
             kept.keep(part.untyped(), 0);
         }
@@ -203,5 +212,117 @@ mod tests {
             kept.keep(images.reserve_handle().untyped(), 0);
         }
         assert_eq!(kept.held.len(), KEPT_MOST);
+    }
+
+    #[derive(Resource, Default)]
+    struct Replaced(usize);
+
+    fn count_replaced(mut events: MessageReader<AssetEvent<Mesh>>, mut replaced: ResMut<Replaced>) {
+        replaced.0 += (events.read())
+            .filter(|event| matches!(event, AssetEvent::Modified { .. }))
+            .count();
+    }
+
+    /// An app that loads `models/tri.gltf`, one triangle, from memory, and keeps what it
+    /// loads as the game does.
+    fn app_with_a_model() -> App {
+        use bevy::asset::io::{
+            AssetSourceBuilder, AssetSourceId,
+            memory::{Dir, MemoryAssetReader},
+        };
+        let gltf = r#"{"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],
+            "buffers":[{"uri":"tri.bin","byteLength":36}],
+            "bufferViews":[{"buffer":0,"byteLength":36}],
+            "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3",
+            "min":[0,0,0],"max":[1,1,0]}]}"#;
+        let corners: [f32; 9] = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
+        let bin: Vec<u8> = corners.iter().flat_map(|c| c.to_le_bytes()).collect();
+        let dir = Dir::default();
+        dir.insert_asset_text(std::path::Path::new("models/tri.gltf"), gltf);
+        dir.insert_asset(std::path::Path::new("models/tri.bin"), bin);
+        let mut app = App::new();
+        let reader = MemoryAssetReader { root: dir };
+        app.register_asset_source(
+            AssetSourceId::Default,
+            AssetSourceBuilder::new(move || Box::new(reader.clone())),
+        )
+        .add_plugins((
+            bevy::app::TaskPoolPlugin::default(),
+            AssetPlugin::default(),
+            bevy::world_serialization::WorldSerializationPlugin,
+            bevy::mesh::MeshPlugin,
+            crate::gltf_gate::GatedGltfPlugin::default(),
+        ))
+        .init_asset::<Image>()
+        .init_asset::<StandardMaterial>()
+        .init_resource::<Replaced>()
+        .add_plugins(plugin)
+        .add_systems(Last, count_replaced);
+        app.finish();
+        app.cleanup();
+        app
+    }
+
+    /// Runs the app until `handle` has loaded, then some frames more so what was let go is
+    /// let go.
+    fn load(app: &mut App, handle: &UntypedHandle) {
+        for _ in 0..10_000 {
+            app.update();
+            match app.world().resource::<AssetServer>().get_load_state(handle) {
+                Some(bevy::asset::LoadState::Loaded) => break,
+                Some(bevy::asset::LoadState::Failed(e)) => panic!("{e}"),
+                _ => {}
+            }
+        }
+        for _ in 0..8 {
+            app.update();
+        }
+    }
+
+    /// A model asked for again after the world that asked is left is not read again, so its
+    /// kept mesh is not replaced under its id (which undid a worn look's cut skin, and the
+    /// figure exploded: held-explode j3). Both ways the game asks: the file, and its scene.
+    #[test]
+    fn a_model_asked_for_again_after_it_is_let_go_is_not_read_again() {
+        type Ask = fn(&AssetServer) -> UntypedHandle;
+        let asks: [(&str, Ask); 2] = [
+            ("its scene", |assets| {
+                assets
+                    .load::<bevy::world_serialization::WorldAsset>(
+                        bevy::gltf::GltfAssetLabel::Scene(0).from_asset("models/tri.gltf"),
+                    )
+                    .untyped()
+            }),
+            ("the file", |assets| {
+                assets.load::<bevy::gltf::Gltf>("models/tri.gltf").untyped()
+            }),
+        ];
+        for (what, ask) in asks {
+            let mut app = app_with_a_model();
+            for entry in 0..3 {
+                let handle = ask(app.world().resource::<AssetServer>());
+                load(&mut app, &handle);
+                assert_eq!(
+                    app.world().resource::<Assets<Mesh>>().len(),
+                    1,
+                    "{what}: the model's mesh is loaded, entry {entry}"
+                );
+                drop(handle);
+                for _ in 0..8 {
+                    app.update();
+                }
+            }
+            assert_eq!(
+                app.world().resource::<Assets<Mesh>>().len(),
+                1,
+                "{what}: the mesh is kept after the world that asked is left"
+            );
+            assert_eq!(
+                app.world().resource::<Replaced>().0,
+                0,
+                "{what}: the kept mesh was replaced under its id, so the file was read again"
+            );
+        }
     }
 }
