@@ -88,8 +88,8 @@ fn warts(p: vec3<f32>) -> vec2<f32> {
 // thinned to their mean where they are finer than a pixel.
 fn blades(round: f32, count: f32, pixel: f32) -> f32 {
     let wave = 0.5 + 0.5 * cos(round * count * TURN);
-    let blade = wave * wave * wave;
-    return mix(blade, 0.31, clamp(pixel * count * 1.5, 0.0, 1.0));
+    let blade = wave * wave;
+    return mix(blade, 0.375, clamp(pixel * count * 1.5, 0.0, 1.0));
 }
 
 // `tint` its vertex's colour, a cap's or a stalk's; `stood` the point from the tree's foot,
@@ -160,12 +160,25 @@ fn cap_skin(tint: vec3<f32>, uv: vec2<f32>, stood: vec3<f32>, gills: vec4<f32>, 
     let above_rough = mix(mix(0.22, 0.5, broad), 0.9, raised);
     let above_height = raised * 0.04 + streak * 0.006 + middling * 0.03;
 
-    // Its gills, from the stalk to the rim, each a ridge with shade between.
-    let gill = mix(0.5 + 0.5 * cos(round * 140.0 * TURN), 0.5, clamp(pixel * 210.0, 0.0, 1.0));
-    skin.colour = mix(gills.rgb * (0.25 + 0.75 * gill), above, top);
-    skin.rough = mix(0.9, above_rough, top);
-    skin.height = above_height * top;
-    skin.glow = gills.rgb * gills.a * (0.2 + 0.8 * gill) * (1.0 - top);
+    // Its gills: long blades from the stalk out, a short one set between each two past
+    // two fifths of the way and again past seven tenths, each wandering a little.
+    let wander = (skin_round(vec2<f32>(round * 30.0, out * 5.0), 30.0) - 0.5) * 0.008;
+    let turned = round + wander;
+    var gill = blades(turned, GILLS, pixel);
+    gill = mix(gill, blades(turned, GILLS * 2.0, pixel), smoothstep(0.36, 0.5, out));
+    gill = mix(gill, blades(turned, GILLS * 4.0, pixel), smoothstep(0.66, 0.8, out));
+    // A blade's edge is ragged and paler; between two it is in shade, deepest by the stalk.
+    let ragged = 0.75 + 0.25 * skin_noise(vec2<f32>(turned * GILLS * 4.0, out * 40.0));
+    let deep = mix(0.6, 1.0, smoothstep(0.1, 0.9, out));
+    let below = gills.rgb * mix(0.2, 0.85 * ragged, gill) * deep;
+    // Their light is in the dark between them, by the stalk, in patches: sparing.
+    let lit = (1.0 - gill) * pow(1.0 - out, 1.5) * smoothstep(0.3, 0.7, broad) * (0.3 + 0.7 * middling);
+
+    skin.colour = mix(below, above, top);
+    skin.rough = mix(0.85, above_rough, top);
+    skin.height = mix(gill * 0.06, above_height, top);
+    skin.glow = gills.rgb * gills.a * lit * (1.0 - top);
+    skin.open = mix(mix(0.4, 1.0, gill) * deep, 1.0, top);
     return skin;
 }
 
